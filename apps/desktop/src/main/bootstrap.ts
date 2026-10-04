@@ -25,6 +25,7 @@ import {
 // How long a disk may take to answer while Replaces are recovered: a network share that
 // doesn't answer is tried again later instead of holding up the window.
 const RECOVERY_ANSWER_WITHIN_MS = 3_000;
+import { inspectBatchRename } from "./bootstrap/batchRenameInspect";
 import {
   clearResponseCaches,
   createFolderSizeHandlers,
@@ -53,6 +54,7 @@ import {
 import { createTrashItem } from "./bootstrap/trashItem";
 import {
   type WriteOperationKind,
+  assertNotSystemLocation,
   createWriteOperationCoordinator,
 } from "./bootstrap/writeOperations";
 import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
@@ -94,9 +96,17 @@ export async function bootstrapMainProcess(
     originalExplorerFileSystem,
     originalFileSystem,
     createOriginalWriteOperationFs,
+    createOriginalBatchRenameInspectDeps,
     getFolderSize,
     cancelFolderSize,
   } = await import("./originalFileSystem");
+  // What the Rename sheet checks for several items: the same folders are refused as for a
+  // rename of one.
+  const batchRenameInspectDeps = createOriginalBatchRenameInspectDeps({
+    homePath: app.getPath("home"),
+    assertRenamable: (path) =>
+      assertNotSystemLocation([path], "renamed", originalFileSystem, app.getPath("home")),
+  });
   // Items replaced by a paste go to the Trash, so a replace can always be undone.
   const trashItem = createTrashItem({
     trash: (path) => shell.trashItem(path),
@@ -165,6 +175,7 @@ export async function bootstrapMainProcess(
       "places:forget": (payload) => ({
         folders: appStateStore.forgetVisitedFolder(payload.path),
       }),
+      "batchRename:inspect": (payload) => inspectBatchRename(payload, batchRenameInspectDeps),
       "app:openSettingsWindow": (payload) => {
         windows.openSettingsWindow?.(payload.tab);
         return { ok: windows.openSettingsWindow !== undefined };

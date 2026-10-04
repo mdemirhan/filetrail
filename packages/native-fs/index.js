@@ -82,7 +82,13 @@ async function isPackageFallback() {
   return null;
 }
 
+// Without it, no item has a date taken: renaming by it uses the date created instead.
+async function datesTakenFallback(paths) {
+  return paths.map(() => null);
+}
+
 module.exports = {
+  nativeDatesTaken: binding.nativeDatesTaken ?? datesTakenFallback,
   nativeCopyFile: binding.nativeCopyFile,
   nativeCopyMetadata: binding.nativeCopyMetadata ?? copyMetadataFallback,
   nativeGetFileIcon: binding.nativeGetFileIcon,

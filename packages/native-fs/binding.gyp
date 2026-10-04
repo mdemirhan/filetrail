@@ -4,6 +4,7 @@
       "target_name": "native-fs",
       "sources": [
         "src/native_copyfile.c",
+        "src/native_datestaken.m",
         "src/native_errors.c",
         "src/native_flags.c",
         "src/native_fileicon.m",
@@ -18,6 +19,8 @@
         "OTHER_LDFLAGS": [
           "-framework",
           "AppKit",
+          "-framework",
+          "AVFoundation",
           "-framework",
           "CoreServices",
           "-framework",
@@ -34,6 +37,7 @@
       "link_settings": {
         "libraries": [
           "-framework AppKit",
+          "-framework AVFoundation",
           "-framework CoreServices",
           "-framework Foundation",
           "-framework ImageIO",

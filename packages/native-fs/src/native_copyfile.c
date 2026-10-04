@@ -275,6 +275,9 @@ extern napi_value register_flags(napi_env env, napi_value exports);
 /* Defined in native_package.m — registers nativeIsPackage. */
 extern napi_value register_package(napi_env env, napi_value exports);
 
+/* Defined in native_datestaken.m — registers nativeDatesTaken. */
+extern napi_value register_dates_taken(napi_env env, napi_value exports);
+
 static napi_value init(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
@@ -290,6 +293,7 @@ static napi_value init(napi_env env, napi_value exports) {
   register_rename(env, exports);
   register_flags(env, exports);
   register_package(env, exports);
+  register_dates_taken(env, exports);
 
   return exports;
 }

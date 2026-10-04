@@ -573,3 +573,49 @@ describe("nativeIsPackage", () => {
     expect(await wrapper.nativeIsPackage(join(root, "missing.app"))).toBeNull();
   });
 });
+
+describe("nativeDatesTaken", () => {
+  const fixtures = join(__dirname, "..", "test-fixtures");
+  // The movie was made at this moment; it is shown on this Mac's clock.
+  const clipMoment = new Date(Date.UTC(2020, 1, 3, 4, 5, 6));
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const clipLocal = `${clipMoment.getFullYear()}-${pad(clipMoment.getMonth() + 1)}-${pad(
+    clipMoment.getDate(),
+  )}T${pad(clipMoment.getHours())}:${pad(clipMoment.getMinutes())}:${pad(clipMoment.getSeconds())}`;
+
+  it.each([
+    ["addon", addon],
+    ["wrapper", wrapper],
+  ])("reads the date a photo or video was taken, one answer per path (%s)", async (_name, api) => {
+    const root = mkdtempSync(join(tmpdir(), "filetrail-dates-taken-"));
+    writeFileSync(join(root, "notes.txt"), "not a photo");
+    // A photo's extension with something else in it.
+    writeFileSync(join(root, "broken.jpg"), "not really a photo");
+    const paths = [
+      join(fixtures, "taken.jpg"),
+      join(fixtures, "digitized.jpg"),
+      join(fixtures, "undated.jpg"),
+      join(fixtures, "clip.mov"),
+      join(root, "notes.txt"),
+      join(root, "broken.jpg"),
+      join(root, "missing.jpg"),
+      join(root, "no extension"),
+    ];
+    expect(await api.nativeDatesTaken(paths)).toEqual([
+      "2021-07-04T09:15:30",
+      "2019-12-31T23:59:58",
+      null,
+      clipLocal,
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(await api.nativeDatesTaken([])).toEqual([]);
+  });
+
+  it("refuses anything but a list of paths", () => {
+    expect(() => addon.nativeDatesTaken("one path" as unknown as string[])).toThrow(TypeError);
+    expect(() => addon.nativeDatesTaken([42] as unknown as string[])).toThrow(TypeError);
+  });
+});

@@ -98,6 +98,15 @@ describe("ipc contracts", () => {
       ["writeOperation:createFolder", { parentDirectoryPath: "Documents", folderName: "New" }],
       ["writeOperation:trash", { paths: ["/Users/demo/a.txt", relative] }],
       ["writeOperation:deleteImmediately", { paths: [relative] }],
+      [
+        "writeOperation:batchRename",
+        {
+          items: [{ sourcePath: relative, destinationName: "b.txt", isFolder: false }],
+          onConflict: "number",
+          numberSeparator: " ",
+        },
+      ],
+      ["batchRename:inspect", { paths: [relative], includeDateTaken: false }],
     ] as const;
 
     for (const [channel, payload] of requests) {
@@ -107,6 +116,41 @@ describe("ipc contracts", () => {
       );
       expect(ipcContractSchemas[channel].request.safeParse(absolute).success, channel).toBe(true);
     }
+  });
+
+  it("takes only valid names and settings for a rename of several items", () => {
+    const schema = ipcContractSchemas["writeOperation:batchRename"].request;
+    const item = { sourcePath: "/a/b.txt", destinationName: "c.txt", isFolder: false };
+    const valid = { items: [item], onConflict: "number", numberSeparator: " " };
+    expect(schema.safeParse(valid).success).toBe(true);
+    for (const invalid of [
+      { ...valid, items: [] },
+      { ...valid, items: [{ ...item, destinationName: "a/b" }] },
+      { ...valid, items: [{ ...item, destinationName: "   " }] },
+      { ...valid, items: [{ ...item, destinationName: ".." }] },
+      { ...valid, items: [{ ...item, destinationName: "x".repeat(256) }] },
+      { ...valid, onConflict: "replace" },
+      { ...valid, numberSeparator: "." },
+    ]) {
+      expect(schema.safeParse(invalid).success, JSON.stringify(invalid).slice(0, 80)).toBe(false);
+    }
+    // Names arrive trimmed, as for a rename of one.
+    expect(
+      schema.parse({ ...valid, items: [{ ...item, destinationName: " c.txt " }] }).items[0]
+        ?.destinationName,
+    ).toBe("c.txt");
+  });
+
+  it("sends dates on this Mac's clock in one shape only", () => {
+    const schema = ipcContractSchemas["batchRename:inspect"].response;
+    const answer = (createdAt: string | null) => ({
+      items: [{ path: "/a", createdAt, modifiedAt: null, takenAt: null, cannotRename: null }],
+      folders: [{ path: "/", names: ["a"], caseSensitive: false }],
+    });
+    expect(schema.safeParse(answer("2026-05-14T18:02:11")).success).toBe(true);
+    expect(schema.safeParse(answer(null)).success).toBe(true);
+    expect(schema.safeParse(answer("2026-05-14T18:02:11Z")).success).toBe(false);
+    expect(schema.safeParse(answer("2026-05-14")).success).toBe(false);
   });
 
   it("refuses a path with a null character, which macOS would cut short", () => {

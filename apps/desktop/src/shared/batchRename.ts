@@ -63,19 +63,21 @@ export const BATCH_RENAME_DATE_SEPARATORS = ["-", "_", ".", " ", ""] as const;
 export type BatchRenameDateSeparator = (typeof BATCH_RENAME_DATE_SEPARATORS)[number];
 
 // The date formats offered, as their parts in order; Custom takes a pattern instead.
-export const BATCH_RENAME_DATE_FORMATS: ReadonlyArray<{
-  id: Exclude<BatchRenameDateFormat, "custom">;
-  tokens: readonly DateToken[];
-}> = [
-  { id: "ymd", tokens: ["YYYY", "MM", "DD"] },
-  { id: "ymd_hm", tokens: ["YYYY", "MM", "DD", "HH", "mm"] },
-  { id: "ymd_hms", tokens: ["YYYY", "MM", "DD", "HH", "mm", "ss"] },
-  { id: "dmy", tokens: ["DD", "MM", "YYYY"] },
-  { id: "dmyy", tokens: ["DD", "MM", "YY"] },
-  { id: "mdy", tokens: ["MM", "DD", "YYYY"] },
-  { id: "yymd", tokens: ["YY", "MM", "DD"] },
-  { id: "ym", tokens: ["YYYY", "MM"] },
-];
+const DATE_FORMAT_TOKENS: Record<Exclude<BatchRenameDateFormat, "custom">, readonly DateToken[]> = {
+  ymd: ["YYYY", "MM", "DD"],
+  ymd_hm: ["YYYY", "MM", "DD", "HH", "mm"],
+  ymd_hms: ["YYYY", "MM", "DD", "HH", "mm", "ss"],
+  dmy: ["DD", "MM", "YYYY"],
+  dmyy: ["DD", "MM", "YY"],
+  mdy: ["MM", "DD", "YYYY"],
+  yymd: ["YY", "MM", "DD"],
+  ym: ["YYYY", "MM"],
+};
+
+// In the order the Date Format pop-up lists them.
+export const BATCH_RENAME_DATE_FORMATS = (
+  Object.keys(DATE_FORMAT_TOKENS) as Array<Exclude<BatchRenameDateFormat, "custom">>
+).map((id) => ({ id, tokens: DATE_FORMAT_TOKENS[id] }));
 
 export const DATE_TOKENS = ["YYYY", "YY", "MM", "DD", "HH", "mm", "ss"] as const;
 export type DateToken = (typeof DATE_TOKENS)[number];
@@ -587,10 +589,7 @@ export function formatDate(date: LocalDateTime, settings: BatchRenameSettings): 
       value(token as DateToken),
     );
   }
-  const format =
-    BATCH_RENAME_DATE_FORMATS.find((candidate) => candidate.id === settings.dateFormat) ??
-    BATCH_RENAME_DATE_FORMATS[0];
-  return (format?.tokens ?? []).map(value).join(settings.dateSeparator);
+  return DATE_FORMAT_TOKENS[settings.dateFormat].map(value).join(settings.dateSeparator);
 }
 
 /** How a date format reads with the separator chosen: "YYYY-MM-DD", "DDMMYY". */
@@ -598,8 +597,7 @@ export function describeDateFormat(
   format: Exclude<BatchRenameDateFormat, "custom">,
   separator: BatchRenameDateSeparator,
 ): string {
-  const tokens = BATCH_RENAME_DATE_FORMATS.find((candidate) => candidate.id === format)?.tokens;
-  return (tokens ?? []).join(separator);
+  return DATE_FORMAT_TOKENS[format].join(separator);
 }
 
 export function readLocalDateTime(date: LocalDateTime): {
@@ -630,24 +628,18 @@ export function toLocalDateTime(date: Date): LocalDateTime {
   )}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+// The segments without the spaces at either end of the text they make, dropping any left
+// empty.
 function trimSegments(segments: NameSegment[]): NameSegment[] {
   const result = segments.map((segment) => ({ ...segment }));
-  while (result.length > 0) {
-    const first = result[0];
-    if (!first) {
-      break;
-    }
+  for (let first = result[0]; first !== undefined; first = result[0]) {
     first.text = first.text.replace(/^\s+/u, "");
     if (first.text.length > 0) {
       break;
     }
     result.shift();
   }
-  while (result.length > 0) {
-    const last = result[result.length - 1];
-    if (!last) {
-      break;
-    }
+  for (let last = result.at(-1); last !== undefined; last = result.at(-1)) {
     last.text = last.text.replace(/\s+$/u, "");
     if (last.text.length > 0) {
       break;
@@ -754,123 +746,86 @@ export type BatchRenamePlanInput = {
 export function planBatchRename(input: BatchRenamePlanInput): BatchRenamePlan {
   const proposed = proposeNames(input.settings, input.items, input.now);
   const plan: BatchRenamePlanItem[] = input.items.map(() => ({ status: "unchanged" }));
-  const byFolder = new Map<string, number[]>();
+  // Each item with its new name and place in the plan, grouped by the folder it is in.
+  type Entry = { item: BatchRenameItem; name: ProposedName; index: number };
+  const byFolder = new Map<string, Entry[]>();
   input.items.forEach((item, index) => {
+    // proposeNames gives exactly one name per item, in order.
+    const entry: Entry = { item, name: proposed.names[index] as ProposedName, index };
     const folderPath = parentPathOf(item.path);
-    byFolder.set(folderPath, [...(byFolder.get(folderPath) ?? []), index]);
+    byFolder.set(folderPath, [...(byFolder.get(folderPath) ?? []), entry]);
   });
 
-  for (const [folderPath, indexes] of byFolder) {
+  for (const [folderPath, entries] of byFolder) {
     const folder = input.folders.get(folderPath);
-    const caseSensitive = folder?.caseSensitive ?? false;
-    const key = (name: string) => nameKey(name, caseSensitive);
-    const batchOldKeys = new Set(indexes.map((index) => key(input.items[index]?.name ?? "")));
+    const key = (name: string) => nameKey(name, folder?.caseSensitive ?? false);
+    const batchOldKeys = new Set(entries.map((entry) => key(entry.item.name)));
     // Items that stay as they are, whatever happens: their names stay taken.
-    const leftAsIs = new Set<number>();
-    for (const index of indexes) {
-      const item = input.items[index];
-      const name = proposed.names[index];
-      if (!item || !name || name.kind === "unchanged") {
-        leftAsIs.add(index);
+    const leftAsIs = new Set<Entry>();
+    for (const entry of entries) {
+      const { item, name } = entry;
+      if (name.kind === "unchanged") {
+        leftAsIs.add(entry);
         continue;
       }
       const invalid = name.emptyName
         ? "The name can’t be only an extension."
         : getItemNameError(name.name);
       const cannotRename = input.cannotRename?.get(item.path);
-      if (invalid !== null) {
-        plan[index] = {
+      if (invalid !== null || cannotRename !== undefined) {
+        plan[entry.index] = {
           status: "problem",
           proposedName: name.name,
           segments: name.segments,
-          problem: { kind: "invalid", message: invalid },
+          problem:
+            invalid !== null
+              ? { kind: "invalid", message: invalid }
+              : { kind: "cannotRename", message: cannotRename as string },
         };
-        leftAsIs.add(index);
-      } else if (cannotRename !== undefined) {
-        plan[index] = {
-          status: "problem",
-          proposedName: name.name,
-          segments: name.segments,
-          problem: { kind: "cannotRename", message: cannotRename },
-        };
-        leftAsIs.add(index);
+        leftAsIs.add(entry);
       }
     }
     // An item skipped for a clash keeps its old name, which may take a name another item was
     // given: the folder is settled again until no new item is skipped.
-    for (let round = 0; round <= indexes.length; round += 1) {
-      const taken = new Set<string>();
-      for (const name of folder?.names ?? []) {
-        taken.add(key(name));
-      }
-      for (const index of indexes) {
-        if (!leftAsIs.has(index)) {
-          taken.delete(key(input.items[index]?.name ?? ""));
+    for (let newlySkipped = true; newlySkipped; ) {
+      newlySkipped = false;
+      const taken = new Set((folder?.names ?? []).map(key));
+      for (const entry of entries) {
+        if (leftAsIs.has(entry)) {
+          taken.add(key(entry.item.name));
+        } else {
+          taken.delete(key(entry.item.name));
         }
       }
-      for (const index of leftAsIs) {
-        taken.add(key(input.items[index]?.name ?? ""));
-      }
-      let newlySkipped = false;
-      for (const index of indexes) {
-        if (leftAsIs.has(index)) {
+      for (const entry of entries) {
+        const { item, name, index } = entry;
+        if (leftAsIs.has(entry) || name.kind !== "renamed") {
           continue;
         }
-        const item = input.items[index];
-        const name = proposed.names[index];
-        if (!item || !name || name.kind !== "renamed") {
+        if (!taken.has(key(name.name))) {
+          taken.add(key(name.name));
+          plan[index] = renamed(item, name, name.name, name.segments, null);
           continue;
         }
-        let finalName = name.name;
-        let segments = name.segments;
-        let addedNumber: number | null = null;
-        if (taken.has(key(finalName))) {
-          const byItemInBatch = batchOldKeys.has(key(finalName));
-          if (input.settings.onConflict === "number") {
-            const numbered = findNumberedName(name, item, input.settings, (candidate) =>
-              taken.has(key(candidate)),
-            );
-            finalName = numbered.name;
-            segments = numbered.segments;
-            addedNumber = numbered.number;
-          } else if (input.settings.onConflict === "skip") {
-            plan[index] = {
-              status: "problem",
-              proposedName: name.name,
-              segments: name.segments,
-              problem: { kind: "skippedTaken", byItemInBatch },
-            };
-            leftAsIs.add(index);
+        const byItemInBatch = batchOldKeys.has(key(name.name));
+        if (input.settings.onConflict === "number") {
+          const numbered = findNumberedName(name, item, input.settings, (candidate) =>
+            taken.has(key(candidate)),
+          );
+          taken.add(key(numbered.name));
+          plan[index] = renamed(item, name, numbered.name, numbered.segments, numbered.number);
+        } else {
+          const skip = input.settings.onConflict === "skip";
+          plan[index] = {
+            status: "problem",
+            proposedName: name.name,
+            segments: name.segments,
+            problem: { kind: skip ? "skippedTaken" : "taken", byItemInBatch },
+          };
+          if (skip) {
+            leftAsIs.add(entry);
             newlySkipped = true;
-            continue;
-          } else {
-            plan[index] = {
-              status: "problem",
-              proposedName: name.name,
-              segments: name.segments,
-              problem: { kind: "taken", byItemInBatch },
-            };
-            continue;
           }
-        }
-        taken.add(key(finalName));
-        plan[index] = {
-          status: "rename",
-          name: finalName,
-          segments,
-          addedNumber,
-          usedCreatedForTaken: name.usedCreatedForTaken === true,
-          becomesHidden: finalName.startsWith(".") && !item.name.startsWith("."),
-        };
-      }
-      if (!newlySkipped) {
-        break;
-      }
-      // Settle the folder again from the start with the skipped items' names taken.
-      for (const index of indexes) {
-        const current = plan[index];
-        if (!leftAsIs.has(index) && current?.status !== "unchanged") {
-          plan[index] = { status: "unchanged" };
         }
       }
     }
@@ -901,6 +856,27 @@ export function planBatchRename(input: BatchRenamePlanInput): BatchRenamePlan {
   };
 }
 
+function renamed(
+  item: BatchRenameItem,
+  proposed: Extract<ProposedName, { kind: "renamed" }>,
+  name: string,
+  segments: NameSegment[],
+  addedNumber: number | null,
+): BatchRenamePlanItem {
+  return {
+    status: "rename",
+    name,
+    segments,
+    addedNumber,
+    usedCreatedForTaken: proposed.usedCreatedForTaken === true,
+    becomesHidden: name.startsWith(".") && !item.name.startsWith("."),
+  };
+}
+
+// Past this many, a number is given without looking further (a folder can't hold that many
+// names like it in practice).
+const MAX_ADDED_NUMBER = 100_000;
+
 // The name with the first free number added before its extension: "Lisbon 2.jpg". Format
 // numbers with the separator it uses; other modes with a space, as macOS numbers copies.
 function findNumberedName(
@@ -913,22 +889,21 @@ function findNumberedName(
     settings.mode === "format" && settings.separator.length > 0 ? settings.separator : " ";
   const { stem, extension } = splitItemName(name.name, item.isFolder);
   const tail = extension === null ? "" : `.${extension}`;
-  for (let number = 2; ; number += 1) {
-    const candidate = `${stem}${separator}${number}${tail}`;
-    if (!isTaken(candidate) || number > 100_000) {
-      const stemLength = stem.length;
-      const segments = splitSegmentsAt(name.segments, stemLength);
-      return {
-        name: candidate,
-        number,
-        segments: mergeSegments([
-          ...segments.before,
-          { text: `${separator}${number}`, changed: true },
-          ...segments.after,
-        ]),
-      };
-    }
+  const candidate = (number: number) => `${stem}${separator}${number}${tail}`;
+  let number = 2;
+  while (isTaken(candidate(number)) && number < MAX_ADDED_NUMBER) {
+    number += 1;
   }
+  const segments = splitSegmentsAt(name.segments, stem.length);
+  return {
+    name: candidate(number),
+    number,
+    segments: mergeSegments([
+      ...segments.before,
+      { text: `${separator}${number}`, changed: true },
+      ...segments.after,
+    ]),
+  };
 }
 
 function splitSegmentsAt(

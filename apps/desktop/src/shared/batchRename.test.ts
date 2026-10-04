@@ -187,6 +187,14 @@ describe("the replacement of a regular expression", () => {
     expect(expandReplacement("$x", found, "abc")).toBe("$x");
   });
 
+  it("puts nothing for a group that matched nothing or a name that isn't a group", () => {
+    const either = match(/(a)|(b)/u, "b");
+    expect(expandReplacement("[$1][$2]", either, "b")).toBe("[][b]");
+    const named = match(/(?<word>\w+)/u, "hi");
+    expect(expandReplacement("$<other>|$<word>", named, "hi")).toBe("|hi");
+    expect(expandReplacement("$<word", named, "hi")).toBe("$<word");
+  });
+
   it("reads two digits only when there are that many groups", () => {
     const eleven = match(/(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)/u, "abcdefghijk");
     expect(expandReplacement("$11", eleven, "abcdefghijk")).toBe("k");
@@ -367,6 +375,15 @@ describe("Format", () => {
     ).toBeNull();
   });
 
+  it("leaves an item without the date asked for as it is", () => {
+    const result = proposeNames(
+      settings(format({ nameFormat: "date", dateSource: "modified" })),
+      [item("a.jpg", { modifiedAt: null })],
+      NOW,
+    );
+    expect(result.names).toEqual([{ kind: "unchanged" }]);
+  });
+
   it("ignores Apply To: the extension is always kept", () => {
     expect(names(format({ applyTo: "both" }), ["a.jpg"])).toEqual(["File 1.jpg"]);
   });
@@ -402,6 +419,10 @@ describe("dates and numbers", () => {
     expect(formatNumber(settings({ startAt: 0, step: 10 }), 3, 4)).toBe("30");
     expect(formatNumber(settings({ nameFormat: "counter", digits: 3 }), 0, 1)).toBe("001");
     expect(formatNumber(settings({ nameFormat: "counter", digits: 2 }), 199, 200)).toBe("200");
+  });
+
+  it("reads a date it can't make sense of as all zeros rather than failing", () => {
+    expect(formatDate("not a date", dated({ dateFormat: "ymd" }))).toBe("0000-00-00");
   });
 
   it("reads a moment on this Mac's clock", () => {
@@ -442,6 +463,26 @@ describe("saved settings and presets", () => {
       onConflict: "skip",
       applyTo: "name",
     });
+  });
+
+  it("takes the default for numbers that aren't numbers, and keeps long text short", () => {
+    const read = sanitizeBatchRenameSettings({
+      startAt: Number.POSITIVE_INFINITY,
+      step: "3",
+      customName: "x".repeat(400),
+      matchCase: "true",
+      keepNames: 1,
+      mode: null,
+    });
+    expect(read).toMatchObject({
+      startAt: DEFAULT_BATCH_RENAME_SETTINGS.startAt,
+      step: DEFAULT_BATCH_RENAME_SETTINGS.step,
+      matchCase: false,
+      keepNames: false,
+      mode: "replace",
+    });
+    expect(read.customName).toHaveLength(255);
+    expect(sanitizeBatchRenameSettings({ startAt: 2e12 }).startAt).toBe(999_999_999);
   });
 
   it("drops presets without a name or with one already used, and keeps at most the limit", () => {
@@ -690,6 +731,19 @@ describe("the plan", () => {
       now: NOW,
     });
     expect(result.items.map(outcome)).toEqual(["notes.txt", "notes 2.txt"]);
+  });
+
+  it("takes a folder it knows nothing of to hold only the items being renamed", () => {
+    const result = planBatchRename({
+      settings: settings({ mode: "format", nameFormat: "date", dateSource: "created" }),
+      items: [
+        item("a.jpg", { path: "/elsewhere/a.jpg" }),
+        item("b.jpg", { path: "/elsewhere/b.jpg" }),
+      ],
+      folders: new Map(),
+      now: NOW,
+    });
+    expect(result.items.map(outcome)).toEqual(["File 2026-09-30.jpg", "File 2026-09-30 2.jpg"]);
   });
 
   it("holds nothing back when the settings themselves are broken: nothing is renamed", () => {

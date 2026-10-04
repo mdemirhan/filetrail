@@ -220,7 +220,12 @@ export const writeOperationActionSchema = z.enum([
   "delete_immediately",
   "rename",
   "new_folder",
+  // Several items renamed at once, from the Rename sheet.
+  "batch_rename",
 ]);
+
+// A date and time as the clock of this Mac reads it, without a zone: "2026-05-14T18:02:11".
+const localDateTimeSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/u);
 export const appLogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 export const sizeStatusSchema = z.enum(["ready", "deferred", "unavailable"]);
 const emptyRequestSchema = z.object({});
@@ -1002,6 +1007,58 @@ export const ipcContractSchemas = {
     request: z.object({
       sourcePath: absolutePathSchema,
       destinationName: itemNameSchema,
+    }),
+    response: z.object({
+      operationId: z.string().min(1),
+      status: z.literal("queued"),
+    }),
+  },
+  // What the Rename sheet needs to show the new names of several items and check them: each
+  // item's dates (when it was taken only when asked: that reads the files), whether it can
+  // be renamed at all, and every name in the folders they are in.
+  "batchRename:inspect": {
+    request: z.object({
+      paths: absolutePathListSchema,
+      includeDateTaken: z.boolean(),
+    }),
+    response: z.object({
+      items: z.array(
+        z.object({
+          path: z.string().min(1),
+          createdAt: localDateTimeSchema.nullable(),
+          modifiedAt: localDateTimeSchema.nullable(),
+          takenAt: localDateTimeSchema.nullable(),
+          // Why the item can't be renamed (gone, locked, its folder read-only), or null.
+          cannotRename: z.string().nullable(),
+        }),
+      ),
+      folders: z.array(
+        z.object({
+          path: z.string().min(1),
+          names: z.array(z.string()),
+          caseSensitive: z.boolean(),
+        }),
+      ),
+    }),
+  },
+  // Renames several items, each in its own folder, to the names the sheet settled. A name
+  // found taken while renaming is handled as the sheet's setting says.
+  "writeOperation:batchRename": {
+    request: z.object({
+      items: z
+        .array(
+          z.object({
+            sourcePath: absolutePathSchema,
+            destinationName: itemNameSchema,
+            // Folders have no extension: a number added to a taken name goes at the end.
+            isFolder: z.boolean(),
+          }),
+        )
+        .min(1)
+        .max(MAX_PATHS_PER_REQUEST),
+      onConflict: z.enum(["number", "skip", "block"]),
+      // What goes before a number added to a taken name.
+      numberSeparator: z.enum([" ", "-", "_"]),
     }),
     response: z.object({
       operationId: z.string().min(1),
