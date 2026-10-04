@@ -143,7 +143,11 @@ export function followClipboardThroughWrite(
     return clipboard;
   }
   const completedItems = result.items.filter((item) => item.status === "completed");
-  if (result.action === "rename" || result.action === "move_to") {
+  if (
+    result.action === "rename" ||
+    result.action === "batch_rename" ||
+    result.action === "move_to"
+  ) {
     const moves = completedItems.flatMap((item) =>
       item.sourcePath && item.destinationPath
         ? [{ from: item.sourcePath, to: item.destinationPath }]

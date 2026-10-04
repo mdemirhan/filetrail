@@ -6529,6 +6529,392 @@ button.shortcut-slot-key.recording:hover {
   --warning-glyph-mark: #1d1d1f;
 }
 
+/* ── The Rename sheet for several items ───────────────────────────────────
+   Finder's Rename Finder Items, with every item's new name listed below the options. It
+   drops in below the toolbar like the other sheets; labels sit right-aligned in a column
+   before their controls, as in Finder's own sheet. */
+.batch-rename-sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 48px));
+  max-height: calc(100vh - 60px - 24px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-dialog);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--elevation-dialog);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  outline: none;
+}
+
+.batch-rename-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.batch-rename-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 16px 12px 20px;
+}
+
+.batch-rename-title {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: 700;
+}
+
+.batch-rename-preset-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.batch-rename-preset-save .batch-rename-field {
+  width: 180px;
+}
+
+.batch-rename-modes {
+  display: flex;
+  justify-content: center;
+  padding: 0 20px 14px;
+}
+
+.batch-rename-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 20px 14px;
+}
+
+/* Label, control, label, control: two settings to a row. */
+.batch-rename-grid {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 104px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.batch-rename-wide {
+  grid-column: span 3;
+}
+
+.batch-rename-wide-pair {
+  grid-column: span 2;
+}
+
+.batch-rename-label {
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.batch-rename-field {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  box-shadow: var(--field-edge);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  caret-color: var(--ft-accent-solid);
+  outline: none;
+}
+
+.batch-rename-field:focus {
+  box-shadow: var(--field-focus);
+}
+
+.batch-rename-field:disabled {
+  opacity: var(--disabled-opacity);
+}
+
+.batch-rename-field.is-mono {
+  font-family: var(--font-mono);
+  font-size: var(--mono-font-size);
+}
+
+.batch-rename-field.is-number {
+  width: 72px;
+  text-align: right;
+}
+
+/* A native pop-up button with the push button's bezel, as the pop-ups in Settings. */
+.batch-rename-popup {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.batch-rename-popup select {
+  width: 100%;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0 24px 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--push-button-bg);
+  box-shadow: var(--push-button-bezel);
+  color: var(--text-primary);
+  font: inherit;
+  appearance: none;
+  cursor: default;
+}
+
+.batch-rename-popup select:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.batch-rename-popup-chevron {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  width: 11px;
+  height: 11px;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.batch-rename-presets select {
+  min-width: 120px;
+}
+
+.batch-rename-checks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+
+.batch-rename-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.batch-rename-check input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border-radius: var(--radius-xs);
+  background: var(--field-bg);
+  box-shadow: var(--field-edge), 0 0.5px 1px rgba(0, 0, 0, 0.1);
+  appearance: none;
+}
+
+.batch-rename-check input:checked {
+  background: var(--ft-accent-solid)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.5 7.2l2.3 2.3 4.7-5' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 14px no-repeat;
+  box-shadow: none;
+}
+
+.batch-rename-check input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.batch-rename-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-small);
+}
+
+.batch-rename-warning {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--font-size-small);
+}
+
+.batch-rename-pattern {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.batch-rename-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.batch-rename-token {
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--ft-accent-soft-bg);
+  color: var(--ft-accent-path-crumb-hover);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+}
+
+.batch-rename-token:hover {
+  background: var(--ft-accent-action-hover-bg);
+}
+
+.batch-rename-token:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* The preview: every item, its name now and its new name, the change marked. */
+.batch-rename-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0 20px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 0.5px var(--border-active);
+  overflow: hidden;
+}
+
+.batch-rename-preview-head,
+.batch-rename-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 14px minmax(0, 1.25fr);
+  column-gap: 8px;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.batch-rename-preview-head {
+  min-height: 22px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-small);
+}
+
+.batch-rename-rows {
+  max-height: calc(8 * 28px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.batch-rename-row {
+  min-height: 26px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.batch-rename-row:nth-child(even) {
+  background: color-mix(in srgb, var(--neutral-ink) 2.5%, transparent);
+}
+
+.batch-rename-row.is-danger {
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.batch-rename-row.is-more {
+  display: block;
+  color: var(--text-secondary);
+}
+
+.batch-rename-glyph {
+  width: 16px;
+  height: 16px;
+}
+
+.batch-rename-arrow {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.batch-rename-old {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-rename-new {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.batch-rename-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.batch-rename-changed {
+  border-radius: 3px;
+  background: var(--ft-accent-soft-bg);
+  color: var(--ft-accent-path-crumb-hover);
+}
+
+.batch-rename-row.is-danger .batch-rename-changed {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger-text);
+}
+
+.batch-rename-unchanged {
+  color: var(--text-tertiary);
+}
+
+.batch-rename-row-note {
+  font-size: var(--font-size-small);
+}
+
+.batch-rename-row-note.is-danger {
+  color: var(--danger-text);
+}
+
+.batch-rename-row-note.is-muted {
+  color: var(--text-tertiary);
+}
+
+.batch-rename-row-note.is-warning {
+  color: var(--text-secondary);
+}
+
+.batch-rename-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 16px 20px;
+}
+
+.batch-rename-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-callout);
+}
+
+.batch-rename-summary.is-danger {
+  color: var(--danger-text);
+}
+
 /* The review and result sheets drop in below the toolbar (.modal-scrim.is-sheet), with
    every corner rounded, as macOS sheets are. */
 .copy-paste-sheet {

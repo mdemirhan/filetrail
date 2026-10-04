@@ -1,5 +1,35 @@
 import { copyPasteProgressEventSchema, ipcContractSchemas } from "./ipc";
 
+// The Rename sheet's preferences, as a new install has them (one preset, to check its shape).
+const BATCH_RENAME_SETTINGS = {
+  mode: "replace",
+  find: "",
+  replaceWith: "",
+  matchCase: false,
+  useRegex: false,
+  addText: "",
+  addWhere: "after",
+  nameFormat: "index",
+  formatWhere: "after",
+  customName: "File",
+  keepNames: false,
+  startAt: 1,
+  step: 1,
+  digits: 5,
+  separator: " ",
+  dateSource: "created",
+  dateFormat: "ymd",
+  dateSeparator: "-",
+  customDatePattern: "YYYY-MM-DD at HH.mm",
+  caseStyle: "lower",
+  applyTo: "name",
+  onConflict: "number",
+} as const;
+const BATCH_RENAME_PREFERENCES = {
+  batchRenameSettings: BATCH_RENAME_SETTINGS,
+  batchRenamePresets: [{ name: "Photos", settings: { ...BATCH_RENAME_SETTINGS, mode: "format" } }],
+};
+
 describe("ipc contracts", () => {
   it("accepts per-item review choices and standing runtime answers", () => {
     expect(
@@ -454,6 +484,7 @@ describe("ipc contracts", () => {
           favoritesPlacement: "integrated",
           favoritesExpanded: true,
           favoritesInitialized: false,
+          ...BATCH_RENAME_PREFERENCES,
         },
       }),
     ).toEqual({
@@ -538,6 +569,7 @@ describe("ipc contracts", () => {
         favoritesPlacement: "integrated",
         favoritesExpanded: true,
         favoritesInitialized: false,
+        ...BATCH_RENAME_PREFERENCES,
       },
     });
 
@@ -606,6 +638,7 @@ describe("ipc contracts", () => {
           favoritesPlacement: "separate",
           favoritesExpanded: false,
           favoritesInitialized: true,
+          ...BATCH_RENAME_PREFERENCES,
         },
       }),
     ).toEqual({
@@ -672,6 +705,7 @@ describe("ipc contracts", () => {
         favoritesPlacement: "separate",
         favoritesExpanded: false,
         favoritesInitialized: true,
+        ...BATCH_RENAME_PREFERENCES,
       },
     });
   });

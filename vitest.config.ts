@@ -36,9 +36,9 @@ export default defineConfig({
         "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds,batchRenameExecution,batchRenameInspect}.ts",
         "apps/desktop/src/shared/batchRename.ts",
         "apps/desktop/src/main/ipc.ts",
-        "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState}.ts",
+        "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename}.ts",
         "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,internalDragAndDrop}.ts",
-        "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField}.tsx",
+        "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField,BatchRenameSheet}.tsx",
       ],
       thresholds: {
         // The copy engine and the contracts: where a gap can lose data.
@@ -71,6 +71,12 @@ export default defineConfig({
           branches: 83,
           functions: 85,
           lines: 93,
+        },
+        "apps/desktop/src/renderer/hooks/useBatchRename.ts": {
+          statements: 95,
+          branches: 90,
+          functions: 95,
+          lines: 95,
         },
         "apps/desktop/src/renderer/hooks/{useWriteOperations,useTrashState}.ts": {
           statements: 100,

@@ -25,6 +25,7 @@ import {
   normalizeAccentColor,
   normalizeDetailColumnOrder,
 } from "../shared/appPreferences";
+import { sanitizeBatchRenamePresets, sanitizeBatchRenameSettings } from "../shared/batchRename";
 import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import { sanitizeTopToolbarItems } from "../shared/toolbarItems";
 import {
@@ -648,6 +649,8 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       typeof record.singleClickExpandTreeItems === "boolean"
         ? record.singleClickExpandTreeItems
         : currentDefaults.singleClickExpandTreeItems,
+    batchRenameSettings: sanitizeBatchRenameSettings(record.batchRenameSettings),
+    batchRenamePresets: sanitizeBatchRenamePresets(record.batchRenamePresets),
   };
 }
 

@@ -151,5 +151,11 @@ export function toPreferencePatch(
   if (value.singleClickExpandTreeItems !== undefined) {
     patch.singleClickExpandTreeItems = value.singleClickExpandTreeItems;
   }
+  if (value.batchRenameSettings !== undefined) {
+    patch.batchRenameSettings = value.batchRenameSettings;
+  }
+  if (value.batchRenamePresets !== undefined) {
+    patch.batchRenamePresets = value.batchRenamePresets;
+  }
   return patch;
 }

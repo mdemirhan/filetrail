@@ -274,6 +274,7 @@ export function describeDragRefusedWhileBusy(
     case "delete_immediately":
       return `Can't drag while ${subject} being deleted`;
     case "rename":
+    case "batch_rename":
       return `Can't drag while ${subject} being renamed`;
     case "new_folder":
       return "Can't drag while a folder is being made";
@@ -310,7 +311,11 @@ export function resolveWriteOperationSelectionDirectoryPath(
   if (!firstSelectedPath) {
     return null;
   }
-  if (result.action === "rename" || result.action === "new_folder") {
+  if (
+    result.action === "rename" ||
+    result.action === "batch_rename" ||
+    result.action === "new_folder"
+  ) {
     return parentDirectoryPath(firstSelectedPath) ?? null;
   }
   return result.targetPath;
@@ -328,7 +333,7 @@ export function resolveWriteOperationRefreshPath(
     return parentDirectoryPath(impactedPath) ?? currentPath;
   }
 
-  if (result.action === "rename" || result.action === "move_to") {
+  if (isRenameOrMove(result.action)) {
     const impactedItem = findDeepestMatchingSourceItem(result, currentPath);
     if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
       return currentPath;
@@ -355,7 +360,7 @@ export function resolveWriteOperationTreeSelectionPath(
     return parentDirectoryPath(impactedPath) ?? null;
   }
 
-  if (result.action === "rename" || result.action === "move_to") {
+  if (isRenameOrMove(result.action)) {
     const impactedItem = findDeepestMatchingSourceItem(result, selectedTreePath);
     if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
       return null;
@@ -368,6 +373,12 @@ export function resolveWriteOperationTreeSelectionPath(
   }
 
   return null;
+}
+
+/** A write that gives items new paths (a rename of one or several, or a move): what was at
+ *  the old paths, and what is inside, is followed to the new ones. */
+export function isRenameOrMove(action: WriteOperationAction): boolean {
+  return action === "rename" || action === "batch_rename" || action === "move_to";
 }
 
 export function resolveWriteOperationTreeReloadPaths(result: WriteOperationResult): string[] {

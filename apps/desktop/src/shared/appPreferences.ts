@@ -1,3 +1,8 @@
+import {
+  type BatchRenamePreset,
+  type BatchRenameSettings,
+  DEFAULT_BATCH_RENAME_SETTINGS,
+} from "./batchRename";
 import type { ShortcutOverrides } from "./shortcuts";
 import { DEFAULT_TOP_TOOLBAR_ITEMS, type ToolbarItemId } from "./toolbarItems";
 
@@ -287,6 +292,9 @@ export type AppPreferences = {
   favoritesPlacement: FavoritesPlacement;
   favoritesExpanded: boolean;
   favoritesInitialized: boolean;
+  // The Rename sheet for several items: its settings as last used, and the ones saved by name.
+  batchRenameSettings: BatchRenameSettings;
+  batchRenamePresets: BatchRenamePreset[];
 };
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
@@ -338,6 +346,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   favoritesPlacement: "integrated",
   favoritesExpanded: true,
   favoritesInitialized: false,
+  batchRenameSettings: DEFAULT_BATCH_RENAME_SETTINGS,
+  batchRenamePresets: [],
 };
 
 // Pane widths are rounded before persistence so restored layouts remain stable and do not

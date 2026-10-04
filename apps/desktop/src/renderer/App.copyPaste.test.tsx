@@ -3543,11 +3543,198 @@ describe("App copy/paste integration", () => {
 
     it("is not offered for files alone, whose sizes are known", async () => {
       await rightClickSelection(["/Users/demo/source.txt", "/Users/demo/notes.txt"]);
-      // Rename is one item at a time: with two it isn't listed, as Calculate Size isn't.
-      expect(screen.queryByRole("button", { name: /^Rename/ })).toBeNull();
+      // Two items are renamed together, in the Rename sheet.
+      expect(screen.getByRole("button", { name: /^Rename 2 Items…/ })).toBeInTheDocument();
 
       expect(screen.getByRole("button", { name: /^Duplicate/ })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Calculate Size" })).toBeNull();
+    });
+  });
+
+  describe("renaming several items", () => {
+    function setup(overrides: Parameters<typeof createAppHarness>[0] = {}) {
+      const harness = createAppHarness(overrides);
+      harness.setDirectoryEntries("/Users/demo", [
+        createDirectoryEntry("/Users/demo/a.txt", "file"),
+        createDirectoryEntry("/Users/demo/b.txt", "file"),
+        createDirectoryEntry("/Users/demo/Folder", "directory"),
+      ]);
+      renderApp(harness);
+      return harness;
+    }
+    async function selectBoth() {
+      await selectItem("/Users/demo/a.txt");
+      await act(async () => {
+        fireEvent.click(screen.getByTitle("/Users/demo/b.txt"), { metaKey: true });
+      });
+    }
+    const sheet = () => screen.queryByRole("dialog", { name: /^Rename \d+ Items?$/u });
+    const batchRequests = (harness: ReturnType<typeof createAppHarness>) =>
+      harness.invocations
+        .filter((call) => call.channel === "writeOperation:batchRename")
+        .map((call) => call.payload);
+
+    it("renames them from the menu, showing every new name first", async () => {
+      const harness = setup();
+      await selectBoth();
+      await act(async () => {
+        fireEvent.contextMenu(screen.getByTitle("/Users/demo/a.txt"));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /^Rename 2 Items…/ }));
+      });
+      await waitFor(() => expect(sheet()).toBeInTheDocument());
+      // The checks have come back once the items are listed with no change.
+      await waitFor(() =>
+        expect(within(sheet() as HTMLElement).getAllByText("No change")).toHaveLength(2),
+      );
+      await act(async () => {
+        fireEvent.click(within(sheet() as HTMLElement).getByLabelText("Add Text"));
+      });
+      await act(async () => {
+        fireEvent.change(within(sheet() as HTMLElement).getByLabelText("Text"), {
+          target: { value: "-old" },
+        });
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Rename 2 Items" }));
+      });
+      expect(batchRequests(harness)).toEqual([
+        {
+          items: [
+            { sourcePath: "/Users/demo/a.txt", destinationName: "a-old.txt", isFolder: false },
+            { sourcePath: "/Users/demo/b.txt", destinationName: "b-old.txt", isFolder: false },
+          ],
+          onConflict: "number",
+          numberSeparator: " ",
+        },
+      ]);
+      expect(sheet()).toBeNull();
+      // What was typed is kept for next time.
+      expect(
+        harness.invocations.some(
+          (call) =>
+            call.channel === "app:updatePreferences" &&
+            (call.payload as { preferences: { batchRenameSettings?: { addText?: string } } })
+              .preferences.batchRenameSettings?.addText === "-old",
+        ),
+      ).toBe(true);
+
+      // Once done, the renamed items are selected, as a renamed item is.
+      harness.setDirectoryEntries("/Users/demo", [
+        createDirectoryEntry("/Users/demo/a-old.txt", "file"),
+        createDirectoryEntry("/Users/demo/b-old.txt", "file"),
+        createDirectoryEntry("/Users/demo/Folder", "directory"),
+      ]);
+      await act(async () => {
+        harness.emitProgress(
+          batchRenameEvent("completed", [
+            ["/Users/demo/a.txt", "/Users/demo/a-old.txt", "completed"],
+            ["/Users/demo/b.txt", "/Users/demo/b-old.txt", "completed"],
+          ]),
+        );
+      });
+      await vi.waitFor(() => {
+        expect(screen.getByTitle("/Users/demo/a-old.txt")).toHaveAttribute("data-selected", "true");
+        expect(screen.getByTitle("/Users/demo/b-old.txt")).toHaveAttribute("data-selected", "true");
+      });
+    });
+
+    it("opens with F2, Return and the menu bar's Rename, and closes with Escape", async () => {
+      const harness = setup();
+      await selectBoth();
+      await pressKey({ key: "F2" });
+      await waitFor(() => expect(sheet()).toBeInTheDocument());
+      await act(async () => {
+        fireEvent.keyDown(screen.getByLabelText("Find"), { key: "Escape" });
+      });
+      expect(sheet()).toBeNull();
+      await act(async () => {
+        harness.emitCommand({ type: "renameSelection" });
+      });
+      await waitFor(() => expect(sheet()).toBeInTheDocument());
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      });
+      expect(sheet()).toBeNull();
+      // Return renames, as Finder's does (Settings can make it open instead).
+      await act(async () => {
+        fireEvent.click(screen.getByTitle("/Users/demo/b.txt"), { metaKey: true });
+        fireEvent.click(screen.getByTitle("/Users/demo/b.txt"), { metaKey: true });
+      });
+      await pressKey({ key: "Enter" });
+      await waitFor(() => expect(sheet()).toBeInTheDocument());
+    });
+
+    it("keeps the list's shortcuts from acting while it is open", async () => {
+      const harness = setup();
+      await selectBoth();
+      await pressKey({ key: "F2" });
+      await waitFor(() => expect(sheet()).toBeInTheDocument());
+      await act(async () => {
+        fireEvent.keyDown(screen.getByLabelText("Find"), { key: "Backspace", metaKey: true });
+      });
+      await pressKey({ key: "Backspace", metaKey: true });
+      expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
+        false,
+      );
+      expect(sheet()).toBeInTheDocument();
+    });
+
+    // Selects both items and renames them by adding "-old", as far as the request.
+    async function startAddingOld() {
+      await selectBoth();
+      await pressKey({ key: "F2" });
+      await waitFor(() =>
+        expect(within(sheet() as HTMLElement).getAllByText("No change")).toHaveLength(2),
+      );
+      await act(async () => {
+        fireEvent.click(within(sheet() as HTMLElement).getByLabelText("Add Text"));
+      });
+      await act(async () => {
+        fireEvent.change(within(sheet() as HTMLElement).getByLabelText("Text"), {
+          target: { value: "-old" },
+        });
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Rename 2 Items" }));
+      });
+    }
+
+    it("lists what wasn't renamed, and tries it again from the sheet", async () => {
+      const harness = setup();
+      await startAddingOld();
+      await act(async () => {
+        harness.emitProgress(
+          batchRenameEvent("partial", [
+            ["/Users/demo/a.txt", "/Users/demo/a-old.txt", "completed"],
+            ["/Users/demo/b.txt", null, "failed"],
+          ]),
+        );
+      });
+      const result = await screen.findByRole("dialog", { name: "Renamed 1 of 2 items in “demo”" });
+      expect(within(result).getByText("Couldn’t rename")).toBeInTheDocument();
+      expect(within(result).getByText("“b.txt” is locked.")).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(within(result).getByRole("button", { name: "Try Again…" }));
+      });
+      await waitFor(() =>
+        expect(screen.getByRole("dialog", { name: "Rename 1 Item" })).toBeInTheDocument(),
+      );
+      expect(screen.queryByRole("dialog", { name: /^Renamed/u })).toBeNull();
+    });
+
+    it("says another operation is running instead of opening", async () => {
+      setup();
+      await startAddingOld();
+      // The rename just started is still running.
+      await pressKey({ key: "F2" });
+      expect(sheet()).toBeNull();
+      expect(
+        await screen.findByText(
+          "Another file operation is running. Wait for it to finish, or stop it.",
+        ),
+      ).toBeInTheDocument();
     });
   });
 
@@ -8909,6 +9096,8 @@ function createAppHarness(
     openPathsWithApplicationError?: Error;
     // Thrown by the next rename requests, one each, as the main process would refuse them.
     renameErrors?: Error[];
+    // Why some items can't be renamed, as the Rename sheet's checks find.
+    batchRenameCannotRename?: Record<string, string>;
     createFolderError?: Error;
     resolveConflictError?: Error;
     clearCachesError?: Error;
@@ -9192,6 +9381,28 @@ function createAppHarness(
           throw renameError;
         }
         return { operationId: "write-op-rename", status: "queued" } as IpcResponse<C>;
+      }
+      if (channel === "writeOperation:batchRename") {
+        return { operationId: "write-op-batch-rename", status: "queued" } as IpcResponse<C>;
+      }
+      if (channel === "batchRename:inspect") {
+        // Each item made on one day; the folders hold what their listings hold.
+        const { paths } = payload as IpcRequestInput<"batchRename:inspect">;
+        const folderPaths = [...new Set(paths.map((path) => path.slice(0, path.lastIndexOf("/"))))];
+        return {
+          items: paths.map((path) => ({
+            path,
+            createdAt: "2026-09-30T10:12:40",
+            modifiedAt: "2026-10-01T08:30:15",
+            takenAt: null,
+            cannotRename: args.batchRenameCannotRename?.[path] ?? null,
+          })),
+          folders: folderPaths.map((path) => ({
+            path,
+            names: (directorySnapshots[path]?.entries ?? []).map((entry) => entry.name),
+            caseSensitive: false,
+          })),
+        } satisfies IpcResponse<"batchRename:inspect"> as IpcResponse<C>;
       }
       if (channel === "writeOperation:trash") {
         return { operationId: "write-op-trash", status: "queued" } as IpcResponse<C>;
@@ -10813,6 +11024,54 @@ function finishedWriteEvent(args: {
   };
 }
 
+// The end (or the middle) of a rename of several items, as the main process reports it.
+function batchRenameEvent(
+  status: "running" | "completed" | "partial",
+  items: Array<[source: string, destination: string | null, status: "completed" | "failed"]>,
+): WriteOperationProgressEvent {
+  const completed = items.filter(([, , itemStatus]) => itemStatus === "completed").length;
+  return {
+    operationId: "write-op-batch-rename",
+    action: "batch_rename",
+    status,
+    completedItemCount: completed,
+    totalItemCount: items.length,
+    completedByteCount: 0,
+    totalBytes: null,
+    currentSourcePath: null,
+    currentDestinationPath: null,
+    result: {
+      operationId: "write-op-batch-rename",
+      action: "batch_rename",
+      status,
+      targetPath: "/Users/demo",
+      startedAt: "2026-10-04T10:00:00.000Z",
+      finishedAt: "2026-10-04T10:00:01.000Z",
+      summary: {
+        topLevelItemCount: items.length,
+        totalItemCount: items.length,
+        completedItemCount: completed,
+        failedItemCount: items.length - completed,
+        skippedItemCount: 0,
+        cancelledItemCount: 0,
+        completedByteCount: 0,
+        totalBytes: null,
+      },
+      items: items.map(([sourcePath, destinationPath, itemStatus]) => ({
+        sourcePath,
+        destinationPath,
+        status: itemStatus,
+        error:
+          itemStatus === "failed"
+            ? `“${sourcePath.slice(sourcePath.lastIndexOf("/") + 1)}” is locked.`
+            : null,
+        skipReason: null,
+      })),
+      error: completed === items.length ? null : "Some items couldn’t be renamed.",
+    },
+  };
+}
+
 function renderApp(harness: ReturnType<typeof createAppHarness>): void {
   render(
     <FiletrailClientProvider value={harness.client}>
@@ -12355,7 +12614,7 @@ describe("acting on search results", () => {
     expect(screen.queryByRole("button", { name: /^Delete Immediately/ })).not.toBeInTheDocument();
   });
 
-  it("leaves Rename and Duplicate out of the menu of results from different folders", async () => {
+  it("renames results from different folders together, but leaves Duplicate out", async () => {
     const harness = createAppHarness({
       searchResultItems: [result("/Users/demo/source.txt"), result("/Users/demo/Folder/deep.txt")],
     });
@@ -12367,9 +12626,10 @@ describe("acting on search results", () => {
       fireEvent.contextMenu(await screen.findByTitle("search:/Users/demo/source.txt"));
     });
 
-    // One at a time, and next to one original: neither applies, so neither is listed.
+    // Each is renamed in its own folder; a duplicate goes next to one original, which two
+    // folders don't have, so Duplicate isn't listed.
     expect(screen.getByRole("button", { name: /^Move to Trash/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Rename/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Rename 2 Items…/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Duplicate/ })).toBeNull();
   });
 });

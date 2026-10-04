@@ -2,6 +2,14 @@ import { existsSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
+import { DEFAULT_BATCH_RENAME_SETTINGS } from "../shared/batchRename";
+
+// The Rename sheet's preferences as a new install has them.
+const BATCH_RENAME_DEFAULTS = {
+  batchRenameSettings: DEFAULT_BATCH_RENAME_SETTINGS,
+  batchRenamePresets: [],
+};
+
 import {
   type StoredWindowState,
   createAppStateStore,
@@ -409,6 +417,7 @@ describe("appStateStore", () => {
       favoritesPlacement: "integrated",
       favoritesExpanded: true,
       favoritesInitialized: false,
+      ...BATCH_RENAME_DEFAULTS,
     });
     expect(store.getWindowState()).toEqual({
       width: 1480,
@@ -527,6 +536,7 @@ describe("appStateStore", () => {
       favoritesPlacement: "separate",
       favoritesExpanded: false,
       favoritesInitialized: true,
+      ...BATCH_RENAME_DEFAULTS,
     });
     store.setWindowState({
       x: 120,
@@ -638,6 +648,7 @@ describe("appStateStore", () => {
       favoritesPlacement: "separate",
       favoritesExpanded: false,
       favoritesInitialized: true,
+      ...BATCH_RENAME_DEFAULTS,
     });
     expect(reloaded.getWindowState()).toEqual({
       x: 120,

@@ -105,7 +105,10 @@ export async function runBatchRename(args: {
     try {
       item.temporaryPath = await moveToTemporaryName(fs, item, temporaryName);
     } catch (error) {
-      results[item.index] = failed(item, await describeRenameError(fs, error, item, item.sourcePath));
+      results[item.index] = failed(
+        item,
+        await describeRenameError(fs, error, item, item.sourcePath),
+      );
     }
   }
 

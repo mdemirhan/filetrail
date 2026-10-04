@@ -440,7 +440,8 @@ export function AppDialogs({
         />
       ) : null}
       {showCopyPasteResultDialog && writeOperationProgressEvent ? (
-        isCopyLikeAction(writeOperationProgressEvent.action) ? (
+        isCopyLikeAction(writeOperationProgressEvent.action) ||
+        writeOperationProgressEvent.action === "batch_rename" ? (
           <CopyPasteResultDialog
             event={writeOperationProgressEvent}
             canRetry
@@ -567,7 +568,7 @@ function getWriteOperationTitle(
             ? ["Moving to Trash…", "Move to Trash"]
             : action === "delete_immediately"
               ? ["Deleting…", "Delete Immediately"]
-              : action === "rename"
+              : action === "rename" || action === "batch_rename"
                 ? ["Renaming…", "Rename"]
                 : action === "new_folder"
                   ? ["Creating Folder…", "New Folder"]

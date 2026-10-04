@@ -174,7 +174,8 @@ export function canRunToolbarRendererCommand(
             .size === 1)
       );
     case "renameSelection":
-      return selectedCount === 1;
+      // One item in its row; several in the Rename sheet.
+      return selectedCount > 0;
     case "emptyTrash":
       return context.trashIsEmpty !== true;
     case "newFolder":
