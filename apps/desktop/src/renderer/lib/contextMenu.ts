@@ -212,6 +212,7 @@ export function getContextMenuItems(
       { id: "newFolder", label: "New Folder", icon: "newFolder" },
       { type: "separator", key: "separator-background-organize" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
+      { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },
       { type: "separator", key: "separator-background-info" },
       { id: "paste", label: "Paste", icon: "paste" },
       { id: "copyPath", label: "Copy Path", icon: "copyPath" },

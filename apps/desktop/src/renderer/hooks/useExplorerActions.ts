@@ -143,6 +143,7 @@ const TRASH_HIDDEN_ACTION_IDS: ContextMenuActionId[] = ["paste", "newFolder", "d
 // Background-menu actions that act on the folder on screen rather than on a selection.
 const BACKGROUND_FOLDER_ACTION_IDS: ContextMenuActionId[] = [
   "showInfo",
+  "calculateSize",
   "copyPath",
   "terminal",
   "showInFinder",
@@ -2572,6 +2573,13 @@ export function useExplorerActions(args: {
       }
       if (actionId === "showInfo") {
         await showInfoForPath(folderPath);
+      } else if (actionId === "calculateSize") {
+        // With nothing selected the Info Row shows the folder on screen; without it the
+        // Info panel opens to show the size.
+        callbacks.calculateFolderSize(folderPath);
+        if (!infoRowOpen) {
+          await showInfoForPath(folderPath);
+        }
       } else if (actionId === "copyPath") {
         await runCopyPathAction([folderPath]);
       } else if (actionId === "terminal") {

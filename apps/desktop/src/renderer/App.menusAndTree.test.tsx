@@ -415,6 +415,48 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  describe("Calculate Size from the menu of empty space", () => {
+    async function calculateSizeFromBackground(
+      preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>,
+    ) {
+      const harness = createAppHarness(preferences ? { preferences } : {});
+      render(
+        <FiletrailClientProvider value={harness.client}>
+          <App />
+        </FiletrailClientProvider>,
+      );
+      const background = await screen.findByTestId("content-pane-background");
+      await act(async () => {
+        fireEvent.contextMenu(background);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Calculate Size" }));
+      });
+      await vi.waitFor(() => {
+        expect(
+          harness.invocations.find(
+            (call) =>
+              call.channel === "folderSize:start" &&
+              (call.payload as { path: string }).path === "/Users/demo" &&
+              !(call.payload as { probeOnly?: boolean }).probeOnly,
+          )?.payload,
+        ).toMatchObject({ recalculate: true });
+      });
+    }
+
+    it("sizes the folder on screen and shows its Info", async () => {
+      await calculateSizeFromBackground({ viewMode: "details" });
+
+      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("demo"));
+    });
+
+    it("leaves the Info panel closed when the Info Row is shown", async () => {
+      await calculateSizeFromBackground({ detailRowOpen: true });
+
+      expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
+  });
+
   describe("Calculate Size for several items", () => {
     async function rightClickSelection(paths: string[]) {
       const harness = createAppHarness({ preferences: { viewMode: "icons" } });

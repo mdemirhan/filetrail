@@ -2092,6 +2092,7 @@ describe("App copy/paste integration", () => {
     expect(labels).toEqual([
       "New Folder",
       "Show Info",
+      "Calculate Size",
       "Paste",
       "Copy Path",
       "View As",
