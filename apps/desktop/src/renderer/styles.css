@@ -2783,6 +2783,14 @@ body.resizing-panels * {
   align-self: stretch;
 }
 
+/* A search result's folder too long for its column loses its start, not its end: the
+   folders nearest the result say the most. The cell runs right to left so the "…" lands
+   on the left; the label inside still reads left to right. */
+.details-folder {
+  direction: rtl;
+  text-align: left;
+}
+
 .details-permissions {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

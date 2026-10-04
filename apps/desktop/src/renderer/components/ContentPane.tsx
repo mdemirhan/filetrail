@@ -2106,7 +2106,7 @@ function DetailsCell({
       // biome-ignore lint/a11y/useFocusableInteractive: see note above.
       // biome-ignore lint/a11y/useSemanticElements: see note above.
       <span role="gridcell" className="details-folder" title={getParentPath(entry.path)}>
-        {folderLabel}
+        <bdi dir="ltr">{folderLabel}</bdi>
       </span>
     );
   }
