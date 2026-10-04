@@ -80,11 +80,13 @@
   /* The design scale. Everything sized in the app takes its value from here, so the
      same kind of thing has the same size everywhere. Text is scaled with the zoom
      level, not by changing these. */
-  /* Text, the macOS scale: mini, small, callout, body, and three titles. */
+  /* Text, the macOS scale: mini, small, callout, body, and three titles, plus name. */
   --font-size-mini: 10px;
   --font-size-small: 11px;
   --font-size-callout: 12px;
   --font-size-body: 13px;
+  /* File and folder names in the sidebar and the views: a step above body. */
+  --font-size-name: 14px;
   --font-size-title3: 15px;
   --font-size-title2: 17px;
   --font-size-title1: 20px;
@@ -2564,13 +2566,13 @@ body.resizing-panels * {
   max-width: 100%;
   gap: 0;
   font-family: var(--font-sans);
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-name);
   color: var(--text-primary);
   font-weight: 400;
 }
 
 .flow-list.compact .flow-item-label {
-  font-size: var(--font-size-callout);
+  font-size: var(--font-size-body);
 }
 
 .truncated-name-stem {
@@ -2767,7 +2769,7 @@ body.resizing-panels * {
 }
 
 .details-scroll.compact .details-row {
-  font-size: var(--font-size-callout);
+  font-size: var(--font-size-body);
 }
 
 /* Size with a bar behind it (while the list is sorted by size). Sizes line up on the
@@ -4415,7 +4417,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   padding: 0 12px;
   border-bottom: 0;
   border-radius: var(--radius-control);
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-name);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6327,7 +6329,7 @@ button.shortcut-slot-key.recording:hover {
 .sidebar-main-native .tree-label {
   gap: 6px;
   padding: 0;
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-name);
   font-weight: 400;
 }
 
@@ -6352,7 +6354,7 @@ button.shortcut-slot-key.recording:hover {
 
 .compact-tree-view .sidebar-main-native .tree-label {
   gap: 4px;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-callout);
 }
 
 .compact-tree-view .sidebar-main-native .tree-expand {
@@ -7715,7 +7717,7 @@ button.shortcut-slot-key.recording:hover {
   box-shadow: var(--field-focus);
   color: var(--text-primary);
   font: inherit;
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-name);
 }
 
 /* A name being edited whose row is scrolled out of view: kept, with the keyboard, off screen. */
@@ -7854,8 +7856,8 @@ button.shortcut-slot-key.recording:hover {
   border-radius: var(--radius-xs);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: var(--font-size-callout);
-  line-height: 15px;
+  font-size: var(--font-size-body);
+  line-height: 16px;
   text-align: center;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -7865,8 +7867,8 @@ button.shortcut-slot-key.recording:hover {
 .icon-grid.compact .icon-item-label,
 .icon-label-measurer.compact {
   padding: 1px 2px;
-  font-size: var(--font-size-small);
-  line-height: 14px;
+  font-size: var(--font-size-callout);
+  line-height: 15px;
 }
 
 /* Off-screen copy of the label that lib/iconLabel.ts measures names with: the same font,
@@ -7916,15 +7918,15 @@ button.shortcut-slot-key.recording:hover {
 .icon-item.renaming .inline-rename-input {
   flex: none;
   width: var(--icon-label-width);
-  height: 19px;
+  height: 20px;
   margin: 0;
-  font-size: var(--font-size-callout);
+  font-size: var(--font-size-body);
   text-align: center;
 }
 
 .icon-grid.compact .icon-item.renaming .inline-rename-input {
-  height: 18px;
-  font-size: var(--font-size-small);
+  height: 19px;
+  font-size: var(--font-size-callout);
 }
 
 /* ── Translucent sidebar ──────────────────────────────────────────────── */
