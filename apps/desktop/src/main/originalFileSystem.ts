@@ -23,6 +23,7 @@ import { createStoppableCopyFile, startsWithAppleDoubleMagic } from "@filetrail/
 import type { ExplorerFileSystem } from "@filetrail/core";
 import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core";
 import type { BatchRenameInspectDeps } from "./bootstrap/batchRenameInspect";
+import type { ItemSize } from "./bootstrap/folderSizeAdjust";
 import type { WriteOperationFs } from "./bootstrap/writeOperations";
 
 // Electron patches `node:fs` at startup. The unpatched version is available as
@@ -42,6 +43,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeGetFileThumbnail: (path: string, size: number) => Promise<Buffer | null>;
   nativeFolderSize: (folderPath: string) => Promise<string>;
   nativeFolderSizeCancel: () => void;
+  nativeItemSize: (path: string) => Promise<ItemSize>;
   nativeRenameExclusive: (from: string, to: string) => Promise<void>;
   nativeIsCaseSensitive: (path: string) => Promise<boolean | null>;
   nativeIsPackage: (path: string) => Promise<boolean | null>;
@@ -55,6 +57,7 @@ const {
   nativeGetFileThumbnail,
   nativeFolderSize,
   nativeFolderSizeCancel,
+  nativeItemSize,
   nativeRenameExclusive,
   nativeIsCaseSensitive,
   nativeIsPackage,
@@ -179,6 +182,7 @@ export function createOriginalWriteOperationFs(
     rm: (path, options) => originalFileSystem.rm(path, options),
     trash,
     getFlags: (path) => nativeGetFlags(path),
+    itemSize: (path) => nativeItemSize(path),
   };
 }
 

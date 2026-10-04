@@ -30,7 +30,8 @@ const PROBE_MISS_COOLDOWN_MS = 5_000;
 // probed again (a cheap main-process lookup) if they are shown later.
 export const MAX_FOLDER_SIZE_CACHE_ENTRIES = 5_000;
 
-export function useFolderSizeCache(client: FiletrailClient) {
+// `homePath` locates the home folder's Trash, where a move to the Trash puts things.
+export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
   // The cache lives in a ref so reads are free (no re-renders). We bump a
   // version counter only when the UI needs to repaint — i.e. when a
   // user-visible entry changes (calculation completes, cancel, etc.).
@@ -283,8 +284,52 @@ export function useFolderSizeCache(client: FiletrailClient) {
     bumpVersion();
   };
 
-  // A finished file operation may have changed the sizes of the folders it touched: they
-  // are forgotten (the main process forgets them too) and asked about again when shown.
+  // Asks the main process again for a size it may have changed: the size shown stays until
+  // the answer comes, then is replaced, or forgotten if the main process forgot it too.
+  const refreshEntry = useCallback(
+    (path: string) => {
+      void (async () => {
+        try {
+          const result = await client.invoke("folderSize:start", { path, probeOnly: true });
+          if (cacheRef.current.get(path)?.status === "calculating") {
+            return;
+          }
+          const status =
+            result.status === "ready"
+              ? await client.invoke("folderSize:getStatus", { jobId: result.jobId })
+              : null;
+          if (cacheRef.current.get(path)?.status === "calculating") {
+            return;
+          }
+          if (status?.status === "ready" && status.sizeBytes !== null) {
+            probedPaths.current.add(path);
+            updateEntry(path, {
+              status: "ready",
+              sizeBytes: status.sizeBytes,
+              diskBytes: status.diskBytes ?? status.sizeBytes,
+              fileCount: status.fileCount ?? 0,
+              folderCount: status.folderCount ?? 0,
+            });
+            return;
+          }
+        } catch {
+          // Forgotten below, and asked about again when shown.
+        }
+        if (cacheRef.current.get(path)?.status === "calculating") {
+          return;
+        }
+        cacheRef.current.delete(path);
+        probedPaths.current.delete(path);
+        probeMissedAt.current.delete(path);
+        bumpVersion();
+      })();
+    },
+    [bumpVersion, client, updateEntry],
+  );
+
+  // A finished file operation may have changed the sizes of the folders it touched. The
+  // main process has taken what a delete removed off the sizes it could, and forgotten the
+  // rest: each is asked about again. A move to the Trash changes the Trash too.
   useEffect(
     () =>
       client.onWriteOperationProgress((event) => {
@@ -292,20 +337,34 @@ export function useFolderSizeCache(client: FiletrailClient) {
           return;
         }
         const changedPaths = pathsChangedByWrite(event.result);
+        // Where the Trash is, the folders holding it may have changed; the Trash itself too.
+        const trashPath =
+          event.action === "trash" && homePath.length > 0
+            ? `${homePath.replace(/\/+$/u, "")}/.Trash`
+            : null;
         let forgotten = false;
         for (const [path, entry] of [...cacheRef.current]) {
-          if (entry.status !== "calculating" && isAffectedByChange(path, changedPaths)) {
+          if (entry.status === "calculating") {
+            continue;
+          }
+          if (isAffectedByChange(path, changedPaths) && !holdsAny(path, changedPaths)) {
+            // What changed, and what is inside it: the main process forgot these.
             cacheRef.current.delete(path);
             probedPaths.current.delete(path);
             probeMissedAt.current.delete(path);
             forgotten = true;
+          } else if (
+            holdsAny(path, changedPaths) ||
+            (trashPath !== null && (trashPath === path || holdsAny(path, [trashPath])))
+          ) {
+            refreshEntry(path);
           }
         }
         if (forgotten) {
           bumpVersion();
         }
       }),
-    [bumpVersion, client],
+    [bumpVersion, client, homePath, refreshEntry],
   );
 
   const getEntry = useCallback(
@@ -331,4 +390,10 @@ export function useFolderSizeCache(client: FiletrailClient) {
     cancelFolderSizes,
     version,
   };
+}
+
+// Whether the folder at `path` holds any of `paths` (somewhere inside it).
+function holdsAny(path: string, paths: readonly string[]): boolean {
+  const prefix = path.endsWith("/") ? path : `${path}/`;
+  return paths.some((candidate) => candidate.startsWith(prefix));
 }

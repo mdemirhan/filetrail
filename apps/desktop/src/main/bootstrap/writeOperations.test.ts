@@ -18,7 +18,12 @@ import {
   originalRename,
   originalRenameExclusive,
 } from "../originalFileSystem";
-import { getCachedResponse, getResponseCacheSizes, resetResponseCacheState } from "./responseCache";
+import {
+  createFolderSizeHandlers,
+  getCachedResponse,
+  getResponseCacheSizes,
+  resetResponseCacheState,
+} from "./responseCache";
 import {
   PROGRESS_UPDATE_INTERVAL_MS,
   assertNotSystemLocation,
@@ -142,6 +147,52 @@ describe("createWriteOperationCoordinator", () => {
       }),
     );
 
+    coordinator.shutdown();
+  });
+
+  it("takes what went to the Trash off measured folders, and forgets those it can't tell", async () => {
+    const folderSizes = createFolderSizeHandlers({
+      getFolderSize: vi.fn(async (path: string) =>
+        JSON.stringify({
+          total: path.endsWith("Project") ? 1_000 : 500,
+          diskTotal: 2_000,
+          fileCount: 10,
+          folderCount: 0,
+          dev: 16,
+          dirs: {},
+        }),
+      ),
+      cancelFolderSize: vi.fn(),
+      homePath: "/Users/demo",
+    });
+    for (const path of ["/Users/demo/Project", "/Users/demo/Music"]) {
+      folderSizes.start({ path });
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const itemSize = vi.fn(async (path: string) => {
+      if (path.endsWith("b.bin")) {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      }
+      return path === "/Users/demo"
+        ? { kind: "folder" as const, sizeBytes: 0, diskBytes: 0, dev: 16 }
+        : { kind: "file" as const, sizeBytes: 200, diskBytes: 400, dev: 16 };
+    });
+    const sender = createSender();
+    const fs = createWriteOperationFs({ itemSize });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
+
+    await coordinator.handlers["writeOperation:trash"](
+      { paths: ["/Users/demo/Project/a.bin", "/Users/demo/Music/b.bin"] },
+      { sender },
+    );
+    await waitForTerminalEvent(sender, "write-op-1");
+
+    // Read just before it went, so the size known for Project is still exact.
+    expect(folderSizes.getCachedSize("/Users/demo/Project")).toBe(800);
+    // What b.bin added to Music couldn't be read: Music is measured again when asked for.
+    expect(folderSizes.getCachedSize("/Users/demo/Music")).toBeUndefined();
     coordinator.shutdown();
   });
 
@@ -2109,6 +2160,7 @@ function createWriteOperationFs(overrides: Partial<WriteOperationFs> = {}): Writ
     renameExclusive: overrides.renameExclusive ?? vi.fn(async () => undefined),
     rm: overrides.rm ?? vi.fn(async () => undefined),
     trash: overrides.trash ?? vi.fn(async () => undefined),
+    ...(overrides.itemSize ? { itemSize: overrides.itemSize } : {}),
   };
 }
 

@@ -138,7 +138,6 @@ export function App() {
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
   const client = useFiletrailClient();
-  const folderSizeCache = useFolderSizeCache(client);
   // The Rename sheet for several items.
   const batchRename = useBatchRename(client);
   const { trashIsEmpty, refreshTrashState } = useTrashState(client);
@@ -326,6 +325,7 @@ export function App() {
     leftPaneSubviewRef,
     lastLeftPaneSubviewRef,
   } = navigation;
+  const folderSizeCache = useFolderSizeCache(client, homePath);
   // The sidebar's Locations, as in Finder's: Home, Macintosh HD, the other disks, the Trash.
   const sidebarLocations = useMemo(
     () => buildSidebarLocations(volumes, homePath),

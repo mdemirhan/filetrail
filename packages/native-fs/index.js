@@ -41,6 +41,7 @@ module.exports = {
   nativeKindForPath: binding.nativeKindForPath,
   nativeFolderSize,
   nativeFolderSizeCancel: binding.nativeFolderSizeCancel,
+  nativeItemSize: binding.nativeItemSize,
   nativeRenameExclusive: binding.nativeRenameExclusive,
   nativeIsCaseSensitive: binding.nativeIsCaseSensitive,
   nativeIsPackage: binding.nativeIsPackage,

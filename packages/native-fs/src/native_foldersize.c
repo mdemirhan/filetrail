@@ -13,9 +13,10 @@
  *   - folder count (subfolders at any depth, packages included; a package's
  *     contents count too, as they are walked like any folder)
  *
- * Exposes two functions:
+ * Exposes three functions:
  *   nativeFolderSize(path) -> Promise<string>  -- JSON with totals + per-dir stats
  *   nativeFolderSizeCancel() -> void           -- cancels active walk
+ *   nativeItemSize(path) -> Promise<object>    -- one item, counted as the walk counts it
  *
  * The walk runs on a libuv thread pool thread (which spawns worker pthreads
  * internally). At most one walk is active at a time (enforced by JS caller).
@@ -591,6 +592,7 @@ typedef struct {
   int64_t disk_total;
   int64_t total_file_count;
   int64_t total_folder_count;
+  int64_t dev; /* the disk walked: the walk never leaves it */
   dir_entry_t *dirs;
   int dir_count;
 } folder_size_work_t;
@@ -618,6 +620,7 @@ static void execute_folder_size(napi_env env, void *data) {
     return;
   }
 
+  w->dev = (int64_t)root_stat.st_dev;
   work_queue_t wq;
   wq_init(&wq, root_stat.st_dev, &w->cancelled);
   if (!wq_push(&wq, root_fd, w->root_path)) {
@@ -679,11 +682,12 @@ static char *build_json_result(folder_size_work_t *w) {
   if (!buf) return NULL;
 
   int written = snprintf(buf, buf_cap,
-    "{\"total\":%lld,\"diskTotal\":%lld,\"fileCount\":%lld,\"folderCount\":%lld,\"dirs\":{",
+    "{\"total\":%lld,\"diskTotal\":%lld,\"fileCount\":%lld,\"folderCount\":%lld,\"dev\":%lld,\"dirs\":{",
     (long long)w->total_bytes,
     (long long)w->disk_total,
     (long long)w->total_file_count,
-    (long long)w->total_folder_count);
+    (long long)w->total_folder_count,
+    (long long)w->dev);
   size_t pos = (size_t)written;
 
   int first = 1;
@@ -846,6 +850,129 @@ static napi_value native_folder_size_cancel(napi_env env, napi_callback_info inf
   return NULL;
 }
 
+/* ── JS entry: nativeItemSize(path) -> Promise<object> ─────────────── */
+
+/*
+ * One item as the walk counts it inside its folder, so a folder's size can be adjusted
+ * when the item is removed: a file or symlink (not followed) by its data length and
+ * allocated size, a folder only as one (its contents are the walk's), anything else not
+ * at all. Resolves { kind: "file" | "folder" | "other", sizeBytes, diskBytes, dev }.
+ */
+
+typedef struct {
+  napi_async_work work;
+  napi_deferred deferred;
+  char *path;
+  int errnum;
+  int kind; /* 0 other, 1 file, 2 folder */
+  int64_t size_bytes;
+  int64_t disk_bytes;
+  int64_t dev;
+} item_size_work_t;
+
+static void execute_item_size(napi_env env, void *data) {
+  (void)env;
+  item_size_work_t *w = (item_size_work_t *)data;
+  struct stat info;
+  if (lstat(w->path, &info) != 0) {
+    w->errnum = errno;
+    return;
+  }
+  w->dev = (int64_t)info.st_dev;
+  if (S_ISDIR(info.st_mode)) {
+    w->kind = 2;
+    return;
+  }
+  if (!S_ISREG(info.st_mode) && !S_ISLNK(info.st_mode)) {
+    w->kind = 0;
+    return;
+  }
+  w->kind = 1;
+  /* The same attributes the walk reads, in bitmap bit order: ALLOCSIZE, then DATALENGTH. */
+  struct attrlist list;
+  memset(&list, 0, sizeof(list));
+  list.bitmapcount = ATTR_BIT_MAP_COUNT;
+  list.fileattr = ATTR_FILE_ALLOCSIZE | ATTR_FILE_DATALENGTH;
+  struct {
+    uint32_t length;
+    off_t alloc_size;
+    off_t data_length;
+  } __attribute__((aligned(4), packed)) buf;
+  if (getattrlist(w->path, &list, &buf, sizeof(buf), FSOPT_NOFOLLOW) != 0) {
+    w->errnum = errno;
+    return;
+  }
+  w->disk_bytes = (int64_t)buf.alloc_size;
+  w->size_bytes = (int64_t)buf.data_length;
+}
+
+static void complete_item_size(napi_env env, napi_status status, void *data) {
+  item_size_work_t *w = (item_size_work_t *)data;
+  if (status == napi_cancelled) {
+    napi_value message;
+    napi_create_string_utf8(env, "Operation cancelled", NAPI_AUTO_LENGTH, &message);
+    napi_value error;
+    napi_create_error(env, NULL, message, &error);
+    napi_reject_deferred(env, w->deferred, error);
+  } else if (w->errnum != 0) {
+    napi_reject_deferred(env, w->deferred,
+                         native_errno_error(env, w->errnum, "item size", w->path, NULL));
+  } else {
+    static const char *kinds[] = {"other", "file", "folder"};
+    napi_value result;
+    napi_value value;
+    napi_create_object(env, &result);
+    napi_create_string_utf8(env, kinds[w->kind], NAPI_AUTO_LENGTH, &value);
+    napi_set_named_property(env, result, "kind", value);
+    napi_create_int64(env, w->size_bytes, &value);
+    napi_set_named_property(env, result, "sizeBytes", value);
+    napi_create_int64(env, w->disk_bytes, &value);
+    napi_set_named_property(env, result, "diskBytes", value);
+    napi_create_int64(env, w->dev, &value);
+    napi_set_named_property(env, result, "dev", value);
+    napi_resolve_deferred(env, w->deferred, result);
+  }
+  napi_delete_async_work(env, w->work);
+  free(w->path);
+  free(w);
+}
+
+static napi_value native_item_size(napi_env env, napi_callback_info info) {
+  size_t argc = 1;
+  napi_value argv[1];
+  napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+  if (argc < 1) {
+    napi_throw_type_error(env, NULL, "nativeItemSize requires 1 argument: path");
+    return NULL;
+  }
+  size_t length;
+  if (napi_get_value_string_utf8(env, argv[0], NULL, 0, &length) != napi_ok) {
+    napi_throw_type_error(env, NULL, "path must be a string");
+    return NULL;
+  }
+  char *path = (char *)malloc(length + 1);
+  if (!path) {
+    napi_throw_error(env, NULL, "Out of memory");
+    return NULL;
+  }
+  napi_get_value_string_utf8(env, argv[0], path, length + 1, NULL);
+  item_size_work_t *w = (item_size_work_t *)calloc(1, sizeof(item_size_work_t));
+  if (!w) {
+    free(path);
+    napi_throw_error(env, NULL, "Out of memory");
+    return NULL;
+  }
+  w->path = path;
+  napi_value promise;
+  napi_create_promise(env, &w->deferred, &promise);
+  napi_value resource_name;
+  napi_create_string_utf8(env, "nativeItemSize", NAPI_AUTO_LENGTH, &resource_name);
+  napi_create_async_work(env, NULL, resource_name, execute_item_size, complete_item_size, w,
+                         &w->work);
+  napi_queue_async_work(env, w->work);
+  return promise;
+}
+
 /* ── Registration (called from init in native_copyfile.c) ────────── */
 
 napi_value register_folder_size(napi_env env, napi_value exports) {
@@ -858,6 +985,9 @@ napi_value register_folder_size(napi_env env, napi_value exports) {
   napi_create_function(env, "nativeFolderSizeCancel", NAPI_AUTO_LENGTH,
                        native_folder_size_cancel, NULL, &fn);
   napi_set_named_property(env, exports, "nativeFolderSizeCancel", fn);
+
+  napi_create_function(env, "nativeItemSize", NAPI_AUTO_LENGTH, native_item_size, NULL, &fn);
+  napi_set_named_property(env, exports, "nativeItemSize", fn);
 
   return exports;
 }

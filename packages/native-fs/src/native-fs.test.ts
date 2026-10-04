@@ -160,6 +160,54 @@ describe("nativeFolderSize", () => {
   });
 });
 
+describe("nativeItemSize", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-item-"));
+    mkdirSync(join(root, "sub"));
+    writeFileSync(join(root, "a.bin"), "x".repeat(12_345));
+    writeFileSync(join(root, "sub", "b.txt"), "x".repeat(300));
+    symlinkSync("sub", join(root, "link"));
+    execFileSync("mkfifo", [join(root, "pipe")]);
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // What the folders that hold an item lose when it is removed must be what measuring
+  // them counted for it.
+  it("counts each item as measuring its folder does", async () => {
+    const walk = JSON.parse(await addon.nativeFolderSize(root)) as {
+      total: number;
+      diskTotal: number;
+      fileCount: number;
+      folderCount: number;
+      dev: number;
+      dirs: Record<string, [number, number, number, number]>;
+    };
+    const items = await Promise.all(
+      ["a.bin", "link", "pipe", "sub"].map((name) => addon.nativeItemSize(join(root, name))),
+    );
+    expect(items.map((item) => item.kind)).toEqual(["file", "file", "other", "folder"]);
+    expect(new Set(items.map((item) => item.dev))).toEqual(new Set([walk.dev]));
+
+    const sub = expectDefined(walk.dirs[join(root, "sub")]);
+    const files = items.filter((item) => item.kind === "file");
+    expect(files.reduce((sum, item) => sum + item.sizeBytes, sub[0])).toBe(walk.total);
+    expect(files.reduce((sum, item) => sum + item.diskBytes, sub[1])).toBe(walk.diskTotal);
+    expect(files.length + sub[2]).toBe(walk.fileCount);
+    expect(1 + sub[3]).toBe(walk.folderCount);
+  });
+
+  it("fails for an item that is gone", async () => {
+    await expect(addon.nativeItemSize(join(root, "missing"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+});
+
 describe("nativeFolderSize wrapper (single-flight)", () => {
   interface FolderSizeResult {
     total: number;
