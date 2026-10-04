@@ -17,8 +17,10 @@
   --border-active: rgba(0, 0, 0, 0.12);
   --border-light: rgba(0, 0, 0, 0.07);
   --text-primary: #1d1d1f;
-  --text-secondary: #4a4a50;
-  --text-tertiary: #86868b;
+  /* macOS secondaryLabelColor, as Finder draws dates, sizes, kinds, "--" and the path
+     bar; tertiaryLabelColor only for placeholders and text that reads as unavailable. */
+  --text-secondary: rgba(0, 0, 0, 0.5);
+  --text-tertiary: rgba(0, 0, 0, 0.26);
   --text-dim: #a1a1a6;
   --ft-accent-solid: #007aff;
   --ft-accent-solid-dark: #0064d1;
@@ -164,8 +166,8 @@
   --border-active: rgba(255, 255, 255, 0.1);
   --border-light: rgba(255, 255, 255, 0.07);
   --text-primary: #f2f2f5;
-  --text-secondary: #c7c7cc;
-  --text-tertiary: #98989d;
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-tertiary: rgba(255, 255, 255, 0.25);
   --text-dim: #6e6e73;
   --icon-neutral: #a1a1a6;
   --danger: #f08080;
@@ -241,7 +243,8 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   overflow: visible;
-  -webkit-font-smoothing: antialiased;
+  /* No -webkit-font-smoothing: antialiased. That turns off the macOS text smoothing every
+     AppKit app draws with, and the app's text came out about a weight lighter than Finder's. */
   text-rendering: optimizeLegibility;
 }
 
@@ -715,7 +718,7 @@ select:focus-visible {
   border: none;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   padding: 6px 10px;
   font-size: var(--font-size-callout);
   font-weight: 500;
@@ -1307,7 +1310,7 @@ select:focus-visible {
   border-radius: var(--radius-control);
   background: var(--field-bg);
   box-shadow: var(--field-edge);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .search-field:focus-within {
@@ -1663,7 +1666,7 @@ select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
@@ -1809,7 +1812,7 @@ select:focus-visible {
 
 .pane-typeahead-label {
   font-size: var(--font-size-callout);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .pane-typeahead-value {
@@ -1846,7 +1849,7 @@ select:focus-visible {
 }
 
 .list-filter-pill-label {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .list-filter-pill-value {
@@ -1861,7 +1864,7 @@ select:focus-visible {
 
 .list-filter-pill-count {
   flex: none;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2085,7 +2088,7 @@ body.resizing-panels * {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-body);
   font-weight: 400;
   overflow: hidden;
@@ -2205,7 +2208,7 @@ body.resizing-panels * {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--mono-font-size);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-weight: 400;
 }
@@ -2413,7 +2416,7 @@ body.resizing-panels * {
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   transition: transform var(--duration-fast) ease;
 }
 
@@ -2469,7 +2472,7 @@ body.resizing-panels * {
   padding: 1px 6px;
   border-radius: var(--radius-capsule);
   background: var(--bg-hover);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-mini);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -2703,7 +2706,7 @@ body.resizing-panels * {
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .details-column-resizer {
@@ -2732,7 +2735,7 @@ body.resizing-panels * {
 .details-column-resizer:hover::before,
 .details-column-resizer:focus-visible::before,
 .column-resize-active .details-column-resizer:active::before {
-  background: var(--text-tertiary);
+  background: var(--text-secondary);
 }
 
 .details-row {
@@ -2791,7 +2794,7 @@ body.resizing-panels * {
 
 /* "--" for a folder whose size is not calculated: there, but quiet. */
 .details-size-text.is-placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .details-row.active:not(.inactive) .details-size-text.is-placeholder {
@@ -2830,7 +2833,7 @@ body.resizing-panels * {
   margin: 0;
   padding: 16px 18px;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .flow-list,
@@ -3033,7 +3036,7 @@ body.resizing-panels * {
 }
 
 .empty-state-message {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
 }
 
@@ -3486,7 +3489,7 @@ body.resizing-panels * {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
-  stroke: var(--text-tertiary);
+  stroke: var(--text-secondary);
   stroke-width: 1.5;
 }
 
@@ -3541,7 +3544,7 @@ body.resizing-panels * {
   justify-content: space-between;
   gap: 12px;
   padding: 0 10px 4px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-weight: 600;
 }
@@ -3563,7 +3566,7 @@ body.resizing-panels * {
 
 .go-to-folder-empty-state {
   padding: 18px 16px 22px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
   text-align: center;
 }
@@ -3594,7 +3597,7 @@ body.resizing-panels * {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .go-to-folder-suggestion.is-selected .go-to-folder-suggestion-icon {
@@ -3631,7 +3634,7 @@ body.resizing-panels * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
   text-align: left;
 }
@@ -3676,7 +3679,7 @@ body.resizing-panels * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
 
@@ -3901,7 +3904,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .sidebar-section-title {
@@ -3952,14 +3955,14 @@ body.platform-macos .settings-view[data-layout="compact"] {
   white-space: nowrap;
   color: var(--text-primary);
   font-size: var(--font-size-title3);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .toolbar-subtitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
@@ -4010,7 +4013,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   padding: 0 28px 0 12px;
   border-right: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: var(--font-size-callout);
+  font-size: var(--font-size-small);
   cursor: default;
   user-select: none;
 }
@@ -4023,7 +4026,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   background: var(--bg-base);
   box-shadow: inset 0 2px 0 var(--ft-accent-solid);
   color: var(--text-primary);
-  font-weight: 600;
 }
 
 .tab-strip-label {
@@ -4037,7 +4039,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .tab-strip-search {
   display: inline-flex;
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .tab-strip-search .toolbar-icon {
@@ -4062,7 +4064,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   opacity: 0;
   transform: translateY(-50%);
 }
@@ -4392,10 +4394,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .content-pathbar-row .pathbar-segment.active {
   background: transparent;
   color: var(--text-primary);
+  font-weight: 400;
 }
 
 .content-pathbar-row .pathbar-separator {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .content-pathbar-row .pathbar-suggestions {
@@ -4407,7 +4410,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .details-header {
   min-height: 28px;
-  font-size: var(--font-size-callout);
+  font-size: var(--font-size-small);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
@@ -4507,7 +4510,7 @@ body.window-inactive {
 
 .search-scope-label {
   margin-right: 2px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .search-scope-spacer {
@@ -4530,7 +4533,7 @@ body.window-inactive {
   border: 0;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-size-callout);
+  font-size: var(--font-size-small);
   text-align: left;
   cursor: default;
 }
@@ -4557,7 +4560,7 @@ body.window-inactive {
 }
 
 .search-result-path {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
 }
 
@@ -4651,7 +4654,7 @@ body.window-inactive {
 }
 
 .get-info-subtitle {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -4722,7 +4725,7 @@ body.window-inactive {
 
 .get-info-section-title {
   margin: 0 0 4px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-weight: 600;
 }
@@ -4736,7 +4739,7 @@ body.window-inactive {
 }
 
 .get-info-meta-label {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
   font-weight: 400;
 }
@@ -4754,7 +4757,7 @@ body.window-inactive {
 }
 
 .get-info-permissions-code {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: var(--font-size-small);
 }
@@ -5018,7 +5021,7 @@ body.page-window-body {
 }
 
 .about-detail dt {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .about-detail dd {
@@ -5036,7 +5039,7 @@ body.page-window-body {
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
 
@@ -5078,7 +5081,7 @@ body.page-window-body {
 
 .acknowledgement summary {
   padding: 8px 0;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-body);
   cursor: default;
 }
@@ -5099,7 +5102,7 @@ body.page-window-body {
 }
 
 .acknowledgement-version {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
@@ -5156,7 +5159,7 @@ body.page-window-body {
   --settings-card-border: rgba(0, 0, 0, 0.08);
   --settings-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --settings-separator: rgba(0, 0, 0, 0.07);
-  --settings-label-secondary: var(--text-tertiary);
+  --settings-label-secondary: var(--text-secondary);
   /* A pop-up is as wide as its longest choice, and never narrower than this. */
   --settings-popup-min-width: 120px;
   --settings-switch-off: #e3e3e8;
@@ -5906,7 +5909,7 @@ body .settings-window .settings-view[data-layout] {
 .shortcut-settings-intro,
 .shortcut-settings-empty {
   margin: 0 4px 14px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--font-size-small);
 }
@@ -5947,7 +5950,7 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .shortcut-row-hint {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   line-height: 1.4;
 }
@@ -6091,7 +6094,7 @@ button.shortcut-slot-key.recording:hover {
 
 .content-pathbar-status {
   margin-left: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -6099,7 +6102,7 @@ button.shortcut-slot-key.recording:hover {
 
 .content-pathbar-row.pane-header-focused,
 .content-pathbar-row.pane-header-focused .content-pathbar-status {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 /* Every text span in a focused selected row takes the selection text color, including names
@@ -6119,7 +6122,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .get-info-meta-value .folder-size-items {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
 
@@ -6331,6 +6334,19 @@ button.shortcut-slot-key.recording:hover {
   margin-top: 4px;
 }
 
+.sidebar-main-native .tree-row[data-tree-kind="favorites-root"] .tree-label {
+  color: var(--text-secondary);
+}
+
+.sidebar-main-native .tree-row[data-tree-kind="favorites-root"] .tree-label-text {
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+.sidebar-main-native .tree-row.active .tree-label-text {
+  font-weight: 600;
+}
+
 .sidebar-main-native .tree-row.active {
   background: var(--bg-active-inactive);
 }
@@ -6471,7 +6487,7 @@ button.shortcut-slot-key.recording:hover {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   text-align: left;
   cursor: default;
 }
@@ -6482,7 +6498,7 @@ button.shortcut-slot-key.recording:hover {
 
 .sidebar-section-chevron {
   display: inline-flex;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   opacity: 0;
   transform: rotate(90deg);
   transition: opacity var(--duration-fast) ease, transform var(--duration-base) ease;
@@ -6677,12 +6693,12 @@ button.shortcut-slot-key.recording:hover {
 
 .copy-paste-glyph-file {
   fill: var(--bg-elevated);
-  stroke: var(--text-tertiary);
+  stroke: var(--text-secondary);
 }
 
 .copy-paste-glyph-file-fold {
   fill: none;
-  stroke: var(--text-tertiary);
+  stroke: var(--text-secondary);
 }
 
 .copy-paste-sheet-row-text {
@@ -6712,7 +6728,7 @@ button.shortcut-slot-key.recording:hover {
 /* Where a deeply nested row is, once rows stop indenting. */
 .copy-paste-sheet-row-path {
   overflow: hidden;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6730,7 +6746,7 @@ button.shortcut-slot-key.recording:hover {
 
 .copy-paste-sheet-row.is-muted .copy-paste-sheet-row-detail,
 .copy-paste-sheet-row-detail.is-muted {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .copy-paste-sheet-row-added {
