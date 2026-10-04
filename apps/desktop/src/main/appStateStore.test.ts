@@ -450,8 +450,8 @@ describe("appStateStore", () => {
       ...BATCH_RENAME_DEFAULTS,
     });
     expect(store.getWindowState()).toEqual({
-      width: 1480,
-      height: 920,
+      width: 1200,
+      height: 760,
       maximized: false,
     });
   });

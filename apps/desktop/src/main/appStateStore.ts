@@ -78,8 +78,8 @@ export type AppStateStoreDependencies = {
 };
 
 const DEFAULT_WINDOW_STATE: StoredWindowState = {
-  width: 1480,
-  height: 920,
+  width: 1200,
+  height: 760,
   maximized: false,
 };
 
