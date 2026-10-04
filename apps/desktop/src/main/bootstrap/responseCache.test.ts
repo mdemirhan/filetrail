@@ -128,6 +128,103 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.start({ path: "/Users/demo/Music", probeOnly: true }).status).toBe("ready");
   });
 
+  // Measuring the home folder, whose walk reached its Trash or was refused it.
+  async function measureHome(trashReadable: boolean) {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers({ ...native, homePath: "/Users/demo" });
+    handlers.start({ path: "/Users/demo" });
+    native.resolveActive(
+      JSON.stringify({
+        total: 1_000,
+        diskTotal: 2_000,
+        fileCount: 10,
+        folderCount: 3,
+        dev: 16,
+        dirs: {
+          "/Users/demo/Downloads": [600, 1_200, 6, 0],
+          ...(trashReadable ? { "/Users/demo/.Trash": [50, 100, 1, 0] } : {}),
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    return { native, handlers };
+  }
+
+  const trashedZip = {
+    path: "/Users/demo/Downloads/a.zip",
+    item: { kind: "file" as const, sizeBytes: 200, diskBytes: 400, dev: 16 },
+    intoHomeTrash: true,
+  };
+
+  it("takes what went to the Trash off the folders that held it, as measured", async () => {
+    const readable = await measureHome(true);
+    clearResponseCaches([], [trashedZip]);
+    expect(readable.handlers.getCachedSize("/Users/demo/Downloads")).toBe(400);
+    // Still in the home folder, in its Trash, which its measurement counted.
+    expect(readable.handlers.getCachedSize("/Users/demo")).toBe(1_000);
+    expect(readable.handlers.getCachedSize("/Users/demo/.Trash")).toBe(250);
+
+    const unreadable = await measureHome(false);
+    clearResponseCaches([], [trashedZip]);
+    expect(unreadable.handlers.getCachedSize("/Users/demo/Downloads")).toBe(400);
+    expect(unreadable.handlers.getCachedSize("/Users/demo")).toBe(800);
+  });
+
+  it("learns that the Trash can't be read from measuring the Trash itself", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers({ ...native, homePath: "/Users/demo" });
+    handlers.start({ path: "/Users/demo/.Trash" });
+    native.rejectActive(Object.assign(new Error("denied"), { code: "EPERM" }));
+    await new Promise((r) => setTimeout(r, 0));
+    handlers.start({ path: "/Users/demo/Downloads" });
+    native.resolveActive(
+      JSON.stringify({
+        total: 600,
+        diskTotal: 1_200,
+        fileCount: 6,
+        folderCount: 0,
+        dev: 16,
+        dirs: {},
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    handlers.start({ path: "/Users/demo" });
+    native.resolveActive(
+      JSON.stringify({
+        total: 1_000,
+        diskTotal: 2_000,
+        fileCount: 10,
+        folderCount: 3,
+        dev: 16,
+        dirs: {},
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    clearResponseCaches([], [trashedZip]);
+
+    expect(handlers.getCachedSize("/Users/demo")).toBe(800);
+  });
+
+  it("measures again a folder a write changed while it was being measured", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers({ ...native, homePath: "/Users/demo" });
+    const { jobId } = handlers.start({ path: "/Users/demo/Project" });
+
+    clearResponseCaches([], [{ ...trashedZip, path: "/Users/demo/Project/a.zip" }]);
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The first answer may have seen part of the change: the same job measures again.
+    expect(native.getFolderSize).toHaveBeenCalledTimes(2);
+    expect(handlers.getStatus({ jobId }).status).toBe("running");
+    expect(handlers.getCachedSize("/Users/demo/Project")).toBeUndefined();
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(handlers.getStatus({ jobId })).toMatchObject({ status: "ready", sizeBytes: 1000 });
+    expect(handlers.getCachedSize("/Users/demo/Project")).toBe(1000);
+  });
+
   it("start with recalculate clears cache", async () => {
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);

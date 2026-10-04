@@ -114,11 +114,12 @@ export function nativeDatesTaken(paths: string[]): Promise<Array<string | null>>
  * Recursively calculates the total size of a folder using `getattrlistbulk(2)`.
  *
  * Returns a JSON string:
- * `{"total":N,"diskTotal":N,"fileCount":N,"folderCount":N,"dirs":{"path":[sizeBytes,diskBytes,fileCount,folderCount],...}}`
+ * `{"total":N,"diskTotal":N,"fileCount":N,"folderCount":N,"dev":N,"dirs":{"path":[sizeBytes,diskBytes,fileCount,folderCount],...}}`
  * where `total` is the root folder logical size in bytes, `diskTotal` is the
  * allocated disk space, `fileCount` is the total number of regular files and
  * symlinks, `folderCount` the total number of folders below the root (package
- * contents included), and `dirs` maps each sub-directory path to an array of
+ * contents included), `dev` the device id of the disk walked (the walk never
+ * leaves it), and `dirs` maps each sub-directory path it walked to an array of
  * `[sizeBytes, diskBytes, fileCount, folderCount]`.
  *
  * Runs on a libuv thread pool thread — non-blocking. At most one calculation
@@ -140,6 +141,21 @@ export function nativeFolderSize(folderPath: string): Promise<string>;
  * calculation is active (no-op).
  */
 export function nativeFolderSizeCancel(): void;
+
+/**
+ * One item as `nativeFolderSize` counts it inside its folder: a file or symlink (not
+ * followed) by its data length and allocated size, a folder only as one (its contents are
+ * the walk's, and `sizeBytes`/`diskBytes` are 0), anything else (sockets, pipes, devices)
+ * not at all. `dev` is the device id of the disk it is on.
+ *
+ * @param path - Absolute path to the item.
+ */
+export function nativeItemSize(path: string): Promise<{
+  kind: "file" | "folder" | "other";
+  sizeBytes: number;
+  diskBytes: number;
+  dev: number;
+}>;
 
 /**
  * Moves `from` to `to` without ever replacing an item at `to`, using `renamex_np(2)`

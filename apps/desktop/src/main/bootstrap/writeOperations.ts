@@ -22,6 +22,7 @@ import {
   findLockedRefusal,
 } from "@filetrail/core";
 import { runBatchRename } from "./batchRenameExecution";
+import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import { clearResponseCaches } from "./responseCache";
 
 type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
@@ -50,6 +51,9 @@ export type WriteOperationFs = {
   trash: (path: string) => Promise<void>;
   // The item's BSD flags, to tell a locked item from a lack of permission.
   getFlags?: (path: string) => Promise<number>;
+  // An item as a folder's measurement counts it (nativeItemSize), read just before a delete
+  // removes it, so the measured folders that held it can have it taken off their sizes.
+  itemSize?: (path: string) => Promise<ItemSize>;
 };
 
 // What kind of change the running operation is making, in the words a person would use.
@@ -472,13 +476,24 @@ export function createWriteOperationCoordinator(
     freeWriteSlot(operationId);
   }
 
-  function emitLocalWriteOperationEvent(event: WriteOperationProgressEvent): void {
+  function emitLocalWriteOperationEvent(
+    event: WriteOperationProgressEvent,
+    // What a delete removed, read just before: taken off the sizes of measured folders
+    // rather than having them measured again.
+    removedItems: readonly RemovedItem[] = [],
+  ): void {
     const sender = writeOperationSenders.get(event.operationId);
     // Release the operation before telling the window, so a failed send can't leave the
     // write slot held and a renderer reacting to the final event can start the next write.
     if (isTerminalStatus(event.status)) {
       // Folder listings read before the operation finished may show the old contents.
-      clearResponseCaches(event.result ? pathsChangedByWrite(event.result) : []);
+      const removedPaths = new Set(removedItems.map((removed) => removed.path));
+      clearResponseCaches(
+        event.result
+          ? pathsChangedByWrite(event.result).filter((path) => !removedPaths.has(path))
+          : [],
+        removedItems,
+      );
       releaseLocalWriteOperation(event.operationId);
     }
     if (sender) {
@@ -908,6 +923,10 @@ export function createWriteOperationCoordinator(
     let cancelled = false;
     // Only what this Trash finds without a Trash may be deleted next.
     itemsWithoutTrash.clear();
+    const removedItems: RemovedItem[] = [];
+    // What's on the home folder's disk goes to the home folder's Trash.
+    const home = fs.itemSize ? await readItemSize(fs.itemSize, homePath) : null;
+    const homeDev = home && home !== "missing" ? home.dev : null;
     // One item that can't go to the Trash doesn't keep the others from going; only
     // cancelling stops the rest.
     for (const [index, path] of paths.entries()) {
@@ -929,10 +948,23 @@ export function createWriteOperationCoordinator(
         result: null,
       });
       try {
+        const before = fs.itemSize ? await readItemSize(fs.itemSize, path) : undefined;
         // An item that is already gone (deleted or moved since it was chosen) has
         // nothing left to move: that counts as done, not as a failure.
         if (!(await isMissing(path, fs.lstat))) {
           await fs.trash(path);
+        }
+        if (before !== undefined) {
+          removedItems.push(
+            before === "missing"
+              ? { path, item: null, intoHomeTrash: false }
+              : {
+                  path,
+                  item: before,
+                  intoHomeTrash:
+                    before === null || homeDev === null ? null : before.dev === homeDev,
+                },
+          );
         }
         completedItemCount += 1;
         items.push({
@@ -980,18 +1012,21 @@ export function createWriteOperationCoordinator(
           ? (items.find((item) => item.status === "failed")?.error ?? "Trash failed.")
           : null,
     });
-    emitLocalWriteOperationEvent({
-      operationId,
-      action: "trash",
-      status,
-      completedItemCount,
-      totalItemCount: paths.length,
-      completedByteCount: 0,
-      totalBytes: null,
-      currentSourcePath: null,
-      currentDestinationPath: null,
-      result,
-    });
+    emitLocalWriteOperationEvent(
+      {
+        operationId,
+        action: "trash",
+        status,
+        completedItemCount,
+        totalItemCount: paths.length,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result,
+      },
+      removedItems,
+    );
   }
 
   async function executeDeleteImmediatelyOperation(
@@ -1005,6 +1040,7 @@ export function createWriteOperationCoordinator(
     const items: WriteOperationResult["items"] = [];
     let completedItemCount = 0;
     let cancelled = false;
+    const removedItems: RemovedItem[] = [];
     for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
         cancelled = true;
@@ -1024,7 +1060,15 @@ export function createWriteOperationCoordinator(
         result: null,
       });
       try {
+        const before = fs.itemSize ? await readItemSize(fs.itemSize, path) : undefined;
         await fs.rm(path, { recursive: true, force: true });
+        if (before !== undefined) {
+          removedItems.push({
+            path,
+            item: before === "missing" ? null : before,
+            intoHomeTrash: false,
+          });
+        }
         completedItemCount += 1;
         items.push({
           sourcePath: path,
@@ -1073,18 +1117,21 @@ export function createWriteOperationCoordinator(
           ? (items.find((item) => item.status === "failed")?.error ?? "Delete failed.")
           : null,
     });
-    emitLocalWriteOperationEvent({
-      operationId,
-      action: "delete_immediately",
-      status,
-      completedItemCount,
-      totalItemCount: paths.length,
-      completedByteCount: 0,
-      totalBytes: null,
-      currentSourcePath: null,
-      currentDestinationPath: null,
-      result,
-    });
+    emitLocalWriteOperationEvent(
+      {
+        operationId,
+        action: "delete_immediately",
+        status,
+        completedItemCount,
+        totalItemCount: paths.length,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result,
+      },
+      removedItems,
+    );
   }
 
   function cancelWriteOperation(operationId: string): { ok: boolean } {
@@ -1524,6 +1571,18 @@ async function lstatOrNull(
 
 // True only when the item is certainly gone; any other trouble reading it is left for
 // the operation itself to report.
+// An item as a measurement counts it; "missing" when it is gone, null when it can't be read.
+async function readItemSize(
+  itemSize: NonNullable<WriteOperationFs["itemSize"]>,
+  path: string,
+): Promise<ItemSize | "missing" | null> {
+  try {
+    return await itemSize(path);
+  } catch (error) {
+    return errorCode(error) === "ENOENT" ? "missing" : null;
+  }
+}
+
 async function isMissing(path: string, lstatFn: WriteOperationFs["lstat"]): Promise<boolean> {
   try {
     await lstatFn(path);

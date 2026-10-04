@@ -421,43 +421,126 @@ describe("useFolderSizeCache", () => {
     );
   });
 
-  it("forgets a size once a file operation changed something in that folder", async () => {
-    const { getStatusHandler, cancelHandler } = createHandlers();
-    const startHandler = vi.fn(async () => ({ jobId: "job-1", status: "ready" as const }));
-    let emit: ((event: never) => void) | null = null;
+  // A main process holding the sizes in `sizes`, which a test changes as a write would.
+  function createWriteClient(sizes: Map<string, number>) {
+    let emit: ((event: unknown) => void) | null = null;
+    const probes: string[] = [];
     const client = {
       ...createMockFiletrailClient({
-        "folderSize:start": startHandler,
-        "folderSize:getStatus": getStatusHandler,
-        "folderSize:cancel": cancelHandler,
+        "folderSize:start": vi.fn(
+          async (payload: { path: string; probeOnly?: boolean | undefined }) => {
+            if (payload.probeOnly) {
+              probes.push(payload.path);
+            }
+            return sizes.has(payload.path)
+              ? { jobId: payload.path, status: "ready" as const }
+              : { jobId: payload.path, status: "deferred" as const };
+          },
+        ),
+        "folderSize:getStatus": vi.fn(async (payload: { jobId: string }) => ({
+          jobId: payload.jobId,
+          status: "ready" as const,
+          sizeBytes: sizes.get(payload.jobId) ?? null,
+          diskBytes: sizes.get(payload.jobId) ?? null,
+          fileCount: 1,
+          folderCount: 0,
+          error: null,
+        })),
+        "folderSize:cancel": vi.fn(async () => ({ ok: true })),
       }),
-      onWriteOperationProgress: (listener: (event: never) => void) => {
+      onWriteOperationProgress: (listener: (event: unknown) => void) => {
         emit = listener;
         return () => undefined;
       },
     };
-
-    const { result } = renderHook(() => useFolderSizeCache(client as never));
-    await act(async () => {
-      await result.current.calculateFolderSize("/Users/demo/Project");
-      await result.current.calculateFolderSize("/Users/demo/Music");
-    });
-    expect(result.current.getEntry("/Users/demo/Project").status).toBe("ready");
-
-    await act(async () => {
-      (emit as ((event: unknown) => void) | null)?.({
-        operationId: "op-1",
-        action: "trash",
-        status: "completed",
-        result: {
-          targetPath: null,
-          items: [{ sourcePath: "/Users/demo/Project/big.bin", destinationPath: null }],
-        },
+    const finishWrite = async (action: string, sourcePaths: string[]) => {
+      probes.length = 0;
+      await act(async () => {
+        emit?.({
+          operationId: "op-1",
+          action,
+          status: "completed",
+          result: {
+            targetPath: null,
+            items: sourcePaths.map((sourcePath) => ({ sourcePath, destinationPath: null })),
+          },
+        });
       });
+      await act(async () => {
+        await Promise.resolve();
+      });
+    };
+    return { client: client as never, probes, finishWrite };
+  }
+
+  it("asks again for the folders a file operation changed, keeping what the main process kept", async () => {
+    const sizes = new Map([
+      ["/Users/demo/Project", 1_000],
+      ["/Users/demo/Project/src", 300],
+      ["/Users/demo/Music", 500],
+    ]);
+    const { client, probes, finishWrite } = createWriteClient(sizes);
+    const { result } = renderHook(() => useFolderSizeCache(client, "/Users/demo"));
+    await act(async () => {
+      for (const path of sizes.keys()) {
+        await result.current.calculateFolderSize(path);
+      }
     });
 
-    expect(result.current.getEntry("/Users/demo/Project").status).toBe("idle");
-    expect(result.current.getEntry("/Users/demo/Music").status).toBe("ready");
+    // The main process took the deleted file off Project, and forgot src, which held it.
+    sizes.set("/Users/demo/Project", 400);
+    sizes.delete("/Users/demo/Project/src");
+    await finishWrite("delete_immediately", ["/Users/demo/Project/src/big.bin"]);
+
+    expect(result.current.getEntry("/Users/demo/Project")).toMatchObject({
+      status: "ready",
+      sizeBytes: 400,
+    });
+    expect(result.current.getEntry("/Users/demo/Project/src").status).toBe("idle");
+    expect(result.current.getEntry("/Users/demo/Music")).toMatchObject({ sizeBytes: 500 });
+    // Only the folders holding what changed are asked about; Music isn't.
+    expect(probes).not.toContain("/Users/demo/Music");
+  });
+
+  it("drops the sizes of what a file operation removed without asking", async () => {
+    const sizes = new Map([
+      ["/Users/demo/Old", 700],
+      ["/Users/demo/Old/inner", 200],
+    ]);
+    const { client, probes, finishWrite } = createWriteClient(sizes);
+    const { result } = renderHook(() => useFolderSizeCache(client, "/Users/demo"));
+    await act(async () => {
+      for (const path of sizes.keys()) {
+        await result.current.calculateFolderSize(path);
+      }
+    });
+
+    sizes.clear();
+    await finishWrite("trash", ["/Users/demo/Old"]);
+
+    expect(result.current.getEntry("/Users/demo/Old").status).toBe("idle");
+    expect(probes).not.toContain("/Users/demo/Old/inner");
+  });
+
+  it("asks again for the Trash after a move to the Trash", async () => {
+    const sizes = new Map([
+      ["/Users/demo/.Trash", 50],
+      ["/opt/tools", 300],
+    ]);
+    const { client, finishWrite } = createWriteClient(sizes);
+    const { result } = renderHook(() => useFolderSizeCache(client, "/Users/demo"));
+    await act(async () => {
+      for (const path of sizes.keys()) {
+        await result.current.calculateFolderSize(path);
+      }
+    });
+
+    sizes.set("/Users/demo/.Trash", 150);
+    sizes.set("/opt/tools", 200);
+    await finishWrite("trash", ["/opt/tools/old"]);
+
+    expect(result.current.getEntry("/Users/demo/.Trash")).toMatchObject({ sizeBytes: 150 });
+    expect(result.current.getEntry("/opt/tools")).toMatchObject({ sizeBytes: 200 });
   });
 
   // A main process that measures folders one at a time, each until the test finishes it.

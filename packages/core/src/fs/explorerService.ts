@@ -99,6 +99,11 @@ export async function listDirectorySnapshot(
         sortBy === "modified" || sortBy === "size" || needsExecutableFlag
           ? await readBestEffortStats(entryPath, fileSystem)
           : null;
+      // A link to a folder is sized as the link itself (see readEntrySize).
+      const linkStats =
+        sortBy === "size" && kind === "symlink_directory"
+          ? await safeLstat(entryPath, fileSystem)
+          : null;
       return {
         path: entryPath,
         name: dirent.name,
@@ -108,7 +113,11 @@ export async function listDirectorySnapshot(
         isSymlink: kind === "symlink_directory" || kind === "symlink_file",
         ...(needsExecutableFlag && stats ? { isExecutable: (stats.mode & 0o111) !== 0 } : {}),
         sortModifiedAt: stats ? stats.mtime.getTime() : null,
-        sortSizeBytes: stats && (kind === "file" || kind === "symlink_file") ? stats.size : null,
+        sortSizeBytes: linkStats
+          ? linkStats.size
+          : stats && (kind === "file" || kind === "symlink_file")
+            ? stats.size
+            : null,
       };
     }),
   );
@@ -160,7 +169,7 @@ export async function getItemProperties(
   const metadataStats = stats ?? symlinkStats;
   const isSymlink = symlinkStats?.isSymbolicLink?.() ?? false;
   const kind = stats ? deriveKindFromStats(stats, isSymlink, resolvedPath) : "other";
-  const isDir = stats?.isDirectory() ?? false;
+  const size = readEntrySize(kind, stats, symlinkStats);
   return {
     item: {
       path: resolvedPath,
@@ -173,8 +182,7 @@ export async function getItemProperties(
       isSymlink,
       createdAt: toIsoStringOrNull(metadataStats?.birthtime),
       modifiedAt: toIsoStringOrNull(metadataStats?.mtime),
-      sizeBytes: stats && !isDir ? stats.size : null,
-      sizeStatus: stats ? (isDir ? "deferred" : "ready") : "unavailable",
+      ...size,
       permissionMode: normalizePermissionMode(metadataStats?.mode),
     },
   };
@@ -274,16 +282,34 @@ async function readDirectoryEntryMetadata(
   const metadataStats = stats ?? symlinkStats;
   const isSymlink = symlinkStats?.isSymbolicLink?.() ?? false;
   const kind = stats ? deriveKindFromStats(stats, isSymlink, path) : "other";
-  const isDir = stats?.isDirectory() ?? false;
+  const size = readEntrySize(kind, stats, symlinkStats);
   return {
     path,
     kindLabel: getKindLabel(kind, path),
     createdAt: toIsoStringOrNull(metadataStats?.birthtime),
     modifiedAt: toIsoStringOrNull(metadataStats?.mtime),
-    sizeBytes: stats && !isDir ? stats.size : null,
-    sizeStatus: stats ? (isDir ? "deferred" : "ready") : "unavailable",
+    ...size,
     permissionMode: normalizePermissionMode(metadataStats?.mode),
   };
+}
+
+// Folder sizes are calculated separately, so a folder's is deferred. A link to a folder
+// has the size of the link itself, as measuring the folder it is in counts it: the folder
+// it points to may be counted elsewhere already.
+function readEntrySize(
+  kind: EntryKind,
+  stats: FileSystemStats | null,
+  symlinkStats: FileSystemStats | null,
+): { sizeBytes: number | null; sizeStatus: "ready" | "deferred" | "unavailable" } {
+  if (kind === "symlink_directory" && symlinkStats) {
+    return { sizeBytes: symlinkStats.size, sizeStatus: "ready" };
+  }
+  if (!stats) {
+    return { sizeBytes: null, sizeStatus: "unavailable" };
+  }
+  return stats.isDirectory()
+    ? { sizeBytes: null, sizeStatus: "deferred" }
+    : { sizeBytes: stats.size, sizeStatus: "ready" };
 }
 
 async function readBestEffortStats(

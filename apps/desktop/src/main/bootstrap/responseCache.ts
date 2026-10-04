@@ -1,5 +1,9 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import { type IpcRequest, type IpcResponse, isAffectedByChange } from "@filetrail/contracts";
 import type { ExplorerWorkerClient } from "@filetrail/core";
+import { type FolderSizeStats, type RemovedItem, adjustForRemovals } from "./folderSizeAdjust";
 
 const CACHE_TTL_MS = 3_000;
 // Entries expire after a few seconds. Inserts also sweep expired entries and cap
@@ -44,18 +48,25 @@ const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 let cacheGeneration = 0;
 
 // Each folder-size cache, told what a write changed.
-const folderSizeForgetters = new Set<(changedPaths: readonly string[]) => void>();
+const folderSizeForgetters = new Set<
+  (changedPaths: readonly string[], removedItems: readonly RemovedItem[]) => void
+>();
 
 // After a write: listings are read again, and the sizes of the folders it touched (what
-// holds them, and what is inside them) are measured again when next asked for.
-export function clearResponseCaches(changedPaths: readonly string[] = []): void {
+// holds them, and what is inside them) are measured again when next asked for. Items a
+// delete removed are taken off the sizes of the folders that held them instead, where
+// that can be done exactly (see adjustForRemovals).
+export function clearResponseCaches(
+  changedPaths: readonly string[] = [],
+  removedItems: readonly RemovedItem[] = [],
+): void {
   cacheGeneration += 1;
   directorySnapshotCache.entries.clear();
   directoryMetadataCache.entries.clear();
   treeChildrenCache.entries.clear();
-  if (changedPaths.length > 0) {
+  if (changedPaths.length > 0 || removedItems.length > 0) {
     for (const forget of folderSizeForgetters) {
-      forget(changedPaths);
+      forget(changedPaths, removedItems);
     }
   }
 }
@@ -131,20 +142,51 @@ export function resetResponseCacheState(): void {
 export function createFolderSizeHandlers(native: {
   getFolderSize: (path: string) => Promise<string>;
   cancelFolderSize: () => void;
+  // Where the home folder is (tests use their own): its Trash is where deleted items go.
+  homePath?: string;
 }) {
-  const folderSizeCache = new Map<
-    string,
-    { sizeBytes: number; diskBytes: number; fileCount: number; folderCount: number }
-  >();
-  folderSizeForgetters.add((changedPaths) => {
+  const folderSizeCache = new Map<string, FolderSizeStats>();
+  const homePath = native.homePath ?? homedir();
+  const homeTrashPath = join(homePath, ".Trash");
+  // Whether a measurement that reached the home folder's Trash could read it, and so
+  // counted what is in it (only an app with Full Disk Access can): what a move to the
+  // Trash does to the sizes of the folders holding the Trash. Learned by measuring, and
+  // kept apart from the sizes, which are forgotten when the Trash changes.
+  let homeTrashCounted: boolean | null = null;
+  // A measurement under way when a write changes what it walks may have seen part of the
+  // change: it is run again rather than kept.
+  const outdatedJobIds = new Set<string>();
+  folderSizeForgetters.add((changedPaths, removedItems) => {
     for (const path of [...folderSizeCache.keys()]) {
       if (isAffectedByChange(path, changedPaths)) {
         folderSizeCache.delete(path);
       }
     }
+    adjustForRemovals(folderSizeCache, removedItems, {
+      path: homeTrashPath,
+      counted: homeTrashCounted,
+    });
+    const activeJob = activeJobId ? folderSizeJobs.get(activeJobId) : undefined;
+    const touchedPaths = [
+      ...changedPaths,
+      ...removedItems.flatMap((removed) =>
+        removed.intoHomeTrash === false ? [removed.path] : [removed.path, homeTrashPath],
+      ),
+    ];
+    if (activeJobId && activeJob && isAffectedByChange(activeJob.path, touchedPaths)) {
+      outdatedJobIds.add(activeJobId);
+    }
   });
   let activeJobId: string | null = null;
   let queuedJobId: string | null = null;
+
+  function recordHomeTrashCounted(path: string, walkedPaths: Record<string, unknown>): void {
+    if (path === homeTrashPath) {
+      homeTrashCounted = true;
+    } else if (path === homePath || homePath in walkedPaths) {
+      homeTrashCounted = homeTrashPath in walkedPaths;
+    }
+  }
 
   function generateJobId(): string {
     return `folder-size-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -173,6 +215,7 @@ export function createFolderSizeHandlers(native: {
       error: null,
     });
 
+    let runAgain = false;
     native
       .getFolderSize(path)
       .then((jsonString) => {
@@ -181,13 +224,22 @@ export function createFolderSizeHandlers(native: {
           diskTotal: number;
           fileCount: number;
           folderCount: number;
+          dev?: number;
           dirs: Record<string, [number, number, number, number]>;
         };
+        recordHomeTrashCounted(path, result.dirs);
+        if (outdatedJobIds.delete(jobId)) {
+          runAgain = true;
+          return;
+        }
+        // Every folder a measurement walks is on the disk it started on.
+        const dev = result.dev ?? null;
         folderSizeCache.set(path, {
           sizeBytes: result.total,
           diskBytes: result.diskTotal,
           fileCount: result.fileCount,
           folderCount: result.folderCount,
+          dev,
         });
         for (const [dirPath, dirStats] of Object.entries(result.dirs)) {
           folderSizeCache.set(dirPath, {
@@ -195,6 +247,7 @@ export function createFolderSizeHandlers(native: {
             diskBytes: dirStats[1],
             fileCount: dirStats[2],
             folderCount: dirStats[3],
+            dev,
           });
         }
         setFolderSizeJob(jobId, {
@@ -209,6 +262,11 @@ export function createFolderSizeHandlers(native: {
         });
       })
       .catch((err: unknown) => {
+        outdatedJobIds.delete(jobId);
+        const code = (err as { code?: unknown } | null)?.code;
+        if (path === homeTrashPath && (code === "EPERM" || code === "EACCES")) {
+          homeTrashCounted = false;
+        }
         const job = folderSizeJobs.get(jobId);
         if (job && job.status === "cancelled") {
           // Already marked as cancelled by the cancel handler
@@ -229,6 +287,12 @@ export function createFolderSizeHandlers(native: {
       .finally(() => {
         if (activeJobId === jobId) {
           activeJobId = null;
+        }
+        // Measured again under the same job, which the window is still waiting on; a
+        // measurement asked for meanwhile takes its place instead.
+        if (runAgain && !queuedJobId && folderSizeJobs.get(jobId)?.status === "running") {
+          runJob(jobId, path);
+          return;
         }
         pruneFinishedFolderSizeJobs();
         processQueue();

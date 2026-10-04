@@ -497,8 +497,11 @@ export function isDirectoryLikeEntry(entry: DirectoryEntry | null): entry is Dir
   return entry?.kind === "directory" || entry?.kind === "symlink_directory";
 }
 
+// A link to a folder is not measured: it has the size of the link itself, as measuring the
+// folder it is in counts it, so a selection adds up to that folder's size and the folder it
+// points to is not counted twice.
 export function isFolderSizeEligibleKind(kind: DirectoryEntry["kind"] | null | undefined): boolean {
-  return kind === "directory" || kind === "symlink_directory" || kind === "bundle";
+  return kind === "directory" || kind === "bundle";
 }
 
 // The listing is sorted before folder sizes are known (they come from a separate folder

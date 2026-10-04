@@ -3,6 +3,7 @@ import { summarizeSelectionSize } from "./selectionSize";
 
 const file = (path: string) => ({ path, kind: "file" as const });
 const folder = (path: string) => ({ path, kind: "directory" as const });
+const folderLink = (path: string) => ({ path, kind: "symlink_directory" as const });
 const ready = (sizeBytes: number, diskBytes = sizeBytes): FolderSizeEntry => ({
   status: "ready",
   sizeBytes,
@@ -12,7 +13,7 @@ const ready = (sizeBytes: number, diskBytes = sizeBytes): FolderSizeEntry => ({
 });
 
 function summarize(
-  entries: Array<{ path: string; kind: "file" | "directory" }>,
+  entries: Array<{ path: string; kind: "file" | "directory" | "symlink_directory" }>,
   fileSizes: Record<string, number | null>,
   folderSizes: Record<string, FolderSizeEntry>,
 ) {
@@ -94,6 +95,19 @@ describe("selection size", () => {
       summarize([folder("/x"), folder("/y")], {}, { "/x": ready(100, 120), "/y": ready(200, 220) })
         .folderSizeEntry,
     ).toMatchObject({ sizeBytes: 300, diskBytes: 340 });
+  });
+
+  it("counts a link to a folder as the link itself, not the folder it points to", () => {
+    // As measuring the folder they are in counts it, so its size is never waited for, and
+    // the folder it points to is not counted twice when it is selected too.
+    const size = summarize(
+      [folder("/home/dotfiles"), folderLink("/home/scripts"), file("/home/.zshrc")],
+      { "/home/scripts": 16, "/home/.zshrc": 10 },
+      { "/home/dotfiles": ready(1_000) },
+    );
+    expect(size.totalBytes).toBe(1_026);
+    expect(size.folderPaths).toEqual(["/home/dotfiles"]);
+    expect(size.folderSizeEntry).toMatchObject({ status: "ready", sizeBytes: 1_026 });
   });
 
   it("waits for a file's size before showing the total of known folders", () => {
