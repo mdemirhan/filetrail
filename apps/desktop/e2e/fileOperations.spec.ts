@@ -48,10 +48,35 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => {
-  await electronApp.close();
-  rmSync(userDataDir, { recursive: true, force: true });
-  rmSync(folder, { recursive: true, force: true });
+  try {
+    await closeApp();
+  } finally {
+    rmSync(userDataDir, { recursive: true, force: true });
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
+
+// Quitting should take a moment. When it doesn't (a question left open, an operation that
+// never ends), the test fails with the app's log, rather than at the test's time limit
+// with nothing to go on.
+async function closeApp(): Promise<void> {
+  const closed = electronApp.close().then(() => true);
+  const waited = new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000));
+  if (await Promise.race([closed, waited])) {
+    return;
+  }
+  let log: string;
+  try {
+    log = readFileSync(join(userDataDir, "logs", "app.log"), "utf8")
+      .split("\n")
+      .slice(-60)
+      .join("\n");
+  } catch (error) {
+    log = `(no log: ${String(error)})`;
+  }
+  electronApp.process().kill("SIGKILL");
+  throw new Error(`The app didn't quit within 15 seconds. The end of its log:\n${log}`);
+}
 
 function item(name: string) {
   return window.locator(`[data-selectable-entry-path="${join(folder, name)}"]`).first();

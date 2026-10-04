@@ -50,5 +50,8 @@ jobs:
       - name: Build desktop app
         run: bun run desktop:build
 
+      # The app logs in detail, for the log a smoke test prints when the app won't quit.
       - name: Smoke test (Playwright + Electron)
         run: bun run test:smoke
+        env:
+          FILETRAIL_DEBUG: "1"
