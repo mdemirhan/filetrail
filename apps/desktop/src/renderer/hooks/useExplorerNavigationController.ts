@@ -9,7 +9,6 @@ import {
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
-import { SEARCH_RESULT_ROW_HEIGHT } from "../components/SearchResultsPane";
 import type { TreeNodeState } from "../components/TreePane";
 import {
   EMPTY_CONTENT_SELECTION,
@@ -185,7 +184,6 @@ export function useExplorerNavigationController(args: {
     setFoldersFirst,
     includeHidden,
     setIncludeHidden,
-    viewMode,
     compactListView,
     compactDetailsView,
     compactIconView,
@@ -211,6 +209,8 @@ export function useExplorerNavigationController(args: {
 
   const hasCachedSearch = searchCommittedQuery.trim().length > 0;
   const isSearchMode = searchResultsVisible && hasCachedSearch;
+  // The view on screen: search results have their own in each tab.
+  const viewMode = isSearchMode ? preferences.searchViewMode : preferences.viewMode;
 
   // Typeahead/content-focus actions live in the shared selection store; they
   // are re-exported from this controller's return value for its consumers.
@@ -381,10 +381,6 @@ export function useExplorerNavigationController(args: {
     if (focusedPane !== "content") {
       return null;
     }
-    if (isSearchMode) {
-      const element = contentPaneRef.current?.querySelector<HTMLElement>(".search-results-scroll");
-      return element ? { axis: "vertical", element } : null;
-    }
     if (viewMode === "details") {
       const element = contentPaneRef.current?.querySelector<HTMLElement>(".details-scroll");
       return element ? { axis: "vertical", element } : null;
@@ -457,7 +453,7 @@ export function useExplorerNavigationController(args: {
       return false;
     }
 
-    if (!isSearchMode && viewMode === "list") {
+    if (viewMode === "list") {
       if (contentSelection.paths.length === 1) {
         const currentIndex = activeContentEntries.findIndex(
           (entry) => entry.path === contentSelection.leadPath,
@@ -497,15 +493,13 @@ export function useExplorerNavigationController(args: {
         return didScroll;
       }
       // Icon view pages by rows, and every row holds a full set of columns.
-      const pagesIconRows = !isSearchMode && viewMode === "icons";
+      const pagesIconRows = viewMode === "icons";
       const stepItems =
         getPageStepItemCount(
           target.element.clientHeight,
-          isSearchMode
-            ? SEARCH_RESULT_ROW_HEIGHT
-            : pagesIconRows
-              ? getIconGridLayout(compactIconView).rowHeight
-              : getDetailsRowHeight(compactDetailsView),
+          pagesIconRows
+            ? getIconGridLayout(compactIconView).rowHeight
+            : getDetailsRowHeight(compactDetailsView),
         ) * (pagesIconRows ? Math.max(1, contentColumns) : 1);
       const nextIndex = getPagedSelectionIndex({
         itemCount: activeContentEntries.length,

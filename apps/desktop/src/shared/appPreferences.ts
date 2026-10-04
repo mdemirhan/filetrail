@@ -77,6 +77,8 @@ export type OpenTabPreference = {
   treeRootPath: string | null;
   favoritePath: string | null;
   viewMode: ExplorerViewMode;
+  // How the tab shows search results, kept apart from how it shows folders.
+  searchViewMode: ExplorerViewMode;
   sortBy: "name" | "modified" | "kind" | "size";
   sortDirection: "asc" | "desc";
   // Each tab shows hidden files, and folders before files, or not, on its own.
@@ -177,6 +179,22 @@ export const DETAIL_COLUMN_WIDTH_LIMITS = {
   created: { min: 80, max: 280 },
   permissions: { min: 36, max: 260 },
 } as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
+// Search results' List view: the folder's columns, and the folder each result is in.
+export type SearchColumnKey = DetailColumnKey | "folder";
+export type SearchColumnWidths = Record<SearchColumnKey, number>;
+export const DEFAULT_SEARCH_COLUMN_WIDTHS: SearchColumnWidths = {
+  ...DEFAULT_DETAIL_COLUMN_WIDTHS,
+  name: 300,
+  folder: 240,
+};
+export const SEARCH_COLUMN_WIDTH_LIMITS = {
+  ...DETAIL_COLUMN_WIDTH_LIMITS,
+  folder: { min: 80, max: 720 },
+} as const satisfies Record<SearchColumnKey, { min: number; max: number }>;
+export function clampSearchColumnWidth(key: SearchColumnKey, value: number): number {
+  const limits = SEARCH_COLUMN_WIDTH_LIMITS[key];
+  return Math.round(Math.max(limits.min, Math.min(limits.max, value)));
+}
 export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
   {
     id: "visual-studio-code",
@@ -237,6 +255,8 @@ export type AppPreferences = {
   accent: AccentMode;
   zoomPercent: number;
   viewMode: ExplorerViewMode;
+  // The view search results are shown in, for the tab on screen; List to begin with.
+  searchViewMode: ExplorerViewMode;
   sortBy: "name" | "modified" | "kind" | "size";
   sortDirection: "asc" | "desc";
   foldersFirst: boolean;
@@ -294,6 +314,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   accent: DEFAULT_ACCENT,
   zoomPercent: 100,
   viewMode: "details",
+  searchViewMode: "details",
   sortBy: "name",
   sortDirection: "asc",
   foldersFirst: true,

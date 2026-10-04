@@ -5,14 +5,17 @@ import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@file
 import {
   type AppPreferences,
   DEFAULT_APP_PREFERENCES,
+  DEFAULT_SEARCH_COLUMN_WIDTHS,
   DEFAULT_TERMINAL_APPLICATION,
   DETAIL_COLUMN_LABELS,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   SORT_BY_ORDER,
+  type SearchColumnWidths,
   VIEW_MODE_NAMES,
   VIEW_MODE_ORDER,
   clampOpenItemLimit,
+  clampSearchColumnWidth,
   clampZoomPercent,
 } from "../shared/appPreferences";
 import { resolveShortcuts } from "../shared/shortcuts";
@@ -20,9 +23,11 @@ import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolders";
 import { AppDialogs } from "./components/AppDialogs";
 import { ClipboardButton } from "./components/ClipboardButton";
+import type { ListColumnSet } from "./components/ContentPane";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import type { InfoPanelSelection } from "./components/GetInfoPanel";
 import { InfoRow } from "./components/InfoRow";
+import { SearchBar, SearchResultsState } from "./components/SearchBar";
 import type { SettingsTab } from "./components/SettingsView";
 import { TabStrip } from "./components/TabStrip";
 import { ToolbarIcon } from "./components/ToolbarIcon";
@@ -54,6 +59,7 @@ import {
 } from "./lib/contentSelection";
 import type { ContextMenuSubmenus } from "./lib/contextMenu";
 import { buildPasteRequest, describeClipboard } from "./lib/copyPasteClipboard";
+import type { ListColumnKey } from "./lib/detailsLayout";
 import {
   createOpenItemLimitMessage,
   formatPathForShell,
@@ -98,7 +104,11 @@ import {
   canRunToolbarRendererCommand,
   resolveFavoriteTargetPath,
 } from "./lib/rendererCommandAvailability";
-import { formatSearchStatus } from "./lib/searchResults";
+import {
+  buildSearchHighlightPattern,
+  formatSearchResultFolder,
+  formatSearchStatus,
+} from "./lib/searchResults";
 import { summarizeSelectionSize } from "./lib/selectionSize";
 import { createShortcutDisplay } from "./lib/shortcutDisplay";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
@@ -113,6 +123,13 @@ import { ShortcutDisplayProvider } from "./state/shortcutDisplayContext";
 const logger = createRendererLogger("filetrail.renderer");
 
 type PreferencesPersistPayload = IpcRequest<"app:updatePreferences">["preferences"];
+// The columns of search results' List view, in order.
+const SEARCH_LIST_COLUMN_KEYS: ReadonlyArray<ListColumnKey> = [
+  "name",
+  "folder",
+  "modified",
+  "size",
+];
 
 export function App() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -157,6 +174,8 @@ export function App() {
     setIncludeHidden,
     viewMode,
     setViewMode,
+    searchViewMode,
+    setSearchViewMode,
     foldersFirst,
     setFoldersFirst,
     compactListView,
@@ -320,8 +339,6 @@ export function App() {
     setSearchResultsVisible,
     searchResults,
     setSearchResults,
-    searchResultsScrollTop,
-    setSearchResultsScrollTop,
     searchStatus,
     setSearchStatus,
     searchError,
@@ -513,6 +530,38 @@ export function App() {
     [isSearchMode, searchResultEntries, visibleBrowseEntries],
   );
   const unfilteredContentEntries = isSearchMode ? allSearchResultEntries : browseEntries;
+  // The view on screen: search results have one of their own in each tab, List to begin with.
+  const shownViewMode = isSearchMode ? searchViewMode : viewMode;
+  const setShownViewMode = isSearchMode ? setSearchViewMode : setViewMode;
+  // Search results' List view: Name, the folder each is in, Date Modified and Size. Their
+  // widths are the window's own for now; Name and Folder sort the results.
+  const [searchColumnWidths, setSearchColumnWidths] = useState<SearchColumnWidths>(
+    DEFAULT_SEARCH_COLUMN_WIDTHS,
+  );
+  const searchListColumns = useMemo<ListColumnSet>(
+    () => ({
+      keys: SEARCH_LIST_COLUMN_KEYS,
+      widths: searchColumnWidths,
+      clampWidth: clampSearchColumnWidth,
+      onWidthsChange: setSearchColumnWidths,
+      getSortKey: (key) => (key === "name" ? "name" : key === "folder" ? "path" : null),
+      sortBy: searchResultsSortBy,
+      sortDirection: searchResultsSortDirection,
+      onSortChange: (sortKey) => sortSearchResultsByColumn(sortKey as "name" | "path"),
+      getFolderLabel: (entry) => formatSearchResultFolder(entry.path, searchRootPath),
+    }),
+    [
+      searchColumnWidths,
+      searchResultsSortBy,
+      searchResultsSortDirection,
+      searchRootPath,
+      sortSearchResultsByColumn,
+    ],
+  );
+  const searchNameHighlight = useMemo(
+    () => buildSearchHighlightPattern(searchCommittedQuery, searchPatternMode, searchMatchScope),
+    [searchCommittedQuery, searchMatchScope, searchPatternMode],
+  );
   const selectedPathSet = useMemo(() => new Set(contentSelection.paths), [contentSelection.paths]);
   const selectedPathsInViewOrder = useMemo(
     () =>
@@ -887,7 +936,7 @@ export function App() {
           kind: "viewMode",
           id: mode,
           label: VIEW_MODE_NAMES[mode],
-          checked: viewMode === mode,
+          checked: shownViewMode === mode,
         },
       })),
       sortBy: SORT_BY_ORDER.map((value) => ({
@@ -899,7 +948,7 @@ export function App() {
         },
       })),
     }),
-    [openWithMenuItems, sortBy, viewMode],
+    [openWithMenuItems, shownViewMode, sortBy],
   );
   const copyPasteModalOpen =
     (copyPasteDialogState !== null && copyPasteDialogState.type !== "analysis") ||
@@ -1090,7 +1139,7 @@ export function App() {
     () =>
       buildApplicationMenuState({
         canRun: canRunRendererCommand,
-        viewMode,
+        viewMode: shownViewMode,
         sortBy,
         foldersFirst,
         hiddenFilesShown: includeHidden,
@@ -1101,7 +1150,7 @@ export function App() {
       }),
     [
       canRunRendererCommand,
-      viewMode,
+      shownViewMode,
       sortBy,
       foldersFirst,
       includeHidden,
@@ -1224,6 +1273,7 @@ export function App() {
     accent,
     zoomPercent,
     viewMode,
+    searchViewMode,
     sortBy,
     sortDirection,
     foldersFirst,
@@ -1391,6 +1441,7 @@ export function App() {
         setSearchResultsSortBy(preferences.searchResultsSortBy);
         setSearchResultsSortDirection(preferences.searchResultsSortDirection);
         setViewMode(preferences.viewMode);
+        setSearchViewMode(preferences.searchViewMode);
         setFoldersFirst(preferences.foldersFirst);
         setCompactListView(preferences.compactListView);
         setCompactDetailsView(preferences.compactDetailsView);
@@ -1458,6 +1509,7 @@ export function App() {
         const startupRootPath = startupTab.rootPath;
         const restoredFavoritePath = startupTab.favoritePath;
         setViewMode(startupTab.viewMode);
+        setSearchViewMode(startupTab.searchViewMode);
         setIncludeHidden(startupTab.includeHidden);
         setFoldersFirst(startupTab.foldersFirst);
         setSortBy(startupTab.sortBy);
@@ -1831,97 +1883,27 @@ export function App() {
               typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
             }}
             searchWorkspaceProps={{
-              isSearchMode,
-              searchResultsPaneProps: {
-                paneRef: contentPaneRef,
-                isFocused: focusedPane === "content",
-                rootPath: searchRootPath,
-                query: searchCommittedQuery,
-                status: searchStatus,
-                results: filteredSearchResults,
-                selectedPaths: contentSelection.paths,
-                selectionLeadPath: contentSelection.leadPath,
-                error: searchError,
-                // A pattern that does not parse while it is being typed is not a failure yet.
-                errorIsQuiet: searchStartedLive && searchPatternMode !== "text",
-                truncated: searchTruncated,
-                totalCount: allSearchResultEntries.length,
-                sortBy: searchResultsSortBy,
-                sortDirection: searchResultsSortDirection,
-                onStopSearch: () => {
-                  void stopSearch();
-                },
-                onClearResults: () => {
-                  void clearCommittedSearch().finally(() => {
-                    focusContentPane();
-                  });
-                },
-                onCloseResults: () => {
-                  setSearchPopoverOpen(false);
-                  searchInputRef.current?.blur();
-                  hideSearchResults();
-                  focusContentPane();
-                },
-                onSortColumn: sortSearchResultsByColumn,
-                metadataByPath: searchMetadataByPath,
-                onVisiblePathsChange: loadSearchResultMetadata,
-                elapsedMs: searchElapsedMs,
-                scopeOptions: buildSearchScopeOptions(currentPath, homePath),
-                onScopeChange: changeSearchRoot,
-                patternMode: searchPatternMode,
-                matchScope: searchMatchScope,
-                onSelectionGesture: handleContentSelectionGesture,
-                onClearSelection: clearContentSelection,
-                onActivateResult: (item, inNewTab) => {
-                  const entry = toDirectoryEntryFromSearchResult(item);
-                  if (inNewTab && isDirectoryLikeEntry(entry)) {
-                    void openFolderInNewTab(entry.path);
-                    return;
-                  }
-                  void activateContentEntry(entry);
-                },
-                onItemContextMenu: (path, position) => {
-                  openItemContextMenu(path, position, "search");
-                },
-                inlineRename: renameDialogState?.inline
-                  ? {
-                      path: renameDialogState.sourcePath,
-                      error: renameDialogState.error,
-                      refusalCount: renameDialogState.refusalCount,
-                      sessionId: renameDialogState.sessionId,
-                    }
-                  : null,
-                onInlineRenameSubmit: (nextName) => void submitRenameDialog(nextName),
-                onInlineRenameCancel: () => setRenameDialogState(null),
-                onItemDragStart: (item, event) =>
-                  handleSearchDragStart(toDirectoryEntryFromSearchResult(item), "search", event),
-                onItemDragEnd: handleDragEnd,
-                onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
-                onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
-                filterQuery: listFilterQuery,
-                onFilterQueryChange: setListFilter,
-                scrollTop: searchResultsScrollTop,
-                onScrollTopChange: setSearchResultsScrollTop,
-              },
               contentPaneProps: {
                 paneRef: contentPaneRef,
                 isFocused: focusedPane === "content",
                 currentPath,
-                entries: visibleBrowseEntries,
-                filterQuery: listFilterQuery,
+                entries: isSearchMode ? searchResultEntries : visibleBrowseEntries,
+                // Search results are narrowed in the search bar's own field.
+                filterQuery: isSearchMode ? "" : listFilterQuery,
                 filterTotalCount: browseEntries.length,
                 onClearFilter: clearListFilter,
                 onSearchForFilter: searchFromListFilter,
-                loading: directoryLoading,
-                error: directoryError,
-                onOpenFullDiskAccess: isTrashListingRefused(currentPath, directoryError, homePath)
-                  ? openFullDiskAccessSettings
-                  : null,
+                loading: isSearchMode ? false : directoryLoading,
+                error: isSearchMode ? null : directoryError,
+                onOpenFullDiskAccess:
+                  !isSearchMode && isTrashListingRefused(currentPath, directoryError, homePath)
+                    ? openFullDiskAccessSettings
+                    : null,
                 hiddenItemCount,
-                metadataByPath,
+                metadataByPath: isSearchMode ? searchMetadataByPath : metadataByPath,
                 selectedPaths: contentSelection.paths,
                 selectionLeadPath: contentSelection.leadPath,
-                viewMode,
+                viewMode: shownViewMode,
                 onSelectionGesture: handleContentSelectionGesture,
                 onClearSelection: clearContentSelection,
                 onActivateEntry: (entry, inNewTab) => {
@@ -1937,8 +1919,16 @@ export function App() {
                 sortDirection,
                 onSortChange: handleSortChange,
                 onLayoutColumnsChange: setContentColumns,
-                onVisiblePathsChange: setVisiblePaths,
-                onNavigatePath: (path) => void navigateTo(path, "push"),
+                onVisiblePathsChange: isSearchMode ? loadSearchResultMetadata : setVisiblePaths,
+                onNavigatePath: (path) => {
+                  // In search results the path bar ends with the selected result, which
+                  // opens as a double-click would open it.
+                  if (isSearchMode && selectedEntry && path === selectedEntry.path) {
+                    void activateContentEntry(selectedEntry);
+                    return;
+                  }
+                  void navigateTo(path, "push");
+                },
                 onOpenPathInNewTab: openPathInNewTab,
                 onRequestPathSuggestions: (inputPath) =>
                   requestPathSuggestions({
@@ -1951,15 +1941,22 @@ export function App() {
                   (await client.invoke("tree:getChildren", { path, includeHidden })).children,
                 onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
                 onItemContextMenu: (path, position) => {
-                  openItemContextMenu(path, position, "content");
+                  openItemContextMenu(path, position, isSearchMode ? "search" : "content");
                 },
-                onItemDragStart: (entry, event) => handleContentDragStart(entry, "content", event),
+                onItemDragStart: (entry, event) =>
+                  isSearchMode
+                    ? handleSearchDragStart(entry, "search", event)
+                    : handleContentDragStart(entry, "content", event),
                 onItemDragEnd: handleDragEnd,
-                onItemDragEnter: handleContentDragEnter,
-                onItemDragOver: handleContentDragOver,
-                onItemDragLeave: handleContentDragLeave,
-                onItemDrop: handleContentDrop,
-                getItemDropIndicator: getContentItemDropIndicator,
+                ...(isSearchMode
+                  ? {}
+                  : {
+                      onItemDragEnter: handleContentDragEnter,
+                      onItemDragOver: handleContentDragOver,
+                      onItemDragLeave: handleContentDragLeave,
+                      onItemDrop: handleContentDrop,
+                      getItemDropIndicator: getContentItemDropIndicator,
+                    }),
                 compactListView,
                 compactDetailsView,
                 compactIconView,
@@ -1977,31 +1974,82 @@ export function App() {
                   : null,
                 onInlineRenameSubmit: (nextName) => void submitRenameDialog(nextName),
                 onInlineRenameCancel: () => setRenameDialogState(null),
-                statusSummary: buildContentStatusSummary({
-                  itemCount: currentEntries.length,
-                  shownCount: visibleBrowseEntries.length,
-                  selectedPaths: contentSelection.paths,
-                  getKnownSizeBytes: (path) => {
-                    const entry = currentEntries.find((candidate) => candidate.path === path);
-                    if (!entry) {
-                      return null;
+                statusSummary: isSearchMode
+                  ? formatSearchStatus({
+                      isSearching: searchStatus === "running",
+                      shown: filteredSearchResults.length,
+                      totalCount: allSearchResultEntries.length,
+                      selectedCount: contentSelection.paths.length,
+                    })
+                  : buildContentStatusSummary({
+                      itemCount: currentEntries.length,
+                      shownCount: visibleBrowseEntries.length,
+                      selectedPaths: contentSelection.paths,
+                      getKnownSizeBytes: (path) => {
+                        const entry = currentEntries.find((candidate) => candidate.path === path);
+                        if (!entry) {
+                          return null;
+                        }
+                        // Only folders have a calculated size to look up; asking for a file's
+                        // would send a request that can never find one.
+                        if (isFolderSizeEligibleKind(entry.kind)) {
+                          const folderSize = folderSizeCache.getEntry(path);
+                          if (folderSize.status === "ready") {
+                            return folderSize.sizeBytes;
+                          }
+                        }
+                        if (entry.kind === "directory" || entry.kind === "bundle") {
+                          return null;
+                        }
+                        const metadata = metadataByPath[path];
+                        return metadata?.sizeStatus === "ready" ? metadata.sizeBytes : null;
+                      },
+                    }),
+                sizeBars: isSearchMode ? null : sizeBars,
+                ...(isSearchMode
+                  ? {
+                      header: (
+                        <SearchBar
+                          isFocused={focusedPane === "content"}
+                          rootPath={searchRootPath}
+                          scopeOptions={buildSearchScopeOptions(currentPath, homePath)}
+                          onScopeChange={changeSearchRoot}
+                          status={searchStatus}
+                          truncated={searchTruncated}
+                          filterQuery={listFilterQuery}
+                          onFilterQueryChange={setListFilter}
+                          onFocusResults={focusContentPane}
+                          onStopSearch={() => {
+                            void stopSearch();
+                          }}
+                          onCloseResults={() => {
+                            setSearchPopoverOpen(false);
+                            searchInputRef.current?.blur();
+                            hideSearchResults();
+                            focusContentPane();
+                          }}
+                        />
+                      ),
+                      // The status bar shows where the selected result is, as Finder's does.
+                      pathbarPath:
+                        contentSelection.paths.length === 1 && selectedEntry
+                          ? selectedEntry.path
+                          : searchRootPath,
+                      viewKey: `search:${searchRootPath}:${searchCommittedQuery}`,
+                      listColumns: searchListColumns,
+                      contentStateOverride: (
+                        <SearchResultsState
+                          status={searchStatus}
+                          shownCount={filteredSearchResults.length}
+                          totalCount={allSearchResultEntries.length}
+                          error={searchError}
+                          errorIsQuiet={searchStartedLive && searchPatternMode !== "text"}
+                          filterQuery={listFilterQuery}
+                        />
+                      ),
+                      nameHighlight: searchNameHighlight,
                     }
-                    // Only folders have a calculated size to look up; asking for a file's
-                    // would send a request that can never find one.
-                    if (isFolderSizeEligibleKind(entry.kind)) {
-                      const folderSize = folderSizeCache.getEntry(path);
-                      if (folderSize.status === "ready") {
-                        return folderSize.sizeBytes;
-                      }
-                    }
-                    if (entry.kind === "directory" || entry.kind === "bundle") {
-                      return null;
-                    }
-                    const metadata = metadataByPath[path];
-                    return metadata?.sizeStatus === "ready" ? metadata.sizeBytes : null;
-                  },
-                }),
-                sizeBars,
+                  : {}),
                 getFolderSizeLabel: (path) => {
                   const entry = folderSizeCache.getEntry(path);
                   if (entry.status === "ready") {
@@ -2139,8 +2187,8 @@ export function App() {
             goForward={goForward}
             navigateToParentFolder={navigateToParentFolder}
             refreshDirectory={refreshDirectory}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
+            viewMode={shownViewMode}
+            onViewModeChange={setShownViewMode}
             sortBy={sortBy}
             sortDirection={sortDirection}
             onSortChange={handleSortChange}
@@ -2269,18 +2317,8 @@ export function App() {
                 ? `Searching “${getFolderDisplayName(searchRootPath)}”`
                 : getFolderDisplayName(currentPath)
             }
-            // Under the name while searching: how the search is going. A folder's item count
-            // is in the status bar, and is not said twice.
-            toolbarSubtitle={
-              isSearchMode
-                ? formatSearchStatus({
-                    isSearching: searchStatus === "running",
-                    shown: filteredSearchResults.length,
-                    totalCount: allSearchResultEntries.length,
-                    selectedCount: contentSelection.paths.length,
-                  })
-                : ""
-            }
+            // How the search is going is in the status bar, as a folder's item count is.
+            toolbarSubtitle=""
           />
         ) : null}
         <AppDialogs
@@ -2305,7 +2343,7 @@ export function App() {
             // View As and Sort By set the view of the folder on screen.
             if (action.kind === "viewMode") {
               closeContextMenu();
-              setViewMode(action.id);
+              setShownViewMode(action.id);
               return;
             }
             if (action.kind === "sortBy") {

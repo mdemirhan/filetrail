@@ -1880,8 +1880,7 @@ select:focus-visible {
 .tree-label:focus-visible,
 .flow-item:focus-visible,
 .details-row:focus-visible,
-.details-header-button:focus-visible,
-.search-result-row:focus-visible {
+.details-header-button:focus-visible {
   outline: none;
   border-color: transparent;
   box-shadow: none;
@@ -2720,8 +2719,7 @@ body.resizing-panels * {
 }
 
 /* Clear of the divider that ends the column. */
-.details-header-button .sort-indicator,
-.search-results-column .sort-indicator {
+.details-header-button .sort-indicator {
   margin-right: 6px;
 }
 
@@ -2865,11 +2863,6 @@ body.resizing-panels * {
   cursor: col-resize;
 }
 
-.search-results-scroll {
-  height: 100%;
-  min-height: 0;
-}
-
 .content-state strong {
   color: var(--text-primary);
   font-size: var(--font-size-body);
@@ -2899,11 +2892,6 @@ body.resizing-panels * {
   text-align: center;
 }
 
-.search-results-body {
-  position: relative;
-  min-height: 0;
-}
-
 .search-results-header {
   gap: 0;
   height: auto;
@@ -2911,17 +2899,6 @@ body.resizing-panels * {
   padding: 0;
   align-items: stretch;
   overflow: hidden;
-}
-
-/* With the row's 6px margin, rows sit 10px in from the pane's edges, as in Details. */
-.search-results-scroll {
-  padding: 10px 4px 12px;
-}
-
-.search-results-scroll:focus,
-.search-results-scroll:focus-visible {
-  outline: none;
-  box-shadow: none;
 }
 
 .search-results-banner {
@@ -2932,20 +2909,6 @@ body.resizing-panels * {
   background: color-mix(in srgb, var(--ft-accent-solid) 6%, transparent);
   color: var(--text-secondary);
   font-size: var(--font-size-callout);
-}
-
-.search-result-row {
-  align-items: center;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.search-result-row:active,
-.search-result-row.active {
-  background: var(--bg-active);
 }
 
 .internal-drag-preview {
@@ -3031,20 +2994,6 @@ body.resizing-panels * {
   font-size: var(--font-size-small);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-}
-
-.search-result-name {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  color: var(--text-primary);
-}
-
-.search-result-path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .empty-state-title {
@@ -4389,6 +4338,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
   grid-template-rows: minmax(0, 1fr) auto auto;
 }
 
+/* Search results: the search bar above the list. */
+.content-pane.has-header {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+
 .content-pathbar-row {
   height: 28px;
   min-height: 28px;
@@ -4486,23 +4440,19 @@ body.window-inactive {
 /* Focused selection is the accent as a fill with white text (see `selectionColors`);
    unfocused selection turns gray. */
 .flow-item.active:not(.inactive),
-.details-row.active:not(.inactive),
-.search-result-row.active:not(.inactive) {
+.details-row.active:not(.inactive) {
   background: var(--ft-accent-selection-bg);
   color: var(--ft-accent-on-selection);
 }
 
 .flow-item.active:not(.inactive) .flow-item-label,
 .details-row.active:not(.inactive) > span,
-.details-row.active:not(.inactive) .details-name-label,
-.search-result-row.active:not(.inactive) .search-result-name,
-.search-result-row.active:not(.inactive) .search-result-path {
+.details-row.active:not(.inactive) .details-name-label {
   color: var(--ft-accent-on-selection);
 }
 
 .flow-item.active.inactive,
-.details-row.active.inactive,
-.search-result-row.active.inactive {
+.details-row.active.inactive {
   background: var(--bg-active-inactive);
 }
 
@@ -4535,58 +4485,6 @@ body.window-inactive {
   flex: 1 1 auto;
 }
 
-.search-results-columns {
-  display: grid;
-  gap: 8px;
-  height: 26px;
-  border-top: 1px solid var(--border-light);
-}
-
-.search-results-column {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-small);
-  text-align: left;
-  cursor: default;
-}
-
-/* The sort arrow at the column's right edge, as in the list's header. */
-button.search-results-column {
-  justify-content: space-between;
-}
-
-.search-results-column.active {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.search-result-row {
-  display: grid;
-  gap: 8px;
-  width: calc(100% - 12px);
-  height: 28px;
-  min-height: 28px;
-  margin: 0 6px;
-  padding: 0 10px;
-  border-radius: var(--radius-control);
-}
-
-.search-result-name {
-  font-size: var(--font-size-body);
-  font-weight: 400;
-}
-
-.search-result-path {
-  color: var(--text-secondary);
-  font-size: var(--font-size-callout);
-}
-
 /* Remaining uppercase letter-spaced labels read as web UI; macOS uses sentence case. */
 .pane-header,
 .get-info-header,
@@ -4596,18 +4494,13 @@ button.search-results-column {
   text-transform: none;
 }
 
-.search-results-pane {
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
 .content-pathbar-row,
 .content-pathbar-row.pane-header-focused {
   background: var(--bg-base);
 }
 
 .flow-item.active:not(.inactive) .truncated-name-extension,
-.details-row.active:not(.inactive) .truncated-name-extension,
-.search-result-row.active:not(.inactive) .truncated-name-extension {
+.details-row.active:not(.inactive) .truncated-name-extension {
   color: var(--ft-accent-on-selection-soft);
 }
 
@@ -6131,8 +6024,7 @@ button.shortcut-slot-key.recording:hover {
 /* Every text span in a focused selected row takes the selection text color, including names
    without an extension (which otherwise match `.details-name span:last-child` and stay dark). */
 .flow-item.active:not(.inactive) .flow-item-label span,
-.details-row.active:not(.inactive) .details-name span,
-.search-result-row.active:not(.inactive) .search-result-name span {
+.details-row.active:not(.inactive) .details-name span {
   color: var(--ft-accent-on-selection);
 }
 
@@ -6444,48 +6336,6 @@ button.shortcut-slot-key.recording:hover {
   scroll-margin-top: 10px;
 }
 
-/* The header is laid out like a row (the list's 4px padding, the row's 6px margin and
-   10px padding, and the same columns), so each title sits over its column. "Name" spans
-   the icon's column too, and starts where the icons do, as in the Details view. */
-.search-results-columns {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 170px 76px;
-  padding: 0 20px;
-}
-
-.search-results-columns > .search-results-column:first-child {
-  grid-column: span 2;
-}
-
-.search-results-column-static {
-  cursor: default;
-}
-
-.search-results-column-size {
-  justify-content: flex-end;
-}
-
-.search-result-row {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 170px 76px;
-}
-
-.search-result-meta {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-  font-size: var(--font-size-callout);
-  font-variant-numeric: tabular-nums;
-}
-
-.search-result-size {
-  text-align: right;
-}
-
-.search-result-row.active:not(.inactive) .search-result-meta {
-  color: var(--ft-accent-on-selection-soft);
-}
-
 .search-result-match {
   border-radius: var(--radius-xs);
   padding: 0 1px;
@@ -6495,7 +6345,8 @@ button.shortcut-slot-key.recording:hover {
 
 /* On a selected row the match is underlined: a tinted box there turns into a dark or
    washed-out block, depending on the accent, and costs the name its contrast. */
-.search-result-row.active:not(.inactive) .search-result-match {
+.details-row.active:not(.inactive) .search-result-match,
+.flow-item.active:not(.inactive) .search-result-match {
   background: transparent;
   text-decoration: underline;
   text-decoration-thickness: 1.5px;
@@ -7136,8 +6987,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .tree-row.active:not(.inactive) .clipboard-mark-icon,
-.flow-item.active:not(.inactive) .clipboard-mark-icon,
-.search-result-row.active:not(.inactive) .clipboard-mark-icon {
+.flow-item.active:not(.inactive) .clipboard-mark-icon {
   color: var(--ft-accent-on-selection);
 }
 
@@ -7154,10 +7004,6 @@ button.shortcut-slot-key.recording:hover {
 
 .details-row.active:not(.inactive) .details-name > span.clipboard-mark-icon {
   color: var(--ft-accent-on-selection);
-}
-
-.search-result-row.clipboard-flash {
-  position: relative;
 }
 
 /* A search result's name and its icon share the name column. */
@@ -7193,7 +7039,6 @@ button.shortcut-slot-key.recording:hover {
 .clipboard-cut .tree-label-text,
 .clipboard-cut .flow-item-label,
 .clipboard-cut .details-name-label,
-.clipboard-cut .search-result-name,
 .clipboard-cut .icon-item-label {
   opacity: 0.55;
 }
@@ -7217,8 +7062,7 @@ button.shortcut-slot-key.recording:hover {
    text on it. */
 .tree-row.clipboard-flash.active:not(.inactive)::after,
 .flow-item.clipboard-flash.active:not(.inactive)::after,
-.details-row.clipboard-flash.active:not(.inactive)::after,
-.search-result-row.clipboard-flash.active:not(.inactive)::after {
+.details-row.clipboard-flash.active:not(.inactive)::after {
   background: var(--ft-accent-on-selection);
 }
 
@@ -7249,32 +7093,6 @@ button.shortcut-slot-key.recording:hover {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Search results drop the date, then the size, as their pane narrows (SearchResultsPane
-   sets `data-columns` from the measured width). */
-.search-results-pane[data-columns="no-date"] .search-results-columns {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 76px;
-}
-
-.search-results-pane[data-columns="no-date"] .search-result-row {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 76px;
-}
-
-.search-results-pane[data-columns="names"] .search-results-columns {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr);
-}
-
-.search-results-pane[data-columns="names"] .search-result-row {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr);
-}
-
-.search-results-pane:not([data-columns="full"])
-  .search-results-column-static:not(.search-results-column-size),
-.search-results-pane:not([data-columns="full"]) .search-result-meta:not(.search-result-size),
-.search-results-pane[data-columns="names"] .search-results-column-size,
-.search-results-pane[data-columns="names"] .search-result-size {
-  display: none;
 }
 
 /* ── Renaming an item in its row ──────────────────────────────────────── */

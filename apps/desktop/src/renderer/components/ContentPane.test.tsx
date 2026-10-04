@@ -342,6 +342,95 @@ describe("ContentPane", () => {
     );
   });
 
+  it("shows search results under the search bar, with the folder each is in", () => {
+    const handleSortChange = vi.fn();
+    const handleWidthsChange = vi.fn();
+    const result = {
+      path: "/Users/demo/app/src/report.ts",
+      name: "report.ts",
+      extension: "ts",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+    };
+    const props = {
+      isFocused: true,
+      currentPath: "/Users/demo",
+      entries: [result],
+      viewMode: "details" as const,
+      loading: false,
+      error: null,
+      hiddenItemCount: 0,
+      metadataByPath: {},
+      sortBy: "name" as const,
+      sortDirection: "asc" as const,
+      selectedPaths: [result.path],
+      selectionLeadPath: result.path,
+      onActivateEntry: () => undefined,
+      onSortChange: () => undefined,
+      onLayoutColumnsChange: () => undefined,
+      onVisiblePathsChange: () => undefined,
+      onNavigatePath: () => undefined,
+      onRequestPathSuggestions: async () => ({ inputPath: "", basePath: null, suggestions: [] }),
+      onFocusChange: () => undefined,
+      header: <div>Search bar</div>,
+      pathbarPath: result.path,
+      viewKey: "search:/Users/demo:report",
+      listColumns: {
+        keys: ["name", "folder", "modified", "size"] as const,
+        widths: {
+          name: 300,
+          folder: 240,
+          modified: 152,
+          size: 108,
+          kind: 148,
+          created: 152,
+          permissions: 108,
+        },
+        clampWidth: (_key: string, width: number) => width,
+        onWidthsChange: handleWidthsChange,
+        getSortKey: (key: string) => (key === "name" ? "name" : key === "folder" ? "path" : null),
+        sortBy: "path",
+        sortDirection: "asc" as const,
+        onSortChange: handleSortChange,
+        getFolderLabel: () => "app › src",
+      },
+      contentStateOverride: null,
+      nameHighlight: /rep/i,
+    };
+    const { rerender } = render(<ContentPane {...props} />);
+
+    expect(screen.getByText("Search bar")).toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Name",
+      "Folder",
+      "Date Modified",
+      "Size",
+    ]);
+    expect(screen.getByRole("columnheader", { name: /^Folder/ })).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    // Only Name and Folder order the results.
+    fireEvent.click(screen.getByRole("button", { name: "Name" }));
+    expect(handleSortChange).toHaveBeenCalledWith("name");
+    expect(screen.queryByRole("button", { name: "Date Modified" })).toBeNull();
+    expect(screen.getByText("app › src")).toBeInTheDocument();
+    expect(document.querySelector(".search-result-match")?.textContent).toBe("rep");
+    // The path bar ends with the selected result.
+    expect(document.querySelector(".pathbar-segment.active")?.textContent).toBe("report.ts");
+    // The keyboard widens a column of the search's own.
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize Folder column" }), {
+      key: "ArrowRight",
+    });
+    expect(handleWidthsChange).toHaveBeenCalledWith(expect.objectContaining({ folder: 252 }));
+
+    // With nothing to show, the search's own message replaces the folder's.
+    rerender(<ContentPane {...props} entries={[]} contentStateOverride={<div>No matches</div>} />);
+    expect(screen.getByText("No matches")).toBeInTheDocument();
+    expect(screen.queryByText("Empty folder")).toBeNull();
+  });
+
   it("fits a column to its title and its widest value on a double-click of its divider", () => {
     // jsdom draws no text: every character is 7 pixels wide here.
     const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({

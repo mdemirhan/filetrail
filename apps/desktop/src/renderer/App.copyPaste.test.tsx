@@ -35,8 +35,13 @@ vi.mock("./components/ContentPane", () => ({
     onInlineRenameSubmit,
     onInlineRenameCancel,
     isFocused,
+    header,
+    paneRef,
   }: {
     isFocused?: boolean;
+    // Given while the pane shows search results (the search bar).
+    header?: React.ReactNode;
+    paneRef?: React.RefObject<HTMLElement | null>;
     currentPath: string;
     entries: Array<{ path: string; name: string; kind: string; isSymlink?: boolean }>;
     inlineRename?: { path: string; error: string | null; refusalCount?: number } | null;
@@ -84,107 +89,161 @@ vi.mock("./components/ContentPane", () => ({
       },
       inNewTab?: boolean,
     ) => void;
-  }) => (
-    <div data-testid="content-pane" onPointerDown={() => onFocusChange(true)}>
-      <output data-testid="content-current-path">{currentPath}</output>
-      <output data-testid="content-entry-count">{entries.length}</output>
-      <output data-testid="content-focused">{String(isFocused ?? false)}</output>
-      <label>
-        Current folder path
-        <input
-          aria-label="Current folder path"
-          defaultValue={currentPath}
-          onFocus={() => onFocusChange(true)}
-        />
-      </label>
-      {/* Controls of each kind, for how the Edit menu treats the focused one. */}
-      <label>
-        Help notes
-        <input aria-label="Help notes" defaultValue="docs" />
-      </label>
-      <label>
-        Readonly value
-        <input aria-label="Readonly value" defaultValue="5" readOnly />
-      </label>
-      <label>
-        Help scope
-        <select aria-label="Help scope" defaultValue="name">
-          <option value="name">Name</option>
-          <option value="path">Path</option>
-        </select>
-      </label>
-      <label>
-        Help color
-        <input aria-label="Help color" type="color" defaultValue="#336699" />
-      </label>
-      <button
-        type="button"
-        data-testid="content-pane-background"
-        onClick={() => {
-          onFocusChange(true);
-          onClearSelection?.();
-        }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          onFocusChange(true);
-          onClearSelection?.();
-          onItemContextMenu?.(null, { x: 80, y: 100 });
-        }}
+  }) =>
+    header ? (
+      // Search results, which the pane shows in the folder's views under the search bar.
+      <div
+        ref={paneRef as React.RefObject<HTMLDivElement | null>}
+        data-testid="search-results-pane"
+        tabIndex={-1}
       >
-        Background
-      </button>
-      {/* Stands in for the name field a list row shows while its item is renamed. */}
-      {inlineRename ? (
-        <output data-testid="inline-rename-refusal" data-refusal-count={inlineRename.refusalCount}>
-          {inlineRename.error}
-        </output>
-      ) : null}
-      {inlineRename ? (
-        <input
-          aria-label={`Rename ${inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}`}
-          defaultValue={inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              onInlineRenameSubmit?.(event.currentTarget.value);
-            }
-            if (event.key === "Escape") {
-              onInlineRenameCancel?.();
-            }
-          }}
-        />
-      ) : null}
-      {entries.map((entry) => (
+        {/* Stands in for the filter: a text field takes the keyboard from the pane. */}
+        <input aria-label="Filter results" onFocus={() => onFocusChange(false)} />
+        {/* Stands in for the name field a result row shows while its item is renamed. */}
+        {inlineRename ? (
+          <input
+            aria-label={`Rename result ${inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}`}
+            defaultValue={inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                onInlineRenameSubmit?.(event.currentTarget.value);
+              }
+              if (event.key === "Escape") {
+                onInlineRenameCancel?.();
+              }
+            }}
+          />
+        ) : null}
+        {entries.map((entry) => (
+          <button
+            key={entry.path}
+            type="button"
+            title={`search:${entry.path}`}
+            data-selected={selectedPaths.includes(entry.path) ? "true" : "false"}
+            draggable={Boolean(onItemDragStart)}
+            onClick={(event) => {
+              onFocusChange(true);
+              onSelectionGesture(entry.path, {
+                metaKey: event.metaKey,
+                shiftKey: event.shiftKey,
+              });
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onItemContextMenu?.(entry.path, { x: 120, y: 140 });
+            }}
+            onDragStart={(event) => onItemDragStart?.(entry, event)}
+            onDragEnd={(event) => onItemDragEnd?.(event)}
+            onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
+          >
+            Search {entry.name}
+          </button>
+        ))}
+      </div>
+    ) : (
+      <div data-testid="content-pane" onPointerDown={() => onFocusChange(true)}>
+        <output data-testid="content-current-path">{currentPath}</output>
+        <output data-testid="content-entry-count">{entries.length}</output>
+        <output data-testid="content-focused">{String(isFocused ?? false)}</output>
+        <label>
+          Current folder path
+          <input
+            aria-label="Current folder path"
+            defaultValue={currentPath}
+            onFocus={() => onFocusChange(true)}
+          />
+        </label>
+        {/* Controls of each kind, for how the Edit menu treats the focused one. */}
+        <label>
+          Help notes
+          <input aria-label="Help notes" defaultValue="docs" />
+        </label>
+        <label>
+          Readonly value
+          <input aria-label="Readonly value" defaultValue="5" readOnly />
+        </label>
+        <label>
+          Help scope
+          <select aria-label="Help scope" defaultValue="name">
+            <option value="name">Name</option>
+            <option value="path">Path</option>
+          </select>
+        </label>
+        <label>
+          Help color
+          <input aria-label="Help color" type="color" defaultValue="#336699" />
+        </label>
         <button
-          key={entry.path}
           type="button"
-          title={entry.path}
-          data-drop-target-state={getItemDropIndicator?.(entry.path) ?? "none"}
-          data-selected={selectedPaths.includes(entry.path) ? "true" : "false"}
-          draggable={Boolean(onItemDragStart)}
-          onClick={(event) => {
+          data-testid="content-pane-background"
+          onClick={() => {
             onFocusChange(true);
-            onSelectionGesture(entry.path, {
-              metaKey: event.metaKey,
-              shiftKey: event.shiftKey,
-            });
+            onClearSelection?.();
           }}
           onContextMenu={(event) => {
             event.preventDefault();
-            onItemContextMenu?.(entry.path, { x: 120, y: 140 });
+            onFocusChange(true);
+            onClearSelection?.();
+            onItemContextMenu?.(null, { x: 80, y: 100 });
           }}
-          onDragStart={(event) => onItemDragStart?.(entry, event)}
-          onDragEnd={(event) => onItemDragEnd?.(event)}
-          onDragEnter={(event) => onItemDragEnter?.(entry, event)}
-          onDragOver={(event) => onItemDragOver?.(entry, event)}
-          onDragLeave={(event) => onItemDragLeave?.(entry, event)}
-          onDrop={(event) => onItemDrop?.(entry, event)}
-          onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
         >
-          {entry.name}
+          Background
         </button>
-      ))}
-    </div>
-  ),
+        {/* Stands in for the name field a list row shows while its item is renamed. */}
+        {inlineRename ? (
+          <output
+            data-testid="inline-rename-refusal"
+            data-refusal-count={inlineRename.refusalCount}
+          >
+            {inlineRename.error}
+          </output>
+        ) : null}
+        {inlineRename ? (
+          <input
+            aria-label={`Rename ${inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}`}
+            defaultValue={inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                onInlineRenameSubmit?.(event.currentTarget.value);
+              }
+              if (event.key === "Escape") {
+                onInlineRenameCancel?.();
+              }
+            }}
+          />
+        ) : null}
+        {entries.map((entry) => (
+          <button
+            key={entry.path}
+            type="button"
+            title={entry.path}
+            data-drop-target-state={getItemDropIndicator?.(entry.path) ?? "none"}
+            data-selected={selectedPaths.includes(entry.path) ? "true" : "false"}
+            draggable={Boolean(onItemDragStart)}
+            onClick={(event) => {
+              onFocusChange(true);
+              onSelectionGesture(entry.path, {
+                metaKey: event.metaKey,
+                shiftKey: event.shiftKey,
+              });
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onItemContextMenu?.(entry.path, { x: 120, y: 140 });
+            }}
+            onDragStart={(event) => onItemDragStart?.(entry, event)}
+            onDragEnd={(event) => onItemDragEnd?.(event)}
+            onDragEnter={(event) => onItemDragEnter?.(entry, event)}
+            onDragOver={(event) => onItemDragOver?.(entry, event)}
+            onDragLeave={(event) => onItemDragLeave?.(entry, event)}
+            onDrop={(event) => onItemDrop?.(entry, event)}
+            onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
+          >
+            {entry.name}
+          </button>
+        ))}
+      </div>
+    ),
 }));
 vi.mock("./components/TreePane", () => ({
   TreePane: ({
@@ -463,110 +522,6 @@ vi.mock("./components/TreePane", () => ({
           </button>
         );
       })}
-    </div>
-  ),
-}));
-vi.mock("./components/SearchResultsPane", () => ({
-  SEARCH_RESULT_ROW_HEIGHT: 32,
-  SearchResultsPane: ({
-    paneRef,
-    results,
-    selectedPaths,
-    onFocusChange,
-    onSelectionGesture,
-    onActivateResult,
-    onItemContextMenu,
-    onItemDragStart,
-    onItemDragEnd,
-    inlineRename,
-    onInlineRenameSubmit,
-    onInlineRenameCancel,
-  }: {
-    inlineRename?: { path: string; error: string | null; refusalCount?: number } | null;
-    onInlineRenameSubmit?: (nextName: string) => void;
-    onInlineRenameCancel?: () => void;
-    paneRef?: React.RefObject<HTMLElement | null>;
-    results: Array<{
-      path: string;
-      name: string;
-      kind: string;
-      extension: string;
-      isHidden: boolean;
-      isSymlink: boolean;
-      relativeParentPath: string;
-    }>;
-    selectedPaths: string[];
-    onFocusChange: (focused: boolean) => void;
-    onSelectionGesture: (
-      path: string,
-      modifiers: {
-        metaKey: boolean;
-        shiftKey: boolean;
-      },
-    ) => void;
-    onActivateResult: (item: { path: string; name: string }) => void;
-    onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
-    onItemDragStart?: (
-      item: {
-        path: string;
-        name: string;
-        kind: string;
-        extension: string;
-        isHidden: boolean;
-        isSymlink: boolean;
-        relativeParentPath: string;
-      },
-      event: React.DragEvent<HTMLElement>,
-    ) => void;
-    onItemDragEnd?: (event: React.DragEvent<HTMLElement>) => void;
-  }) => (
-    <div
-      ref={paneRef as React.RefObject<HTMLDivElement | null>}
-      data-testid="search-results-pane"
-      tabIndex={-1}
-    >
-      {/* Stands in for the filter: a text field takes the keyboard from the pane. */}
-      <input aria-label="Filter results" onFocus={() => onFocusChange(false)} />
-      {/* Stands in for the name field a result row shows while its item is renamed. */}
-      {inlineRename ? (
-        <input
-          aria-label={`Rename result ${inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}`}
-          defaultValue={inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              onInlineRenameSubmit?.(event.currentTarget.value);
-            }
-            if (event.key === "Escape") {
-              onInlineRenameCancel?.();
-            }
-          }}
-        />
-      ) : null}
-      {results.map((result) => (
-        <button
-          key={result.path}
-          type="button"
-          title={`search:${result.path}`}
-          data-selected={selectedPaths.includes(result.path) ? "true" : "false"}
-          draggable={Boolean(onItemDragStart)}
-          onClick={(event) => {
-            onFocusChange(true);
-            onSelectionGesture(result.path, {
-              metaKey: event.metaKey,
-              shiftKey: event.shiftKey,
-            });
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            onItemContextMenu?.(result.path, { x: 120, y: 140 });
-          }}
-          onDragStart={(event) => onItemDragStart?.(result, event)}
-          onDragEnd={(event) => onItemDragEnd?.(event)}
-          onDoubleClick={() => onActivateResult(result)}
-        >
-          Search {result.name}
-        </button>
-      ))}
     </div>
   ),
 }));
@@ -10233,6 +10188,7 @@ describe("App tabs", () => {
     treeRootPath: "/Users/demo",
     favoritePath: null,
     viewMode: "details" as const,
+    searchViewMode: "details" as const,
     sortBy: "name" as const,
     sortDirection: "asc" as const,
     includeHidden: false,

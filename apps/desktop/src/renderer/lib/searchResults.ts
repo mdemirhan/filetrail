@@ -1,6 +1,8 @@
 import type { IpcResponse } from "@filetrail/contracts";
 
 import type {
+  SearchMatchScopePreference,
+  SearchPatternModePreference,
   SearchResultsSortByPreference,
   SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
@@ -63,4 +65,36 @@ export function formatSearchStatus({
     parts.push(`${selectedCount} selected`);
   }
   return parts.join(" · ");
+}
+
+// What a name search matched, to mark it in the names. fd uses smart case (case-sensitive
+// only when the query has an uppercase letter); glob patterns match the whole name, so they
+// are not marked, and neither are patterns JavaScript cannot parse.
+export function buildSearchHighlightPattern(
+  query: string,
+  patternMode: SearchPatternModePreference,
+  matchScope: SearchMatchScopePreference,
+): RegExp | null {
+  const trimmed = query.trim();
+  if (trimmed.length === 0 || patternMode === "glob" || matchScope !== "name") {
+    return null;
+  }
+  const source = patternMode === "text" ? trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : trimmed;
+  try {
+    return new RegExp(source, /\p{Lu}/u.test(trimmed) ? "" : "i");
+  } catch {
+    return null;
+  }
+}
+
+// The folder a result is in, from where the search started, with › between folders
+// ("src › renderer"); a result right in that folder shows the folder's name.
+export function formatSearchResultFolder(path: string, rootPath: string): string {
+  const parentPath = path.slice(0, Math.max(1, path.lastIndexOf("/")));
+  const root = rootPath.length > 1 ? rootPath.replace(/\/+$/u, "") : rootPath;
+  if (parentPath === root) {
+    return root === "/" ? "Macintosh HD" : (root.split("/").filter(Boolean).at(-1) ?? root);
+  }
+  const relative = root === "/" ? parentPath.slice(1) : parentPath.slice(root.length + 1);
+  return relative.split("/").filter(Boolean).join(" › ");
 }

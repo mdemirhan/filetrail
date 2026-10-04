@@ -232,6 +232,7 @@ export function useExplorerTabs(args: {
       historyPaths: navigation.historyPaths,
       historyIndex: navigation.historyIndex,
       viewMode: preferences.viewMode,
+      searchViewMode: preferences.searchViewMode,
       sortBy: navigation.sortBy,
       sortDirection: navigation.sortDirection,
       treeRootPath: navigation.treeRootPathRef.current,
@@ -288,6 +289,7 @@ export function useExplorerTabs(args: {
     const metadataByPath = view?.metadataByPath ?? {};
 
     preferences.setViewMode(snapshot.viewMode);
+    preferences.setSearchViewMode(snapshot.searchViewMode);
     preferences.setIncludeHidden(snapshot.includeHidden);
     preferences.setFoldersFirst(snapshot.foldersFirst);
     navigation.setSortBy(snapshot.sortBy);
@@ -593,6 +595,7 @@ export function useExplorerTabs(args: {
           historyPaths: [startupTab.path],
           historyIndex: 0,
           viewMode: startupTab.viewMode,
+          searchViewMode: startupTab.searchViewMode,
           sortBy: startupTab.sortBy,
           sortDirection: startupTab.sortDirection,
           treeRootPath: startupTab.rootPath,
@@ -821,6 +824,7 @@ export function useExplorerTabs(args: {
         ? navigation.currentPath
         : null,
     viewMode: preferences.viewMode,
+    searchViewMode: preferences.searchViewMode,
     sortBy: navigation.sortBy,
     sortDirection: navigation.sortDirection,
     includeHidden: preferences.includeHidden,
@@ -875,6 +879,7 @@ function toOpenTabPreference(snapshot: TabSnapshot): OpenTabPreference {
         ? favoritePath
         : null,
     viewMode: snapshot.viewMode,
+    searchViewMode: snapshot.searchViewMode,
     sortBy: snapshot.sortBy,
     sortDirection: snapshot.sortDirection,
     includeHidden: snapshot.includeHidden,

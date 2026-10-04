@@ -32,6 +32,9 @@ export function useAppPreferences() {
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_APP_PREFERENCES.zoomPercent);
   const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
+  const [searchViewMode, setSearchViewMode] = useState<ExplorerViewMode>(
+    DEFAULT_APP_PREFERENCES.searchViewMode,
+  );
   const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
   const [compactListView, setCompactListView] = useState(DEFAULT_APP_PREFERENCES.compactListView);
   const [compactDetailsView, setCompactDetailsView] = useState(
@@ -117,6 +120,8 @@ export function useAppPreferences() {
     setIncludeHidden,
     viewMode,
     setViewMode,
+    searchViewMode,
+    setSearchViewMode,
     foldersFirst,
     setFoldersFirst,
     compactListView,

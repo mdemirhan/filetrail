@@ -90,8 +90,6 @@ export function useExplorerSearchController(args: {
     searchResultsVisible,
     searchResults,
     setSearchResults,
-    searchResultsScrollTop,
-    setSearchResultsScrollTop,
     setSearchStatus,
     searchError,
     setSearchError,
@@ -318,7 +316,6 @@ export function useExplorerSearchController(args: {
     setSearchRootPath("");
     searchResultsRef.current = [];
     setSearchResults([]);
-    setSearchResultsScrollTop(0);
     setSearchStatus("idle");
     setSearchError(null);
     setSearchTruncated(false);
@@ -526,7 +523,6 @@ export function useExplorerSearchController(args: {
     searchResultsVisibleRef.current = true;
     searchOriginPathRef.current = currentPath;
     setSearchStartedLive(overrides.live === true);
-    setSearchResultsScrollTop(0);
     setSearchStatus("running");
     setSearchError(null);
     setSearchTruncated(false);
@@ -603,7 +599,6 @@ export function useExplorerSearchController(args: {
     }
     setSearchCommittedQuery(query);
     searchCommittedQueryRef.current = query;
-    setSearchResultsScrollTop(0);
     cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
     applyContentSelection(EMPTY_CONTENT_SELECTION, []);
   }
@@ -789,7 +784,6 @@ export function useExplorerSearchController(args: {
       resultsSortDirection: searchResultsSortDirection,
       resultsVisible: searchResultsVisible,
       results: searchResultsRef.current,
-      resultsScrollTop: searchResultsScrollTop,
       status: searchStatus,
       error: searchError,
       startedLive: searchStartedLive,
@@ -846,7 +840,6 @@ export function useExplorerSearchController(args: {
     searchResultsVisibleRef.current = session.resultsVisible;
     setSearchResults(session.results);
     searchResultsRef.current = session.results;
-    setSearchResultsScrollTop(session.resultsScrollTop);
     setSearchStatus(cutOff ? "cancelled" : session.status);
     setSearchError(session.error);
     setSearchStartedLive(session.startedLive);
@@ -899,7 +892,6 @@ export function useExplorerSearchController(args: {
       resultsSortDirection: searchResultsSortDirection,
       resultsVisible: false,
       results: [],
-      resultsScrollTop: 0,
       status: "idle",
       error: null,
       startedLive: false,

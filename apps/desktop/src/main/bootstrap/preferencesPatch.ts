@@ -25,6 +25,9 @@ export function toPreferencePatch(
   if (value.viewMode !== undefined) {
     patch.viewMode = value.viewMode;
   }
+  if (value.searchViewMode !== undefined) {
+    patch.searchViewMode = value.searchViewMode;
+  }
   if (value.sortBy !== undefined) {
     patch.sortBy = value.sortBy;
   }

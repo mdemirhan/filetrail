@@ -91,6 +91,7 @@ describe("explorerTabs", () => {
       historyPaths: ["/Users/demo", "/Users/demo/work"],
       historyIndex: 1,
       viewMode: "details",
+      searchViewMode: "icons",
       sortBy: "size",
       sortDirection: "desc",
       treeRootPath: "/Users/demo",

@@ -109,6 +109,7 @@ const NAVIGATION_PREFERENCE_KEYS: ReadonlySet<string> = new Set<keyof AppPrefere
   "openTabs",
   "activeTabIndex",
   "viewMode",
+  "searchViewMode",
   "sortBy",
   "sortDirection",
   "searchResultsSortBy",
@@ -408,10 +409,11 @@ function writeFileAtomically(
 }
 
 // A saved view mode, or the default one (List, Finder's table) for anything else.
-function sanitizeViewMode(value: unknown): ExplorerViewMode {
-  return value === "icons" || value === "list" || value === "details"
-    ? value
-    : DEFAULT_APP_PREFERENCES.viewMode;
+function sanitizeViewMode(
+  value: unknown,
+  fallback: ExplorerViewMode = DEFAULT_APP_PREFERENCES.viewMode,
+): ExplorerViewMode {
+  return value === "icons" || value === "list" || value === "details" ? value : fallback;
 }
 
 // Tabs from a damaged file are kept as far as they make sense; a tab that does not is
@@ -435,6 +437,10 @@ function sanitizeOpenTabs(
       treeRootPath: nonEmptyString(candidate.treeRootPath),
       favoritePath: nonEmptyString(candidate.favoritePath),
       viewMode: sanitizeViewMode(candidate.viewMode),
+      searchViewMode: sanitizeViewMode(
+        candidate.searchViewMode,
+        DEFAULT_APP_PREFERENCES.searchViewMode,
+      ),
       sortBy:
         candidate.sortBy === "modified" ||
         candidate.sortBy === "kind" ||
@@ -477,6 +483,7 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       typeof record.zoomPercent === "number" ? record.zoomPercent : currentDefaults.zoomPercent,
     ),
     viewMode: sanitizeViewMode(record.viewMode),
+    searchViewMode: sanitizeViewMode(record.searchViewMode, DEFAULT_APP_PREFERENCES.searchViewMode),
     sortBy:
       record.sortBy === "modified" ||
       record.sortBy === "kind" ||

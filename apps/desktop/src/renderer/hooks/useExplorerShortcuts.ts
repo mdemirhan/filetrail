@@ -225,8 +225,9 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     setInfoRowOpen: navigation.setInfoRowOpen,
     listFilterActive: navigation.listFilterQuery.length > 0,
     returnKeyAction: preferences.returnKeyAction,
-    viewMode: preferences.viewMode,
-    setViewMode: preferences.setViewMode,
+    // Search results have a view of their own in each tab; ⌘1–⌘3 change the one on screen.
+    viewMode: derived.isSearchMode ? preferences.searchViewMode : preferences.viewMode,
+    setViewMode: derived.isSearchMode ? preferences.setSearchViewMode : preferences.setViewMode,
     setZoomPercent: preferences.setZoomPercent,
     actionNotice: writeOperations.actionNotice,
     contextMenuState: writeOperations.contextMenuState,
@@ -843,12 +844,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
               | "ArrowRight"
               | "Home"
               | "End",
-            columns: current.isSearchMode
-              ? 1
-              : current.viewMode === "details"
-                ? 1
-                : current.contentColumns,
-            viewMode: current.isSearchMode ? "details" : current.viewMode,
+            columns: current.viewMode === "details" ? 1 : current.contentColumns,
+            viewMode: current.viewMode,
           });
           const nextEntry = current.activeContentEntries[nextIndex];
           if (!nextEntry) {
