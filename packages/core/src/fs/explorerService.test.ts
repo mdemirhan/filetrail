@@ -2,6 +2,8 @@ import { chmod, lstat, mkdir, mkdtemp, readdir, realpath, stat, writeFile } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { ipcContractSchemas } from "@filetrail/contracts";
+
 import {
   getDirectoryMetadataBatch,
   getItemProperties,
@@ -90,6 +92,16 @@ describe("explorerService", () => {
     expect(response.item.kind).toBe("file");
     expect(response.item.sizeBytes).toBe(11);
     expect(response.item.kindLabel).toBe("TXT File");
+    expect(response.item.permissionMode).not.toBeNull();
+  });
+
+  it("reads the properties of the root folder, named Macintosh HD", async () => {
+    const response = await getItemProperties("/");
+    // The response must pass the IPC check, which wants a non-empty name.
+    expect(ipcContractSchemas["item:getProperties"].response.parse(response)).toEqual(response);
+    expect(response.item).toMatchObject({ path: "/", name: "Macintosh HD", kind: "directory" });
+    expect(response.item.createdAt).not.toBeNull();
+    expect(response.item.modifiedAt).not.toBeNull();
     expect(response.item.permissionMode).not.toBeNull();
   });
 
