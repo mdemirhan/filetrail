@@ -561,3 +561,96 @@ describe("nativeIsPackage", () => {
     expect(await wrapper.nativeIsPackage(join(root, "missing.app"))).toBeNull();
   });
 });
+
+describe("nativeDatesTaken", () => {
+  const fixtures = join(__dirname, "..", "test-fixtures");
+  // The movie was made at this moment; it is shown on this Mac's clock.
+  it.each([
+    ["addon", addon],
+    ["wrapper", wrapper],
+  ])("reads the date a photo was taken, one answer per path (%s)", async (_name, api) => {
+    const root = mkdtempSync(join(tmpdir(), "filetrail-dates-taken-"));
+    writeFileSync(join(root, "notes.txt"), "not a photo");
+    // A photo's extension with something else in it.
+    writeFileSync(join(root, "broken.jpg"), "not really a photo");
+    const paths = [
+      join(fixtures, "taken.jpg"),
+      join(fixtures, "digitized.jpg"),
+      join(fixtures, "undated.jpg"),
+      // Only photos: a video has no date taken here, though it has a creation date.
+      join(fixtures, "clip.mov"),
+      join(root, "notes.txt"),
+      join(root, "broken.jpg"),
+      join(root, "missing.jpg"),
+      join(root, "no extension"),
+    ];
+    expect(await api.nativeDatesTaken(paths)).toEqual([
+      "2021-07-04T09:15:30",
+      "2019-12-31T23:59:58",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(await api.nativeDatesTaken([])).toEqual([]);
+  });
+
+  it("refuses anything but a list of paths", () => {
+    expect(() => addon.nativeDatesTaken("one path" as unknown as string[])).toThrow(TypeError);
+    expect(() => addon.nativeDatesTaken([42] as unknown as string[])).toThrow(TypeError);
+  });
+
+  describe("unusual files", () => {
+    let root: string;
+
+    beforeEach(() => {
+      root = mkdtempSync(join(tmpdir(), "filetrail-dates-taken-"));
+    });
+
+    afterEach(() => {
+      rmSync(root, { recursive: true, force: true });
+    });
+
+    // taken.jpg with its DateTimeOriginal (its only date) replaced by `date`.
+    function photoDated(name: string, date: string): string {
+      const data = readFileSync(join(fixtures, "taken.jpg"));
+      const at = data.indexOf("2021:07:04 09:15:30");
+      expect(at).toBeGreaterThan(0);
+      data.write(date, at, "latin1");
+      const path = join(root, name);
+      writeFileSync(path, data);
+      return path;
+    }
+
+    it("reads a photo whose extension is in capitals", async () => {
+      const path = join(root, "IMG_0001.JPG");
+      writeFileSync(path, readFileSync(join(fixtures, "taken.jpg")));
+      expect(await wrapper.nativeDatesTaken([path])).toEqual(["2021-07-04T09:15:30"]);
+    });
+
+    it("reads a photo whose folder and name have accents", async () => {
+      mkdirSync(join(root, "Café"));
+      const path = join(root, "Café", "été.jpg");
+      writeFileSync(path, readFileSync(join(fixtures, "taken.jpg")));
+      expect(await wrapper.nativeDatesTaken([path])).toEqual(["2021-07-04T09:15:30"]);
+    });
+
+    // Made from taken.jpg with `sips -s format heic`, which keeps its EXIF.
+    it("reads the date a HEIC photo was taken", async () => {
+      expect(await wrapper.nativeDatesTaken([join(fixtures, "taken.heic")])).toEqual([
+        "2021-07-04T09:15:30",
+      ]);
+    });
+
+    // A camera that doesn't know the date writes zeros or spaces; neither is a date.
+    it("finds no date in a photo whose camera wrote zeros or spaces", async () => {
+      const paths = [
+        photoDated("zeros.jpg", "0000:00:00 00:00:00"),
+        photoDated("spaces.jpg", "    :  :     :  :  "),
+      ];
+      expect(await wrapper.nativeDatesTaken(paths)).toEqual([null, null]);
+    });
+  });
+});

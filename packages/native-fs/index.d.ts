@@ -108,6 +108,15 @@ export function nativeKindForPath(path: string): string | null;
 export function nativeIsPackage(path: string): Promise<boolean | null>;
 
 /**
+ * When each photo was taken, read from its own metadata (the date the camera recorded, in
+ * EXIF): one answer per path, in order, as "2026-05-14T18:02:11" on the clock of this Mac,
+ * or null when there is none, or the item isn't a photo.
+ *
+ * @param paths - Absolute paths to the items.
+ */
+export function nativeDatesTaken(paths: string[]): Promise<Array<string | null>>;
+
+/**
  * Recursively calculates the total size of a folder using `getattrlistbulk(2)`.
  *
  * Returns a JSON string:

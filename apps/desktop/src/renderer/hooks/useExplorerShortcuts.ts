@@ -416,8 +416,9 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         command: "renameSelection",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
+          // One item in its row; several in the Rename sheet.
           const paths = current.resolveContentActionPaths();
-          if (paths.length !== 1) {
+          if (paths.length === 0) {
             return;
           }
           keyboardEvent.preventDefault();
@@ -897,10 +898,13 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           }
           keyboardEvent.preventDefault();
           if (current.returnKeyAction === "rename") {
-            // Finder behavior: Return renames a single selected item; ⌘O / ⌘↓ open.
-            if (current.selectedPathsInViewOrder.length <= 1) {
-              current.openRenameDialog([current.selectedEntry.path]);
-            }
+            // Finder behavior: Return renames; ⌘O / ⌘↓ open. Several selected items are
+            // renamed in the Rename sheet.
+            current.openRenameDialog(
+              current.selectedPathsInViewOrder.length > 1
+                ? current.selectedPathsInViewOrder
+                : [current.selectedEntry.path],
+            );
             return;
           }
           const pathsToActivate =
@@ -1079,8 +1083,9 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         return;
       }
       if (commandType === "renameSelection") {
+        // One item in its row; several in the Rename sheet.
         const paths = current.resolveContentActionPaths();
-        if (paths.length === 1) {
+        if (paths.length > 0) {
           current.openRenameDialog(paths);
         }
         return;

@@ -236,7 +236,12 @@ export const writeOperationActionSchema = z.enum([
   "delete_immediately",
   "rename",
   "new_folder",
+  // Several items renamed at once, from the Rename sheet.
+  "batch_rename",
 ]);
+
+// A date and time as the clock of this Mac reads it, without a zone: "2026-05-14T18:02:11".
+const localDateTimeSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/u);
 export const appLogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 export const sizeStatusSchema = z.enum(["ready", "deferred", "unavailable"]);
 const emptyRequestSchema = z.object({});
@@ -606,6 +611,33 @@ export const openTabPreferenceSchema = z.object({
   foldersFirst: z.boolean(),
 });
 
+// The Rename sheet's settings for several items (see apps/desktop/src/shared/batchRename.ts,
+// which reads saved ones leniently; these are the values it can hold).
+const batchRenameSettingsSchema = z.object({
+  mode: z.enum(["replace", "add", "format", "case"]),
+  find: z.string().max(255),
+  replaceWith: z.string().max(255),
+  matchCase: z.boolean(),
+  useRegex: z.boolean(),
+  addText: z.string().max(255),
+  addWhere: z.enum(["after", "before"]),
+  nameFormat: z.enum(["index", "counter", "date"]),
+  formatWhere: z.enum(["after", "before"]),
+  customName: z.string().max(255),
+  keepNames: z.boolean(),
+  startAt: z.number().int().min(0).max(999_999_999),
+  step: z.number().int().min(1).max(999_999_999),
+  digits: z.union([z.literal("auto"), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+  separator: z.enum([" ", "-", "_", ""]),
+  dateSource: z.enum(["created", "modified", "taken", "today"]),
+  dateFormat: z.enum(["ymd", "ymd_hm", "ymd_hms", "dmy", "dmyy", "mdy", "yymd", "ym", "custom"]),
+  dateSeparator: z.enum(["-", "_", ".", " ", ""]),
+  customDatePattern: z.string().max(255),
+  caseStyle: z.enum(["lower", "upper", "title"]),
+  applyTo: z.enum(["name", "extension", "both"]),
+  onConflict: z.enum(["number", "skip", "block"]),
+});
+
 export const appPreferencesSchema = z.object({
   theme: themePreferenceSchema,
   accent: accentModeSchema,
@@ -660,6 +692,12 @@ export const appPreferencesSchema = z.object({
   favoritesPlacement: favoritesPlacementSchema,
   favoritesExpanded: z.boolean(),
   favoritesInitialized: z.boolean(),
+  batchRenameSettings: batchRenameSettingsSchema,
+  batchRenamePresets: z
+    .array(
+      z.object({ name: z.string().trim().min(1).max(80), settings: batchRenameSettingsSchema }),
+    )
+    .max(50),
 });
 
 export const folderSizeJobStatusSchema = z.enum([
@@ -1023,6 +1061,58 @@ export const ipcContractSchemas = {
     request: z.object({
       sourcePath: absolutePathSchema,
       destinationName: itemNameSchema,
+    }),
+    response: z.object({
+      operationId: z.string().min(1),
+      status: z.literal("queued"),
+    }),
+  },
+  // What the Rename sheet needs to show the new names of several items and check them: each
+  // item's dates (when it was taken only when asked: that reads the files), whether it can
+  // be renamed at all, and every name in the folders they are in.
+  "batchRename:inspect": {
+    request: z.object({
+      paths: absolutePathListSchema,
+      includeDateTaken: z.boolean(),
+    }),
+    response: z.object({
+      items: z.array(
+        z.object({
+          path: z.string().min(1),
+          createdAt: localDateTimeSchema.nullable(),
+          modifiedAt: localDateTimeSchema.nullable(),
+          takenAt: localDateTimeSchema.nullable(),
+          // Why the item can't be renamed (gone, locked, its folder read-only), or null.
+          cannotRename: z.string().nullable(),
+        }),
+      ),
+      folders: z.array(
+        z.object({
+          path: z.string().min(1),
+          names: z.array(z.string()),
+          caseSensitive: z.boolean(),
+        }),
+      ),
+    }),
+  },
+  // Renames several items, each in its own folder, to the names the sheet settled. A name
+  // found taken while renaming is handled as the sheet's setting says.
+  "writeOperation:batchRename": {
+    request: z.object({
+      items: z
+        .array(
+          z.object({
+            sourcePath: absolutePathSchema,
+            destinationName: itemNameSchema,
+            // Folders have no extension: a number added to a taken name goes at the end.
+            isFolder: z.boolean(),
+          }),
+        )
+        .min(1)
+        .max(MAX_PATHS_PER_REQUEST),
+      onConflict: z.enum(["number", "skip", "block"]),
+      // What goes before a number added to a taken name.
+      numberSeparator: z.enum([" ", "-", "_"]),
     }),
     response: z.object({
       operationId: z.string().min(1),

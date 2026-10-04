@@ -284,7 +284,8 @@ describe("canRunToolbarRendererCommand", () => {
 
     expect(canRunToolbarRendererCommand("duplicateSelection", fromTwoFolders)).toBe(false);
     expect(canRunToolbarRendererCommand("duplicateSelection", fromOneFolder)).toBe(true);
-    expect(canRunToolbarRendererCommand("renameSelection", fromOneFolder)).toBe(false);
+    // Several results are renamed in the Rename sheet, each in its own folder.
+    expect(canRunToolbarRendererCommand("renameSelection", fromTwoFolders)).toBe(true);
   });
 
   it("allows new folder whenever there is a folder to make it in", () => {
@@ -329,7 +330,7 @@ describe("canRunToolbarRendererCommand", () => {
     ).toBe(false);
   });
 
-  it("requires a single selection for rename", () => {
+  it("renames one selected item in its row and several in the Rename sheet", () => {
     expect(
       canRunToolbarRendererCommand(
         "renameSelection",
@@ -345,6 +346,13 @@ describe("canRunToolbarRendererCommand", () => {
         availabilityContext({
           selectedPathsInViewOrder: ["/Users/demo/file.txt", "/Users/demo/notes.md"],
         }),
+      ),
+    ).toBe(true);
+
+    expect(
+      canRunToolbarRendererCommand(
+        "renameSelection",
+        availabilityContext({ selectedPathsInViewOrder: [], selectedEntry: null }),
       ),
     ).toBe(false);
   });

@@ -103,6 +103,7 @@ import type {
   SelectionActions,
   WriteOperationsStore,
 } from "../state/explorerStores";
+import type { BatchRenameTarget } from "./useBatchRename";
 import type {
   ContextMenuState,
   CopyPasteDialogState,
@@ -161,6 +162,7 @@ type WriteStartAction =
   | "delete_immediately"
   | "empty_trash"
   | "rename"
+  | "batch_rename"
   | "new_folder";
 type CopyLikePreStartOutcome =
   | { status: "queued" }
@@ -245,6 +247,7 @@ function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
     case "empty_trash":
       return "Couldn’t Empty the Trash";
     case "rename":
+    case "batch_rename":
       return "Couldn’t Rename";
     case "new_folder":
       return "Couldn’t Make a New Folder";
@@ -352,6 +355,8 @@ export function useExplorerActions(args: {
     calculateFolderSize: (path: string) => void;
     /** Several folders, one after another, leaving those whose size is known. */
     calculateFolderSizes: (paths: string[]) => void;
+    /** Opens the Rename sheet for several items. */
+    openBatchRename: (targets: BatchRenameTarget[]) => void;
   };
 }) {
   const {
@@ -465,6 +470,9 @@ export function useExplorerActions(args: {
   const pendingInlineRenamePathRef = useRef<string | null>(null);
   // A paste start request on its way, which Stop marks to stop once it has an id.
   const startRequestRef = useRef<{ cancelled: boolean } | null>(null);
+  // Which items of the last rename of several were folders, by the path asked for, for
+  // trying again those that weren't renamed wherever they are now.
+  const batchRenameFoldersRef = useRef(new Map<string, boolean>());
   const reviewStartInFlightRef = useRef<string | null>(null);
   // A cut clipboard to clear when its move finishes having moved something.
   const clipboardClearAfterMoveRef = useRef<{ operationId: string; capturedAt: string } | null>(
@@ -518,6 +526,11 @@ export function useExplorerActions(args: {
       targetsFolder:
         contextMenuTargetEntries.length > 0 &&
         contextMenuTargetEntries.every((entry) => isDirectoryLikeEntry(entry)),
+      // Several items are renamed in the Rename sheet, as Finder's Rename does.
+      renameLabel:
+        contextMenuTargetEntries.length > 1
+          ? `Rename ${contextMenuTargetEntries.length.toLocaleString()} Items…`
+          : null,
     }),
     [contextMenuFavoriteToggleLabel, contextMenuTargetEntries, defaultTextEditor.appName],
   );
@@ -569,10 +582,6 @@ export function useExplorerActions(args: {
       hidden.add("edit");
     }
     if (isItemListSurface) {
-      // Rename is for one item at a time.
-      if (contextMenuState.paths.length !== 1) {
-        hidden.add("rename");
-      }
       // "Show Package Contents" is for packages (.app, .framework and the like).
       if (!contextMenuTargetEntries.some((entry) => entry.kind === "bundle")) {
         hidden.add("showPackageContents");
@@ -1212,7 +1221,10 @@ export function useExplorerActions(args: {
   // request is sent, not when the main process answers: a second press that comes in between
   // (a quick double Command-Delete) then finds the lock taken instead of sending again.
   function takeWriteOperationLock(
-    action: Extract<WriteStartAction, "trash" | "delete_immediately" | "rename" | "new_folder">,
+    action: Extract<
+      WriteStartAction,
+      "trash" | "delete_immediately" | "rename" | "batch_rename" | "new_folder"
+    >,
     details: {
       targetPath: string | null;
       totalItemCount: number;
@@ -1354,10 +1366,12 @@ export function useExplorerActions(args: {
     if (!result) {
       return;
     }
-    // What is made or renamed in the folder on screen is already in sight there.
+    // What is made or renamed in the folder on screen is already in sight there, and a
+    // rename of several that left anything as it was is told in the result dialog.
     if (
       event.action === "new_folder" ||
       event.action === "rename" ||
+      event.action === "batch_rename" ||
       event.action === "duplicate"
     ) {
       return;
@@ -2051,6 +2065,23 @@ export function useExplorerActions(args: {
   async function retryFailedCopyPasteItems(event: WriteOperationProgressEvent) {
     const result = event.result;
     if (!result) {
+      return;
+    }
+    // A rename is tried again from its sheet, for the items that weren't renamed, where
+    // each is now: the names are worked out anew from what the folders hold now.
+    // They are taken from the result, not the list: one may be outside what is listed, or
+    // under a hidden name.
+    if (event.action === "batch_rename") {
+      const targets = result.items.flatMap((item) => {
+        const path = item.destinationPath ?? item.sourcePath;
+        if (item.status === "completed" || !path) {
+          return [];
+        }
+        const isFolder = batchRenameFoldersRef.current.get(item.sourcePath ?? path) ?? false;
+        return [{ path, name: getPathLeafName(path), isFolder }];
+      });
+      dismissCopyPasteDialog();
+      openBatchRenameSheet(targets);
       return;
     }
     if (
@@ -3202,6 +3233,10 @@ export function useExplorerActions(args: {
   // Starts a rename. An item shown in the file list is renamed in its row, like Finder;
   // `fromTree` (the folder tree's menu) and items outside the list use the dialog.
   function openRenameDialog(paths: string[], options: { fromTree?: boolean } = {}) {
+    if (paths.length > 1) {
+      openBatchRenameFor(paths);
+      return;
+    }
     if (paths.length !== 1) {
       return;
     }
@@ -3234,6 +3269,79 @@ export function useExplorerActions(args: {
       sessionId: nextRenameSessionId(),
     });
     closeContextMenu();
+  }
+
+  // The Rename sheet for several items, in the order the list shows them (which numbers
+  // them). A folder's whole name is its name; a package (an .app) keeps its extension.
+  function openBatchRenameFor(paths: string[]) {
+    const wanted = new Set(paths);
+    openBatchRenameSheet(
+      activeContentEntries
+        .filter((entry) => wanted.has(entry.path))
+        .map((entry) => ({
+          path: entry.path,
+          name: entry.name,
+          isFolder: entry.kind === "directory" || entry.kind === "symlink_directory",
+        })),
+    );
+  }
+
+  function openBatchRenameSheet(targets: BatchRenameTarget[]) {
+    closeContextMenu();
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyNotice("batch_rename");
+      return;
+    }
+    if (targets.length === 0) {
+      return;
+    }
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    clearTypeahead();
+    callbacks.openBatchRename(targets);
+  }
+
+  // Renames the items the sheet settled. Like every write, it waits for no other: one that
+  // is running is said, and the sheet stays closed.
+  async function startBatchRename(request: IpcRequest<"writeOperation:batchRename">) {
+    const first = request.items[0]?.sourcePath ?? null;
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyNotice("batch_rename");
+      return;
+    }
+    batchRenameFoldersRef.current = new Map(
+      request.items.map((item) => [item.sourcePath, item.isFolder]),
+    );
+    takeWriteOperationLock("batch_rename", {
+      targetPath: first,
+      totalItemCount: request.items.length,
+      currentSourcePath: first,
+    });
+    try {
+      const response = await client.invoke("writeOperation:batchRename", request);
+      adoptWriteOperation(response.operationId);
+      applyWriteOperationCardState({
+        action: "batch_rename",
+        stage: "queued",
+        targetPath: first,
+        completedItemCount: 0,
+        totalItemCount: request.items.length,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: first,
+      });
+    } catch (error) {
+      applyWriteOperationCardState(null);
+      if (isWriteOperationBusyError(error)) {
+        showWriteOperationBusyNotice("batch_rename");
+        return;
+      }
+      showModalNotice(
+        getCopyLikePreStartFailureTitle("batch_rename"),
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   async function submitRenameDialog(typedName: string) {
@@ -3742,6 +3850,7 @@ export function useExplorerActions(args: {
     toggleFavoritePath,
     openPaths,
     openRenameDialog,
+    startBatchRename,
     removeOpenWithApplication,
     resolveContentActionPaths,
     retryFailedCopyPasteItems,

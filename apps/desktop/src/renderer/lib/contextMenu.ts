@@ -138,6 +138,8 @@ export type ContextMenuOptions = {
   textEditorName?: string | null;
   /** The menu is for folders: Open shows a folder, and Paste goes into the folder. */
   targetsFolder?: boolean;
+  /** Rename's label when it isn't plain "Rename": "Rename 3 Items…" for several. */
+  renameLabel?: string | null;
 };
 
 export function getContextMenuItems(
@@ -266,7 +268,7 @@ export function getContextMenuItems(
     { id: "paste", label: "Paste into Folder", icon: "paste" },
     { id: "copyPath", label: "Copy Path", icon: "copyPath" },
     { type: "separator", key: "separator-clipboard" },
-    { id: "rename", label: "Rename", icon: "rename" },
+    { id: "rename", label: input.renameLabel ?? "Rename", icon: "rename" },
     { id: "duplicate", label: "Duplicate", icon: "duplicate" },
     { id: "move", label: "Move to…", icon: "move" },
     { id: "newFolder", label: "New Folder", icon: "newFolder" },

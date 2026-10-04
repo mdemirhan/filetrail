@@ -33,11 +33,12 @@ export default defineConfig({
         "packages/core/src/fs/writeService.ts",
         "packages/core/src/fs/stoppableCopy.ts",
         "packages/contracts/src/{copyPasteChoices,itemName,paths,trash,writeEffects}.ts",
-        "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds}.ts",
+        "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds,batchRenameExecution,batchRenameInspect}.ts",
+        "apps/desktop/src/shared/batchRename.ts",
         "apps/desktop/src/main/ipc.ts",
-        "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState}.ts",
+        "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename}.ts",
         "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,internalDragAndDrop}.ts",
-        "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField}.tsx",
+        "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField,BatchRenameSheet}.tsx",
       ],
       thresholds: {
         // The copy engine and the contracts: where a gap can lose data.
@@ -45,6 +46,13 @@ export default defineConfig({
         "packages/contracts/src/**": { statements: 92, branches: 94, functions: 100, lines: 92 },
         // The main process's file operations.
         "apps/desktop/src/main/**": { statements: 95, branches: 88, functions: 90, lines: 95 },
+        // The names a rename of several items gives: what the preview shows is what is done.
+        "apps/desktop/src/shared/batchRename.ts": {
+          statements: 97,
+          branches: 92,
+          functions: 100,
+          lines: 97,
+        },
         // The window. The large hooks start from where they are, so they can only go up.
         "apps/desktop/src/renderer/hooks/useExplorerActions.ts": {
           statements: 77,
@@ -63,6 +71,12 @@ export default defineConfig({
           branches: 83,
           functions: 85,
           lines: 93,
+        },
+        "apps/desktop/src/renderer/hooks/useBatchRename.ts": {
+          statements: 95,
+          branches: 90,
+          functions: 95,
+          lines: 95,
         },
         "apps/desktop/src/renderer/hooks/{useWriteOperations,useTrashState}.ts": {
           statements: 100,

@@ -1,6 +1,6 @@
 import type { IpcRequest } from "@filetrail/contracts";
 
-import { getPathLeafName, replacePathPrefix } from "./explorerAppUtils";
+import { collectFollowedMoves, getPathLeafName, replacePathPrefix } from "./explorerAppUtils";
 import type { DirectoryEntry, WriteOperationResult } from "./explorerTypes";
 
 export type ClipboardMode = IpcRequest<"copyPaste:plan">["mode"];
@@ -134,7 +134,8 @@ export function remapClipboardPaths(
 
 // What a finished write did to the items on the clipboard: renamed and moved items are
 // followed to where they are now, and items put in the Trash or deleted are taken off.
-// Only what actually happened counts; an item that failed is still where it was.
+// Only what actually happened counts; an item that failed is still where it was, unless
+// its result says it was put back elsewhere.
 export function followClipboardThroughWrite(
   clipboard: CopyPasteClipboardState,
   result: WriteOperationResult,
@@ -143,13 +144,12 @@ export function followClipboardThroughWrite(
     return clipboard;
   }
   const completedItems = result.items.filter((item) => item.status === "completed");
-  if (result.action === "rename" || result.action === "move_to") {
-    const moves = completedItems.flatMap((item) =>
-      item.sourcePath && item.destinationPath
-        ? [{ from: item.sourcePath, to: item.destinationPath }]
-        : [],
-    );
-    return remapClipboardPaths(clipboard, moves);
+  if (
+    result.action === "rename" ||
+    result.action === "batch_rename" ||
+    result.action === "move_to"
+  ) {
+    return remapClipboardPaths(clipboard, collectFollowedMoves(result));
   }
   if (result.action === "trash" || result.action === "delete_immediately") {
     return dropClipboardPaths(

@@ -1,6 +1,7 @@
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import {
+  collectFollowedMoves,
   collectRetrySourcePaths,
   describeDragRefusedWhileBusy,
   describeEmptyTrashFailure,
@@ -322,6 +323,50 @@ describe("explorerAppUtils", () => {
 
     expect(isExpectedPlannedSkipResult(event)).toBe(false);
     expect(shouldRenderCopyPasteResultDialog(event)).toBe(true);
+  });
+
+  it("tells of a rename of several that skipped an item, even when the rest went", () => {
+    const skipped = createPartialSkipEvent("runtime_conflict_resolution");
+    const event = {
+      ...skipped,
+      action: "batch_rename",
+      status: "completed",
+      result: skipped.result && { ...skipped.result, action: "batch_rename", status: "completed" },
+    } as WriteOperationProgressEvent;
+    expect(shouldRenderCopyPasteResultDialog(event)).toBe(true);
+    expect(
+      shouldRenderCopyPasteResultDialog({
+        ...event,
+        result: event.result && {
+          ...event.result,
+          summary: { ...event.result.summary, skippedItemCount: 0 },
+        },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("collectFollowedMoves", () => {
+  const result = (action: WriteOperationResult["action"]) =>
+    ({
+      action,
+      items: [
+        { sourcePath: "/a", destinationPath: "/b", status: "completed", error: null },
+        { sourcePath: "/c", destinationPath: "/c 2", status: "failed", error: "Taken." },
+        { sourcePath: "/d", destinationPath: null, status: "failed", error: "Locked." },
+        { sourcePath: "/e", destinationPath: "/e", status: "completed", error: null },
+      ],
+    }) as WriteOperationResult;
+
+  it("follows what was renamed, and an item of several put back under another name", () => {
+    expect(collectFollowedMoves(result("batch_rename"))).toEqual([
+      { from: "/a", to: "/b" },
+      { from: "/c", to: "/c 2" },
+    ]);
+  });
+
+  it("follows only what a move finished: a failed item stayed where it was", () => {
+    expect(collectFollowedMoves(result("move_to"))).toEqual([{ from: "/a", to: "/b" }]);
   });
 });
 

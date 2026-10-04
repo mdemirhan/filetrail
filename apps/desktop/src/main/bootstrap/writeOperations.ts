@@ -21,6 +21,7 @@ import {
   fileIdOf,
   findLockedRefusal,
 } from "@filetrail/core";
+import { runBatchRename } from "./batchRenameExecution";
 import { clearResponseCaches } from "./responseCache";
 
 type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
@@ -685,6 +686,112 @@ export function createWriteOperationCoordinator(
     };
   }
 
+  // Several items renamed at once. What the request asks is checked before the write slot is
+  // taken: nothing protected, no item twice. An item asked to keep its own name is left out.
+  async function prepareBatchRenameOperation(
+    payload: IpcRequest<"writeOperation:batchRename">,
+  ): Promise<IpcRequest<"writeOperation:batchRename">> {
+    const items = payload.items
+      .map((item) => ({ ...item, sourcePath: resolve(item.sourcePath) }))
+      .filter((item) => basename(item.sourcePath) !== item.destinationName.trim());
+    if (items.length === 0) {
+      throw new Error("Nothing would be renamed.");
+    }
+    const sources = new Set<string>();
+    for (const item of items) {
+      if (sources.has(item.sourcePath)) {
+        throw new Error(`“${basename(item.sourcePath)}” is in the list twice.`);
+      }
+      sources.add(item.sourcePath);
+    }
+    const sourcePaths = items.map((item) => item.sourcePath);
+    assertNotProtectedPath(sourcePaths);
+    await assertNotSystemLocation(sourcePaths, "renamed", fs, homePath);
+    return { ...payload, items };
+  }
+
+  async function executeBatchRenameOperation(
+    request: IpcRequest<"writeOperation:batchRename">,
+    operationId: string,
+    controller: AbortController,
+  ): Promise<void> {
+    const startedAt = new Date().toISOString();
+    const totalItemCount = request.items.length;
+    let run: Awaited<ReturnType<typeof runBatchRename>>;
+    try {
+      run = await runBatchRename({
+        request,
+        fs,
+        signal: controller.signal,
+        onItemStart: (item, completedItemCount) =>
+          emitLocalWriteOperationEvent({
+            operationId,
+            action: "batch_rename",
+            status: "running",
+            completedItemCount,
+            totalItemCount,
+            completedByteCount: 0,
+            totalBytes: null,
+            currentSourcePath: item.sourcePath,
+            currentDestinationPath: item.destinationPath,
+            result: null,
+          }),
+      });
+    } catch (error) {
+      // Nothing expected gets here: every item's failure is in its result. Should something
+      // else go wrong, the window still hears the end, so it isn't left waiting.
+      run = {
+        items: request.items.map((item) => ({
+          sourcePath: resolve(item.sourcePath),
+          destinationPath: null,
+          status: "failed" as const,
+          error: `The rename stopped unexpectedly: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          skipReason: null,
+        })),
+        completedItemCount: 0,
+        cancelled: false,
+      };
+    }
+    const failedItemCount = run.items.filter((item) => item.status === "failed").length;
+    const status = resolveLocalTerminalStatus({
+      cancelled: run.cancelled,
+      completedItemCount: run.completedItemCount,
+      failedItemCount,
+    });
+    // One folder when all the items are in it, for the window to look at.
+    const folders = new Set(request.items.map((item) => dirname(resolve(item.sourcePath))));
+    const result = createLocalWriteOperationResult({
+      operationId,
+      action: "batch_rename",
+      targetPath: folders.size === 1 ? ([...folders][0] ?? null) : null,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      totalItemCount,
+      completedItemCount: run.completedItemCount,
+      items: run.items,
+      status,
+      error: run.cancelled
+        ? stoppedMessage(run.completedItemCount, "renamed")
+        : failedItemCount > 0
+          ? (run.items.find((item) => item.status === "failed")?.error ?? "Rename failed.")
+          : null,
+    });
+    emitLocalWriteOperationEvent({
+      operationId,
+      action: "batch_rename",
+      status,
+      completedItemCount: run.completedItemCount,
+      totalItemCount,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: null,
+      currentDestinationPath: null,
+      result,
+    });
+  }
+
   // Whether the folder holds an entry spelled exactly like `name` (another item, since the
   // item being renamed is spelled differently). Unknown when the folder can't be read.
   async function listsSeparateEntry(folder: string, name: string): Promise<boolean> {
@@ -1206,6 +1313,18 @@ export function createWriteOperationCoordinator(
             executeRenameOperation(operation, operationId, controller),
         });
       },
+      "writeOperation:batchRename": async (
+        payload: IpcRequest<"writeOperation:batchRename">,
+        event: { sender: WriteOperationSender },
+      ) => {
+        const request = await prepareWithReservedSlot(() => prepareBatchRenameOperation(payload));
+        return queueLocalWriteOperation({
+          action: "batch_rename",
+          sender: event.sender,
+          execute: (operationId, controller) =>
+            executeBatchRenameOperation(request, operationId, controller),
+        });
+      },
       "writeOperation:createFolder": async (
         payload: IpcRequest<"writeOperation:createFolder">,
         event: { sender: WriteOperationSender },
@@ -1499,6 +1618,7 @@ function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind 
     case "delete_immediately":
       return "delete";
     case "rename":
+    case "batch_rename":
       return "rename";
     case "new_folder":
       return "new_folder";

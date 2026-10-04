@@ -95,6 +95,11 @@ export function shouldRenderCopyPasteResultDialog(
   if (event.status === "failed") {
     return true;
   }
+  // The sheet said every item would be renamed: one skipped after all (its name was taken
+  // since) is told, even when the rest went.
+  if (event.action === "batch_rename" && event.result.summary.skippedItemCount > 0) {
+    return true;
+  }
   if (event.status === "partial") {
     return !isExpectedPlannedSkipResult(event);
   }
@@ -274,6 +279,7 @@ export function describeDragRefusedWhileBusy(
     case "delete_immediately":
       return `Can't drag while ${subject} being deleted`;
     case "rename":
+    case "batch_rename":
       return `Can't drag while ${subject} being renamed`;
     case "new_folder":
       return "Can't drag while a folder is being made";
@@ -310,7 +316,11 @@ export function resolveWriteOperationSelectionDirectoryPath(
   if (!firstSelectedPath) {
     return null;
   }
-  if (result.action === "rename" || result.action === "new_folder") {
+  if (
+    result.action === "rename" ||
+    result.action === "batch_rename" ||
+    result.action === "new_folder"
+  ) {
     return parentDirectoryPath(firstSelectedPath) ?? null;
   }
   return result.targetPath;
@@ -328,7 +338,7 @@ export function resolveWriteOperationRefreshPath(
     return parentDirectoryPath(impactedPath) ?? currentPath;
   }
 
-  if (result.action === "rename" || result.action === "move_to") {
+  if (isRenameOrMove(result.action)) {
     const impactedItem = findDeepestMatchingSourceItem(result, currentPath);
     if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
       return currentPath;
@@ -355,7 +365,7 @@ export function resolveWriteOperationTreeSelectionPath(
     return parentDirectoryPath(impactedPath) ?? null;
   }
 
-  if (result.action === "rename" || result.action === "move_to") {
+  if (isRenameOrMove(result.action)) {
     const impactedItem = findDeepestMatchingSourceItem(result, selectedTreePath);
     if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
       return null;
@@ -368,6 +378,30 @@ export function resolveWriteOperationTreeSelectionPath(
   }
 
   return null;
+}
+
+/** A write that gives items new paths (a rename of one or several, or a move): what was at
+ *  the old paths, and what is inside, is followed to the new ones. */
+export function isRenameOrMove(action: WriteOperationAction): boolean {
+  return action === "rename" || action === "batch_rename" || action === "move_to";
+}
+
+/**
+ * Where a rename or move took each item, for following it there. Only what really moved
+ * counts: completed items, and for a rename of several also an item that couldn't take its
+ * new name but was put back under another ("b 2"), since its result says where it is.
+ */
+export function collectFollowedMoves(
+  result: WriteOperationResult,
+): Array<{ from: string; to: string }> {
+  return result.items.flatMap((item) =>
+    item.sourcePath &&
+    item.destinationPath &&
+    item.destinationPath !== item.sourcePath &&
+    (item.status === "completed" || result.action === "batch_rename")
+      ? [{ from: item.sourcePath, to: item.destinationPath }]
+      : [],
+  );
 }
 
 export function resolveWriteOperationTreeReloadPaths(result: WriteOperationResult): string[] {

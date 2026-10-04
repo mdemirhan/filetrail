@@ -21,6 +21,7 @@ import { pipeline } from "node:stream/promises";
 import { createStoppableCopyFile, startsWithAppleDoubleMagic } from "@filetrail/core";
 import type { ExplorerFileSystem } from "@filetrail/core";
 import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core";
+import type { BatchRenameInspectDeps } from "./bootstrap/batchRenameInspect";
 import type { WriteOperationFs } from "./bootstrap/writeOperations";
 
 // Electron patches `node:fs` at startup. The unpatched version is available as
@@ -43,6 +44,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeRenameExclusive: (from: string, to: string) => Promise<void>;
   nativeIsCaseSensitive: (path: string) => Promise<boolean | null>;
   nativeIsPackage: (path: string) => Promise<boolean | null>;
+  nativeDatesTaken: (paths: string[]) => Promise<Array<string | null>>;
 };
 const {
   nativeCopyFile,
@@ -56,6 +58,7 @@ const {
   nativeIsPackage,
   nativeGetFlags,
   nativeSetFlags,
+  nativeDatesTaken,
 } = addon;
 
 // Stop takes effect part way through a large file.
@@ -174,6 +177,29 @@ export function createOriginalWriteOperationFs(
     rm: (path, options) => originalFileSystem.rm(path, options),
     trash,
     getFlags: (path) => nativeGetFlags(path),
+  };
+}
+
+/** What the Rename sheet's checks read, backed by original-fs and the native module.
+ *  `assertRenamable` refuses the folders that are never renamed. */
+export function createOriginalBatchRenameInspectDeps(args: {
+  homePath: string;
+  assertRenamable: (path: string) => Promise<void>;
+}): BatchRenameInspectDeps {
+  return {
+    lstat: (path) => lstat(path),
+    stat: (path) => stat(path),
+    readdir: (path) => readdir(path),
+    isCaseSensitive: (path) => nativeIsCaseSensitive(path),
+    getFlags: (path) => nativeGetFlags(path),
+    canWriteFolder: (path) =>
+      access(path, fsConstants.W_OK).then(
+        () => true,
+        () => false,
+      ),
+    readDatesTaken: (paths) => nativeDatesTaken(paths),
+    assertRenamable: args.assertRenamable,
+    homePath: args.homePath,
   };
 }
 

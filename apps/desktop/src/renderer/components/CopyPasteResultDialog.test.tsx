@@ -8,7 +8,10 @@ import { CopyPasteResultDialog } from "./CopyPasteResultDialog";
 
 type Items = NonNullable<WriteOperationProgressEvent["result"]>["items"];
 
-function event(action: "paste" | "copy_to" | "move_to", items: Items): WriteOperationProgressEvent {
+function event(
+  action: "paste" | "copy_to" | "move_to" | "batch_rename",
+  items: Items,
+): WriteOperationProgressEvent {
   return {
     operationId: "copy-op-1",
     action,
@@ -291,5 +294,185 @@ describe("CopyPasteResultDialog", () => {
     );
     expect(within(dialog).getByText("Stopped part way")).toBeInTheDocument();
     expect(dialog).toHaveTextContent("2 items weren't started because the operation was stopped.");
+  });
+});
+
+describe("CopyPasteResultDialog for renaming several items", () => {
+  it("says why a rename was skipped, and offers Try Again when only skipped items are left", () => {
+    const onRetry = vi.fn();
+    const { unmount } = render(
+      <CopyPasteResultDialog
+        event={event("batch_rename", [
+          item(
+            "/Users/demo/dest/a.txt",
+            "skipped",
+            "An item named “a-old.txt” already exists.",
+            "runtime_conflict_resolution",
+          ),
+          // No reason given: the sheet had settled every name, so it was taken since.
+          item("/Users/demo/dest/b.txt", "skipped", null, "runtime_conflict_resolution"),
+        ])}
+        canRetry
+        onRetry={onRetry}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Renamed 0 of 2 items in “dest”" })).toBeVisible();
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription("2 items were skipped.");
+    const skipped = screen.getByRole("region", { name: "Skipped" });
+    expect(within(skipped).getByText("a.txt")).toBeInTheDocument();
+    expect(
+      within(skipped).getByText("An item named “a-old.txt” already exists."),
+    ).toBeInTheDocument();
+    expect(within(skipped).getByText("b.txt")).toBeInTheDocument();
+    expect(within(skipped).getByText("Its new name was taken")).toBeInTheDocument();
+    // Not the words a skipped copy has.
+    expect(screen.queryByText("Already existed · you chose Skip")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try Again…" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    unmount();
+
+    render(
+      <CopyPasteResultDialog
+        event={event("batch_rename", [
+          item("/Users/demo/dest/a.txt", "skipped", null, "runtime_conflict_resolution"),
+        ])}
+        canRetry={false}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Try Again…" })).not.toBeInTheDocument();
+  });
+
+  it("says which renames weren't started when the rename was stopped", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("batch_rename", [
+          item("/Users/demo/dest/a.txt", "completed"),
+          item(
+            "/Users/demo/dest/b.txt",
+            "cancelled",
+            "Not started because the operation was stopped.",
+          ),
+          item(
+            "/Users/demo/dest/c.txt",
+            "cancelled",
+            "Not started because the operation was stopped.",
+          ),
+        ])}
+        canRetry
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Renamed 1 of 3 items in “dest”" })).toBeVisible();
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+      "2 items weren't started because the operation was stopped.",
+    );
+    const notStarted = screen.getByRole("region", { name: "Not started" });
+    expect(within(notStarted).getByText("b.txt")).toBeInTheDocument();
+    expect(within(notStarted).getByText("c.txt")).toBeInTheDocument();
+    expect(within(notStarted).getAllByText("The operation was stopped first.")).toHaveLength(2);
+    expect(screen.queryByRole("region", { name: "Stopped part way" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try Again…" })).toBeInTheDocument();
+  });
+
+  it("says the name an item that couldn't be renamed was put back under", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("batch_rename", [
+          {
+            ...item(
+              "/Users/demo/dest/b.txt",
+              "failed",
+              "“b.txt” is locked. Another item has its old name now, so it is named “b 2.txt”.",
+            ),
+            destinationPath: "/Users/demo/dest/b 2.txt",
+          },
+          {
+            ...item(
+              "/Users/demo/dest/c.txt",
+              "failed",
+              "“c.txt” is locked. Another item has its old name now, so it is named “.filetrail-rename-abc123” (hidden).",
+            ),
+            destinationPath: "/Users/demo/dest/.filetrail-rename-abc123",
+          },
+        ])}
+        canRetry
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Each row is named as it was, and says where it is now.
+    expect(
+      screen.getByRole("heading", { name: "Renamed 0 of 2 items in “dest”" }),
+    ).toBeInTheDocument();
+    const failed = screen.getByRole("region", { name: "Couldn’t rename" });
+    expect(within(failed).getByText("b.txt")).toBeInTheDocument();
+    expect(
+      within(failed).getByText(
+        "“b.txt” is locked. Another item has its old name now, so it is named “b 2.txt”.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(failed).getByText("c.txt")).toBeInTheDocument();
+    expect(
+      within(failed).getByText(
+        "“c.txt” is locked. Another item has its old name now, so it is named “.filetrail-rename-abc123” (hidden).",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription("2 items couldn’t be renamed.");
+    expect(screen.getByRole("button", { name: "Try Again…" })).toBeInTheDocument();
+  });
+
+  // A stopped item put back under another name ("b 2.txt", when its old name was taken while
+  // it waited under a hidden one) says so, rather than only that it wasn't started.
+  it("says the name a stopped item was put back under", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("batch_rename", [
+          item("/Users/demo/dest/a.txt", "completed"),
+          {
+            ...item(
+              "/Users/demo/dest/b.txt",
+              "cancelled",
+              "Not started because the operation was stopped. Another item has its old name now, so it is named “b 2.txt”.",
+            ),
+            destinationPath: "/Users/demo/dest/b 2.txt",
+          },
+        ])}
+        canRetry
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("b 2.txt");
+  });
+
+  // Unlike a copy's, a rename's items inside a folder are items of their own: search results
+  // reach into folders, and the folder and an item inside may both be renamed.
+  it("counts a folder and an item inside it renamed together as two items", () => {
+    const folderAndInside = event("batch_rename", [
+      item("/Users/demo/Folder", "failed", "“Folder” is locked."),
+      item("/Users/demo/Folder/deep.txt", "completed"),
+    ]);
+    render(
+      <CopyPasteResultDialog
+        event={{
+          ...folderAndInside,
+          result: folderAndInside.result ? { ...folderAndInside.result, targetPath: null } : null,
+        }}
+        canRetry
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Renamed 1 of 2 items" })).toBeInTheDocument();
   });
 });

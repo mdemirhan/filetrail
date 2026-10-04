@@ -21,6 +21,7 @@ import { resolveShortcuts } from "../shared/shortcuts";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolders";
 import { AppDialogs } from "./components/AppDialogs";
+import { BatchRenameSheet } from "./components/BatchRenameSheet";
 import { ClipboardButton } from "./components/ClipboardButton";
 import type { ListColumnSet } from "./components/ContentPane";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
@@ -31,6 +32,7 @@ import type { SettingsTab } from "./components/SettingsView";
 import { TabStrip } from "./components/TabStrip";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
+import { useBatchRename } from "./hooks/useBatchRename";
 import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerActions } from "./hooks/useExplorerActions";
 import { useExplorerDragAndDrop } from "./hooks/useExplorerDragAndDrop";
@@ -128,6 +130,8 @@ export function App() {
 
   const client = useFiletrailClient();
   const folderSizeCache = useFolderSizeCache(client);
+  // The Rename sheet for several items.
+  const batchRename = useBatchRename(client);
   const { trashIsEmpty, refreshTrashState } = useTrashState(client);
   // The plain folder and document icons, asked for before the first folder is drawn.
   useEffect(() => {
@@ -746,7 +750,8 @@ export function App() {
     writeOperationProgressEvent !== null ||
     renameDialogState !== null ||
     newFolderDialogState !== null ||
-    moveDialogState !== null;
+    moveDialogState !== null ||
+    batchRename.sheet !== null;
   const {
     clearTypeahead,
     focusContentPane,
@@ -854,6 +859,7 @@ export function App() {
     toggleFavoritePath,
     openPaths,
     openRenameDialog,
+    startBatchRename,
     openMoveDialog,
     requestCopyLikePlanStart,
     resolveContentActionPaths,
@@ -916,6 +922,7 @@ export function App() {
       openPathInNewTab: (path) => openPathInNewTabRef.current(path),
       calculateFolderSize: (path) => folderSizeCache.recalculateFolderSize(path),
       calculateFolderSizes: (paths) => void folderSizeCache.calculateFolderSizes(paths),
+      openBatchRename: (targets) => void batchRename.open(targets),
       restartActiveSearch: async () => {
         if (searchCommittedQuery.trim().length === 0) {
           return;
@@ -958,7 +965,8 @@ export function App() {
       Boolean(writeOperationProgressEvent.runtimeConflict)) ||
     renameDialogState !== null ||
     newFolderDialogState !== null ||
-    moveDialogState !== null;
+    moveDialogState !== null ||
+    batchRename.sheet !== null;
   const {
     openTabs,
     activeTabIndex,
@@ -1196,7 +1204,9 @@ export function App() {
     },
     actions: {
       dismissActionNotice,
-      handleCopyPasteDialogEscape,
+      // Escape closes the Rename sheet too, wherever the focus is.
+      handleCopyPasteDialogEscape: () =>
+        batchRename.sheet ? batchRename.close() : handleCopyPasteDialogEscape(),
       openSettingsView: () => openSettingsView(),
       customizeToolbar: startCustomizingToolbar,
       openLocationSheet,
@@ -2325,6 +2335,29 @@ export function App() {
             }
             // How the search is going is in the status bar, as a folder's item count is.
             toolbarSubtitle=""
+          />
+        ) : null}
+        {batchRename.sheet && batchRename.plan ? (
+          <BatchRenameSheet
+            targets={batchRename.sheet.targets}
+            settings={batchRename.settings}
+            onSettingsChange={batchRename.setSettings}
+            plan={batchRename.plan}
+            checking={batchRename.sheet.inspect === null && batchRename.sheet.inspectError === null}
+            checkError={batchRename.sheet.inspectError}
+            presets={batchRename.presets}
+            onSavePreset={batchRename.savePreset}
+            onDeletePreset={batchRename.deletePreset}
+            canRename={batchRename.request !== null}
+            onCancel={batchRename.close}
+            onRename={() => {
+              const request = batchRename.request;
+              if (!request) {
+                return;
+              }
+              batchRename.close();
+              void startBatchRename(request);
+            }}
           />
         ) : null}
         <AppDialogs
