@@ -211,6 +211,8 @@ test("swaps two names, the contents going with them", async () => {
   makeFiles({ "File 1.txt": "was one", "File 2.txt": "was two" });
   await launch();
   await waitUntil(() => isListed("File 2.txt"), 30_000);
+  // The List view (⌘2), whatever view folders open in: its column headers sort.
+  await window.keyboard.press("Meta+2");
   // Name from Z to A: the list, and so the numbering, has File 2 first.
   await window.locator('button.details-header-button[aria-label="Name"]').click();
   await waitUntil(async () =>
