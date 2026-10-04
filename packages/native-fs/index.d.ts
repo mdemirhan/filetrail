@@ -42,13 +42,9 @@ export function nativeSetFlags(path: string, flags: number): Promise<void>;
  * with `COPYFILE_METADATA`: mode, flags, dates, extended attributes (Finder tags, the
  * custom-icon flag, quarantine) and ACLs. Nothing inside the folder is copied.
  *
- * `undefined` when the loaded binary predates it.
- *
  * @throws An error with a `code` property (the errno name) on failure.
  */
-export const nativeCopyMetadata:
-  | ((sourcePath: string, destinationPath: string) => Promise<void>)
-  | undefined;
+export function nativeCopyMetadata(sourcePath: string, destinationPath: string): Promise<void>;
 
 /**
  * Returns the macOS file icon for the given path as a PNG buffer.
@@ -88,8 +84,7 @@ export function nativeGetFileThumbnail(path: string, size: number): Promise<Buff
  * "Plain Text Document"): the localized description of its type
  * (`NSURLLocalizedTypeDescriptionKey`), which the apps that open it can name.
  *
- * Synchronous and fast; callers cache it per extension. `null` when there is none, and
- * when the loaded binary predates this function.
+ * Synchronous and fast; callers cache it per extension. `null` when there is none.
  *
  * @param path - Absolute path to the file.
  */
@@ -100,8 +95,7 @@ export function nativeKindForPath(path: string): string | null;
  * Keynote and Pages documents, photo libraries, any type an installed app declares as a
  * package, and folders with the package bit set.
  *
- * Runs on a libuv thread pool thread. `null` when it can't be told (the item is gone),
- * and when the loaded binary predates this function.
+ * Runs on a libuv thread pool thread. `null` when it can't be told (the item is gone).
  *
  * @param path - Absolute path to the folder.
  */

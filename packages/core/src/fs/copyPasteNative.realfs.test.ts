@@ -28,7 +28,7 @@ const nativeFileSystem: WriteServiceFileSystem = {
     await mkdir(dirname(destinationPath), { recursive: true });
     await nativeCopy(sourcePath, destinationPath, signal);
   },
-  ...(native.nativeCopyMetadata ? { copyMetadata: native.nativeCopyMetadata } : {}),
+  copyMetadata: native.nativeCopyMetadata,
 };
 
 let testDir: string;

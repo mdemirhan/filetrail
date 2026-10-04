@@ -1,4 +1,3 @@
-const fs = require("node:fs");
 const binding = require("node-gyp-build")(__dirname);
 
 /*
@@ -33,72 +32,18 @@ function nativeFolderSize(folderPath) {
   });
 }
 
-/*
- * Fallbacks for a binary built before these functions existed. The rename one checks
- * first, which leaves a tiny window the native RENAME_EXCL version doesn't have.
- */
-async function renameExclusiveFallback(from, to) {
-  try {
-    await fs.promises.lstat(to);
-  } catch (error) {
-    if (error && error.code === "ENOENT") {
-      await fs.promises.rename(from, to);
-      return;
-    }
-    throw error;
-  }
-  throw Object.assign(new Error(`EEXIST: file already exists, rename '${from}' -> '${to}'`), {
-    code: "EEXIST",
-    syscall: "rename",
-    path: from,
-    dest: to,
-  });
-}
-
-// Without it, callers fall back to setting the mode and dates themselves.
-const copyMetadataFallback = undefined;
-
-async function isCaseSensitiveFallback() {
-  return null;
-}
-
-async function getFileThumbnailFallback() {
-  return null;
-}
-
-// Without them no item is seen as locked, as before they existed.
-async function getFlagsFallback() {
-  return 0;
-}
-
-async function setFlagsFallback() {}
-
-function kindForPathFallback() {
-  return null;
-}
-
-// Without it, callers go by the folder's extension.
-async function isPackageFallback() {
-  return null;
-}
-
-// Without it, no item has a date taken: renaming by it uses the date created instead.
-async function datesTakenFallback(paths) {
-  return paths.map(() => null);
-}
-
 module.exports = {
-  nativeDatesTaken: binding.nativeDatesTaken ?? datesTakenFallback,
+  nativeDatesTaken: binding.nativeDatesTaken,
   nativeCopyFile: binding.nativeCopyFile,
-  nativeCopyMetadata: binding.nativeCopyMetadata ?? copyMetadataFallback,
+  nativeCopyMetadata: binding.nativeCopyMetadata,
   nativeGetFileIcon: binding.nativeGetFileIcon,
-  nativeGetFileThumbnail: binding.nativeGetFileThumbnail ?? getFileThumbnailFallback,
-  nativeKindForPath: binding.nativeKindForPath ?? kindForPathFallback,
+  nativeGetFileThumbnail: binding.nativeGetFileThumbnail,
+  nativeKindForPath: binding.nativeKindForPath,
   nativeFolderSize,
   nativeFolderSizeCancel: binding.nativeFolderSizeCancel,
-  nativeRenameExclusive: binding.nativeRenameExclusive ?? renameExclusiveFallback,
-  nativeIsCaseSensitive: binding.nativeIsCaseSensitive ?? isCaseSensitiveFallback,
-  nativeIsPackage: binding.nativeIsPackage ?? isPackageFallback,
-  nativeGetFlags: binding.nativeGetFlags ?? getFlagsFallback,
-  nativeSetFlags: binding.nativeSetFlags ?? setFlagsFallback,
+  nativeRenameExclusive: binding.nativeRenameExclusive,
+  nativeIsCaseSensitive: binding.nativeIsCaseSensitive,
+  nativeIsPackage: binding.nativeIsPackage,
+  nativeGetFlags: binding.nativeGetFlags,
+  nativeSetFlags: binding.nativeSetFlags,
 };
