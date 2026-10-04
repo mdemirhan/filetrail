@@ -141,7 +141,8 @@ describe("read-only folders", () => {
       fileSystem,
     });
 
-    expect(result.status).toBe("completed");
+    // The whole result on failure: it names what went wrong, which the status alone doesn't.
+    expect(result.status, JSON.stringify(result, null, 1)).toBe("completed");
     expect(await readdir(join(testDir, "dst"))).toEqual(["module"]);
     expect(await readdir(join(testDir, "dst", "module"))).toEqual(["new.txt"]);
     expect(await modeOf(join(testDir, "dst", "module"))).toBe(0o555);

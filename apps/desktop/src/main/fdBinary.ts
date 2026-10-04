@@ -38,6 +38,8 @@ export function resolveBundledFdBinaryPath(
     join(moduleDir, "..", "..", "dist", "assets", relativeBinaryPath),
     join(options.cwd ?? process.cwd(), "dist", "assets", relativeBinaryPath),
     join(options.cwd ?? process.cwd(), "assets", relativeBinaryPath),
+    // The copy checked in beside the source, for tests run before a build (as in CI).
+    join(moduleDir, "..", "..", "assets", relativeBinaryPath),
   ];
   const resourcesPath = options.resourcesPath ?? process.resourcesPath;
   if (typeof resourcesPath === "string" && resourcesPath.length > 0) {

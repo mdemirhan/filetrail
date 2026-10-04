@@ -321,29 +321,29 @@ describe("App copy/paste integration", () => {
     expect(await screen.findByRole("region", { name: "Pasting…" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
 
-    // Filter out background folder-size probe calls (probeOnly) which are
-    // fire-and-forget and don't count as user-initiated write operations.
-    const nonProbeInvocations = () =>
+    // Only the calls that start a write count: reads (icons, the analysis polling its
+    // progress) can still arrive after this point on a slow machine.
+    const writeInvocations = () =>
       harness.invocations.filter(
         (inv) =>
-          !(
-            inv.channel === "folderSize:start" &&
-            (inv.payload as { probeOnly?: boolean })?.probeOnly
-          ),
+          inv.channel === "copyPaste:analyzeStart" ||
+          inv.channel === "copyPaste:start" ||
+          inv.channel === "system:emptyTrash" ||
+          (inv.channel.startsWith("writeOperation:") && inv.channel !== "writeOperation:cancel"),
       );
 
-    const invocationCountBeforeBlockedPaste = nonProbeInvocations().length;
+    const invocationCountBeforeBlockedPaste = writeInvocations().length;
     // Cut only fills the clipboard, so the operation under way does not hold it back.
     await act(async () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });
     expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
-    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
+    expect(writeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
-    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
+    expect(writeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
 
     const folderButton = await screen.findByRole("button", { name: "Folder" });
     await act(async () => {

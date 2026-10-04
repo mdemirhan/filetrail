@@ -14,9 +14,13 @@ jobs:
     name: Lint, typecheck, test, smoke
     runs-on: macos-14
     timeout-minutes: 30
+    # Every test runs here, including the ones that write large files, which
+    # `bun run test` leaves out during development (see docs/ENGINEERING_RULES.md).
+    env:
+      FILETRAIL_LARGE_FILE_TESTS: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup bun
         uses: oven-sh/setup-bun@v2
@@ -24,7 +28,7 @@ jobs:
           bun-version: latest
 
       - name: Cache bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
