@@ -17,7 +17,7 @@ export const TOP_TOOLBAR_LAYOUT = {
   capsulePadding: 3,
   titleMinWidth: 96,
   // The » button that lists the items there is no room for, a button of its own capsule.
-  overflowButtonWidth: 28,
+  overflowButtonWidth: 34,
   searchWidth: 200,
   searchMinWidth: 110,
 } as const;

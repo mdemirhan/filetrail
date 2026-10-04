@@ -329,7 +329,10 @@ select:focus-visible {
   /* How far a capsule of buttons reaches past its first and last button. */
   --toolbar-capsule-padding: 3px;
   --toolbar-title-min-width: 96px;
-  --toolbar-overflow-button-width: 28px;
+  /* Every control in the toolbar is this tall, as in a macOS 26 toolbar. */
+  --toolbar-control-height: 36px;
+  --toolbar-button-width: 34px;
+  --toolbar-overflow-button-width: 34px;
   --toolbar-search-width: 200px;
   --toolbar-search-min-width: 110px;
 }
@@ -596,7 +599,7 @@ select:focus-visible {
   display: grid;
   place-items: center;
   width: 34px;
-  height: 30px;
+  height: 36px;
   border-radius: var(--radius-capsule);
   background: var(--toolbar-capsule-bg);
   color: var(--toolbar-nav-icon-active);
@@ -641,7 +644,7 @@ select:focus-visible {
   gap: 4px;
   box-sizing: border-box;
   min-width: 34px;
-  height: 30px;
+  height: 36px;
   padding: 0 8px;
   border-radius: var(--radius-capsule);
   background: var(--bg-elevated);
@@ -2659,6 +2662,13 @@ body.resizing-panels * {
   white-space: nowrap;
 }
 
+/* The title takes the column's room, so the sort arrow sits at its right edge, as in
+   Finder. */
+.details-header-text {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
 .details-header-button.active {
   color: var(--text-primary);
 }
@@ -2759,11 +2769,13 @@ body.resizing-panels * {
   font-size: var(--font-size-callout);
 }
 
-/* Size with a bar behind it (while the list is sorted by size). */
+/* Size with a bar behind it (while the list is sorted by size). Sizes line up on the
+   right, as in Finder; the title stays on the left. */
 .details-size {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   align-self: stretch;
 }
 
@@ -2776,7 +2788,7 @@ body.resizing-panels * {
   position: absolute;
   top: 3px;
   bottom: 3px;
-  left: -4px;
+  right: -4px;
   min-width: 2px;
   max-width: calc(100% + 4px);
   border-radius: var(--radius-xs);
@@ -3979,7 +3991,8 @@ body.platform-macos .settings-view[data-layout="compact"] {
   display: flex;
   align-items: stretch;
   min-width: 0;
-  height: 33px;
+  /* Finder's tab bar height. */
+  height: 27px;
   /* Half the divider's width to the left, so the band starts at the tree's hairline. */
   margin-left: -4px;
   /* The tree's own color: the band continues the sidebar. In the explorer window it is a
@@ -4536,6 +4549,11 @@ body.window-inactive {
   font-size: var(--font-size-small);
   text-align: left;
   cursor: default;
+}
+
+/* The sort arrow at the column's right edge, as in the list's header. */
+button.search-results-column {
+  justify-content: space-between;
 }
 
 .search-results-column.active {
@@ -6147,9 +6165,9 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .window-toolbar .tb-btn.tb-btn-icon {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: var(--toolbar-button-width);
+  min-width: var(--toolbar-button-width);
+  height: var(--toolbar-control-height);
   border-radius: var(--radius-control);
   color: var(--text-secondary);
 }
@@ -6182,12 +6200,17 @@ button.shortcut-slot-key.recording:hover {
 }
 
 /* The segments are toolbar buttons too, so the segmented control's look is restated here,
-   from its own tokens, over the toolbar button's fills. 24px segments in the 2px track make
-   28px, the height of every control in the toolbar. */
+   from its own tokens, over the toolbar button's fills. 26px segments in a 5px track make
+   the toolbar's 36px; they are 40px apart, as Finder's are. */
+.toolbar-group-view .toolbar-segmented-native {
+  gap: 4px;
+  padding: 5px;
+}
+
 .toolbar-group-view .toolbar-segmented-native .tb-btn.segmented-item {
-  width: 34px;
-  min-width: 34px;
-  height: var(--control-height);
+  width: 36px;
+  min-width: 36px;
+  height: 26px;
   padding: 0;
   border-radius: var(--radius-capsule);
   background: transparent;
@@ -6228,9 +6251,9 @@ button.shortcut-slot-key.recording:hover {
   box-shadow: var(--focus-ring);
 }
 
-/* 26px inside its 1px border: 28px, the height of every control in the toolbar. */
+/* Inside its 1px border, the height of every control in the toolbar. */
 .window-toolbar .toolbar-search-row {
-  min-height: 26px;
+  min-height: calc(var(--toolbar-control-height) - 2px);
   padding: 0 8px;
   gap: 6px;
 }
