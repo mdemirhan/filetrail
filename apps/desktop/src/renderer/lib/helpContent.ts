@@ -391,7 +391,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Rename",
             description:
-              "{renameSelection} renames the selected item. Settings → Files chooses whether Return renames or opens.",
+              "{renameSelection} renames the selected item. With several selected it opens the Rename sheet: replace or add text, number or date them, or change their case, with every new name shown before anything is renamed, and settings saved as presets. Settings → Files chooses whether Return renames or opens.",
           },
           {
             label: "Move to Trash",
