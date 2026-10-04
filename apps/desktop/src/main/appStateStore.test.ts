@@ -176,35 +176,6 @@ describe("appStateStore", () => {
     expect(written().slice(2)).toEqual(["visited-folders.json"]);
   });
 
-  it("moves the opened folders out of the state file into their own", () => {
-    const filePath = resolveAppStatePath(mkdtempSync(join(tmpdir(), "filetrail-app-state-")));
-    writeFileSync(
-      filePath,
-      JSON.stringify({
-        preferences: { viewMode: "details" },
-        visitedFolders: [{ path: "/Users/demo/work", visitCount: 2, lastVisitedAt: 1_000 }],
-      }),
-      "utf8",
-    );
-    const { written, runTimers } = createTimedStore(filePath);
-    runTimers();
-
-    // The new file is written before the old one loses the list.
-    expect(written()).toEqual(["visited-folders.json", "app-state.json"]);
-    expect(JSON.parse(readFileSync(filePath, "utf8")).visitedFolders).toBeUndefined();
-    const reloaded = createAppStateStore(filePath);
-    expect(reloaded.getVisitedFolders()).toEqual([
-      {
-        path: "/Users/demo/work",
-        visits: [
-          { at: 1_000, kind: "stay" },
-          { at: 1_000, kind: "stay" },
-        ],
-      },
-    ]);
-    expect(reloaded.getPreferences().viewMode).toBe("details");
-  });
-
   it("keeps the open tabs for the quit-time write, but writes the setting at once", () => {
     const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
     const tab = {

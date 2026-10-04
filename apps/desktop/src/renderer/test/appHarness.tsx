@@ -109,9 +109,32 @@ export function finishedResultEvent(
   };
 }
 
-export function sameFolderIssue(
-  sourcePath: string,
-): IpcResponse<"copyPaste:plan">["issues"][number] {
+type AnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
+export type CopyPasteIssue = AnalysisReport["issues"][number];
+
+// A paste's outcome as the tests describe it: the items and what is wrong. toAnalysisReport
+// makes the analysis the window is given from it.
+export type TestPastePlan = {
+  mode: AnalysisReport["mode"];
+  sourcePaths: string[];
+  destinationDirectoryPath: string;
+  items: Array<{
+    sourcePath: string;
+    destinationPath: string;
+    kind: "file" | "directory" | "symlink";
+    status: "ready" | "conflict" | "blocked";
+    sizeBytes: number | null;
+  }>;
+  issues: CopyPasteIssue[];
+  warnings: AnalysisReport["warnings"];
+  summary: {
+    topLevelItemCount: number;
+    totalItemCount: number;
+    totalBytes: number | null;
+  };
+};
+
+export function sameFolderIssue(sourcePath: string): CopyPasteIssue {
   return {
     code: "same_path",
     message: `Cannot paste ${sourcePath} onto itself.`,
@@ -123,8 +146,8 @@ export function sameFolderIssue(
 export function cutPlan(
   sourcePaths: string[],
   destinationDirectoryPath: string,
-  issues: IpcResponse<"copyPaste:plan">["issues"] = [],
-): IpcResponse<"copyPaste:plan"> {
+  issues: CopyPasteIssue[] = [],
+): TestPastePlan {
   const issuePaths = new Set(issues.map((issue) => issue.sourcePath));
   const items = sourcePaths
     .filter((sourcePath) => !issuePaths.has(sourcePath))
@@ -139,28 +162,22 @@ export function cutPlan(
     mode: "cut",
     sourcePaths,
     destinationDirectoryPath,
-    conflictResolution: "error",
     items,
-    conflicts: [],
     issues,
     warnings: [],
-    requiresConfirmation: { largeBatch: false, cutDelete: false },
     summary: {
       topLevelItemCount: sourcePaths.length,
       totalItemCount: items.length,
       totalBytes: items.length * 5,
-      skippedConflictCount: 0,
     },
-    canExecute: issues.length === 0,
   };
 }
 
-export function folderConflictPlan(): IpcResponse<"copyPaste:plan"> {
+export function folderConflictPlan(): TestPastePlan {
   return {
     mode: "copy",
     sourcePaths: ["/Users/demo/Folder"],
     destinationDirectoryPath: "/Users/demo",
-    conflictResolution: "error",
     items: [
       {
         sourcePath: "/Users/demo/Folder",
@@ -170,29 +187,19 @@ export function folderConflictPlan(): IpcResponse<"copyPaste:plan"> {
         sizeBytes: null,
       },
     ],
-    conflicts: [
-      {
-        sourcePath: "/Users/demo/Folder",
-        destinationPath: "/Users/demo/Folder",
-        reason: "destination_exists",
-      },
-    ],
     issues: [],
     warnings: [],
-    requiresConfirmation: { largeBatch: false, cutDelete: false },
     summary: {
       topLevelItemCount: 1,
       totalItemCount: 1,
       totalBytes: null,
-      skippedConflictCount: 0,
     },
-    canExecute: true,
   };
 }
 
 export function createAppHarness(
   args: {
-    planResponse?: IpcResponse<"copyPaste:plan">;
+    planResponse?: TestPastePlan;
     analysisUpdateResponse?: IpcResponse<"copyPaste:analyzeGetUpdate">;
     // Builds the finished analysis from the request, for tests where it depends on the
     // items being analyzed.
@@ -423,35 +430,8 @@ export function createAppHarness(
           },
         } satisfies IpcResponse<"item:getProperties"> as IpcResponse<C>;
       }
-      if (channel === "copyPaste:plan") {
-        copyPastePlanCallCount += 1;
-        if (
-          args.deferCopyPastePlan === true ||
-          args.deferCopyPastePlanCalls?.includes(copyPastePlanCallCount)
-        ) {
-          await new Promise<void>((resolve) => {
-            resolveCopyPastePlanPromises.push(resolve);
-          });
-        }
-        // Explicit thrown planner failures intentionally win over canned terminal updates.
-        if (args.copyPastePlanError) {
-          throw args.copyPastePlanError;
-        }
-        return (args.planResponse ?? defaultPlanResponse()) as IpcResponse<C>;
-      }
       if (channel === "copyPaste:analyzeStart") {
         lastAnalyzeRequest = payload as IpcRequestInput<"copyPaste:analyzeStart">;
-        invocations.push({
-          channel: "copyPaste:plan",
-          payload: {
-            mode: (payload as IpcRequestInput<"copyPaste:analyzeStart">).mode,
-            sourcePaths: (payload as IpcRequestInput<"copyPaste:analyzeStart">).sourcePaths,
-            destinationDirectoryPath: (payload as IpcRequestInput<"copyPaste:analyzeStart">)
-              .destinationDirectoryPath,
-            conflictResolution: "error",
-            action: (payload as IpcRequestInput<"copyPaste:analyzeStart">).action,
-          },
-        });
         return { analysisId: "analysis-1", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "copyPaste:analyzeGetUpdate") {
@@ -948,7 +928,7 @@ export async function expectClipboardListing(
 }
 
 export function expectNoFileClipboardActions(harness: ReturnType<typeof createAppHarness>): void {
-  expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+  expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(false);
   expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
 }
@@ -992,12 +972,11 @@ export function createDirectoryEntry(
   };
 }
 
-export function defaultPlanResponse(): IpcResponse<"copyPaste:plan"> {
+export function defaultPlanResponse(): TestPastePlan {
   return {
     mode: "copy",
     sourcePaths: ["/Users/demo/source.txt"],
     destinationDirectoryPath: "/Users/demo/Folder",
-    conflictResolution: "error",
     items: [
       {
         sourcePath: "/Users/demo/source.txt",
@@ -1007,26 +986,17 @@ export function defaultPlanResponse(): IpcResponse<"copyPaste:plan"> {
         sizeBytes: 5,
       },
     ],
-    conflicts: [],
     issues: [],
     warnings: [],
-    requiresConfirmation: {
-      largeBatch: false,
-      cutDelete: false,
-    },
     summary: {
       topLevelItemCount: 1,
       totalItemCount: 1,
       totalBytes: 5,
-      skippedConflictCount: 0,
     },
-    canExecute: true,
   };
 }
 
-export function toAnalysisReport(
-  plan: IpcResponse<"copyPaste:plan">,
-): NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]> {
+export function toAnalysisReport(plan: TestPastePlan): AnalysisReport {
   const fileConflictCount = plan.items.filter(
     (item) => item.status === "conflict" && item.kind !== "directory",
   ).length;
@@ -1214,9 +1184,7 @@ export function analyzeRequests(
     .map((call) => call.payload as IpcRequestInput<"copyPaste:analyzeStart">);
 }
 
-export function missingSourceIssue(
-  sourcePath: string,
-): IpcResponse<"copyPaste:plan">["issues"][number] {
+export function missingSourceIssue(sourcePath: string): CopyPasteIssue {
   return {
     code: "source_missing",
     message: `Source does not exist: ${sourcePath}`,
@@ -1228,7 +1196,7 @@ export function missingSourceIssue(
 // A plan for the request, with `issuesFor` saying which of its items have a problem.
 export function planForRequest(
   request: IpcRequestInput<"copyPaste:analyzeStart">,
-  issuesFor: (sourcePath: string) => IpcResponse<"copyPaste:plan">["issues"][number] | null,
+  issuesFor: (sourcePath: string) => CopyPasteIssue | null,
 ): NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]> {
   const issues = request.sourcePaths.flatMap((path) => {
     const issue = issuesFor(path);

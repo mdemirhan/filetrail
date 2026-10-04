@@ -8,7 +8,7 @@ import {
 } from "./explorerAppUtils";
 import type { DirectoryEntry, WriteOperationResult } from "./explorerTypes";
 
-export type ClipboardMode = IpcRequest<"copyPaste:plan">["mode"];
+export type ClipboardMode = IpcRequest<"copyPaste:analyzeStart">["mode"];
 
 // What was known about an item when it was copied: enough to draw its icon and to say
 // whether it is a folder. Items copied from somewhere that does not say (a path alone) have
@@ -175,8 +175,7 @@ export function clearCopyPasteClipboard(): CopyPasteClipboardState {
 export function buildPasteRequest(
   clipboard: CopyPasteClipboardState,
   destinationDirectoryPath: string,
-  conflictResolution: IpcRequest<"copyPaste:plan">["conflictResolution"] = "error",
-): IpcRequest<"copyPaste:plan"> | null {
+): IpcRequest<"copyPaste:analyzeStart"> | null {
   if (clipboard.type !== "ready") {
     return null;
   }
@@ -184,7 +183,6 @@ export function buildPasteRequest(
     mode: clipboard.mode,
     sourcePaths: clipboard.sourcePaths,
     destinationDirectoryPath,
-    conflictResolution,
     action: "paste",
   };
 }

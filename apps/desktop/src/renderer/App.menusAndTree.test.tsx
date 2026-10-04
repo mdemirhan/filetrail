@@ -289,7 +289,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         destinationDirectoryPath: "/Users/demo/Folder",
       });
@@ -317,7 +319,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         destinationDirectoryPath: "/Users/demo",
       });
@@ -345,7 +349,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         destinationDirectoryPath: "/Users/demo/Folder",
       });
@@ -1018,7 +1024,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         sourcePaths: ["/Users/demo/source.txt"],
       });
@@ -1052,7 +1060,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.findLast(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         destinationDirectoryPath: "/Users/demo/Folder",
       });
@@ -1065,7 +1075,6 @@ describe("App copy/paste integration", () => {
         mode: "copy",
         sourcePaths: ["/Users/demo/Folder"],
         destinationDirectoryPath: "/Users/demo",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/Folder",
@@ -1075,20 +1084,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: null,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: null,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -1107,7 +1109,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.findLast(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         sourcePaths: ["/Users/demo/Folder"],
         destinationDirectoryPath: "/Users/demo",
@@ -1150,7 +1154,9 @@ describe("App copy/paste integration", () => {
       });
 
       await vi.waitFor(() => {
-        const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+        const planCall = harness.invocations.findLast(
+          (call) => call.channel === "copyPaste:analyzeStart",
+        );
         expect(planCall?.payload).toMatchObject({
           destinationDirectoryPath: "/Users/demo/Documents",
         });
@@ -1780,7 +1786,7 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       expect(
-        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+        harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
       ).toMatchObject({
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
@@ -1810,7 +1816,9 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "editPaste" });
     });
 
-    expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+      false,
+    );
   });
 
   it("pastes into the folder on screen when no pane has focus, even with a folder selected", async () => {
@@ -1837,7 +1845,7 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       expect(
-        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+        harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
       ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
     });
   });
@@ -1941,7 +1949,7 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       expect(
-        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+        harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
       ).toMatchObject({ destinationDirectoryPath: "/Users/demo/Folder" });
     });
     expectNativeEditActions(harness, []);
@@ -2024,7 +2032,9 @@ describe("App copy/paste integration", () => {
       {
         command: "duplicateSelection",
         assertNoSideEffect: () => {
-          expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+          expect(
+            harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart"),
+          ).toBe(false);
         },
       },
       {
@@ -2324,7 +2334,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/source.txt",
@@ -2334,20 +2343,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: 5,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: true,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -2379,7 +2381,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/Source Folder"],
         destinationDirectoryPath: "/Users/demo/Target",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/Source Folder",
@@ -2396,20 +2397,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: 5,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: true,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 2,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
       directorySnapshots: {
         "/Users/demo": {
@@ -2525,9 +2519,7 @@ describe("App copy/paste integration", () => {
         mode: "copy",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [],
-        conflicts: [],
         issues: [
           {
             code: "same_path",
@@ -2537,17 +2529,11 @@ describe("App copy/paste integration", () => {
           },
         ],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 0,
           totalBytes: 0,
-          skippedConflictCount: 0,
         },
-        canExecute: false,
       },
     });
 

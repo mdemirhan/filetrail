@@ -315,7 +315,7 @@ describe("App copy/paste dialogs and destinations", () => {
       );
     });
     expect(
-      harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+      harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
     ).toMatchObject({ sourcePaths: ["/Users/demo/photos"] });
     expect(
       harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
@@ -382,7 +382,7 @@ describe("App copy/paste dialogs and destinations", () => {
 
     await vi.waitFor(() => {
       expect(
-        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+        harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
       ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
     });
   });
@@ -416,7 +416,7 @@ describe("App copy/paste dialogs and destinations", () => {
     });
     await vi.waitFor(() => {
       expect(
-        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+        harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
       ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
     });
 
@@ -429,7 +429,7 @@ describe("App copy/paste dialogs and destinations", () => {
       );
     });
     const planCallCount = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     ).length;
     await act(async () => {
       fireEvent.contextMenu(await screen.findByTitle("/Users/demo/Linked"));
@@ -438,12 +438,12 @@ describe("App copy/paste dialogs and destinations", () => {
       fireEvent.click(screen.getByRole("button", { name: /^Paste/ }));
     });
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallCount + 1,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallCount + 1);
     });
     expect(
-      harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+      harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
     ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
   });
 
@@ -468,7 +468,9 @@ describe("App copy/paste dialogs and destinations", () => {
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(true);
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+        true,
+      );
     });
     await act(async () => {
       await Promise.resolve();
@@ -510,7 +512,7 @@ describe("App copy/paste dialogs and destinations", () => {
     });
     expect(
       harness.invocations
-        .filter((call) => call.channel === "copyPaste:plan")
+        .filter((call) => call.channel === "copyPaste:analyzeStart")
         .map((call) => (call.payload as { sourcePaths: string[] }).sourcePaths),
     ).toEqual([["/Users/demo/source.txt", "/Users/demo/Folder"], ["/Users/demo/Folder"]]);
     expect(screen.queryByText("Couldn’t Move")).not.toBeInTheDocument();
@@ -1980,9 +1982,7 @@ describe("acting on search results", () => {
 
   function duplicateRequests(harness: ReturnType<typeof createAppHarness>) {
     return harness.invocations
-      .filter(
-        (call) => call.channel === "copyPaste:plan" || call.channel === "copyPaste:analyzeStart",
-      )
+      .filter((call) => call.channel === "copyPaste:analyzeStart")
       .map((call) => call.payload as { action?: string; destinationDirectoryPath?: string })
       .filter((payload) => payload.action === "duplicate");
   }

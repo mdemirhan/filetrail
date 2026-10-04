@@ -182,14 +182,12 @@ describe("copyPasteClipboard", () => {
       buildPasteRequest(
         setCopyPasteClipboard("copy", ["/tmp/a"], "2026-03-09T00:00:00.000Z"),
         "/tmp/target",
-        "skip",
       ),
     ).toEqual({
       action: "paste",
       mode: "copy",
       sourcePaths: ["/tmp/a"],
       destinationDirectoryPath: "/tmp/target",
-      conflictResolution: "skip",
     });
   });
 

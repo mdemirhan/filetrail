@@ -157,27 +157,12 @@ export class AppStateStore {
         console.error("[filetrail] failed persisting app state", error);
       });
     this.visitsFilePath = resolveVisitedFoldersPath(filePath);
-    const { state, legacyVisitedFolders } = readState(
-      filePath,
+    this.state = readState(filePath, this.fileSystem, this.defaults, this.onReadError);
+    this.visitedFolders = readVisitedFolders(
+      this.visitsFilePath,
       this.fileSystem,
-      this.defaults,
       this.onReadError,
     );
-    this.state = state;
-    if (this.fileSystem.existsSync(this.visitsFilePath) || legacyVisitedFolders === undefined) {
-      this.visitedFolders = readVisitedFolders(
-        this.visitsFilePath,
-        this.fileSystem,
-        this.onReadError,
-      );
-    } else {
-      // Visits used to be kept in the state file: they move to their own, which is written
-      // before the state file loses them.
-      this.visitedFolders = legacyVisitedFolders;
-      this.markUnsaved("visits");
-      this.markUnsaved("state");
-      this.saveSoon();
-    }
   }
 
   getFilePath(): string {
@@ -267,8 +252,7 @@ export class AppStateStore {
     this.save();
   }
 
-  // Writes only the files that changed since they were last written; visits first, so a
-  // move of them out of the state file never loses them.
+  // Writes only the files that changed since they were last written.
   private save(): void {
     if (this.promptSaveTimer !== null) {
       this.timer.clearTimeout(this.promptSaveTimer);
@@ -342,37 +326,28 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 // Loading is best-effort. Corrupt state should never block startup.
-// `legacyVisitedFolders` is the list of opened folders from a state file written before
-// they had a file of their own; undefined when there is none.
 function readState(
   filePath: string,
   fileSystem: AppStateStoreFileSystem,
   defaults: AppPreferences,
   onReadError: (error: unknown) => void,
-): { state: AppState; legacyVisitedFolders: VisitedFolder[] | undefined } {
-  const empty = { state: {}, legacyVisitedFolders: undefined };
+): AppState {
   if (!fileSystem.existsSync(filePath)) {
-    return empty;
+    return {};
   }
   try {
     const raw = fileSystem.readFileSync(filePath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
     if (!isPlainObject(parsed)) {
-      return empty;
+      return {};
     }
-    const record = parsed;
-    const preferences = sanitizePreferences(record.preferences, defaults);
-    const window = sanitizeWindowState(record.window);
     return {
-      state: { preferences, window },
-      legacyVisitedFolders:
-        record.visitedFolders === undefined
-          ? undefined
-          : sanitizeVisitedFolders(record.visitedFolders),
+      preferences: sanitizePreferences(parsed.preferences, defaults),
+      window: sanitizeWindowState(parsed.window),
     };
   } catch (error) {
     onReadError(error);
-    return empty;
+    return {};
   }
 }
 

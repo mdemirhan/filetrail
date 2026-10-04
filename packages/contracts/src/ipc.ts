@@ -167,7 +167,6 @@ export const searchJobStatusSchema = z.enum([
 ]);
 export const nativeEditActionSchema = z.enum(["cut", "copy", "paste", "selectAll"]);
 export const copyPasteModeSchema = z.enum(["copy", "cut"]);
-export const copyPasteConflictResolutionSchema = z.enum(["error", "skip"]);
 export const copyPasteAnalysisJobStatusSchema = z.enum([
   "queued",
   "analyzing",
@@ -208,7 +207,6 @@ export const copyPasteRuntimeConflictReasonSchema = z.enum([
   "source_deleted",
   "trash_unavailable",
 ]);
-export const copyPastePlanItemStatusSchema = z.enum(["ready", "conflict", "blocked"]);
 export const copyPastePlanIssueCodeSchema = z.enum([
   "destination_missing",
   "destination_not_directory",
@@ -359,18 +357,6 @@ export const nodeFingerprintSchema = z.object({
   dev: z.number().int().nonnegative().nullable(),
   symlinkTarget: z.string().nullable(),
 });
-export const copyPastePlanItemSchema = z.object({
-  sourcePath: z.string().min(1),
-  destinationPath: z.string().min(1),
-  kind: z.enum(["file", "directory", "symlink"]),
-  status: copyPastePlanItemStatusSchema,
-  sizeBytes: z.number().int().nonnegative().nullable(),
-});
-export const copyPastePlanConflictSchema = z.object({
-  sourcePath: z.string().min(1),
-  destinationPath: z.string().min(1),
-  reason: z.literal("destination_exists"),
-});
 export const copyPastePlanIssueSchema = z.object({
   code: copyPastePlanIssueCodeSchema,
   message: z.string().min(1),
@@ -459,27 +445,6 @@ export const copyPasteRuntimeConflictSchema = z.object({
   destinationFingerprint: nodeFingerprintSchema,
   currentSourceFingerprint: nodeFingerprintSchema,
   currentDestinationFingerprint: nodeFingerprintSchema,
-});
-export const copyPastePlanSchema = z.object({
-  mode: copyPasteModeSchema,
-  sourcePaths: z.array(z.string().min(1)).min(1).max(MAX_PATHS_PER_REQUEST),
-  destinationDirectoryPath: z.string().min(1),
-  conflictResolution: copyPasteConflictResolutionSchema,
-  items: z.array(copyPastePlanItemSchema),
-  conflicts: z.array(copyPastePlanConflictSchema),
-  issues: z.array(copyPastePlanIssueSchema),
-  warnings: z.array(copyPastePlanWarningSchema),
-  requiresConfirmation: z.object({
-    largeBatch: z.boolean(),
-    cutDelete: z.boolean(),
-  }),
-  summary: z.object({
-    topLevelItemCount: z.number().int().nonnegative(),
-    totalItemCount: z.number().int().nonnegative(),
-    totalBytes: z.number().int().nonnegative().nullable(),
-    skippedConflictCount: z.number().int().nonnegative(),
-  }),
-  canExecute: z.boolean(),
 });
 export const copyPasteItemResultSchema = z.object({
   sourcePath: z.string().min(1),
@@ -991,47 +956,24 @@ export const ipcContractSchemas = {
       ok: z.boolean(),
     }),
   },
-  "copyPaste:plan": {
+  "copyPaste:start": {
     request: z.object({
-      mode: copyPasteModeSchema,
-      sourcePaths: absolutePathListSchema,
-      destinationDirectoryPath: absolutePathSchema,
-      conflictResolution: copyPasteConflictResolutionSchema.default("error"),
+      analysisId: z.string().min(1),
       action: writeOperationActionSchema
         .extract(["paste", "copy_to", "move_to", "duplicate"])
         .default("paste"),
+      policy: copyPastePolicySchema,
+      // Per-item choices from the review, overriding the policy for those items.
+      overrides: z
+        .array(
+          z.object({
+            nodeId: z.string().min(1),
+            action: copyPasteRuntimeResolutionActionSchema,
+          }),
+        )
+        .max(100_000)
+        .optional(),
     }),
-    response: copyPastePlanSchema,
-  },
-  "copyPaste:start": {
-    request: z.union([
-      z.object({
-        mode: copyPasteModeSchema,
-        sourcePaths: absolutePathListSchema,
-        destinationDirectoryPath: absolutePathSchema,
-        conflictResolution: copyPasteConflictResolutionSchema.default("error"),
-        action: writeOperationActionSchema
-          .extract(["paste", "copy_to", "move_to", "duplicate"])
-          .default("paste"),
-      }),
-      z.object({
-        analysisId: z.string().min(1),
-        action: writeOperationActionSchema
-          .extract(["paste", "copy_to", "move_to", "duplicate"])
-          .default("paste"),
-        policy: copyPastePolicySchema,
-        // Per-item choices from the review, overriding the policy for those items.
-        overrides: z
-          .array(
-            z.object({
-              nodeId: z.string().min(1),
-              action: copyPasteRuntimeResolutionActionSchema,
-            }),
-          )
-          .max(100_000)
-          .optional(),
-      }),
-    ]),
     response: z.object({
       operationId: z.string().min(1),
       status: z.literal("queued"),
@@ -1340,7 +1282,6 @@ export const ipcChannels = Object.keys(ipcContractSchemas) as IpcChannel[];
 export type IpcRequest<C extends IpcChannel> = z.output<IpcContractSchemas[C]["request"]>;
 export type IpcRequestInput<C extends IpcChannel> = z.input<IpcContractSchemas[C]["request"]>;
 export type IpcResponse<C extends IpcChannel> = z.output<IpcContractSchemas[C]["response"]>;
-export type CopyPastePlan = z.output<typeof copyPastePlanSchema>;
 export type CopyPasteOperationResult = z.output<typeof copyPasteOperationResultSchema>;
 export type CopyPasteProgressEvent = z.output<typeof copyPasteProgressEventSchema>;
 export type CopyPasteRuntimeResolutionAction = z.output<

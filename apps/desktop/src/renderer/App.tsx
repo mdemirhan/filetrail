@@ -59,7 +59,7 @@ import {
   setSingleContentSelection as createSingleContentSelection,
 } from "./lib/contentSelection";
 import type { ContextMenuSubmenus } from "./lib/contextMenu";
-import { buildPasteRequest, describeClipboard } from "./lib/copyPasteClipboard";
+import { describeClipboard } from "./lib/copyPasteClipboard";
 import {
   createOpenItemLimitMessage,
   formatPathForShell,

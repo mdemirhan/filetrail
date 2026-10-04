@@ -150,30 +150,4 @@ describe("visited folders", () => {
       },
     ]);
   });
-
-  it("reads the list kept before visits were stored one by one", () => {
-    expect(
-      sanitizeVisitedFolders([
-        { path: "/few", visitCount: 2.9, lastVisitedAt: NOW },
-        { path: "/many", visitCount: 40, lastVisitedAt: NOW - DAY },
-        { path: "/zero", visitCount: 0, lastVisitedAt: NOW },
-        { path: "/bad-time", visitCount: 1, lastVisitedAt: "yesterday" },
-      ]),
-    ).toEqual([
-      {
-        path: "/few",
-        visits: [
-          { at: NOW, kind: "stay" },
-          { at: NOW, kind: "stay" },
-        ],
-      },
-      {
-        path: "/many",
-        visits: Array.from({ length: MAX_VISITS_PER_FOLDER }, () => ({
-          at: NOW - DAY,
-          kind: "stay",
-        })),
-      },
-    ]);
-  });
 });

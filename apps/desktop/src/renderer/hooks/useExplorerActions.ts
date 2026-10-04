@@ -1956,7 +1956,7 @@ export function useExplorerActions(args: {
     if (pasteDestinationPath === null) {
       return;
     }
-    const request = buildPasteRequest(copyPasteClipboardRef.current, pasteDestinationPath, "error");
+    const request = buildPasteRequest(copyPasteClipboardRef.current, pasteDestinationPath);
     if (!request) {
       return;
     }

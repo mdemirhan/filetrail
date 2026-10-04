@@ -58,7 +58,6 @@ describe("App copy/paste integration", () => {
         mode: "copy",
         sourcePaths: ["/Users/demo/Folder"],
         destinationDirectoryPath: "/Users/demo",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/Folder",
@@ -68,26 +67,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: null,
           },
         ],
-        conflicts: [
-          {
-            sourcePath: "/Users/demo/Folder",
-            destinationPath: "/Users/demo/Folder",
-            reason: "destination_exists",
-          },
-        ],
         issues: [],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: null,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -283,7 +269,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("shows an immediate preparing progress card before copyPaste:plan resolves", async () => {
+  it("shows an immediate preparing progress card before the analysis finishes", async () => {
     const harness = createAppHarness({
       deferCopyPastePlan: true,
     });
@@ -411,7 +397,7 @@ describe("App copy/paste integration", () => {
 
     expect(screen.queryByRole("region", { name: "Pasting…" })).not.toBeInTheDocument();
     const planCallsBeforeRetry = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     );
 
     await act(async () => {
@@ -419,9 +405,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length + 1,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallsBeforeRetry.length + 1);
     });
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
 
@@ -494,16 +480,16 @@ describe("App copy/paste integration", () => {
     await selectItem("/Users/demo/Folder");
 
     const planCallsBeforeRetry = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length + 1,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallsBeforeRetry.length + 1);
     });
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
@@ -514,9 +500,7 @@ describe("App copy/paste integration", () => {
         mode: "copy",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [],
-        conflicts: [],
         issues: [
           {
             code: "destination_missing",
@@ -526,17 +510,11 @@ describe("App copy/paste integration", () => {
           },
         ],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: false,
       },
     });
 
@@ -564,16 +542,16 @@ describe("App copy/paste integration", () => {
     await selectItem("/Users/demo/Folder");
 
     const planCallsBeforeRetry = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length + 1,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallsBeforeRetry.length + 1);
     });
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
@@ -652,7 +630,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/source.txt",
@@ -662,20 +639,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: 5,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: true,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -767,16 +737,16 @@ describe("App copy/paste integration", () => {
     });
 
     const planCallsBeforeRetry = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length + 1,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallsBeforeRetry.length + 1);
     });
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
@@ -1118,7 +1088,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         sourcePaths: ["/Users/demo/source.txt"],
       });
@@ -1196,16 +1168,16 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByRole("dialog", { name: /^Pasted \d+ of/ })).not.toBeInTheDocument();
 
     const planCallsBeforeRetry = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length + 1,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallsBeforeRetry.length + 1);
     });
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
@@ -1283,16 +1255,16 @@ describe("App copy/paste integration", () => {
     ).toBeInTheDocument();
 
     const planCallsBeforeRetry = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length + 1,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallsBeforeRetry.length + 1);
     });
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
@@ -1303,7 +1275,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/source.txt",
@@ -1313,20 +1284,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: 5,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: true,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -1395,16 +1359,16 @@ describe("App copy/paste integration", () => {
     });
 
     const planCallsBeforeRetry = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length + 1,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallsBeforeRetry.length + 1);
     });
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
@@ -1415,7 +1379,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/source.txt",
@@ -1425,20 +1388,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: 5,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: true,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -1503,16 +1459,16 @@ describe("App copy/paste integration", () => {
     });
 
     const planCallsBeforeRetry = harness.invocations.filter(
-      (call) => call.channel === "copyPaste:plan",
+      (call) => call.channel === "copyPaste:analyzeStart",
     );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length,
-      );
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:analyzeStart"),
+      ).toHaveLength(planCallsBeforeRetry.length);
     });
     expect(clipboardButton()).toBeNull();
   });
@@ -1586,14 +1542,13 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       const retryPlanCalls = harness.invocations.filter(
-        (call) => call.channel === "copyPaste:plan",
+        (call) => call.channel === "copyPaste:analyzeStart",
       );
       expect(retryPlanCalls).toHaveLength(2);
       expect(retryPlanCalls[1]?.payload).toEqual({
         mode: "copy",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         action: "paste",
       });
     });
@@ -1836,9 +1791,7 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [],
-        conflicts: [],
         issues: [
           {
             code: "source_missing",
@@ -1848,17 +1801,11 @@ describe("App copy/paste integration", () => {
           },
         ],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: false,
       },
     });
 
@@ -1883,7 +1830,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/source.txt",
@@ -1893,20 +1839,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: 5,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [{ code: "large_batch", message: "This operation will write 200 items." }],
-        requiresConfirmation: {
-          largeBatch: true,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 200,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -2016,7 +1955,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/test3_1"],
         destinationDirectoryPath: "/Users/demo/test2",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/test3_1",
@@ -2026,20 +1964,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: null,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 0,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -2093,7 +2024,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/test3_1"],
         destinationDirectoryPath: "/Users/demo/test2",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/test3_1",
@@ -2103,20 +2033,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: null,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 0,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
       directorySnapshots: {
         "/Users/demo": {
@@ -2189,7 +2112,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/test3_1"],
         destinationDirectoryPath: "/Users/demo/test2",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/test3_1",
@@ -2199,20 +2121,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: null,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 0,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
       directorySnapshots: {
         "/Users/demo": {

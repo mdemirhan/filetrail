@@ -13,8 +13,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  type CopyPasteAnalysisReport,
+  type CopyPasteAnalysisRequest,
+  type CopyPasteOperationHandle,
   type CopyPasteProgressEvent,
+  DEFAULT_COPY_PASTE_POLICY,
   WRITE_OPERATION_BUSY_ERROR,
+  type WriteService,
   type WriteServiceFileSystem,
   type WriteServiceStats,
   createWriteService,
@@ -51,22 +56,20 @@ describe("writeService", () => {
       }),
     });
 
-    const plan = await service.planCopyPaste({
+    const report = await analyze(service, {
       mode: "copy",
       sourcePaths: ["/workspace/file.txt"],
       destinationDirectoryPath: "/workspace",
     });
 
-    expect(plan.items).toEqual([
+    expect(report.nodes).toEqual([
       expect.objectContaining({
         sourcePath: "/workspace/file.txt",
         destinationPath: "/workspace/file copy 2.txt",
-        status: "ready",
+        conflictClass: null,
       }),
     ]);
-    expect(plan.conflicts).toEqual([]);
-    expect(plan.issues).toEqual([]);
-    expect(plan.canExecute).toBe(true);
+    expect(report.issues).toEqual([]);
   });
 
   it("keeps same-directory cut/paste blocked as a self-target", async () => {
@@ -80,21 +83,20 @@ describe("writeService", () => {
       }),
     });
 
-    const plan = await service.planCopyPaste({
+    const report = await analyze(service, {
       mode: "cut",
       sourcePaths: ["/workspace/file.txt"],
       destinationDirectoryPath: "/workspace",
     });
 
-    expect(plan.issues).toEqual([
+    expect(report.issues).toEqual([
       expect.objectContaining({
         code: "same_path",
       }),
     ]);
-    expect(plan.canExecute).toBe(false);
   });
 
-  it("plans copy operations and blocks destination conflicts by default", async () => {
+  it("finds a file already at the destination as a conflict", async () => {
     const service = createWriteService({
       fileSystem: createMockFileSystem({
         existingPaths: ["/target", "/source/file.txt", "/target/file.txt"],
@@ -106,44 +108,19 @@ describe("writeService", () => {
       }),
     });
 
-    const plan = await service.planCopyPaste({
+    const report = await analyze(service, {
       mode: "copy",
       sourcePaths: ["/source/file.txt"],
       destinationDirectoryPath: "/target",
     });
 
-    expect(plan.conflicts).toEqual([
-      {
+    expect(report.nodes).toEqual([
+      expect.objectContaining({
         sourcePath: "/source/file.txt",
         destinationPath: "/target/file.txt",
-        reason: "destination_exists",
-      },
-    ]);
-    expect(plan.canExecute).toBe(false);
-  });
-
-  it("allows skipping conflicts during planning", async () => {
-    const service = createWriteService({
-      fileSystem: createMockFileSystem({
-        existingPaths: ["/target", "/source/file.txt", "/target/file.txt"],
-        directoryPaths: ["/target"],
-        fileSizes: {
-          "/source/file.txt": 42,
-          "/target/file.txt": 42,
-        },
+        conflictClass: "file_conflict",
       }),
-    });
-
-    const plan = await service.planCopyPaste({
-      mode: "copy",
-      sourcePaths: ["/source/file.txt"],
-      destinationDirectoryPath: "/target",
-      conflictResolution: "skip",
-    });
-
-    expect(plan.summary.skippedConflictCount).toBe(1);
-    expect(plan.canExecute).toBe(false);
-    expect(plan.conflicts).toHaveLength(1);
+    ]);
   });
 
   it("rejects copying a directory into its own child", async () => {
@@ -158,18 +135,17 @@ describe("writeService", () => {
       }),
     });
 
-    const plan = await service.planCopyPaste({
+    const report = await analyze(service, {
       mode: "copy",
       sourcePaths: ["/workspace/folder"],
       destinationDirectoryPath: "/workspace/folder/child",
     });
 
-    expect(plan.issues).toEqual([
+    expect(report.issues).toEqual([
       expect.objectContaining({
         code: "parent_into_child",
       }),
     ]);
-    expect(plan.canExecute).toBe(false);
   });
 
   it("copies symlinks as links during execution", async () => {
@@ -189,7 +165,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: [join(root, "source", "alias.txt")],
       destinationDirectoryPath: join(root, "target"),
@@ -215,7 +191,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "cut",
       sourcePaths: [join(root, "source", "notes.txt")],
       destinationDirectoryPath: join(root, "target"),
@@ -242,7 +218,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "cut",
       sourcePaths: [join(root, "source")],
       destinationDirectoryPath: join(root, "target"),
@@ -284,7 +260,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: ["/source/one.txt", "/source/two.txt"],
       destinationDirectoryPath: "/target",
@@ -328,19 +304,19 @@ describe("writeService", () => {
       }),
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: ["/source/one.txt"],
       destinationDirectoryPath: "/target",
     });
 
-    expect(() =>
-      service.startCopyPaste({
+    await expect(
+      startPaste(service, {
         mode: "copy",
         sourcePaths: ["/source/two.txt"],
         destinationDirectoryPath: "/target",
       }),
-    ).toThrow(WRITE_OPERATION_BUSY_ERROR);
+    ).rejects.toThrow(WRITE_OPERATION_BUSY_ERROR);
   });
 
   it("copies nested directory trees on the real filesystem", async () => {
@@ -358,7 +334,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: [join(root, "source")],
       destinationDirectoryPath: join(root, "target"),
@@ -393,7 +369,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: [join(root, "source")],
       destinationDirectoryPath: join(root, "target"),
@@ -432,7 +408,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: ["/source"],
       destinationDirectoryPath: "/target",
@@ -500,7 +476,7 @@ describe("writeService", () => {
     const events: CopyPasteProgressEvent[] = [];
     service.subscribe((event) => events.push(event));
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: [source],
       destinationDirectoryPath: target,
@@ -518,9 +494,9 @@ describe("writeService", () => {
     expect(content).toBe("asar-archive-content");
   });
 
-  it("plans .asar files as copy_file steps, not directory traversals", async () => {
-    // Ensures the planner sees .asar as a regular file, so it generates a
-    // copy_file step rather than recursing into it as a directory.
+  it("analyzes .asar files as files, not directory traversals", async () => {
+    // Ensures the analysis sees .asar as a regular file rather than recursing into it as
+    // a directory.
     const service = createWriteService({
       fileSystem: createMockFileSystem({
         existingPaths: ["/target", "/source", "/source/app.asar"],
@@ -529,15 +505,15 @@ describe("writeService", () => {
       }),
     });
 
-    const plan = await service.planCopyPaste({
+    const report = await analyze(service, {
       mode: "copy",
       sourcePaths: ["/source"],
       destinationDirectoryPath: "/target",
     });
 
-    expect(plan.canExecute).toBe(true);
-    // 2 items: mkdir for /target/source + copy_file for /target/source/app.asar
-    expect(plan.summary.totalItemCount).toBe(2);
+    expect(report.issues).toEqual([]);
+    // 2 items: the folder /target/source and the file /target/source/app.asar
+    expect(report.summary.totalNodeCount).toBe(2);
   });
 
   it("duplicates a file when copy/paste targets the same directory", async () => {
@@ -553,7 +529,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: [join(root, "workspace", "notes.txt")],
       destinationDirectoryPath: join(root, "workspace"),
@@ -581,7 +557,7 @@ describe("writeService", () => {
       events.push(event);
     });
 
-    service.startCopyPaste({
+    await startPaste(service, {
       mode: "copy",
       sourcePaths: [join(root, "workspace", "source")],
       destinationDirectoryPath: join(root, "workspace"),
@@ -694,6 +670,31 @@ function fakeStats(args: {
     size: args.size ?? 0,
     mode: args.mode ?? (args.directory ? 0o755 : 0o644),
   };
+}
+
+// The finished analysis of a paste.
+async function analyze(
+  service: WriteService,
+  request: CopyPasteAnalysisRequest,
+): Promise<CopyPasteAnalysisReport> {
+  const { analysisId } = service.startCopyPasteAnalysis(request);
+  await vi.waitFor(() => {
+    expect(service.getCopyPasteAnalysisUpdate(analysisId).done).toBe(true);
+  });
+  const { report, error } = service.getCopyPasteAnalysisUpdate(analysisId);
+  if (!report) {
+    throw new Error(`The analysis failed: ${error}`);
+  }
+  return report;
+}
+
+// Analyzes a paste, then starts it with the default policy, as the window does.
+async function startPaste(
+  service: WriteService,
+  request: CopyPasteAnalysisRequest,
+): Promise<CopyPasteOperationHandle> {
+  const { analysisId } = await analyze(service, request);
+  return service.startCopyPaste({ analysisId, policy: DEFAULT_COPY_PASTE_POLICY });
 }
 
 async function waitForTerminalEvent(
