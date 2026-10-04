@@ -5160,8 +5160,9 @@ body.page-window-body {
   /* A pop-up is as wide as its longest choice, and never narrower than this. */
   --settings-popup-min-width: 120px;
   --settings-switch-off: #e3e3e8;
-  --settings-check-off: #ffffff;
-  --settings-check-border: rgba(0, 0, 0, 0.18);
+  /* A checkbox that is off, here and in the Rename sheet. */
+  --check-off-bg: #ffffff;
+  --check-border: rgba(0, 0, 0, 0.25);
 }
 
 :root[data-theme="dark"] {
@@ -5171,8 +5172,8 @@ body.page-window-body {
   --settings-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   --settings-separator: rgba(255, 255, 255, 0.07);
   --settings-switch-off: #3a3a3d;
-  --settings-check-off: rgba(255, 255, 255, 0.06);
-  --settings-check-border: rgba(255, 255, 255, 0.16);
+  --check-off-bg: rgba(255, 255, 255, 0.06);
+  --check-border: rgba(255, 255, 255, 0.25);
 }
 
 /* In the Settings window the toolbar is above the page, so no room is kept for the window's
@@ -5433,8 +5434,8 @@ body .settings-window .settings-view[data-layout] {
   height: 14px;
   margin: 0;
   border-radius: var(--radius-xs);
-  background: var(--settings-check-off);
-  box-shadow: inset 0 0 0 0.5px var(--settings-check-border), 0 0.5px 1px rgba(0, 0, 0, 0.1);
+  background: var(--check-off-bg);
+  box-shadow: inset 0 0 0 0.5px var(--check-border), 0 0.5px 1px rgba(0, 0, 0, 0.1);
   appearance: none;
 }
 
@@ -6539,7 +6540,7 @@ button.shortcut-slot-key.recording:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(640px, calc(100vw - 48px));
+  width: min(680px, calc(100vw - 48px));
   max-height: calc(100vh - 60px - 24px);
   margin: 0;
   padding: 0;
@@ -6553,6 +6554,18 @@ button.shortcut-slot-key.recording:hover {
   outline: none;
 }
 
+/* The marks for what changes in a name, and the date tokens: the accent's own text color
+   is too dark to read on the dark sheet, so a lighter tint of it is used there. */
+:root {
+  --batch-rename-mark-text: var(--ft-accent-path-crumb-hover);
+  --batch-rename-mark-bg: var(--ft-accent-soft-bg);
+}
+
+:root[data-theme="dark"] {
+  --batch-rename-mark-text: color-mix(in srgb, var(--ft-accent-solid) 65%, white);
+  --batch-rename-mark-bg: color-mix(in srgb, var(--ft-accent-solid) 16%, transparent);
+}
+
 .batch-rename-form {
   display: flex;
   flex-direction: column;
@@ -6563,7 +6576,7 @@ button.shortcut-slot-key.recording:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 16px 16px 12px 20px;
+  padding: 20px 20px 14px;
 }
 
 .batch-rename-title {
@@ -6599,7 +6612,7 @@ button.shortcut-slot-key.recording:hover {
 /* Label, control, label, control: two settings to a row. */
 .batch-rename-grid {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) 104px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr) 132px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
 }
@@ -6612,10 +6625,19 @@ button.shortcut-slot-key.recording:hover {
   grid-column: span 2;
 }
 
+/* A label keeps to the first line of its control when the control's cell is taller (a
+   message under a field). */
 .batch-rename-label {
+  align-self: start;
   color: var(--text-secondary);
+  line-height: var(--control-height);
   text-align: right;
   white-space: nowrap;
+}
+
+/* The second setting of a row stands apart from the first. */
+.batch-rename-label.is-second {
+  margin-left: 12px;
 }
 
 .batch-rename-field {
@@ -6643,6 +6665,26 @@ button.shortcut-slot-key.recording:hover {
   opacity: var(--disabled-opacity);
 }
 
+.batch-rename-field[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.batch-rename-field[aria-invalid="true"]:focus {
+  box-shadow: inset 0 0 0 1px var(--danger), var(--focus-ring);
+}
+
+/* What is said of the field above: why it is wrong, or how to fill it in. */
+.batch-rename-field-message {
+  align-self: start;
+  margin: -2px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.batch-rename-field-message.is-danger {
+  color: var(--danger-text);
+}
+
 .batch-rename-field.is-mono {
   font-family: var(--font-mono);
   font-size: var(--mono-font-size);
@@ -6661,34 +6703,48 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .batch-rename-popup select {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   height: var(--control-height);
-  padding: 0 24px 0 8px;
+  padding: 0 26px 0 8px;
   border: 0;
   border-radius: var(--radius-control);
-  background: var(--push-button-bg);
+  background-color: var(--push-button-bg);
   box-shadow: var(--push-button-bezel);
   color: var(--text-primary);
   font: inherit;
+  outline: none;
   appearance: none;
   cursor: default;
+}
+
+.batch-rename-popup select:hover:not(:disabled) {
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
+}
+
+.batch-rename-popup select:active:not(:disabled) {
+  filter: var(--push-button-pressed);
 }
 
 .batch-rename-popup select:focus-visible {
   box-shadow: var(--focus-ring);
 }
 
+.batch-rename-popup:has(select:disabled) {
+  opacity: var(--disabled-opacity);
+}
+
 .batch-rename-popup-chevron {
   position: absolute;
   top: 50%;
-  right: 7px;
+  right: 8px;
   width: 11px;
   height: 11px;
   transform: translateY(-50%);
   fill: none;
   stroke: var(--text-tertiary);
-  stroke-width: 1.6;
+  stroke-width: 2.4;
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
@@ -6717,8 +6773,8 @@ button.shortcut-slot-key.recording:hover {
   height: 14px;
   margin: 0;
   border-radius: var(--radius-xs);
-  background: var(--field-bg);
-  box-shadow: var(--field-edge), 0 0.5px 1px rgba(0, 0, 0, 0.1);
+  background: var(--check-off-bg);
+  box-shadow: inset 0 0 0 0.5px var(--check-border), 0 0.5px 1px rgba(0, 0, 0, 0.1);
   appearance: none;
 }
 
@@ -6734,15 +6790,29 @@ button.shortcut-slot-key.recording:hover {
   box-shadow: var(--focus-ring);
 }
 
+.batch-rename-check input:disabled {
+  opacity: var(--disabled-opacity);
+}
+
 .batch-rename-note {
   margin: 0;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
 
-.batch-rename-warning {
+/* A note that stands in a cell for a control: on the line its label is on. */
+.batch-rename-note.is-cell {
+  align-self: start;
+  line-height: var(--control-height);
+}
+
+/* Advice, not a fault: the warning sign the copy sheet uses, in the notes' gray. */
+.batch-rename-advice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
-  color: var(--danger-text);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
 
@@ -6764,8 +6834,8 @@ button.shortcut-slot-key.recording:hover {
   padding: 0 7px;
   border: 0;
   border-radius: var(--radius-xs);
-  background: var(--ft-accent-soft-bg);
-  color: var(--ft-accent-path-crumb-hover);
+  background: var(--batch-rename-mark-bg);
+  color: var(--batch-rename-mark-text);
   font-family: var(--font-mono);
   font-size: var(--font-size-small);
 }
@@ -6813,6 +6883,12 @@ button.shortcut-slot-key.recording:hover {
   padding: 0;
   overflow-y: auto;
   list-style: none;
+  outline: none;
+}
+
+/* The ring goes round the whole preview, which clips what is drawn outside the list. */
+.batch-rename-preview:has(.batch-rename-rows:focus-visible) {
+  box-shadow: inset 0 0 0 0.5px var(--border-active), var(--focus-ring);
 }
 
 .batch-rename-row {
@@ -6869,14 +6945,27 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .batch-rename-changed {
+  margin: 0 -1px;
+  padding: 0 1px;
   border-radius: 3px;
-  background: var(--ft-accent-soft-bg);
-  color: var(--ft-accent-path-crumb-hover);
+  background: var(--batch-rename-mark-bg);
+  color: var(--batch-rename-mark-text);
 }
 
 .batch-rename-row.is-danger .batch-rename-changed {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger-text);
+}
+
+/* An item left as it is: the name it would have had, struck through. */
+.batch-rename-row.is-skipped .batch-rename-name {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.batch-rename-row.is-skipped .batch-rename-changed {
+  background: none;
+  color: inherit;
 }
 
 .batch-rename-unchanged {
@@ -6892,7 +6981,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .batch-rename-row-note.is-muted {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .batch-rename-row-note.is-warning {
@@ -6903,7 +6992,8 @@ button.shortcut-slot-key.recording:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 16px 16px 20px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border-light);
 }
 
 .batch-rename-summary {

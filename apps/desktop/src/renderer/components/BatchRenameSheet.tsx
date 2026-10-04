@@ -16,6 +16,7 @@ import {
   type BatchRenameSeparator,
   type BatchRenameSettings,
   DATE_TOKENS,
+  type DateToken,
   type NameSegment,
   describeDateFormat,
   formatDate,
@@ -196,29 +197,26 @@ export function BatchRenameSheet({
                     choosePreset(value);
                   }}
                 >
+                  {/* What the closed pull-down says: the preset loaded, marked once its
+                      settings are changed, or only "Presets". */}
                   <option value="" hidden>
-                    Presets
+                    {currentPreset ? `${currentPreset.name} (Edited)` : "Presets"}
                   </option>
-                  {presets.length > 0 ? (
-                    <optgroup label="Presets">
-                      {presets.map((preset) => (
-                        <option key={preset.name} value={`load:${preset.name}`}>
-                          {preset.name}
-                        </option>
-                      ))}
-                    </optgroup>
+                  {presets.map((preset) => (
+                    <option key={preset.name} value={`load:${preset.name}`}>
+                      {preset.name}
+                    </option>
+                  ))}
+                  {presets.length > 0 ? <hr /> : null}
+                  <option value="save">Save as Preset…</option>
+                  {currentPreset ? (
+                    <>
+                      <option value="update">{`Update “${currentPreset.name}”`}</option>
+                      <option value="delete">{`Delete “${currentPreset.name}”`}</option>
+                    </>
                   ) : null}
-                  <optgroup label="Manage">
-                    <option value="save">Save as Preset…</option>
-                    {currentPreset ? (
-                      <>
-                        <option value="update">{`Update “${currentPreset.name}”`}</option>
-                        <option value="delete">{`Delete “${currentPreset.name}”`}</option>
-                      </>
-                    ) : null}
-                  </optgroup>
                 </select>
-                <PopupChevron />
+                <PullDownChevron />
               </span>
             )}
           </header>
@@ -248,7 +246,12 @@ export function BatchRenameSheet({
 
           <div className="batch-rename-options">
             {settings.mode === "replace" ? (
-              <ReplaceOptions settings={settings} set={set} firstFieldRef={firstFieldRef} />
+              <ReplaceOptions
+                settings={settings}
+                set={set}
+                firstFieldRef={firstFieldRef}
+                settingsError={plan.settingsError}
+              />
             ) : settings.mode === "add" ? (
               <AddOptions settings={settings} set={set} firstFieldRef={firstFieldRef} />
             ) : settings.mode === "format" ? (
@@ -260,7 +263,7 @@ export function BatchRenameSheet({
               {settings.mode === "format" ? (
                 <>
                   <span className="batch-rename-label">Apply to</span>
-                  <span className="batch-rename-note">Names only: extensions are kept</span>
+                  <span className="batch-rename-note is-cell">Names only: extensions are kept</span>
                 </>
               ) : (
                 <>
@@ -277,21 +280,27 @@ export function BatchRenameSheet({
                   />
                 </>
               )}
-              <Label htmlFor="batch-rename-on-conflict">If a name is taken</Label>
+              <Label htmlFor="batch-rename-on-conflict" second>
+                If a name is taken
+              </Label>
               <Popup
                 id="batch-rename-on-conflict"
                 value={settings.onConflict}
                 onChange={(value) => set("onConflict", value as BatchRenameOnConflict)}
                 options={[
-                  ["number", "Add a number"],
-                  ["skip", "Skip those items"],
-                  ["block", "Don’t rename"],
+                  ["number", "Add a Number"],
+                  ["skip", "Skip Those Items"],
+                  ["block", "Don’t Rename"],
                 ]}
               />
               {settings.mode !== "format" && settings.applyTo !== "name" ? (
-                <p className="batch-rename-warning batch-rename-wide">
-                  Changing an extension can change the app a file opens in.
-                </p>
+                <>
+                  <span />
+                  <p className="batch-rename-advice batch-rename-wide">
+                    <WarningGlyph />
+                    Changing an extension can change the app a file opens in.
+                  </p>
+                </>
               ) : null}
             </div>
           </div>
@@ -322,11 +331,16 @@ function ReplaceOptions({
   settings,
   set,
   firstFieldRef,
+  settingsError,
 }: {
   settings: BatchRenameSettings;
   set: SetSetting;
   firstFieldRef: React.RefObject<HTMLInputElement | null>;
+  settingsError: string | null;
 }) {
+  const errorId = useId();
+  // In Replace Text, the only setting that can be wrong is the pattern in Find.
+  const findError = settingsError === null ? null : describeSettingsError(settingsError);
   return (
     <div className="batch-rename-grid">
       <Label htmlFor="batch-rename-find">Find</Label>
@@ -335,15 +349,41 @@ function ReplaceOptions({
         inputRef={firstFieldRef}
         value={settings.find}
         mono={settings.useRegex}
+        invalid={findError !== null}
+        describedBy={findError !== null ? errorId : undefined}
         onChange={(value) => set("find", value)}
       />
-      <Label htmlFor="batch-rename-replace">Replace with</Label>
+      <Label htmlFor="batch-rename-replace" second>
+        Replace with
+      </Label>
       <TextField
         id="batch-rename-replace"
         value={settings.replaceWith}
         mono={settings.useRegex}
         onChange={(value) => set("replaceWith", value)}
       />
+      {/* Under each field, what is to be said of it: the pattern's fault under Find, how to
+          use the groups under Replace with. */}
+      {findError !== null || settings.useRegex ? (
+        <>
+          <span />
+          {findError !== null ? (
+            <p id={errorId} className="batch-rename-field-message is-danger">
+              {findError}
+            </p>
+          ) : (
+            <span />
+          )}
+          <span />
+          {settings.useRegex ? (
+            <p className="batch-rename-field-message">
+              Use $1, $2… or $&lt;name&gt; for groups, $&amp; for the whole match
+            </p>
+          ) : (
+            <span />
+          )}
+        </>
+      ) : null}
       <span />
       <div className="batch-rename-checks batch-rename-wide">
         <Checkbox
@@ -356,11 +396,6 @@ function ReplaceOptions({
           checked={settings.useRegex}
           onChange={(checked) => set("useRegex", checked)}
         />
-        {settings.useRegex ? (
-          <span className="batch-rename-note">
-            In Replace with, $1, $2… or $&lt;name&gt; for the groups, $&amp; for the whole match
-          </span>
-        ) : null}
       </div>
     </div>
   );
@@ -384,7 +419,9 @@ function AddOptions({
         value={settings.addText}
         onChange={(value) => set("addText", value)}
       />
-      <Label htmlFor="batch-rename-add-where">Where</Label>
+      <Label htmlFor="batch-rename-add-where" second>
+        Where
+      </Label>
       <Popup
         id="batch-rename-add-where"
         value={settings.addWhere}
@@ -397,6 +434,17 @@ function AddOptions({
     </div>
   );
 }
+
+// What each date token puts in a name, shown for the date the example is written for.
+const DATE_TOKEN_NAMES: Record<DateToken, string> = {
+  YYYY: "Year (2026)",
+  YY: "Year (26)",
+  MM: "Month (05)",
+  DD: "Day (14)",
+  HH: "Hour, 24-hour (18)",
+  mm: "Minutes (02)",
+  ss: "Seconds (11)",
+};
 
 function FormatOptions({
   settings,
@@ -423,9 +471,29 @@ function FormatOptions({
     });
   }
 
+  // Between the name and its number or date.
+  const separator = (second: boolean) => (
+    <>
+      <Label htmlFor="batch-rename-separator" second={second}>
+        Separator
+      </Label>
+      <Popup
+        id="batch-rename-separator"
+        value={settings.separator}
+        onChange={(value) => set("separator", value as BatchRenameSeparator)}
+        options={[
+          [" ", "Space"],
+          ["-", "Hyphen (-)"],
+          ["_", "Underscore (_)"],
+          ["", "None"],
+        ]}
+      />
+    </>
+  );
+
   return (
     <div className="batch-rename-grid">
-      <Label htmlFor="batch-rename-name-format">Name Format</Label>
+      <Label htmlFor="batch-rename-name-format">Name format</Label>
       <Popup
         id="batch-rename-name-format"
         value={settings.nameFormat}
@@ -436,7 +504,9 @@ function FormatOptions({
           ["date", "Name and Date"],
         ]}
       />
-      <Label htmlFor="batch-rename-format-where">Where</Label>
+      <Label htmlFor="batch-rename-format-where" second>
+        Where
+      </Label>
       <Popup
         id="batch-rename-format-where"
         value={settings.formatWhere}
@@ -447,7 +517,7 @@ function FormatOptions({
         ]}
       />
 
-      <Label htmlFor="batch-rename-custom-name">Custom Format</Label>
+      <Label htmlFor="batch-rename-custom-name">Custom format</Label>
       <TextField
         id="batch-rename-custom-name"
         inputRef={firstFieldRef}
@@ -476,7 +546,8 @@ function FormatOptions({
               ["today", "Today"],
             ]}
           />
-          <Label htmlFor="batch-rename-date-format">Date Format</Label>
+          {separator(true)}
+          <Label htmlFor="batch-rename-date-format">Date format</Label>
           <Popup
             id="batch-rename-date-format"
             value={settings.dateFormat}
@@ -489,6 +560,28 @@ function FormatOptions({
               ["custom", "Custom…"],
             ]}
           />
+          {isCustomDate ? (
+            // A pattern says its own separators.
+            <span className="batch-rename-wide-pair" />
+          ) : (
+            <>
+              <Label htmlFor="batch-rename-date-separator" second>
+                Date separator
+              </Label>
+              <Popup
+                id="batch-rename-date-separator"
+                value={settings.dateSeparator}
+                onChange={(value) => set("dateSeparator", value as BatchRenameDateSeparator)}
+                options={[
+                  ["-", "Hyphen (-)"],
+                  ["_", "Underscore (_)"],
+                  [".", "Period (.)"],
+                  [" ", "Space"],
+                  ["", "None"],
+                ]}
+              />
+            </>
+          )}
           {isCustomDate ? (
             <>
               <Label htmlFor="batch-rename-date-pattern">Pattern</Label>
@@ -507,38 +600,22 @@ function FormatOptions({
                       key={token}
                       type="button"
                       className="batch-rename-token"
-                      aria-label={`Insert ${token}`}
+                      title={DATE_TOKEN_NAMES[token]}
+                      aria-label={DATE_TOKEN_NAMES[token]}
                       onClick={() => insertToken(token)}
                     >
                       {token}
                     </button>
                   ))}
-                  <span className="batch-rename-note">Anything else is kept as typed</span>
+                  <span className="batch-rename-note">Text in [brackets] is kept as typed</span>
                 </div>
               </div>
+              <span />
+              <p className="batch-rename-note batch-rename-wide">
+                {`Example: ${formatDate(EXAMPLE_DATE, settings)}`}
+              </p>
             </>
-          ) : (
-            <>
-              <Label htmlFor="batch-rename-date-separator">Date Separator</Label>
-              <Popup
-                id="batch-rename-date-separator"
-                value={settings.dateSeparator}
-                onChange={(value) => set("dateSeparator", value as BatchRenameDateSeparator)}
-                options={[
-                  ["-", "Hyphen  -"],
-                  ["_", "Underscore  _"],
-                  [".", "Dot  ."],
-                  [" ", "Space"],
-                  ["", "None"],
-                ]}
-              />
-              <span className="batch-rename-wide-pair" />
-            </>
-          )}
-          <span />
-          <p className="batch-rename-note batch-rename-wide">
-            {`Example: ${formatDate(EXAMPLE_DATE, settings)}`}
-          </p>
+          ) : null}
         </>
       ) : (
         <>
@@ -549,7 +626,9 @@ function FormatOptions({
             least={0}
             onChange={(value) => set("startAt", value)}
           />
-          <Label htmlFor="batch-rename-step">Step</Label>
+          <Label htmlFor="batch-rename-step" second>
+            Step
+          </Label>
           <NumberField
             id="batch-rename-step"
             value={settings.step}
@@ -566,29 +645,23 @@ function FormatOptions({
                   set("digits", value === "auto" ? "auto" : (Number(value) as 2 | 3 | 4 | 5))
                 }
                 options={[
-                  ["auto", "As many as needed"],
+                  ["auto", "As Many as Needed"],
                   ["2", "2"],
                   ["3", "3"],
                   ["4", "4"],
                   ["5", "5"],
                 ]}
               />
+              {separator(true)}
             </>
-          ) : null}
+          ) : (
+            <>
+              {separator(false)}
+              <span className="batch-rename-wide-pair" />
+            </>
+          )}
         </>
       )}
-      <Label htmlFor="batch-rename-separator">Separator</Label>
-      <Popup
-        id="batch-rename-separator"
-        value={settings.separator}
-        onChange={(value) => set("separator", value as BatchRenameSeparator)}
-        options={[
-          [" ", "Space"],
-          ["-", "Hyphen  -"],
-          ["_", "Underscore  _"],
-          ["", "None"],
-        ]}
-      />
     </div>
   );
 }
@@ -629,7 +702,9 @@ function BatchRenamePreview({
         <span />
         <span>New Name</span>
       </div>
-      <ul className="batch-rename-rows" aria-label="New names" aria-busy={checking}>
+      {/* Focusable so that the keyboard can scroll it. */}
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling list must be reachable by keyboard. */}
+      <ul className="batch-rename-rows" aria-label="New names" aria-busy={checking} tabIndex={0}>
         {shown.map((target, index) => (
           <PreviewRow
             key={target.path}
@@ -655,12 +730,11 @@ function PreviewRow({
   planItem: BatchRenamePlanItem;
 }) {
   const note = describeRow(planItem);
-  const tone =
-    planItem.status === "problem"
-      ? planItem.problem.kind === "invalid" || planItem.problem.kind === "taken"
-        ? "is-danger"
-        : "is-muted"
-      : "";
+  // Items held back for a name to be fixed, and items left as they are on purpose.
+  const skipped =
+    planItem.status === "problem" &&
+    (planItem.problem.kind === "skippedTaken" || planItem.problem.kind === "cannotRename");
+  const tone = planItem.status !== "problem" ? "" : skipped ? "is-skipped" : "is-danger";
   return (
     <li className={`batch-rename-row ${tone}`} title={target.path}>
       <ItemGlyph isFolder={target.isFolder} />
@@ -670,12 +744,17 @@ function PreviewRow({
       <svg className="batch-rename-arrow" viewBox="0 0 12 12" aria-hidden="true">
         <path d="M2 6h8M7 3l3 3-3 3" />
       </svg>
+      <span className="sr-only">, becomes </span>
       <span className="batch-rename-new">
         {planItem.status === "unchanged" ? (
           <span className="batch-rename-unchanged">No change</span>
         ) : (
-          <span className="batch-rename-name">
+          <span
+            className="batch-rename-name"
+            title={planItem.status === "rename" ? planItem.name : planItem.proposedName}
+          >
             <Segments segments={planItem.segments} />
+            {skipped ? <span className="sr-only">, not renamed</span> : null}
           </span>
         )}
         {note ? <span className={`batch-rename-row-note ${note.tone}`}>{note.text}</span> : null}
@@ -692,7 +771,12 @@ function describeRow(
       return { text: "Starts with “.”: it will be hidden", tone: "is-warning" };
     }
     if (planItem.addedNumber !== null) {
-      return { text: "That name is taken: a number was added", tone: "is-muted" };
+      return {
+        text: planItem.numberedForItemInBatch
+          ? "Same new name as another item: a number is added"
+          : "That name is taken: a number is added",
+        tone: "is-muted",
+      };
     }
     if (planItem.usedCreatedForTaken) {
       return { text: "No date taken: the date created is used", tone: "is-muted" };
@@ -753,7 +837,7 @@ function Summary({
     text = checkError;
     danger = true;
   } else if (plan.settingsError) {
-    text = plan.settingsError;
+    text = describeSettingsError(plan.settingsError);
     danger = true;
   } else if (checking) {
     text = "Checking names…";
@@ -764,6 +848,12 @@ function Summary({
     text = "Nothing to rename yet";
   } else {
     const parts = [`${plan.renameCount.toLocaleString()} will be renamed`];
+    const numbered = plan.items.filter(
+      (item) => item.status === "rename" && item.addedNumber !== null,
+    ).length;
+    if (numbered > 0) {
+      parts.push(`${numbered.toLocaleString()} get a number`);
+    }
     if (plan.skippedCount > 0) {
       parts.push(`${plan.skippedCount.toLocaleString()} left as they are`);
     }
@@ -775,9 +865,27 @@ function Summary({
   return <output className={`batch-rename-summary${danger ? " is-danger" : ""}`}>{text}</output>;
 }
 
-function Label({ htmlFor, children }: { htmlFor: string; children: ReactNode }) {
+// The settings' fault as the sheet says it: JavaScript's own words for a broken pattern
+// ("Invalid regular expression: /(/giu: ") are left out, the reason kept.
+function describeSettingsError(error: string): string {
+  return error.replace(
+    /^(The pattern isn’t valid: )(?:Invalid regular expression: )?\/.*\/[a-z]*: /su,
+    "$1",
+  );
+}
+
+function Label({
+  htmlFor,
+  second = false,
+  children,
+}: {
+  htmlFor: string;
+  /** The label of a row's second setting, set off from the first. */
+  second?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <label className="batch-rename-label" htmlFor={htmlFor}>
+    <label className={`batch-rename-label${second ? " is-second" : ""}`} htmlFor={htmlFor}>
       {children}
     </label>
   );
@@ -790,6 +898,8 @@ function TextField({
   inputRef,
   mono = false,
   disabled = false,
+  invalid = false,
+  describedBy,
 }: {
   id: string;
   value: string;
@@ -797,6 +907,8 @@ function TextField({
   inputRef?: React.RefObject<HTMLInputElement | null>;
   mono?: boolean;
   disabled?: boolean;
+  invalid?: boolean;
+  describedBy?: string | undefined;
 }) {
   return (
     <input
@@ -805,6 +917,8 @@ function TextField({
       className={`batch-rename-field${mono ? " is-mono" : ""}`}
       value={value}
       disabled={disabled}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
       spellCheck={false}
       autoComplete="off"
       autoCorrect="off"
@@ -830,8 +944,9 @@ function NumberField({
   // nearest whole number allowed.
   const [draft, setDraft] = useState(String(value));
   // The draft while it says the setting (or is being emptied to type another); the setting
-  // when it was changed some other way (a preset loaded).
-  const shown = draft === "" || Math.max(least, Number(draft)) === value ? draft : String(value);
+  // when the draft is below the least allowed, or the setting was changed some other way
+  // (a preset loaded).
+  const shown = draft === "" || Number(draft) === value ? draft : String(value);
   return (
     <input
       id={id}
@@ -896,10 +1011,28 @@ function Popup({
   );
 }
 
+// The chevrons Settings draws: up and down on a pop-up, down only on a pull-down.
 function PopupChevron() {
   return (
-    <svg className="batch-rename-popup-chevron" viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M3.5 4.75 6 2.25l2.5 2.5M3.5 7.25 6 9.75l2.5-2.5" />
+    <svg className="batch-rename-popup-chevron" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" />
+    </svg>
+  );
+}
+
+function PullDownChevron() {
+  return (
+    <svg className="batch-rename-popup-chevron" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 10l4 4 4-4" />
+    </svg>
+  );
+}
+
+function WarningGlyph() {
+  return (
+    <svg className="copy-paste-warning-glyph" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 1.5 15 14H1z" className="copy-paste-glyph-warning" />
+      <path d="M8 6v3.6M8 11.4v.1" className="copy-paste-glyph-warning-mark" />
     </svg>
   );
 }

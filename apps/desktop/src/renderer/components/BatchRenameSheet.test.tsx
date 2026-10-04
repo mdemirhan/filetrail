@@ -32,6 +32,7 @@ function Harness({
   onDeletePreset = () => undefined,
   checking = false,
   checkError = null,
+  onSettings = () => undefined,
 }: {
   targets: BatchRenameTarget[];
   folderNames?: string[];
@@ -44,6 +45,7 @@ function Harness({
   onDeletePreset?: (name: string) => void;
   checking?: boolean;
   checkError?: string | null;
+  onSettings?: (settings: BatchRenameSettings) => void;
 }) {
   const [settings, setSettings] = useState<BatchRenameSettings>({
     ...DEFAULT_BATCH_RENAME_SETTINGS,
@@ -74,7 +76,10 @@ function Harness({
     <BatchRenameSheet
       targets={targets}
       settings={settings}
-      onSettingsChange={setSettings}
+      onSettingsChange={(next) => {
+        onSettings(next);
+        setSettings(next);
+      }}
       plan={plan}
       checking={checking}
       checkError={checkError}
@@ -89,7 +94,15 @@ function Harness({
 }
 
 const rows = () => within(screen.getByRole("list", { name: "New names" })).getAllByRole("listitem");
-const rowTexts = () => rows().map((row) => row.textContent);
+// What a row shows, without what is there only for screen readers.
+const shownText = (element: Element) => {
+  const copy = element.cloneNode(true) as Element;
+  for (const hidden of Array.from(copy.querySelectorAll(".sr-only"))) {
+    hidden.remove();
+  }
+  return copy.textContent;
+};
+const rowTexts = () => rows().map(shownText);
 const renameButton = () => screen.getByRole("button", { name: /^Rename/ });
 const type = (label: string | RegExp, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -133,12 +146,83 @@ describe("the Rename sheet", () => {
     // Adding a number settles it instead.
     fireEvent.change(screen.getByLabelText("If a name is taken"), { target: { value: "number" } });
     expect(rows()[0]).toHaveTextContent("Lisbon 1 2.jpg");
-    expect(rows()[0]).toHaveTextContent("That name is taken: a number was added");
+    expect(rows()[0]).toHaveTextContent("That name is taken: a number is added");
+    expect(screen.getByText("1 will be renamed · 1 get a number")).toBeInTheDocument();
     expect(renameButton()).toBeEnabled();
-    // Or leaving the item as it is.
+    // Or leaving the item as it is: its new name is struck through, and screen readers are
+    // told it isn't renamed.
     fireEvent.change(screen.getByLabelText("If a name is taken"), { target: { value: "skip" } });
     expect(rows()[0]).toHaveTextContent("Left as it is: the name is taken");
+    expect(rows()[0]).toHaveClass("is-skipped");
+    expect(rows()[0]).not.toHaveClass("is-danger");
+    expect(rows()[0]?.querySelector(".batch-rename-name")).toHaveTextContent(
+      "Lisbon 1.jpg, not renamed",
+    );
     expect(screen.getByText("Nothing to rename yet")).toBeInTheDocument();
+  });
+
+  it("tells screen readers each old name becomes the new one, and shows the whole new name", () => {
+    render(
+      <Harness targets={[target("IMG_1.jpg")]} initial={{ find: "IMG_", replaceWith: "x" }} />,
+    );
+    expect(rows()[0]).toHaveTextContent("IMG_1.jpg, becomes x1.jpg");
+    expect(rows()[0]?.querySelector(".batch-rename-name")).toHaveAttribute("title", "x1.jpg");
+    expect(rows()[0]?.querySelector(".sr-only")).toHaveTextContent(", becomes");
+    expect(screen.getByRole("list", { name: "New names" })).toHaveAttribute("tabindex", "0");
+  });
+
+  it("says when two items would get the same new name, and settles it as chosen", () => {
+    render(
+      <Harness
+        targets={[target("a1.txt"), target("b1.txt")]}
+        initial={{ find: "^.", replaceWith: "x", useRegex: true }}
+      />,
+    );
+    expect(rowTexts()).toEqual([
+      "a1.txtx1.txt",
+      "b1.txtx1 2.txtSame new name as another item: a number is added",
+    ]);
+    fireEvent.change(screen.getByLabelText("If a name is taken"), { target: { value: "block" } });
+    expect(rows()[1]).toHaveClass("is-danger");
+    expect(rows()[1]).toHaveTextContent("Another item here would get this name");
+  });
+
+  it("holds the rename for a name that can't be used, and draws folders as folders", () => {
+    render(
+      <Harness
+        targets={[target("Photos", true), target("a.txt")]}
+        initial={{ mode: "add", addText: "/x" }}
+      />,
+    );
+    expect(rows()[0]?.querySelector(".copy-paste-glyph-folder")).not.toBeNull();
+    expect(rows()[1]?.querySelector(".copy-paste-glyph-file")).not.toBeNull();
+    expect(rows()[0]).toHaveClass("is-danger");
+    expect(rows()[0]?.querySelector(".batch-rename-row-note.is-danger")?.textContent).not.toBe("");
+    expect(screen.getByText("2 names to fix before renaming")).toBeInTheDocument();
+  });
+
+  it("does nothing on Return while the names are checked or one must be fixed", () => {
+    const onRename = vi.fn();
+    const { unmount } = render(
+      <Harness
+        targets={[target("a.txt")]}
+        initial={{ mode: "add", addText: "x" }}
+        checking
+        onRename={onRename}
+      />,
+    );
+    fireEvent.submit(screen.getByLabelText("Text"));
+    unmount();
+    render(
+      <Harness
+        targets={[target("a.txt")]}
+        folderNames={["a.txt", "ax.txt"]}
+        initial={{ mode: "add", addText: "x", onConflict: "block" }}
+        onRename={onRename}
+      />,
+    );
+    fireEvent.submit(screen.getByLabelText("Text"));
+    expect(onRename).not.toHaveBeenCalled();
   });
 
   it("reports an item that can't be renamed and renames the others", () => {
@@ -154,34 +238,73 @@ describe("the Rename sheet", () => {
     expect(renameButton()).toHaveTextContent("Rename 1 Item");
   });
 
-  it("explains regular expressions and says when a pattern is broken", () => {
+  it("explains regular expressions and says under Find when a pattern is broken", () => {
     render(<Harness targets={[target("a.txt")]} />);
     fireEvent.click(screen.getByLabelText("Regular expression"));
-    expect(screen.getByText(/for the groups, \$& for the whole match/u)).toBeInTheDocument();
-    expect(screen.getByLabelText("Find")).toHaveClass("is-mono");
+    expect(
+      screen.getByText("Use $1, $2… or $<name> for groups, $& for the whole match"),
+    ).toBeInTheDocument();
+    const find = screen.getByLabelText("Find");
+    expect(find).toHaveClass("is-mono");
+    expect(find).not.toHaveAttribute("aria-invalid");
     type("Find", "(");
-    expect(screen.getByText(/^The pattern isn’t valid: /u)).toBeInTheDocument();
+    expect(find).toHaveAttribute("aria-invalid", "true");
+    // The message under the field, without JavaScript's own words for the pattern.
+    const message = document.getElementById(find.getAttribute("aria-describedby") ?? "");
+    expect(message).toHaveTextContent(/^The pattern isn’t valid: \w/u);
+    expect(message?.textContent).not.toMatch(/Invalid regular expression|\/\(\//u);
+    expect(screen.getByRole("status")).toHaveTextContent(message?.textContent ?? "");
     expect(renameButton()).toBeDisabled();
+    // Fixed, the field is no longer marked.
+    type("Find", "(a)");
+    expect(find).not.toHaveAttribute("aria-invalid");
+    expect(find).not.toHaveAttribute("aria-describedby");
   });
 
-  it("warns that changing an extension may change the app a file opens in", () => {
+  it("finds text ignoring case unless Match case is on", () => {
+    render(
+      <Harness targets={[target("IMG_1.jpg")]} initial={{ find: "img_", replaceWith: "x" }} />,
+    );
+    expect(rowTexts()).toEqual(["IMG_1.jpgx1.jpg"]);
+    fireEvent.click(screen.getByLabelText("Match case"));
+    expect(rowTexts()).toEqual(["IMG_1.jpgNo change"]);
+  });
+
+  it("advises that changing an extension may change the app a file opens in", () => {
     render(<Harness targets={[target("a.JPG")]} initial={{ mode: "case" }} />);
     expect(screen.queryByText(/change the app a file opens in/u)).toBeNull();
     fireEvent.change(screen.getByLabelText("Apply to"), { target: { value: "extension" } });
-    expect(screen.getByText(/change the app a file opens in/u)).toBeInTheDocument();
+    const advice = screen.getByText(/change the app a file opens in/u);
+    expect(advice).toHaveClass("batch-rename-advice");
+    expect(advice.querySelector(".copy-paste-warning-glyph")).not.toBeNull();
     expect(rowTexts()).toEqual(["a.JPGa.jpg"]);
   });
 
   it("numbers items in Format, with the options for numbers", () => {
-    render(<Harness targets={[target("a.jpg"), target("b.jpg")]} />);
+    const onSettings = vi.fn();
+    render(<Harness targets={[target("a.jpg"), target("b.jpg")]} onSettings={onSettings} />);
     fireEvent.click(screen.getByLabelText("Format"));
     expect(rowTexts()).toEqual(["a.jpgFile 1.jpg", "b.jpgFile 2.jpg"]);
-    fireEvent.change(screen.getByLabelText("Name Format"), { target: { value: "counter" } });
-    expect(rowTexts()[0]).toBe("a.jpgFile 00001.jpg");
+    type("Custom format", "Trip");
+    expect(rowTexts()).toEqual(["a.jpgTrip 1.jpg", "b.jpgTrip 2.jpg"]);
+    fireEvent.change(screen.getByLabelText("Where"), { target: { value: "before" } });
+    expect(rowTexts()).toEqual(["a.jpg1 Trip.jpg", "b.jpg2 Trip.jpg"]);
+    fireEvent.change(screen.getByLabelText("Where"), { target: { value: "after" } });
+    fireEvent.change(screen.getByLabelText("Name format"), { target: { value: "counter" } });
+    expect(rowTexts()[0]).toBe("a.jpgTrip 00001.jpg");
+    // The settings are saved, so Digits must give a number, not the pop-up's text.
+    fireEvent.change(screen.getByLabelText("Digits"), { target: { value: "3" } });
+    expect(onSettings).toHaveBeenLastCalledWith(expect.objectContaining({ digits: 3 }));
+    expect(rowTexts()[0]).toBe("a.jpgTrip 001.jpg");
     fireEvent.change(screen.getByLabelText("Digits"), { target: { value: "auto" } });
+    expect(onSettings).toHaveBeenLastCalledWith(expect.objectContaining({ digits: "auto" }));
     type("Start numbers at", "9");
-    type("Step", "1");
-    expect(rowTexts()).toEqual(["a.jpgFile 09.jpg", "b.jpgFile 10.jpg"]);
+    type("Step", "2");
+    expect(rowTexts()).toEqual(["a.jpgTrip 09.jpg", "b.jpgTrip 11.jpg"]);
+    // A step below the least allowed shows the step used.
+    type("Step", "0");
+    expect(screen.getByLabelText("Step")).toHaveValue("1");
+    expect(rowTexts()).toEqual(["a.jpgTrip 09.jpg", "b.jpgTrip 10.jpg"]);
     // Only digits are kept, and an empty field waits for one.
     type("Start numbers at", "");
     expect(screen.getByLabelText("Start numbers at")).toHaveValue("");
@@ -189,7 +312,7 @@ describe("the Rename sheet", () => {
     expect(screen.getByLabelText("Start numbers at")).toHaveValue("3");
     fireEvent.blur(screen.getByLabelText("Start numbers at"));
     fireEvent.click(screen.getByLabelText("Keep current names"));
-    expect(screen.getByLabelText("Custom Format")).toBeDisabled();
+    expect(screen.getByLabelText("Custom format")).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Separator"), { target: { value: "_" } });
     expect(rowTexts()[0]).toBe("a.jpga_3.jpg");
     expect(screen.getByText("Names only: extensions are kept")).toBeInTheDocument();
@@ -197,23 +320,70 @@ describe("the Rename sheet", () => {
 
   it("puts dates in the format chosen, with its separator, or a custom pattern", () => {
     render(<Harness targets={[target("a.jpg")]} initial={{ mode: "format" }} />);
-    fireEvent.change(screen.getByLabelText("Name Format"), { target: { value: "date" } });
+    fireEvent.change(screen.getByLabelText("Name format"), { target: { value: "date" } });
     expect(rowTexts()).toEqual(["a.jpgFile 2026-09-30.jpg"]);
-    expect(screen.getByText("Example: 2026-05-14")).toBeInTheDocument();
+    // The example is for a pattern only: a format says how it looks.
+    expect(screen.queryByText(/^Example:/u)).toBeNull();
     // The formats are listed with the separator chosen.
-    fireEvent.change(screen.getByLabelText("Date Separator"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Date separator"), { target: { value: "" } });
     expect(
-      within(screen.getByLabelText("Date Format")).getByRole("option", { name: "YYYYMMDD" }),
+      within(screen.getByLabelText("Date format")).getByRole("option", { name: "YYYYMMDD" }),
     ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Date"), { target: { value: "modified" } });
     expect(rowTexts()).toEqual(["a.jpgFile 20261001.jpg"]);
-    fireEvent.change(screen.getByLabelText("Date Format"), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("Date format"), { target: { value: "custom" } });
+    expect(screen.queryByLabelText("Date separator")).toBeNull();
     type("Pattern", "");
-    fireEvent.click(screen.getByRole("button", { name: "Insert YYYY" }));
+    fireEvent.click(screen.getByRole("button", { name: "Year (2026)" }));
     expect(screen.getByLabelText("Pattern")).toHaveValue("YYYY");
     expect(rowTexts()).toEqual(["a.jpgFile 2026.jpg"]);
+    expect(screen.getByText("Example: 2026")).toBeInTheDocument();
+    expect(screen.getByText("Text in [brackets] is kept as typed")).toBeInTheDocument();
     type("Pattern", "no tokens");
-    expect(screen.getByText(/at least one of YYYY/u)).toBeInTheDocument();
+    expect(screen.getAllByText(/at least one of YYYY/u).length).toBeGreaterThan(0);
+  });
+
+  it("names each date token, and inserts one where the cursor is", async () => {
+    render(
+      <Harness
+        targets={[target("a.jpg")]}
+        initial={{
+          mode: "format",
+          nameFormat: "date",
+          dateFormat: "custom",
+          customDatePattern: "YYYY-DD",
+        }}
+      />,
+    );
+    const names = [
+      "Year (2026)",
+      "Year (26)",
+      "Month (05)",
+      "Day (14)",
+      "Hour, 24-hour (18)",
+      "Minutes (02)",
+      "Seconds (11)",
+    ];
+    for (const name of names) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute("title", name);
+    }
+    const pattern = screen.getByLabelText("Pattern") as HTMLInputElement;
+    pattern.setSelectionRange(5, 5);
+    fireEvent.click(screen.getByRole("button", { name: "Month (05)" }));
+    expect(pattern).toHaveValue("YYYY-MMDD");
+    // The cursor is put after what was inserted.
+    await vi.waitFor(() => expect(pattern.selectionStart).toBe(7));
+    expect(pattern).toHaveFocus();
+  });
+
+  it("says when the date taken isn't there and the date created is used", () => {
+    render(
+      <Harness
+        targets={[target("a.jpg")]}
+        initial={{ mode: "format", nameFormat: "date", dateSource: "taken" }}
+      />,
+    );
+    expect(rowTexts()).toEqual(["a.jpgFile 2026-09-30.jpgNo date taken: the date created is used"]);
   });
 
   it("changes case in Change Case", () => {
@@ -232,7 +402,7 @@ describe("the Rename sheet", () => {
     expect(rowTexts()).toEqual(["a.txtold-a.txt"]);
   });
 
-  it("warns of a name that hides the item, and of a date taken that isn't there", () => {
+  it("warns of a name that hides the item", () => {
     render(
       <Harness
         targets={[target("config")]}
@@ -301,6 +471,36 @@ describe("the Rename sheet", () => {
       expect(onSavePreset).toHaveBeenCalledWith("Photos");
       fireEvent.change(screen.getByLabelText("Presets"), { target: { value: "delete" } });
       expect(onDeletePreset).toHaveBeenCalledWith("Photos");
+    });
+
+    it("lists the presets above the commands, with a separator between", () => {
+      render(<Harness targets={[target("a.jpg")]} presets={[photos]} />);
+      const presetsMenu = screen.getByLabelText("Presets");
+      expect(presetsMenu.querySelector("optgroup")).toBeNull();
+      expect(presetsMenu.querySelector("hr")).not.toBeNull();
+      expect((presetsMenu as HTMLSelectElement).selectedOptions[0]).toHaveTextContent("Presets");
+    });
+
+    it("says a loaded preset was edited, and updates it", () => {
+      const onSavePreset = vi.fn();
+      render(
+        <Harness targets={[target("a.jpg")]} presets={[photos]} onSavePreset={onSavePreset} />,
+      );
+      fireEvent.change(screen.getByLabelText("Presets"), { target: { value: "load:Photos" } });
+      type("Custom format", "Beach");
+      const presetsMenu = screen.getByLabelText("Presets") as HTMLSelectElement;
+      expect(presetsMenu).toHaveValue("");
+      expect(presetsMenu.selectedOptions[0]).toHaveTextContent("Photos (Edited)");
+      fireEvent.change(presetsMenu, { target: { value: "update" } });
+      expect(onSavePreset).toHaveBeenCalledWith("Photos");
+    });
+
+    it("offers the loaded preset's name to save the settings under", () => {
+      render(<Harness targets={[target("a.jpg")]} presets={[photos]} />);
+      fireEvent.change(screen.getByLabelText("Presets"), { target: { value: "load:Photos" } });
+      fireEvent.change(screen.getByLabelText("Presets"), { target: { value: "save" } });
+      expect(screen.getByLabelText("Preset name")).toHaveValue("Photos");
+      expect(screen.getByRole("button", { name: "Replace" })).toBeEnabled();
     });
 
     it("saves the settings under a name typed in the header", async () => {
