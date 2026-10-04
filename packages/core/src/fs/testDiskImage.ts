@@ -3,9 +3,19 @@
 // macOS only; `hdiutil` needs no special rights for images in a temporary folder.
 
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import {
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type TestDiskImage = {
   // Where the volume is mounted (its real path, so it compares equal to what realpath says).
@@ -40,27 +50,23 @@ export function mountTestDiskImage(
   );
   const imagePath = join(root, "volume.sparseimage");
   const mountPath = join(root, "mnt");
-  runHdiutil([
-    "create",
-    "-quiet",
-    // A retry after a failed attempt replaces whatever that attempt left.
-    "-ov",
-    // Grows as it is written to: a plain image is written out in full when it is made,
-    // which for the twenty a run makes is more than a gigabyte of writes to the Mac's disk.
-    "-type",
-    "SPARSE",
-    "-size",
-    `${options.sizeMb ?? 64}m`,
-    "-fs",
-    options.format ?? (options.caseSensitive ? "Case-sensitive APFS" : "APFS"),
-    "-volname",
-    // FAT volume names are at most 11 upper-case characters.
-    options.format === "MS-DOS FAT32"
+  const format = options.format ?? (options.caseSensitive ? "Case-sensitive APFS" : "APFS");
+  // FAT volume names are at most 11 upper-case characters.
+  const volumeName =
+    format === "MS-DOS FAT32"
       ? (options.name ?? "FTTEST").toUpperCase().slice(0, 11)
-      : (options.name ?? "FileTrailTest"),
-    imagePath,
-  ]);
-  runHdiutil(["attach", "-quiet", "-nobrowse", "-noverify", "-mountpoint", mountPath, imagePath]);
+      : (options.name ?? "FileTrailTest");
+  const template = blankDiskImage(format, options.sizeMb ?? 64, volumeName);
+  // A clone of the blank disk: a fresh, empty disk in a few milliseconds.
+  copyFileSync(template, imagePath, constants.COPYFILE_FICLONE);
+  try {
+    runHdiutil(["attach", "-quiet", "-nobrowse", "-noverify", "-mountpoint", mountPath, imagePath]);
+  } catch (error) {
+    // A blank disk that can't be mounted is made again by the next test that needs it.
+    rmSync(template, { force: true });
+    rmSync(root, { recursive: true, force: true });
+    throw error;
+  }
   let detached = false;
   return {
     mountPath: realpathSync(mountPath),
@@ -91,6 +97,51 @@ export function mountTestDiskImage(
       rmSync(root, { recursive: true, force: true });
     },
   };
+}
+
+// Making a disk image takes about a second; cloning one takes milliseconds. So each kind of
+// blank disk (format, size and name) is made once and kept between runs, beside the
+// background copy of Electron the tests run on, and every test disk is a clone of it. The
+// clones share the blank disk's volume UUID, which nothing here goes by: the app tells disks
+// apart by device number, which each mounted disk has its own of.
+const BLANK_DISK_CACHE = fileURLToPath(
+  new URL("../../../../node_modules/.cache/filetrail-test-disks/", import.meta.url),
+);
+
+function blankDiskImage(format: TestDiskFormat, sizeMb: number, volumeName: string): string {
+  const path = join(
+    BLANK_DISK_CACHE,
+    `${format.replaceAll(" ", "-")}-${sizeMb}m-${volumeName}.sparseimage`,
+  );
+  if (existsSync(path)) {
+    return path;
+  }
+  mkdirSync(BLANK_DISK_CACHE, { recursive: true });
+  // Made beside its final place and renamed into it, so two test files making the same one
+  // at once, or a run that stops halfway, never leave a broken one.
+  const partialPath = join(BLANK_DISK_CACHE, `partial-${process.pid}-${Date.now()}.sparseimage`);
+  try {
+    runHdiutil([
+      "create",
+      "-quiet",
+      // A retry after a failed attempt replaces whatever that attempt left.
+      "-ov",
+      // Grows as it is written to: a plain image is written out in full when it is made.
+      "-type",
+      "SPARSE",
+      "-size",
+      `${sizeMb}m`,
+      "-fs",
+      format,
+      "-volname",
+      volumeName,
+      partialPath,
+    ]);
+    renameSync(partialPath, path);
+  } finally {
+    rmSync(partialPath, { force: true });
+  }
+  return path;
 }
 
 // Test files run side by side, and hdiutil sometimes refuses to create or attach an image

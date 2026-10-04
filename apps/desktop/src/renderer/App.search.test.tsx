@@ -27,6 +27,9 @@ vi.mock("./hooks/useElementSize", async () =>
 vi.mock("./hooks/useExplorerPaneLayout", async () =>
   (await import("./test/appMocks")).useExplorerPaneLayoutMock(),
 );
+vi.mock("./lib/progressCardDelay", async () =>
+  (await import("./test/appMocks")).progressCardDelayMock(),
+);
 
 import { App } from "./App";
 import { FiletrailClientProvider } from "./lib/filetrailClient";
@@ -43,6 +46,12 @@ import {
 afterEach(expectNoRefusedRequests);
 
 describe("App copy/paste integration", () => {
+  // The search waits for the typing to rest: the tests move the clock on instead of
+  // waiting for it. It still runs on by itself, so waitFor and findBy go on working.
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -235,7 +244,7 @@ describe("App copy/paste integration", () => {
     }
     await act(async () => {
       fireEvent.keyDown(window, { key: "f", metaKey: true });
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      await vi.advanceTimersByTimeAsync(60);
     });
 
     const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
@@ -266,7 +275,7 @@ describe("App copy/paste integration", () => {
     const type = async (value: string, restMs: number) => {
       await act(async () => {
         fireEvent.change(searchInput, { target: { value } });
-        await new Promise((resolve) => setTimeout(resolve, restMs));
+        await vi.advanceTimersByTimeAsync(restMs);
       });
     };
 
@@ -344,7 +353,7 @@ describe("App copy/paste integration", () => {
     const type = async (value: string, restMs = 0) => {
       await act(async () => {
         fireEvent.change(searchInput, { target: { value } });
-        await new Promise((resolve) => setTimeout(resolve, restMs));
+        await vi.advanceTimersByTimeAsync(restMs);
       });
     };
 
@@ -393,7 +402,7 @@ describe("App copy/paste integration", () => {
     const type = async (value: string, restMs = 0) => {
       await act(async () => {
         fireEvent.change(searchInput, { target: { value } });
-        await new Promise((resolve) => setTimeout(resolve, restMs));
+        await vi.advanceTimersByTimeAsync(restMs);
       });
     };
     await act(async () => {
@@ -447,7 +456,7 @@ describe("App copy/paste integration", () => {
     const type = async (value: string, restMs = 0) => {
       await act(async () => {
         fireEvent.change(searchInput, { target: { value } });
-        await new Promise((resolve) => setTimeout(resolve, restMs));
+        await vi.advanceTimersByTimeAsync(restMs);
       });
     };
     await act(async () => {
@@ -486,7 +495,7 @@ describe("App copy/paste integration", () => {
       searchInput.focus();
       fireEvent.change(searchInput, { target: { value: "source" } });
       fireEvent.keyDown(searchInput, { key: "Escape" });
-      await new Promise((resolve) => setTimeout(resolve, 480));
+      await vi.advanceTimersByTimeAsync(480);
     });
     expect(searchCount()).toBe(0);
     expect(searchInput.value).toBe("");
@@ -496,12 +505,12 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       searchInput.focus();
       fireEvent.change(searchInput, { target: { value: "source" } });
-      await new Promise((resolve) => setTimeout(resolve, 480));
+      await vi.advanceTimersByTimeAsync(480);
     });
     await screen.findByTestId("search-results-pane");
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Clear file search" }));
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      await vi.advanceTimersByTimeAsync(60);
     });
     expect(searchInput.value).toBe("");
     expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
@@ -522,7 +531,7 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       searchInput.focus();
       fireEvent.change(searchInput, { target: { value: "source" } });
-      await new Promise((resolve) => setTimeout(resolve, 480));
+      await vi.advanceTimersByTimeAsync(480);
     });
     await screen.findByTestId("search-results-pane");
 
@@ -555,7 +564,7 @@ describe("App copy/paste integration", () => {
     const filterInput = screen.getByRole("textbox", { name: "Filter results" });
     await act(async () => {
       filterInput.focus();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await vi.advanceTimersByTimeAsync(100);
     });
     expect(document.activeElement).toBe(filterInput);
   });

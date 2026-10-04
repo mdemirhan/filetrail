@@ -19,6 +19,7 @@ import { NEW_FOLDER_NAME } from "../lib/explorerAppUtils";
 import { formatSize } from "../lib/formatting";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { Place } from "../lib/places";
+import { PROGRESS_CARD_DELAY_MS } from "../lib/progressCardDelay";
 import type { ShortcutContext } from "../lib/shortcutPolicy";
 import type { ToastEntry } from "../lib/toasts";
 import { useDialogStore, useNavigationStore } from "../state/explorerStoreContext";
@@ -37,8 +38,6 @@ import {
 } from "./ItemContextMenu";
 import { TextPromptDialog } from "./TextPromptDialog";
 import { ToastViewport } from "./ToastViewport";
-
-const PROGRESS_CARD_DELAY_MS = 500;
 
 function resolveContextMenuShortcutContext(
   shortcutContext: ShortcutContext,

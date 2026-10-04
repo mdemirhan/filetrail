@@ -27,6 +27,9 @@ vi.mock("./hooks/useElementSize", async () =>
 vi.mock("./hooks/useExplorerPaneLayout", async () =>
   (await import("./test/appMocks")).useExplorerPaneLayoutMock(),
 );
+vi.mock("./lib/progressCardDelay", async () =>
+  (await import("./test/appMocks")).progressCardDelayMock(),
+);
 
 import { App } from "./App";
 import { FiletrailClientProvider } from "./lib/filetrailClient";
@@ -50,6 +53,10 @@ import {
 afterEach(expectNoRefusedRequests);
 
 describe("App tabs", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const tabLabels = () => screen.queryAllByRole("tab").map((tab) => tab.textContent);
   const activeTabLabel = () =>
     screen.queryAllByRole("tab").find((tab) => tab.getAttribute("aria-selected") === "true")
@@ -403,6 +410,8 @@ describe("App tabs", () => {
   });
 
   it("notices when a search finishes in a background tab, and has its results on return", async () => {
+    // Background searches are asked about once a second: the test moves the clock on.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     let finished = false;
     const harness = createAppHarness({
       searchJobs: () =>
@@ -420,7 +429,10 @@ describe("App tabs", () => {
 
     // The search ends while its tab is in the background.
     finished = true;
-    await waitFor(() => expect(searchingTabs()).toBe(0), { timeout: 3000 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    await waitFor(() => expect(searchingTabs()).toBe(0));
 
     // Once it has ended there is nothing left to ask about.
     const updatesWhenDone = harness.invocations.filter(
@@ -428,7 +440,7 @@ describe("App tabs", () => {
     ).length;
     expect(updatesWhenDone).toBeGreaterThan(updatesBefore);
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await vi.advanceTimersByTimeAsync(1200);
     });
     expect(harness.invocations.filter((call) => call.channel === "search:getUpdate")).toHaveLength(
       updatesWhenDone,
@@ -471,6 +483,8 @@ describe("App tabs", () => {
   });
 
   it("searches for what was being typed when the tab was left, once the tab is back", async () => {
+    // The search waits for the typing to rest: the test moves the clock on.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const harness = createAppHarness({
       searchJobs: () => ({ names: ["source.txt"] }),
     });
@@ -490,7 +504,7 @@ describe("App tabs", () => {
       harness.emitCommand({ type: "newTab" });
     });
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await vi.advanceTimersByTimeAsync(500);
     });
     expect(searchQueries()).toEqual([]);
 
@@ -498,7 +512,10 @@ describe("App tabs", () => {
       harness.emitCommand({ type: "selectNextTab" });
     });
     expect(searchInput.value).toBe("sou");
-    await waitFor(() => expect(searchQueries()).toEqual(["sou"]), { timeout: 2000 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    await waitFor(() => expect(searchQueries()).toEqual(["sou"]));
   });
 
   it("closes a background tab from its close button and keeps the tab on screen", async () => {

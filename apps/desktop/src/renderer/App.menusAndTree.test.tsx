@@ -28,6 +28,9 @@ vi.mock("./hooks/useElementSize", async () =>
 vi.mock("./hooks/useExplorerPaneLayout", async () =>
   (await import("./test/appMocks")).useExplorerPaneLayoutMock(),
 );
+vi.mock("./lib/progressCardDelay", async () =>
+  (await import("./test/appMocks")).progressCardDelayMock(),
+);
 
 import { App } from "./App";
 import { type FiletrailClient, FiletrailClientProvider } from "./lib/filetrailClient";

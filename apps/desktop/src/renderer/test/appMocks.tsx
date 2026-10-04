@@ -702,3 +702,8 @@ export const useElementSizeMock = () => ({
 export const useExplorerPaneLayoutMock = () => ({
   useExplorerPaneLayout: () => paneLayoutMock,
 });
+
+// The progress card's delay, short: the App tests wait for the card, not for half a second.
+export const progressCardDelayMock = () => ({
+  PROGRESS_CARD_DELAY_MS: 20,
+});
