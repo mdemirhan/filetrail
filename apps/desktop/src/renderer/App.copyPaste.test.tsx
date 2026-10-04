@@ -3427,6 +3427,12 @@ describe("App copy/paste integration", () => {
 
       await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
     });
+
+    it("leaves the Info panel closed when the Info Row is shown", async () => {
+      await calculateSizeFromMenu({ viewMode: "icons", detailRowOpen: true });
+
+      expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
   });
 
   describe("Calculate Size for several items", () => {

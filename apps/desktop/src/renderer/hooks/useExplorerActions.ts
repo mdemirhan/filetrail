@@ -376,6 +376,7 @@ export function useExplorerActions(args: {
     focusedPane,
     setFocusedPane,
     setInfoPanelOpen,
+    infoRowOpen,
     setInfoTargetPathOverride,
     setGetInfoItem,
     setGetInfoLoading,
@@ -2614,12 +2615,14 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "calculateSize") {
-      // The list's Size column shows the size as it comes in, in the Details view; anywhere
-      // else (another view, the column hidden, search results, the tree) the Info panel does.
-      const sizeColumnShowsIt =
-        (contextMenuSurface === "content" || contextMenuSurface === "trash") &&
-        viewMode === "details" &&
-        detailColumns.size;
+      // The Info Row, when it is shown, or the list's Size column in the Details view shows
+      // the size as it comes in; otherwise (another view, the column hidden, search results,
+      // the tree) the Info panel opens to show it.
+      const sizeAlreadyShown =
+        infoRowOpen ||
+        ((contextMenuSurface === "content" || contextMenuSurface === "trash") &&
+          viewMode === "details" &&
+          detailColumns.size);
       if (contextMenuTargetEntries.length > 1) {
         // Several items: the folders among them, and the Info panel sums up the selection.
         callbacks.calculateFolderSizes(
@@ -2627,7 +2630,7 @@ export function useExplorerActions(args: {
             .filter((entry) => isFolderSizeEligibleKind(entry.kind))
             .map((entry) => entry.path),
         );
-        if (!sizeColumnShowsIt) {
+        if (!sizeAlreadyShown) {
           setInfoPanelOpen(true);
         }
         return;
@@ -2637,7 +2640,7 @@ export function useExplorerActions(args: {
         return;
       }
       callbacks.calculateFolderSize(targetPath);
-      if (!sizeColumnShowsIt) {
+      if (!sizeAlreadyShown) {
         await showInfoForPath(targetPath);
       }
       return;
