@@ -67,6 +67,11 @@ const ALLOWED_HARD_CODED_COLORS: ReadonlyArray<{ selector: RegExp; reason: strin
   },
   { selector: /^\.settings-switch::after$/, reason: "white switch knob, as in macOS" },
   {
+    selector: /^\.settings-sidebar-icon(?: svg)?$/,
+    reason:
+      "a section's coloured tile and white glyph, the same in every theme, as in System Settings",
+  },
+  {
     selector: /^\.settings-checkbox input:checked$/,
     reason: "white checkmark on the accent, as in macOS",
   },

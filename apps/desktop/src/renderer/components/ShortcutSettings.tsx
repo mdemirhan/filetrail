@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { ReturnKeyAction } from "../../shared/appPreferences";
 import {
@@ -67,10 +68,14 @@ function withoutEllipsis(label: string): string {
 // Settings → Shortcuts: every command with its keys. Click a key and press the new one;
 // Esc cancels and ⌫ removes the key. Each change is saved as it is made.
 export function ShortcutSettings({
+  searchFieldContainer = null,
   overrides,
   returnKeyAction,
   onChange,
 }: {
+  // Beside the Settings window's title, where the search field goes; without it the field
+  // sits above the list.
+  searchFieldContainer?: HTMLElement | null;
   overrides: ShortcutOverrides;
   returnKeyAction: ReturnKeyAction;
   onChange: (overrides: ShortcutOverrides) => void;
@@ -163,51 +168,47 @@ export function ShortcutSettings({
     ),
   })).filter((entry) => entry.commands.length > 0);
 
+  const searchField = (
+    <label className="search-field shortcut-settings-search-field">
+      <svg className="search-field-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="6.5" />
+        <path d="m16 16 4.5 4.5" />
+      </svg>
+      <input
+        type="text"
+        className="search-field-input"
+        value={query}
+        placeholder="Search commands or keys"
+        aria-label="Search shortcuts"
+        spellCheck={false}
+        onChange={(event) => setQuery(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          // Escape clears the search first; with nothing to clear it closes Settings.
+          if (event.key === "Escape" && query.length > 0) {
+            event.preventDefault();
+            setQuery("");
+          }
+        }}
+      />
+      {query.length > 0 ? (
+        <ClearButton
+          aria-label="Clear search"
+          title="Clear Search (Esc)"
+          // The field keeps the keyboard, so typing can continue after a click here.
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setQuery("")}
+        />
+      ) : null}
+    </label>
+  );
+
   return (
     <div className="shortcut-settings">
-      <div className="shortcut-settings-bar">
-        <label className="search-field shortcut-settings-search-field">
-          <svg className="search-field-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="m16 16 4.5 4.5" />
-          </svg>
-          <input
-            type="text"
-            className="search-field-input"
-            value={query}
-            placeholder="Search by command or key"
-            aria-label="Search shortcuts"
-            spellCheck={false}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              // Escape clears the search first; with nothing to clear it closes Settings.
-              if (event.key === "Escape" && query.length > 0) {
-                event.preventDefault();
-                setQuery("");
-              }
-            }}
-          />
-          {query.length > 0 ? (
-            <ClearButton
-              aria-label="Clear search"
-              title="Clear Search (Esc)"
-              // The field keeps the keyboard, so typing can continue after a click here.
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => setQuery("")}
-            />
-          ) : null}
-        </label>
-        <ActionButton
-          label="Restore Defaults"
-          ariaLabel="Restore Default Shortcuts"
-          disabled={!anyCustomized}
-          onClick={() => {
-            onChange({});
-            setRecording(null);
-            setNote(null);
-          }}
-        />
-      </div>
+      {searchFieldContainer ? (
+        createPortal(searchField, searchFieldContainer)
+      ) : (
+        <div className="shortcut-settings-bar">{searchField}</div>
+      )}
       <p className="shortcut-settings-intro">
         Click a key and press the new one. Esc cancels, and ⌫ removes the key.
       </p>
@@ -246,6 +247,18 @@ export function ShortcutSettings({
           ))}
         </SectionCard>
       ))}
+      <div className="settings-section-footer">
+        <ActionButton
+          label="Restore Defaults"
+          ariaLabel="Restore Default Shortcuts"
+          disabled={!anyCustomized}
+          onClick={() => {
+            onChange({});
+            setRecording(null);
+            setNote(null);
+          }}
+        />
+      </div>
     </div>
   );
 }

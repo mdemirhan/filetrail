@@ -4781,69 +4781,146 @@ body.settings-window-body {
   overflow: hidden;
 }
 
+/* A sidebar of sections in the tree's colour, as System Settings has, and the section on
+   screen beside it under its title. */
 .settings-window {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-columns: var(--settings-sidebar-width) minmax(0, 1fr);
   height: 100vh;
   background: var(--settings-page-bg);
 }
 
-/* One row, as tall as the explorer's toolbar: the window's buttons at the left and the tabs
-   in the middle. The tab on screen is the window's title, so no line repeats it. */
-.settings-window-toolbar {
+/* The strip above the sections, beside the window's own buttons, is what the window is
+   dragged by. */
+.settings-sidebar {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 52px;
-  padding: 0 88px;
-  border-bottom: 1px solid var(--border);
-  background: var(--toolbar-bg, var(--bg-base));
+  flex-direction: column;
+  gap: 2px;
+  padding: 52px 10px 10px;
+  border-right: 1px solid var(--settings-sidebar-edge);
+  background: var(--sidebar-bg);
   -webkit-app-region: drag;
 }
 
-.settings-window-tabs {
+.settings-sidebar-item {
   display: flex;
-  gap: 2px;
-}
-
-.settings-window-tab {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  width: 72px;
-  height: 42px;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-small);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  text-align: left;
   cursor: default;
   -webkit-app-region: no-drag;
 }
 
-.settings-window-tab:hover {
+.settings-sidebar-item:hover {
   background: var(--bg-hover);
 }
 
-.settings-window-tab.active {
-  background: var(--bg-active-inactive);
-  color: var(--text-primary);
+.settings-sidebar-item[aria-pressed="true"] {
+  background: var(--settings-sidebar-selection);
+  font-weight: 600;
 }
 
-.settings-window-tab-icon {
-  width: 17px;
-  height: 17px;
+.settings-sidebar-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.settings-sidebar-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: linear-gradient(to bottom, var(--tile-top), var(--tile-bottom));
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.settings-sidebar-icon[data-tone="gray"] {
+  --tile-top: #a3a3a9;
+  --tile-bottom: #808086;
+}
+
+.settings-sidebar-icon[data-tone="blue"] {
+  --tile-top: #4a9bff;
+  --tile-bottom: #1f6fe8;
+}
+
+.settings-sidebar-icon[data-tone="indigo"] {
+  --tile-top: #8f7bf5;
+  --tile-bottom: #6750de;
+}
+
+.settings-sidebar-icon[data-tone="orange"] {
+  --tile-top: #ffab45;
+  --tile-bottom: #f3861b;
+}
+
+.settings-sidebar-icon[data-tone="slate"] {
+  --tile-top: #7f8da5;
+  --tile-bottom: #5d6a82;
+}
+
+.settings-sidebar-icon svg {
+  width: 13px;
+  height: 13px;
   fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
+  stroke: #fff;
+  stroke-width: 2.1;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.settings-window-tab.active .settings-window-tab-icon {
-  stroke: var(--ft-accent-solid);
+.settings-pane {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The section's name, as the explorer window writes the folder's, and a line under it once
+   the page scrolls beneath. */
+.settings-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 20px;
+  border-bottom: 1px solid transparent;
+  -webkit-app-region: drag;
+}
+
+.settings-pane-header[data-scrolled] {
+  border-bottom-color: var(--settings-separator);
+}
+
+.settings-pane-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-title3);
+  font-weight: 600;
+}
+
+.settings-pane-accessory {
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+}
+
+.settings-pane-accessory:empty {
+  display: none;
 }
 
 .settings-window-notice {
@@ -4857,9 +4934,12 @@ body.settings-window-body {
   font-size: var(--font-size-callout);
 }
 
+/* The scrollbar's room is kept on every page, so a page's groups are as wide whether it
+   scrolls or not; the page's right padding is that much narrower. */
 .settings-window-body-scroll {
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 /* ── About and Acknowledgements windows ───────────────────────────────── */
@@ -5074,48 +5154,61 @@ body.page-window-body {
   min-width: 0;
 }
 
+/* Beside the window's title, the field is as wide as the explorer's toolbar search. */
+.settings-pane-accessory .shortcut-settings-search-field {
+  flex: none;
+  width: 200px;
+}
+
 /* ── Settings ─────────────────────────────────────────────────────────────
-   Every control in Settings is drawn here. As in System Settings, the groups are cards on
-   a page a shade darker than them in the light appearance. */
+   Every control in Settings is drawn here. As in System Settings, the groups are a faint
+   tint of the text colour with a hairline edge, on the window's own background. */
 :root {
-  --settings-page-bg: #f2f2f4;
-  --settings-card-bg: #ffffff;
-  --settings-card-border: rgba(0, 0, 0, 0.08);
-  --settings-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --settings-page-bg: var(--bg-base);
+  --settings-card-bg: rgba(0, 0, 0, 0.028);
+  --settings-card-border: rgba(0, 0, 0, 0.055);
   --settings-separator: rgba(0, 0, 0, 0.07);
+  --settings-sidebar-width: 196px;
+  --settings-sidebar-edge: rgba(0, 0, 0, 0.06);
+  --settings-sidebar-selection: rgba(0, 0, 0, 0.085);
+  /* A key in the Shortcuts list: a cap tinted like the groups, a shade deeper. */
+  --settings-keycap: rgba(0, 0, 0, 0.055);
   --settings-label-secondary: var(--text-secondary);
   /* A pop-up is as wide as its longest choice, and never narrower than this. */
   --settings-popup-min-width: 120px;
-  --settings-switch-off: #e3e3e8;
+  --settings-switch-off: rgba(0, 0, 0, 0.09);
   /* A checkbox that is off, here and in the Rename sheet. */
   --check-off-bg: #ffffff;
   --check-border: rgba(0, 0, 0, 0.25);
 }
 
 :root[data-theme="dark"] {
-  --settings-page-bg: #1e1e20;
-  --settings-card-bg: #2a2a2d;
-  --settings-card-border: rgba(255, 255, 255, 0.08);
-  --settings-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  --settings-card-bg: rgba(255, 255, 255, 0.035);
+  --settings-card-border: rgba(255, 255, 255, 0.06);
   --settings-separator: rgba(255, 255, 255, 0.07);
-  --settings-switch-off: #3a3a3d;
+  --settings-sidebar-edge: rgba(0, 0, 0, 0.35);
+  --settings-sidebar-selection: rgba(255, 255, 255, 0.1);
+  --settings-keycap: rgba(255, 255, 255, 0.08);
+  --settings-switch-off: rgba(255, 255, 255, 0.14);
   --check-off-bg: rgba(255, 255, 255, 0.06);
   --check-border: rgba(255, 255, 255, 0.25);
 }
 
-/* In the Settings window the toolbar is above the page, so no room is kept for the window's
+/* In the Settings window the title is above the page, so no room is kept for the window's
    own buttons. */
 body .settings-window .settings-view,
 body .settings-window .settings-view[data-layout] {
-  padding: 22px 28px 28px;
+  height: auto;
+  overflow: visible;
+  padding: 4px 12px 20px 20px;
 }
 
 .settings-window .settings-page {
-  width: min(680px, 100%);
+  width: min(560px, 100%);
 }
 
 .settings-section {
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 
 .settings-section-header {
@@ -5124,8 +5217,8 @@ body .settings-window .settings-view[data-layout] {
   justify-content: space-between;
   gap: 12px;
   /* The same height with and without a button, so every group's title sits alike. */
-  min-height: 24px;
-  padding: 0 2px 6px;
+  min-height: 22px;
+  padding: 0 2px 5px;
 }
 
 .settings-section-title {
@@ -5148,18 +5241,28 @@ body .settings-window .settings-view[data-layout] {
 .settings-section-footer {
   display: flex;
   justify-content: flex-end;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 /* A group in Settings and its rows. A row draws the line under itself, and the last row
    of a group draws none: which row is last is the stylesheet's to know, so no row has to
    be told. */
 .settings-card {
+  position: relative;
   padding: 0 12px;
-  border: 0.5px solid var(--settings-card-border);
+  overflow: hidden;
   border-radius: var(--radius-menu);
   background: var(--settings-card-bg);
-  box-shadow: var(--settings-card-shadow);
+}
+
+/* The edge is drawn over the rows, so a selected row of a list doesn't paint over it. */
+.settings-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--settings-card-border);
+  pointer-events: none;
 }
 
 .settings-row {
@@ -5188,10 +5291,10 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .settings-row-desc {
-  margin-top: 2px;
+  margin-top: 1px;
   color: var(--settings-label-secondary);
   font-size: var(--font-size-small);
-  line-height: 1.35;
+  line-height: 14px;
 }
 
 .settings-row-control {
@@ -5302,14 +5405,14 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .settings-number-field {
-  width: 56px;
+  width: 48px;
   text-align: right;
 }
 
 .settings-field-with-unit {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--settings-label-secondary);
   font-size: var(--font-size-body);
 }
@@ -5318,8 +5421,8 @@ body .settings-window .settings-view[data-layout] {
 .settings-switch {
   position: relative;
   flex-shrink: 0;
-  width: 32px;
-  height: 18px;
+  width: 28px;
+  height: 16px;
   padding: 0;
   border: 0;
   border-radius: var(--radius-capsule);
@@ -5330,13 +5433,13 @@ body .settings-window .settings-view[data-layout] {
 .settings-switch::after {
   content: "";
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 1px;
+  left: 1px;
   width: 14px;
   height: 14px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
   transition: transform var(--duration-base) var(--ease-standard);
 }
 
@@ -5345,7 +5448,7 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .settings-switch[aria-checked="true"]::after {
-  transform: translateX(14px);
+  transform: translateX(12px);
 }
 
 .settings-checkbox {
@@ -5427,8 +5530,8 @@ body .settings-window .settings-view[data-layout] {
 .settings-appearance-thumb {
   position: relative;
   display: block;
-  width: 64px;
-  height: 42px;
+  width: 56px;
+  height: 36px;
   overflow: hidden;
   border-radius: 6px;
   box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25);
@@ -5455,7 +5558,7 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .settings-appearance-thumb-side {
-  width: 17px;
+  width: 15px;
   background: var(--thumb-side);
 }
 
@@ -5468,7 +5571,7 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .settings-appearance-thumb-main span {
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
   background: var(--thumb-bar);
 }
@@ -5486,23 +5589,21 @@ body .settings-window .settings-view[data-layout] {
   background: var(--ft-accent-solid);
 }
 
-/* The accent colours: a row of swatches, the chosen one ringed, and its name under them. */
+/* The accent colours: a row of swatches, the chosen one ringed; its name is the tooltip. */
 .settings-accent {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  align-items: center;
 }
 
 .settings-accent-swatches {
   display: flex;
-  gap: 8px;
+  gap: 7px;
 }
 
 .settings-accent-swatch {
   position: relative;
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -5511,7 +5612,7 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .settings-accent-swatch[aria-pressed="true"] {
-  box-shadow: 0 0 0 2px var(--settings-card-bg), 0 0 0 3.5px var(--ft-accent-solid);
+  box-shadow: 0 0 0 2px var(--settings-page-bg), 0 0 0 3.5px var(--ft-accent-solid);
 }
 
 .settings-accent-swatch:focus-visible {
@@ -5525,7 +5626,7 @@ body .settings-window .settings-view[data-layout] {
 
 .settings-accent-custom-fill {
   position: absolute;
-  inset: 4px;
+  inset: 3.5px;
   border-radius: 50%;
 }
 
@@ -5536,30 +5637,43 @@ body .settings-window .settings-view[data-layout] {
   pointer-events: none;
 }
 
-.settings-accent-name {
-  color: var(--settings-label-secondary);
-  font-size: var(--font-size-small);
-}
-
-/* A list in Settings: rows over a bar of + and − buttons. */
-.settings-list-rows {
-  padding: 4px 6px;
-}
-
+/* A list in Settings: rows from edge to edge of the group, a line between them, over a bar
+   of + and − buttons. */
 .settings-list-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 6px;
-  border-radius: var(--radius-control);
+  gap: 9px;
+  min-height: 40px;
+  padding: 0 12px;
   outline: none;
   cursor: default;
 }
 
+.settings-list-row + .settings-list-row {
+  box-shadow: inset 0 1px 0 var(--settings-separator);
+}
+
 /* A row of the column list: a checkbox and a name, no second line. */
 .settings-column-row {
-  min-height: 28px;
+  min-height: 30px;
+}
+
+/* The three lines at the end of a row that can be dragged. */
+.settings-drag-handle {
+  flex: none;
+  width: 12px;
+  height: 8px;
+  margin-left: auto;
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.settings-list-trailing-note {
+  margin-left: auto;
+  color: var(--settings-label-secondary);
+  font-size: var(--font-size-small);
 }
 
 .settings-column-row[aria-disabled="true"] .settings-list-name {
@@ -5586,15 +5700,18 @@ body .settings-window .settings-view[data-layout] {
   color: inherit;
 }
 
-.settings-list-rows:focus-within .settings-list-row[aria-selected="true"] .file-icon-favorite {
+.settings-list-rows:focus-within .settings-list-row[aria-selected="true"] .file-icon-favorite,
+.settings-list-rows:focus-within .settings-list-row[aria-selected="true"] .settings-drag-handle {
   color: inherit;
+  stroke: currentColor;
 }
 
 .settings-list-row[data-dragging] {
   opacity: 0.4;
 }
 
-.settings-list-row[data-drop="before"] {
+.settings-list-row[data-drop="before"],
+.settings-list-row + .settings-list-row[data-drop="before"] {
   box-shadow: inset 0 2px 0 var(--ft-accent-solid);
 }
 
@@ -5833,7 +5950,7 @@ body .settings-window .settings-view[data-layout] {
 
 .shortcut-settings-intro,
 .shortcut-settings-empty {
-  margin: 0 4px 14px;
+  margin: 0 2px 12px;
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--font-size-small);
@@ -5845,8 +5962,8 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .shortcut-row {
-  padding: 8px 0;
-  border-top: 1px solid var(--border-light);
+  padding: 5px 0;
+  border-top: 1px solid var(--settings-separator);
   font-family: var(--font-sans);
 }
 
@@ -5859,7 +5976,7 @@ body .settings-window .settings-view[data-layout] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 24px;
+  min-height: 22px;
 }
 
 .shortcut-row-text {
@@ -5869,9 +5986,8 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .shortcut-row-label {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: var(--font-size-body);
-  font-weight: 500;
 }
 
 .shortcut-row-hint {
@@ -5901,12 +6017,12 @@ body .settings-window .settings-view[data-layout] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 58px;
-  height: 24px;
+  min-width: 52px;
+  height: 20px;
   padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--bg-elevated);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: var(--settings-keycap);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-callout);
@@ -5915,7 +6031,7 @@ body .settings-window .settings-view[data-layout] {
 }
 
 button.shortcut-slot-key:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 
 button.shortcut-slot-key:focus-visible {
@@ -5927,6 +6043,7 @@ button.shortcut-slot-key:focus-visible {
    dashed boxes would read as forty things to fill in. It keeps its room, so the keys of
    every row stay in their columns. */
 .shortcut-slot-key.empty {
+  border-color: var(--border);
   border-style: dashed;
   background: transparent;
   color: var(--text-tertiary);

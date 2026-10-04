@@ -269,7 +269,6 @@ function AccentSelector({
           />
         </button>
       </div>
-      <span className="settings-accent-name">{selected?.label ?? "Custom"}</span>
     </div>
   );
 }
@@ -568,6 +567,7 @@ function SettingsList<T>({
               }}
             >
               {renderRow(item, index)}
+              <DragHandle />
             </div>
           );
         })}
@@ -618,6 +618,15 @@ function SettingsList<T>({
         {extraButtons}
       </div>
     </div>
+  );
+}
+
+// The three lines at the end of a row that can be dragged into another place.
+function DragHandle() {
+  return (
+    <svg className="settings-drag-handle" viewBox="0 0 12 8" aria-hidden="true">
+      <path d="M1 1h10M1 4h10M1 7h10" />
+    </svg>
   );
 }
 
@@ -712,6 +721,7 @@ function ColumnList<K extends string>({
             <input type="checkbox" checked disabled tabIndex={-1} aria-hidden="true" />
           </span>
           <span className="settings-list-name">{labels.name}</span>
+          <span className="settings-list-trailing-note">Always first</span>
         </div>
         {order.map((key, index) => {
           const columnLabel = labels[key];
@@ -787,6 +797,7 @@ function ColumnList<K extends string>({
                 />
               </span>
               <span className="settings-list-name">{columnLabel}</span>
+              <DragHandle />
             </div>
           );
         })}
@@ -1205,6 +1216,7 @@ function resolveDensity(flags: ReadonlyArray<boolean>): Density {
 
 export function SettingsView({
   activeTab,
+  headerAccessory = null,
   searchDefaults,
   onSearchDefaultsChange = () => undefined,
   theme,
@@ -1273,6 +1285,8 @@ export function SettingsView({
   // In the Settings window each toolbar tab shows one group of sections; without a tab
   // (tests, embedded use) every section renders.
   activeTab?: SettingsTab;
+  // The place beside the Settings window's title where a tab can put a control of its own.
+  headerAccessory?: HTMLElement | null;
   // Defaults for new searches; the Search tab only renders when these are provided.
   searchDefaults?: SearchDefaults | undefined;
   onSearchDefaultsChange?: (patch: Partial<SearchDefaults>) => void;
@@ -1381,6 +1395,7 @@ export function SettingsView({
         {showSection("general") ? (
           <SectionCard
             title="Appearance"
+            resetBelow
             resetButton={
               <ActionButton
                 label="Restore Defaults"
@@ -1412,7 +1427,7 @@ export function SettingsView({
                   shortcutDisplay.label("resetZoom"),
                 ],
                 "",
-                " also change it.",
+                " change it too.",
               )}
               right={<ZoomComboBox value={zoomPercent} onChange={onZoomPercentChange} />}
             />
@@ -1420,7 +1435,7 @@ export function SettingsView({
         ) : null}
 
         {showSection("general") ? (
-          <SectionCard title="Startup">
+          <SectionCard title="Behavior">
             <SettingRow
               title="Reopen the last folder and tabs"
               desc="Otherwise File Trail opens one tab in your home folder."
@@ -1432,14 +1447,9 @@ export function SettingsView({
                 />
               }
             />
-          </SectionCard>
-        ) : null}
-
-        {showSection("general") ? (
-          <SectionCard title="Notifications">
             <SettingRow
               title="Show notifications"
-              desc="A card at the bottom right when a copy, a move or the Trash is done."
+              desc="When a copy, a move or the Trash finishes."
               right={
                 <Toggle
                   checked={notificationsEnabled}
@@ -1448,14 +1458,9 @@ export function SettingsView({
                 />
               }
             />
-          </SectionCard>
-        ) : null}
-
-        {showSection("general") ? (
-          <SectionCard title="Copy and Cut">
             <SettingRow
               title="Mark copied and cut items"
-              desc="They flash, and keep a mark in the folder tree and the file list until they are pasted."
+              desc="They keep a mark in the tree and the list until they are pasted."
               right={
                 <Toggle
                   checked={markClipboardItems}
@@ -1471,7 +1476,7 @@ export function SettingsView({
           <SectionCard title="Views">
             <SettingRow
               title="Density"
-              desc="Compact fits more rows and icons in every view and in the folder tree."
+              desc="Compact fits more rows in every view and the folder tree."
               right={
                 <SelectControl
                   value={density}
@@ -1491,7 +1496,7 @@ export function SettingsView({
             />
             <SettingRow
               title="Expand folders with a single click"
-              desc="In the folder tree, a click opens or closes a folder as well as selecting it."
+              desc="In the folder tree, a click also opens or closes the folder."
               right={
                 <Toggle
                   checked={singleClickExpandTreeItems}
@@ -1506,7 +1511,7 @@ export function SettingsView({
         {showSection("browsing") ? (
           <SectionCard
             title="Columns in List View"
-            note="Name always comes first. Drag the other columns into the order you want."
+            note="Drag the columns into the order you want."
           >
             <div className="settings-row settings-row-list">
               <ColumnList
@@ -1582,7 +1587,7 @@ export function SettingsView({
         {searchDefaults && showSection("search") ? (
           <SectionCard
             title={activeTab ? "New Searches" : "Search"}
-            note="Every new search starts with these. The search field's menu changes them for the search you are making."
+            note="Every new search starts with these. The search field’s menu changes them for one search."
           >
             <SettingRow
               title="Search in"
@@ -1600,7 +1605,7 @@ export function SettingsView({
             />
             <SettingRow
               title="Match as"
-              desc="Plain Text finds the words anywhere; Glob and Regex read them as a pattern."
+              desc="Glob and Regex read the words as a pattern."
               right={
                 <SelectControl
                   value={searchDefaults.searchPatternMode}
@@ -1665,7 +1670,7 @@ export function SettingsView({
         {searchDefaults && showSection("search") ? (
           <SectionCard
             title="Columns in Search Results"
-            note="For search results in List view. Name always comes first. Drag the other columns into the order you want."
+            note="For search results in List view. Drag the columns into the order you want."
           >
             <div className="settings-row settings-row-list">
               <ColumnList
@@ -1716,7 +1721,7 @@ export function SettingsView({
             />
             <SettingRow
               title="Ask before opening more than"
-              desc="Opening or editing more items at once asks first."
+              desc="Opening or editing more at once asks first."
               right={
                 <span className="settings-field-with-unit">
                   <OpenItemLimitInput value={openItemLimit} onChange={onOpenItemLimitChange} />
@@ -1793,6 +1798,7 @@ export function SettingsView({
 
         {showSection("shortcuts") ? (
           <ShortcutSettings
+            searchFieldContainer={headerAccessory}
             overrides={shortcutOverrides}
             returnKeyAction={returnKeyAction}
             onChange={onShortcutOverridesChange}

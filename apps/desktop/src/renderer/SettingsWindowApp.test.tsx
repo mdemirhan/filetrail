@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { DEFAULT_APP_PREFERENCES } from "../shared/appPreferences";
 import { SettingsWindowApp } from "./SettingsWindowApp";
@@ -92,6 +92,22 @@ describe("SettingsWindowApp", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));
     expect(window.location.hash).toBe("#settings/shortcuts");
+  });
+
+  it("names the section on screen above it, with the Shortcuts search beside the name", async () => {
+    window.history.replaceState(null, "", "#settings");
+    renderSettings();
+    await screen.findByText("Reopen the last folder and tabs");
+    expect(screen.getByRole("heading", { level: 1, name: "General" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "General" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Shortcuts" })).toBeInTheDocument();
+    const header = screen.getByRole("heading", { level: 1, name: "Shortcuts" }).parentElement;
+    if (!(header instanceof HTMLElement)) {
+      throw new Error("Missing the section's header.");
+    }
+    expect(within(header).getByRole("textbox", { name: "Search shortcuts" })).toBeInTheDocument();
   });
 
   it("opens on the tab named in its address", async () => {

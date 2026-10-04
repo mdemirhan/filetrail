@@ -160,7 +160,9 @@ describe("SettingsView", () => {
 
     expect(screen.getByLabelText("Accent color Gold")).toBeInTheDocument();
     expect(screen.getByLabelText("Accent color Teal")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("Teal")).toBeInTheDocument();
+    // The name is the swatch's tooltip; no line under the swatches repeats it.
+    expect(screen.getByLabelText("Accent color Teal")).toHaveAttribute("title", "Teal");
+    expect(screen.queryByText("Teal")).toBeNull();
   });
 
   it("shows a custom accent picker for non-preset colors", () => {
@@ -170,7 +172,7 @@ describe("SettingsView", () => {
       onAccentChange,
     });
 
-    expect(screen.getByText("Custom")).toBeInTheDocument();
+    expect(screen.getByLabelText("Accent color Custom")).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Custom color")).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Accent color Custom"));
     fireEvent.change(screen.getByLabelText("Accent color Custom value"), {
@@ -351,11 +353,11 @@ describe("SettingsView", () => {
     expect(within(opening).getByRole("button", { name: "Terminal" })).toBeVisible();
     cleanup();
 
-    // General has the appearance first, then the startup choice.
+    // General has the appearance first, then one group of the switches for how it behaves.
     const view = renderSettingsView({ activeTab: "general" });
     expect(
       Array.from(view.container.querySelectorAll("h3")).map((heading) => heading.textContent),
-    ).toEqual(["Appearance", "Startup", "Notifications", "Copy and Cut"]);
+    ).toEqual(["Appearance", "Behavior"]);
     expect(screen.getByText("Reopen the last folder and tabs")).toBeInTheDocument();
     expect(screen.queryByText("Reopen tabs")).toBeNull();
     expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
@@ -452,7 +454,7 @@ describe("SettingsView", () => {
     const onMarkClipboardItemsChange = vi.fn();
     renderSettingsView({ markClipboardItems: true, onMarkClipboardItemsChange });
 
-    expect(screen.getByText("Copy and Cut")).toBeInTheDocument();
+    expect(screen.getByText("Behavior")).toBeInTheDocument();
     const toggle = screen.getByRole("switch", { name: "Mark copied and cut items" });
     expect(toggle).toHaveAttribute("aria-checked", "true");
     fireEvent.click(toggle);
