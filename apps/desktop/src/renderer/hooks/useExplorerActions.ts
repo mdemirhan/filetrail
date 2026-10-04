@@ -1040,6 +1040,19 @@ export function useExplorerActions(args: {
     setSingleContentSelection(path);
   }
 
+  // Drag-to-select: the items under the box, kept in the order they are shown.
+  function selectContentPaths(paths: string[], leadPath: string | null) {
+    const picked = new Set(paths);
+    const orderedPaths = activeContentEntries
+      .filter((entry) => picked.has(entry.path))
+      .map((entry) => entry.path);
+    applyContentSelection(
+      orderedPaths.length === 0
+        ? EMPTY_CONTENT_SELECTION
+        : { paths: orderedPaths, anchorPath: leadPath, leadPath },
+    );
+  }
+
   function selectAllContentEntries() {
     applyContentSelection(selectAllSelectionStateEntries(activeContentEntries));
   }
@@ -3841,6 +3854,7 @@ export function useExplorerActions(args: {
     requestCopyLikePlanStart,
     surfaceCopyLikePreStartFailureNotice,
     handleContentSelectionGesture,
+    selectContentPaths,
     handleCopyPasteDialogEscape,
     moveOpenWithApplication,
     openItemContextMenu,

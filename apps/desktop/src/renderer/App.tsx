@@ -848,6 +848,7 @@ export function App() {
     editPaths,
     extendContentSelectionToPath,
     handleContentSelectionGesture,
+    selectContentPaths,
     handleCopyPasteDialogEscape,
     openItemContextMenu,
     openTreeItemContextMenu,
@@ -1921,6 +1922,7 @@ export function App() {
                 selectionLeadPath: contentSelection.leadPath,
                 viewMode: shownViewMode,
                 onSelectionGesture: handleContentSelectionGesture,
+                onSelectPaths: selectContentPaths,
                 onClearSelection: clearContentSelection,
                 onActivateEntry: (entry, inNewTab) => {
                   // ⌘-double-click opens a folder in a new tab, as in Finder.

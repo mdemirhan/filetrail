@@ -8,6 +8,14 @@ export type IconGridLayout = {
   cellMinWidth: number;
   // Row pitch: icon, name on up to two lines, and the spacing around them.
   rowHeight: number;
+  // Space above an item's icon, inside the item (`.icon-item`'s top padding).
+  itemPaddingTop: number;
+  // Side of the tile the icon sits on (`--icon-box`), and the space between it and the name
+  // (`.icon-item`'s gap). Only the tile and the name take clicks.
+  iconBoxSize: number;
+  labelGap: number;
+  // The widest a name can be (`--icon-label-width`).
+  labelWidth: number;
   paddingTop: number;
   paddingBottom: number;
   // Space kept free on each side; on the right it includes the scrollbar.
@@ -18,6 +26,10 @@ export const ICON_GRID_LAYOUT: IconGridLayout = {
   iconSize: 64,
   cellMinWidth: 104,
   rowHeight: 116,
+  itemPaddingTop: 5,
+  iconBoxSize: 72,
+  labelGap: 4,
+  labelWidth: 102,
   paddingTop: 10,
   paddingBottom: 10,
   paddingInline: 16,
@@ -27,6 +39,10 @@ export const COMPACT_ICON_GRID_LAYOUT: IconGridLayout = {
   iconSize: 48,
   cellMinWidth: 88,
   rowHeight: 94,
+  itemPaddingTop: 3,
+  iconBoxSize: 56,
+  labelGap: 3,
+  labelWidth: 86,
   paddingTop: 8,
   paddingBottom: 8,
   paddingInline: 16,

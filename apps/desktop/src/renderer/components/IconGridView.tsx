@@ -10,6 +10,7 @@ import {
 
 import type { IpcResponse } from "@filetrail/contracts";
 
+import { useDragSelection } from "../hooks/useDragSelection";
 import { useElementSize } from "../hooks/useElementSize";
 import {
   ClipboardMarkIcon,
@@ -17,6 +18,7 @@ import {
   useClipboardMarks,
 } from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
+import { getIconGridItemsInBox } from "../lib/dragSelection";
 import { FileThumbnail } from "../lib/fileThumbnails";
 import {
   computeIconGridColumns,
@@ -58,6 +60,7 @@ export function IconGridView({
   viewportWidth,
   viewportHeight,
   onSelectionGesture,
+  onSelectPaths,
   onClearSelection,
   onActivateEntry,
   onLayoutColumnsChange,
@@ -83,6 +86,7 @@ export function IconGridView({
   viewportWidth: number;
   viewportHeight: number;
   onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
+  onSelectPaths?: ((paths: string[], leadPath: string | null) => void) | undefined;
   onClearSelection: () => void;
   onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
   onLayoutColumnsChange: (columns: number) => void;
@@ -192,6 +196,23 @@ export function IconGridView({
   // or closes. Kept after every render except the one in which the grid's width has just
   // changed and its columns have not been worked out again yet.
   const listRef = useRef<HTMLDivElement | null>(null);
+  const { boxRef, startDragSelection } = useDragSelection({
+    containerRef,
+    itemsRef: listRef,
+    getItemsInBox: (box, sizes) =>
+      getIconGridItemsInBox({
+        box,
+        entries,
+        columns,
+        gridWidth: listRef.current?.clientWidth ?? 0,
+        layout,
+        sizes,
+      }),
+    measuredPartSelector: ".icon-item-label",
+    selectedPaths,
+    selectionLeadPath,
+    onSelectPaths,
+  });
   const itemPlacesRef = useRef(new Map<string, { left: number; top: number }>());
   useLayoutEffect(() => {
     const list = listRef.current;
@@ -281,8 +302,12 @@ export function IconGridView({
         if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
           return;
         }
-        onClearSelection();
+        // ⇧ or ⌘ keeps the selection, for a drag that adds to it.
+        if (!event.metaKey && !event.shiftKey) {
+          onClearSelection();
+        }
         containerRef.current?.focus();
+        startDragSelection(event);
       }}
       onContextMenu={(event) => {
         const target = event.target;
@@ -422,6 +447,7 @@ export function IconGridView({
           );
         })}
       </div>
+      <div ref={boxRef} className="drag-select-box" hidden />
       {offscreenRenameEntry && inlineRename ? (
         <OffscreenRenameField
           entry={offscreenRenameEntry}

@@ -24,6 +24,7 @@ import {
   clampDetailColumnWidth,
 } from "../../shared/appPreferences";
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
+import { useDragSelection } from "../hooks/useDragSelection";
 import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useRelativeDate } from "../hooks/useRelativeDate";
@@ -43,6 +44,7 @@ import {
   getDetailsTableWidth,
   getVisibleDetailColumns,
 } from "../lib/detailsLayout";
+import { getDetailsItemsInBox, getFlowListItemsInBox } from "../lib/dragSelection";
 import { FileIcon } from "../lib/fileIcons";
 import {
   COMPACT_FLOW_LIST_LAYOUT,
@@ -154,6 +156,7 @@ export function ContentPane({
   sortDirection,
   onSelectPath,
   onSelectionGesture = (path) => onSelectPath?.(path),
+  onSelectPaths,
   onClearSelection = () => undefined,
   onActivateEntry,
   onSortChange,
@@ -232,6 +235,8 @@ export function ContentPane({
   sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"];
   onSelectPath?: (path: string) => void;
   onSelectionGesture?: (path: string, modifiers: SelectionGestureModifiers) => void;
+  /** Drag-to-select: the items under the box, and the one the arrow keys move from. */
+  onSelectPaths?: (paths: string[], leadPath: string | null) => void;
   onClearSelection?: () => void;
   onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
   onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
@@ -543,6 +548,7 @@ export function ContentPane({
                 onActivateEntry={onActivateEntry}
                 onLayoutColumnsChange={onLayoutColumnsChange}
                 onSelectionGesture={onSelectionGesture}
+                onSelectPaths={onSelectPaths}
                 onClearSelection={onClearSelection}
                 onVisiblePathsChange={onVisiblePathsChange}
                 onItemContextMenu={onItemContextMenu}
@@ -584,6 +590,7 @@ export function ContentPane({
                 onActivateEntry={onActivateEntry}
                 onLayoutColumnsChange={onLayoutColumnsChange}
                 onSelectionGesture={onSelectionGesture}
+                onSelectPaths={onSelectPaths}
                 onClearSelection={onClearSelection}
                 onVisiblePathsChange={onVisiblePathsChange}
                 onItemContextMenu={onItemContextMenu}
@@ -618,6 +625,7 @@ export function ContentPane({
                 onActivateEntry={onActivateEntry}
                 onLayoutColumnsChange={onLayoutColumnsChange}
                 onSelectionGesture={onSelectionGesture}
+                onSelectPaths={onSelectPaths}
                 onClearSelection={onClearSelection}
                 onVisiblePathsChange={onVisiblePathsChange}
                 onItemContextMenu={onItemContextMenu}
@@ -1054,6 +1062,7 @@ function FlowListView({
   viewportWidth,
   viewportHeight,
   onSelectionGesture,
+  onSelectPaths,
   onClearSelection,
   onActivateEntry,
   onLayoutColumnsChange,
@@ -1083,6 +1092,7 @@ function FlowListView({
   viewportWidth: number;
   viewportHeight: number;
   onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
+  onSelectPaths: ((paths: string[], leadPath: string | null) => void) | undefined;
   onClearSelection: () => void;
   onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
   onLayoutColumnsChange: (columns: number) => void;
@@ -1145,6 +1155,17 @@ function FlowListView({
     overscan: 6,
   });
   const visibleRows = rows.slice(range.startIndex, range.endIndex);
+  const itemsRef = useRef<HTMLDivElement | null>(null);
+  const { boxRef, startDragSelection } = useDragSelection({
+    containerRef,
+    itemsRef,
+    getItemsInBox: (box, sizes) =>
+      getFlowListItemsInBox({ box, entries, rowsPerColumn, layout: listLayout, sizes }),
+    measuredPartSelector: ".flow-item",
+    selectedPaths,
+    selectionLeadPath,
+    onSelectPaths,
+  });
   // Report by value: the sliced rows are a new array every render, and depending on them
   // would re-render the parent in an endless loop.
   const visiblePathsKey = visibleRows
@@ -1201,8 +1222,12 @@ function FlowListView({
         if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
           return;
         }
-        onClearSelection();
+        // ⇧ or ⌘ keeps the selection, for a drag that adds to it.
+        if (!event.metaKey && !event.shiftKey) {
+          onClearSelection();
+        }
         containerRef.current?.focus();
+        startDragSelection(event);
       }}
       onContextMenu={(event) => {
         const target = event.target;
@@ -1253,6 +1278,7 @@ function FlowListView({
       {/* biome-ignore lint/a11y/useSemanticElements: a native select cannot host this virtualized column-major file grid. */}
       <div
         role="listbox"
+        ref={itemsRef}
         aria-multiselectable="true"
         className="flow-grid-rows"
         style={{
@@ -1379,6 +1405,7 @@ function FlowListView({
           </div>
         ))}
       </div>
+      <div ref={boxRef} className="drag-select-box" hidden />
     </div>
   );
 }
@@ -1398,6 +1425,7 @@ function DetailsView({
   viewportWidth,
   viewportHeight,
   onSelectionGesture,
+  onSelectPaths,
   onClearSelection,
   onActivateEntry,
   onLayoutColumnsChange,
@@ -1431,6 +1459,7 @@ function DetailsView({
   viewportWidth: number;
   viewportHeight: number;
   onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
+  onSelectPaths: ((paths: string[], leadPath: string | null) => void) | undefined;
   onClearSelection: () => void;
   onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
   onLayoutColumnsChange: (columns: number) => void;
@@ -1506,6 +1535,15 @@ function DetailsView({
     overscan: 10,
   });
   const visibleEntries = entries.slice(range.startIndex, range.endIndex);
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  const { boxRef, startDragSelection } = useDragSelection({
+    containerRef,
+    itemsRef: tableRef,
+    getItemsInBox: (box) => getDetailsItemsInBox({ box, entries, rowHeight }),
+    selectedPaths,
+    selectionLeadPath,
+    onSelectPaths,
+  });
   // Report by value (see the list view): the slice is a new array every render.
   const visiblePathsKey = visibleEntries.map((entry) => entry.path).join("\0");
   const offscreenRenameEntry = findOffscreenRenameEntry(entries, visibleEntries, inlineRename);
@@ -1733,8 +1771,12 @@ function DetailsView({
           if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
             return;
           }
-          onClearSelection();
+          // ⇧ or ⌘ keeps the selection, for a drag that adds to it.
+          if (!event.metaKey && !event.shiftKey) {
+            onClearSelection();
+          }
           containerRef.current?.focus();
+          startDragSelection(event);
         }}
         onContextMenu={(event) => {
           const target = event.target;
@@ -1778,6 +1820,7 @@ function DetailsView({
         {/* biome-ignore lint/a11y/useSemanticElements: see grid note above; body markup mirrors the styled-div table. */}
         <div
           role="rowgroup"
+          ref={tableRef}
           className="details-table"
           style={{
             width: `${tableWidth + 2 * DETAILS_LAYOUT.rowInset}px`,
@@ -1935,6 +1978,7 @@ function DetailsView({
             );
           })}
         </div>
+        <div ref={boxRef} className="drag-select-box" hidden />
       </div>
       {offscreenRenameEntry && inlineRename ? (
         <OffscreenRenameField

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import {
   COMPACT_ICON_GRID_LAYOUT,
   ICON_GRID_LAYOUT,
@@ -6,7 +8,38 @@ import {
   getIconGridRevealScrollTop,
 } from "./iconGridLayout";
 
+// The body of the stylesheet's rule for exactly this selector.
+function cssRule(selector: string): string {
+  const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
+  return (
+    new RegExp(`\n${selector.replace(/[.]/g, "\\.")} \\{([^}]*)\\}`, "u").exec(styles)?.[1] ?? ""
+  );
+}
+
 describe("iconGridLayout", () => {
+  it("puts the icon as far down in its item as the stylesheet does", () => {
+    expect(cssRule(".icon-item")).toMatch(
+      new RegExp(`\\bpadding: ${ICON_GRID_LAYOUT.itemPaddingTop}px `, "u"),
+    );
+    expect(cssRule(".icon-grid.compact .icon-item")).toContain(
+      `padding-top: ${COMPACT_ICON_GRID_LAYOUT.itemPaddingTop}px;`,
+    );
+  });
+
+  it("takes clicks on the tile and the name where the stylesheet draws them", () => {
+    for (const [selector, layout] of [
+      [".icon-grid", ICON_GRID_LAYOUT],
+      [".icon-grid.compact", COMPACT_ICON_GRID_LAYOUT],
+    ] as const) {
+      expect(cssRule(selector)).toContain(`--icon-box: ${layout.iconBoxSize}px;`);
+      expect(cssRule(selector)).toContain(`--icon-label-width: ${layout.labelWidth}px;`);
+    }
+    expect(cssRule(".icon-item")).toContain(`gap: ${ICON_GRID_LAYOUT.labelGap}px;`);
+    expect(cssRule(".icon-grid.compact .icon-item")).toContain(
+      `gap: ${COMPACT_ICON_GRID_LAYOUT.labelGap}px;`,
+    );
+  });
+
   it("uses smaller icons and tighter rows in compact mode", () => {
     expect(getIconGridLayout(false)).toBe(ICON_GRID_LAYOUT);
     expect(getIconGridLayout(true)).toBe(COMPACT_ICON_GRID_LAYOUT);

@@ -2225,6 +2225,22 @@ body.resizing-panels * {
   overflow: auto;
 }
 
+/* Drag-to-select's box, as in Finder: a gray tint with a gray edge, mixed from the text
+   color so it suits light and dark. Placed by `useDragSelection`, in the scroll area's
+   content so it scrolls with the items. */
+.drag-select-box {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 38%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  pointer-events: none;
+}
+
+.drag-select-box[hidden] {
+  display: none;
+}
+
 .tree-scroll:focus,
 .tree-scroll:focus-visible,
 .content-scroll:focus,
@@ -2573,6 +2589,28 @@ body.resizing-panels * {
 
 .flow-list.compact .flow-item-label {
   font-size: var(--font-size-body);
+}
+
+/* In the Icon view only an item's icon and name take clicks, as in Finder: the rest of its
+   cell is empty space, where a press clears the selection and a drag draws a selection
+   box. Clicks on the icon and the name still reach the item's own handlers. An item being
+   renamed takes clicks everywhere, for its field. lib/dragSelection.ts touches items on
+   the same parts. */
+.icon-item:not(.renaming) {
+  pointer-events: none;
+}
+
+.icon-item:not(.renaming) .icon-item-image,
+.icon-item:not(.renaming) .icon-item-label {
+  pointer-events: auto;
+}
+
+/* A Compact List item is as wide as its icon and name (at most its column), as in the List
+   view of Windows Explorer: its highlight fits them, and the rest of the column is empty
+   space, as in the Icon view. An item being renamed keeps the column, for its field. */
+.flow-item:not(.renaming) {
+  justify-self: start;
+  max-width: 100%;
 }
 
 .truncated-name-stem {
