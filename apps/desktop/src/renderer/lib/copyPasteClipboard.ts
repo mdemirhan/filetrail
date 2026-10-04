@@ -1,6 +1,11 @@
 import type { IpcRequest } from "@filetrail/contracts";
 
-import { collectFollowedMoves, getPathLeafName, replacePathPrefix } from "./explorerAppUtils";
+import {
+  collectFollowedMoves,
+  getPathLeafName,
+  isRenameOrMove,
+  replacePathPrefix,
+} from "./explorerAppUtils";
 import type { DirectoryEntry, WriteOperationResult } from "./explorerTypes";
 
 export type ClipboardMode = IpcRequest<"copyPaste:plan">["mode"];
@@ -132,10 +137,13 @@ export function remapClipboardPaths(
   return changed ? { ...clipboard, sourcePaths, sourceEntries } : clipboard;
 }
 
-// What a finished write did to the items on the clipboard: renamed and moved items are
-// followed to where they are now, and items put in the Trash or deleted are taken off.
-// Only what actually happened counts; an item that failed is still where it was, unless
-// its result says it was put back elsewhere.
+// What a finished write did to the items on the clipboard. Copied items that were renamed
+// or moved are followed to where they are now, as Finder does, and those put in the Trash
+// or deleted are taken off. A cut is a move not made yet: once any item in it is renamed,
+// moved, put in the Trash or deleted, the whole cut is cancelled, so a later paste doesn't
+// move what was already dealt with, or only part of what was cut. Only what actually
+// happened counts; an item that failed is still where it was, unless its result says it
+// was put back elsewhere.
 export function followClipboardThroughWrite(
   clipboard: CopyPasteClipboardState,
   result: WriteOperationResult,
@@ -143,21 +151,21 @@ export function followClipboardThroughWrite(
   if (clipboard.type !== "ready") {
     return clipboard;
   }
-  const completedItems = result.items.filter((item) => item.status === "completed");
-  if (
-    result.action === "rename" ||
-    result.action === "batch_rename" ||
-    result.action === "move_to"
-  ) {
-    return remapClipboardPaths(clipboard, collectFollowedMoves(result));
-  }
-  if (result.action === "trash" || result.action === "delete_immediately") {
-    return dropClipboardPaths(
-      clipboard,
-      completedItems.flatMap((item) => (item.sourcePath ? [item.sourcePath] : [])),
+  const moves = isRenameOrMove(result.action) ? collectFollowedMoves(result) : [];
+  const removedPaths =
+    result.action === "trash" || result.action === "delete_immediately"
+      ? result.items.flatMap((item) =>
+          item.status === "completed" && item.sourcePath ? [item.sourcePath] : [],
+        )
+      : [];
+  if (clipboard.mode === "cut") {
+    const changedPaths = [...moves.map(({ from }) => from), ...removedPaths];
+    const changesAnItem = clipboard.sourcePaths.some((path) =>
+      changedPaths.some((changed) => path === changed || path.startsWith(`${changed}/`)),
     );
+    return changesAnItem ? EMPTY_COPY_PASTE_CLIPBOARD : clipboard;
   }
-  return clipboard;
+  return dropClipboardPaths(remapClipboardPaths(clipboard, moves), removedPaths);
 }
 
 export function clearCopyPasteClipboard(): CopyPasteClipboardState {

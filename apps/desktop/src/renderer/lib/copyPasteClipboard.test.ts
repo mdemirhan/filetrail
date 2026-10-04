@@ -315,5 +315,55 @@ describe("copyPasteClipboard", () => {
         ),
       ).toBe(clipboard);
     });
+
+    it("cancels a whole cut once any item in it is renamed, moved or deleted", () => {
+      const cut = setCopyPasteClipboard(
+        "cut",
+        ["/Users/demo/report.pdf", "/Users/demo/Folder/inner.txt", "/Users/demo/other.txt"],
+        NOW,
+      );
+      for (const result of [
+        writeResult("rename", [
+          { sourcePath: "/Users/demo/report.pdf", destinationPath: "/Users/demo/final.pdf" },
+        ]),
+        // A folder something was cut from counts too.
+        writeResult("move_to", [
+          { sourcePath: "/Users/demo/Folder", destinationPath: "/Volumes/Backup/Folder" },
+        ]),
+        // A rename of several: an item put back under another name has moved too.
+        writeResult("batch_rename", [
+          {
+            sourcePath: "/Users/demo/other.txt",
+            destinationPath: "/Users/demo/other 2.txt",
+            status: "failed",
+          },
+        ]),
+        writeResult("trash", [{ sourcePath: "/Users/demo/other.txt", destinationPath: null }]),
+        writeResult("delete_immediately", [
+          { sourcePath: "/Users/demo/report.pdf", destinationPath: null },
+        ]),
+      ]) {
+        expect(followClipboardThroughWrite(cut, result)).toEqual(EMPTY_COPY_PASTE_CLIPBOARD);
+      }
+      // Items that failed, items not in the cut, and copies leave it as it was.
+      for (const result of [
+        writeResult("move_to", [
+          {
+            sourcePath: "/Users/demo/report.pdf",
+            destinationPath: "/Volumes/Backup/report.pdf",
+            status: "failed",
+          },
+          { sourcePath: "/Users/demo/Fold", destinationPath: "/Volumes/Backup/Fold" },
+        ]),
+        writeResult("trash", [
+          { sourcePath: "/Users/demo/other.txt", destinationPath: null, status: "failed" },
+        ]),
+        writeResult("paste", [
+          { sourcePath: "/Users/demo/report.pdf", destinationPath: "/tmp/report.pdf" },
+        ]),
+      ]) {
+        expect(followClipboardThroughWrite(cut, result)).toBe(cut);
+      }
+    });
   });
 });

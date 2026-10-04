@@ -888,8 +888,9 @@ export function useExplorerActions(args: {
             applyCopyPasteClipboardState(clearCopyPasteClipboard());
           }
         }
-        // Items on the clipboard that this write renamed, moved or deleted are followed, so a
-        // later paste still finds them, or no longer offers what is gone.
+        // Copied items that this write renamed or moved are followed, so a later paste still
+        // finds them, and deleted ones are no longer offered. A cut any of whose items this
+        // write changed is cancelled.
         if (event.result) {
           const clipboard = copyPasteClipboardRef.current;
           const followedClipboard = followClipboardThroughWrite(clipboard, event.result);

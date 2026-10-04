@@ -895,6 +895,49 @@ describe("App file operations like Finder", () => {
       });
     });
 
+    it("cancels a whole cut when one of its items is moved by a drag", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await act(async () => {
+        fireEvent.click(screen.getByTitle("/Users/demo/Folder"), { metaKey: true });
+      });
+      await pressKey({ key: "x", metaKey: true });
+      expect(clipboardButton()).toHaveAccessibleName("Clipboard: 2 items cut");
+
+      await selectItem("/Users/demo/source.txt");
+      await dragBetween(
+        await screen.findByTitle("/Users/demo/source.txt"),
+        await screen.findByTitle("tree:/Users/demo/Folder"),
+      );
+      await vi.waitFor(() => {
+        expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+      });
+      harness.setDirectoryEntries("/Users/demo", [
+        createDirectoryEntry("/Users/demo/Folder", "directory"),
+      ]);
+      await act(async () => {
+        harness.emitProgress(
+          finishedWriteEvent({
+            operationId: "copy-op-1",
+            action: "move_to",
+            targetPath: "/Users/demo/Folder",
+            items: [
+              {
+                sourcePath: "/Users/demo/source.txt",
+                destinationPath: "/Users/demo/Folder/source.txt",
+              },
+            ],
+          }),
+        );
+      });
+
+      await vi.waitFor(() => {
+        expect(clipboardButton()).toBeNull();
+      });
+    });
+
     it("drops an item put in the Trash", async () => {
       const harness = createAppHarness();
       renderApp(harness);
