@@ -90,66 +90,103 @@ export async function runBatchRename(args: {
     const key = `${item.folder}\0${looseKey(item.destinationName)}`;
     wantedNames.set(key, [...(wantedNames.get(key) ?? []), item.index]);
   }
-  const blockers = planned.filter((item) =>
+  const isBlocker = (item: PlannedItem) =>
     (wantedNames.get(`${item.folder}\0${looseKey(item.sourceName)}`) ?? []).some(
       (wanting) => wanting !== item.index,
-    ),
-  );
-
-  // First, the items in the way move aside.
-  for (const item of blockers) {
-    if (signal.aborted) {
-      cancelled = true;
-      break;
-    }
-    try {
-      item.temporaryPath = await moveToTemporaryName(fs, item, temporaryName);
-    } catch (error) {
-      results[item.index] = failed(
-        item,
-        await describeRenameError(fs, error, item, item.sourcePath),
-      );
-    }
-  }
-
-  // Then every item takes its new name, in the order asked for. Stopped before any has, they
-  // all go back as they were; stopped later, an item already moved aside still takes its
-  // new name, so a swap under way is finished rather than left with a name taken from it.
-  let anyRenamed = false;
-  for (const item of planned) {
-    if (results[item.index] !== null) {
-      continue;
-    }
-    const finishesSwap = anyRenamed && item.temporaryPath !== null;
-    if ((cancelled || signal.aborted) && !finishesSwap) {
-      cancelled = true;
-      results[item.index] = await leaveUnrenamed(fs, item, {
-        status: "cancelled",
-        error: "Not started because the operation was stopped.",
-        skipReason: null,
-      });
-      continue;
-    }
-    args.onItemStart?.(
-      { sourcePath: item.sourcePath, destinationPath: item.destinationPath },
-      completedItemCount,
     );
-    results[item.index] = await renameItem(fs, item, request);
-    if (results[item.index]?.status === "completed") {
-      completedItemCount += 1;
-      anyRenamed = true;
+
+  // A folder and items inside it may be renamed together (search results reach into
+  // folders): the deepest items go first, so every path still leads where it did when it
+  // is used, and a folder is renamed once what is inside it is done. Items in one folder
+  // are at one depth, so names are swapped and passed along within a level.
+  const levels = new Map<number, PlannedItem[]>();
+  for (const item of planned) {
+    const depth = item.sourcePath.split("/").length;
+    levels.set(depth, [...(levels.get(depth) ?? []), item]);
+  }
+  const deepestFirst = [...levels.entries()]
+    .sort(([left], [right]) => right - left)
+    .map(([, items]) => items);
+
+  let anyRenamed = false;
+  for (const level of deepestFirst) {
+    // First, the items in the way move aside.
+    for (const item of level.filter(isBlocker)) {
+      if (signal.aborted) {
+        cancelled = true;
+        break;
+      }
+      try {
+        item.temporaryPath = await moveToTemporaryName(fs, item, temporaryName);
+      } catch (error) {
+        results[item.index] = failed(
+          item,
+          await describeRenameError(fs, error, item, item.sourcePath),
+        );
+      }
     }
-    if (signal.aborted) {
-      cancelled = true;
+
+    // Then every item takes its new name, in the order asked for. Stopped before any has,
+    // they all go back as they were; stopped later, an item already moved aside still takes
+    // its new name, so a swap under way is finished rather than left with a name taken
+    // from it.
+    for (const item of level) {
+      if (results[item.index] !== null) {
+        continue;
+      }
+      const finishesSwap = anyRenamed && item.temporaryPath !== null;
+      if ((cancelled || signal.aborted) && !finishesSwap) {
+        cancelled = true;
+        results[item.index] = await leaveUnrenamed(fs, item, {
+          status: "cancelled",
+          error: "Not started because the operation was stopped.",
+          skipReason: null,
+        });
+        continue;
+      }
+      args.onItemStart?.(
+        { sourcePath: item.sourcePath, destinationPath: item.destinationPath },
+        completedItemCount,
+      );
+      results[item.index] = await renameItem(fs, item, request);
+      if (results[item.index]?.status === "completed") {
+        completedItemCount += 1;
+        anyRenamed = true;
+        followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
+      }
+      if (signal.aborted) {
+        cancelled = true;
+      }
     }
   }
 
-  // Every item has its result by now: the loop above gives one to each.
+  // Every item has its result by now: the loops above give one to each.
   return {
     items: results.filter((result): result is ResultItem => result !== null),
     completedItemCount,
     cancelled,
   };
+}
+
+// A folder just renamed takes along what was renamed inside it before: their new paths say
+// where they are now, under the folder's new name.
+function followFolderRename(
+  results: Array<ResultItem | null>,
+  from: string,
+  to: string | null | undefined,
+): void {
+  if (!to || to === from) {
+    return;
+  }
+  const prefix = `${from}/`;
+  results.forEach((result, index) => {
+    if (result?.destinationPath?.startsWith(prefix)) {
+      results[index] = {
+        ...result,
+        destinationPath: `${to}/${result.destinationPath.slice(prefix.length)}`,
+      };
+    }
+  });
 }
 
 async function renameItem(

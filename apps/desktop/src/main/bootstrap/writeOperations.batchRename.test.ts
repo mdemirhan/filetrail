@@ -159,6 +159,27 @@ describe("renaming several items on a real disk", () => {
     ]);
   });
 
+  it("renames a folder and items inside it together, as search results can ask", async () => {
+    const root = makeFolder({});
+    mkdirSync(join(root, "day/inner"), { recursive: true });
+    writeFileSync(join(root, "day/x.jpg"), "X");
+    writeFileSync(join(root, "day/inner/z.jpg"), "Z");
+    const { terminal } = await rename(root, [
+      ["day", "Lisbon"],
+      ["day/x.jpg", "Lisbon 1.jpg"],
+      ["day/inner/z.jpg", "Lisbon 2.jpg"],
+    ]);
+    expect(terminal.status).toBe("completed");
+    expect(visibleNames(root)).toEqual(["Lisbon"]);
+    expect(readFileSync(join(root, "Lisbon/Lisbon 1.jpg"), "utf8")).toBe("X");
+    expect(readFileSync(join(root, "Lisbon/inner/Lisbon 2.jpg"), "utf8")).toBe("Z");
+    expect(terminal.result?.items.map((item) => item.destinationPath)).toEqual([
+      join(root, "Lisbon"),
+      join(root, "Lisbon/Lisbon 1.jpg"),
+      join(root, "Lisbon/inner/Lisbon 2.jpg"),
+    ]);
+  });
+
   it("changes only the case of names, and how an accented letter is written", async () => {
     const root = makeFolder({ "notes.txt": "n", "café.txt": "c" });
     if (existsSync(join(root, "NOTES.TXT")) === false) {

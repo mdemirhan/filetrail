@@ -95,6 +95,13 @@ class MemoryDisk implements BatchRenameFs {
     const entries = this.folders.get(destination.folder) ?? new Map();
     entries.set(this.key(destination.name), { name: destination.name, ino: entry?.ino ?? 0 });
     this.folders.set(destination.folder, entries);
+    // A folder takes what is inside it along.
+    for (const [path, contents] of [...this.folders]) {
+      if (path === from || path.startsWith(`${from}/`)) {
+        this.folders.delete(path);
+        this.folders.set(`${to}${path.slice(from.length)}`, contents);
+      }
+    }
   }
 }
 
@@ -513,6 +520,100 @@ describe("renaming several items", () => {
     const disk = new MemoryDisk(files);
     const result = await run(disk, request([["a", "b"]]));
     expect(result.items[0]).toMatchObject({ status: "failed" });
+  });
+
+  describe("a folder and items inside it", () => {
+    it("renames the items inside first, and says where they are under the folder's new name", async () => {
+      const disk = new MemoryDisk(["/trip/sub", "/trip/sub/x.jpg", "/trip/sub/deeper/z.jpg"]);
+      const started: string[] = [];
+      const result = await run(
+        disk,
+        request(
+          [
+            ["sub", "Day 1"],
+            ["sub/x.jpg", "y.jpg"],
+            ["sub/deeper/z.jpg", "w.jpg"],
+          ],
+          { folders: ["sub"] },
+        ),
+        { onItemStart: (item) => started.push(item.sourcePath) },
+      );
+      expect(started).toEqual(["/trip/sub/deeper/z.jpg", "/trip/sub/x.jpg", "/trip/sub"]);
+      expect(disk.names()).toEqual(["Day 1"]);
+      expect(disk.names("/trip/Day 1")).toEqual(["y.jpg"]);
+      expect(disk.names("/trip/Day 1/deeper")).toEqual(["w.jpg"]);
+      // Results stay in the order asked for.
+      expect(result.items.map((item) => [item.sourcePath, item.destinationPath])).toEqual([
+        ["/trip/sub", "/trip/Day 1"],
+        ["/trip/sub/x.jpg", "/trip/Day 1/y.jpg"],
+        ["/trip/sub/deeper/z.jpg", "/trip/Day 1/deeper/w.jpg"],
+      ]);
+      expect(result.completedItemCount).toBe(3);
+    });
+
+    it("still renames the folder when an item inside it fails", async () => {
+      const disk = new MemoryDisk(["/trip/sub", "/trip/sub/x.jpg"]);
+      disk.failures.set("renameExclusive:/trip/sub/x.jpg->/trip/sub/y.jpg", errno("EACCES"));
+      const result = await run(
+        disk,
+        request(
+          [
+            ["sub", "Day 1"],
+            ["sub/x.jpg", "y.jpg"],
+          ],
+          { folders: ["sub"] },
+        ),
+      );
+      expect(result.items.map((item) => [item.status, item.destinationPath])).toEqual([
+        ["completed", "/trip/Day 1"],
+        ["failed", null],
+      ]);
+      expect(disk.names("/trip/Day 1")).toEqual(["x.jpg"]);
+    });
+
+    it("leaves the folder alone when stopped while the item inside is renamed", async () => {
+      const disk = new MemoryDisk(["/trip/sub", "/trip/sub/x.jpg"]);
+      const controller = new AbortController();
+      const result = await run(
+        disk,
+        request(
+          [
+            ["sub", "Day 1"],
+            ["sub/x.jpg", "y.jpg"],
+          ],
+          { folders: ["sub"] },
+        ),
+        { signal: controller.signal, onItemStart: () => controller.abort() },
+      );
+      expect(result.cancelled).toBe(true);
+      expect(result.items.map((item) => [item.status, item.destinationPath])).toEqual([
+        ["cancelled", null],
+        ["completed", "/trip/sub/y.jpg"],
+      ]);
+      expect(disk.names()).toEqual(["sub"]);
+    });
+
+    it("swaps names inside a folder that is renamed too", async () => {
+      const disk = new MemoryDisk(["/trip/sub", "/trip/sub/a", "/trip/sub/b"]);
+      const result = await run(
+        disk,
+        request(
+          [
+            ["sub", "Day 1"],
+            ["sub/a", "b"],
+            ["sub/b", "a"],
+          ],
+          { folders: ["sub"] },
+        ),
+      );
+      expect(result.completedItemCount).toBe(3);
+      expect(disk.names("/trip/Day 1")).toEqual(["a", "b"]);
+      expect(result.items.map((item) => item.destinationPath)).toEqual([
+        "/trip/Day 1",
+        "/trip/Day 1/b",
+        "/trip/Day 1/a",
+      ]);
+    });
   });
 
   describe("stopping", () => {
