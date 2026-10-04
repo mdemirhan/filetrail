@@ -309,7 +309,9 @@ describe("renaming several items", () => {
         ),
       );
       expect(result.items.map((item) => item.status)).toEqual(["skipped", "completed"]);
+      // A skipped item is still where it was: no new path for the window to follow.
       expect(result.items[0]).toMatchObject({
+        destinationPath: null,
         error: "An item named “Lisbon.jpg” already exists.",
         skipReason: "runtime_conflict_resolution",
       });
@@ -430,7 +432,8 @@ describe("renaming several items", () => {
       ]),
     );
     // "b" moved aside, failed to become "c", and is back as "b"; "a" then found "b" taken.
-    expect(result.items[0]).toMatchObject({ status: "failed", destinationPath: "/trip/c" });
+    // Still where it was: no new path.
+    expect(result.items[0]).toMatchObject({ status: "failed", destinationPath: null });
     expect(result.items[1]).toMatchObject({ status: "completed", destinationPath: "/trip/b 2" });
     expect(disk.names()).toEqual(["b", "b 2"]);
   });
@@ -457,7 +460,7 @@ describe("renaming several items", () => {
     const failing = new MemoryDisk(["/trip/notes.txt"]);
     failing.failures.set("rename:/trip/notes.txt->/trip/Notes.txt", errno("EIO"));
     const result = await run(failing, request([["notes.txt", "Notes.txt"]]));
-    expect(result.items[0]).toMatchObject({ status: "failed", destinationPath: "/trip/Notes.txt" });
+    expect(result.items[0]).toMatchObject({ status: "failed", destinationPath: null });
     expect(failing.names()).toEqual(["notes.txt"]);
     // A disk that minds case finds no "A" for "a": an ordinary rename.
     const sensitive = new MemoryDisk(["/trip/a"], true);

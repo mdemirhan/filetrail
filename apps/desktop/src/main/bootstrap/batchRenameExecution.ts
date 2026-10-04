@@ -105,13 +105,7 @@ export async function runBatchRename(args: {
     try {
       item.temporaryPath = await moveToTemporaryName(fs, item, temporaryName);
     } catch (error) {
-      results[item.index] = {
-        sourcePath: item.sourcePath,
-        destinationPath: item.destinationPath,
-        status: "failed",
-        error: await describeRenameError(fs, error, item, item.sourcePath),
-        skipReason: null,
-      };
+      results[item.index] = failed(item, await describeRenameError(fs, error, item, item.sourcePath));
     }
   }
 
@@ -228,7 +222,7 @@ async function leaveUnrenamed(
   }
   return {
     sourcePath: item.sourcePath,
-    destinationPath: item.destinationPath,
+    destinationPath: null,
     status: outcome.status,
     error: outcome.error,
     skipReason: outcome.skipReason ?? null,
@@ -325,10 +319,11 @@ function completed(item: PlannedItem, destinationPath: string): ResultItem {
   };
 }
 
+// An item that couldn't be renamed and is still where it was: it has no new path.
 function failed(item: PlannedItem, error: string): ResultItem {
   return {
     sourcePath: item.sourcePath,
-    destinationPath: item.destinationPath,
+    destinationPath: null,
     status: "failed",
     error,
     skipReason: null,
