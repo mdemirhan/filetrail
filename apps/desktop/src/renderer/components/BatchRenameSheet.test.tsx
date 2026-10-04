@@ -303,7 +303,7 @@ describe("the Rename sheet", () => {
       expect(onDeletePreset).toHaveBeenCalledWith("Photos");
     });
 
-    it("saves the settings under a name typed in the header", () => {
+    it("saves the settings under a name typed in the header", async () => {
       const onSavePreset = vi.fn();
       const onRename = vi.fn();
       render(
@@ -328,6 +328,8 @@ describe("the Rename sheet", () => {
       expect(onSavePreset).toHaveBeenCalledWith("Suffix");
       expect(onRename).not.toHaveBeenCalled();
       expect(screen.queryByLabelText("Preset name")).toBeNull();
+      // The keyboard goes back to the pop-up the name was asked from.
+      await vi.waitFor(() => expect(screen.getByLabelText("Presets")).toHaveFocus());
     });
 
     it("leaves saving with Escape or Cancel without closing the sheet", () => {

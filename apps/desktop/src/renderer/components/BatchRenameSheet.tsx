@@ -74,6 +74,13 @@ export function BatchRenameSheet({
   const titleId = useId();
   const modeGroupName = useId();
   const [savingPreset, setSavingPreset] = useState(false);
+  const presetsRef = useRef<HTMLSelectElement | null>(null);
+  // Back from naming a preset, the keyboard goes to the Presets pop-up the name was asked
+  // from: the field it was in is gone, and Escape or Tab must still reach the sheet.
+  function stopSavingPreset() {
+    setSavingPreset(false);
+    requestAnimationFrame(() => presetsRef.current?.focus());
+  }
   const [presetName, setPresetName] = useState("");
   // The preset last loaded or saved, offered for Update and Delete while it exists.
   const [currentPresetName, setCurrentPresetName] = useState<string | null>(null);
@@ -113,7 +120,7 @@ export function BatchRenameSheet({
     }
     onSavePreset(name);
     setCurrentPresetName(name);
-    setSavingPreset(false);
+    stopSavingPreset();
   }
 
   const count = targets.length;
@@ -134,7 +141,7 @@ export function BatchRenameSheet({
           event.preventDefault();
           event.stopPropagation();
           if (savingPreset) {
-            setSavingPreset(false);
+            stopSavingPreset();
             return;
           }
           onCancel();
@@ -168,7 +175,7 @@ export function BatchRenameSheet({
                   autoFocus
                   onChange={(event) => setPresetName(event.currentTarget.value)}
                 />
-                <PushButton onClick={() => setSavingPreset(false)}>Cancel</PushButton>
+                <PushButton onClick={stopSavingPreset}>Cancel</PushButton>
                 <PushButton
                   variant="default"
                   type="submit"
@@ -180,6 +187,7 @@ export function BatchRenameSheet({
             ) : (
               <span className="batch-rename-popup batch-rename-presets">
                 <select
+                  ref={presetsRef}
                   aria-label="Presets"
                   value={matchesCurrentPreset ? `load:${currentPreset?.name}` : ""}
                   onChange={(event) => {

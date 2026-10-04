@@ -6534,6 +6534,9 @@ button.shortcut-slot-key.recording:hover {
    drops in below the toolbar like the other sheets; labels sit right-aligned in a column
    before their controls, as in Finder's own sheet. */
 .batch-rename-sheet {
+  /* In the scrim's flow, centered under the toolbar, rather than where an open <dialog>
+     is placed by default (absolutely, at the left). */
+  position: relative;
   display: flex;
   flex-direction: column;
   width: min(640px, calc(100vw - 48px));

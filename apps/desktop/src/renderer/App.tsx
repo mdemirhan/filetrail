@@ -1148,7 +1148,9 @@ export function App() {
     },
     actions: {
       dismissActionNotice,
-      handleCopyPasteDialogEscape,
+      // Escape closes the Rename sheet too, wherever the focus is.
+      handleCopyPasteDialogEscape: () =>
+        batchRename.sheet ? batchRename.close() : handleCopyPasteDialogEscape(),
       openSettingsView: () => openSettingsView(),
       customizeToolbar: startCustomizingToolbar,
       openLocationSheet,

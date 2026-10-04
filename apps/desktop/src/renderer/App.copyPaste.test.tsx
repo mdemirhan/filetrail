@@ -3657,6 +3657,12 @@ describe("App copy/paste integration", () => {
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       });
       expect(sheet()).toBeNull();
+      // Escape closes it wherever the keyboard is, even outside it.
+      await pressKey({ key: "F2" });
+      await waitFor(() => expect(sheet()).toBeInTheDocument());
+      (document.activeElement as HTMLElement | null)?.blur();
+      await pressKey({ key: "Escape" });
+      expect(sheet()).toBeNull();
       // Return renames, as Finder's does (Settings can make it open instead).
       await act(async () => {
         fireEvent.click(screen.getByTitle("/Users/demo/b.txt"), { metaKey: true });
