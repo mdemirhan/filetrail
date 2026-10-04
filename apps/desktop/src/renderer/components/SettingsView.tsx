@@ -28,6 +28,7 @@ import type {
 } from "../../shared/appPreferences";
 import {
   DEFAULT_APP_PREFERENCES,
+  DEFAULT_DETAIL_COLUMN_ORDER,
   DEFAULT_TERMINAL_APPLICATION,
   DEFAULT_TEXT_EDITOR,
   DETAIL_COLUMN_LABELS,
@@ -628,7 +629,8 @@ function SettingsListText({ name, path }: { name: string; path: string }) {
   );
 }
 
-// The List view's columns, to check and to drag into order, as a list in Settings is. Name is
+// The List view's columns, to check and to drag into order, as a list in Settings is; Restore
+// Defaults puts back the order only, not which columns are shown. Name is
 // always shown and always first: its row is there, but it cannot be unchecked or moved. The
 // arrow keys select, Space checks, and ⌥ or ⌘ with an arrow moves the selected column.
 function DetailColumnList({
@@ -811,6 +813,16 @@ function DetailColumnList({
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M4 6l4 4 4-4" />
           </svg>
+        </button>
+        <span className="settings-list-bar-spacer" />
+        <button
+          type="button"
+          className="settings-list-bar-text-button"
+          aria-label="Restore the default column order"
+          disabled={order.every((key, index) => key === DEFAULT_DETAIL_COLUMN_ORDER[index])}
+          onClick={() => onOrderChange([...DEFAULT_DETAIL_COLUMN_ORDER])}
+        >
+          Restore Defaults
         </button>
       </div>
     </div>

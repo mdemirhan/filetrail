@@ -167,14 +167,15 @@ export const DEFAULT_DETAIL_COLUMN_WIDTHS: DetailColumnWidths = {
 };
 // A column may be made narrower than its title or its longest value: both end in an
 // ellipsis, and a date's tooltip has it in full. The least widths still show a short value
-// ("Mar 3, 2024", "123.5 MB", "Folder", "755") and a few letters of the title.
+// ("Mar 3, 2024", "123.5 MB", "Folder", "755") and a few letters of the title, except
+// Permissions, whose code is all it needs to show.
 export const DETAIL_COLUMN_WIDTH_LIMITS = {
   name: { min: 140, max: 720 },
   modified: { min: 80, max: 280 },
   size: { min: 60, max: 240 },
   kind: { min: 60, max: 320 },
   created: { min: 80, max: 280 },
-  permissions: { min: 52, max: 260 },
+  permissions: { min: 36, max: 260 },
 } as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
 export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
   {

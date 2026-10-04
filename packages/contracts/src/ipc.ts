@@ -64,7 +64,7 @@ export const detailColumnWidthsSchema = z.object({
   size: z.number().int().min(60).max(240),
   kind: z.number().int().min(60).max(320),
   created: z.number().int().min(80).max(280),
-  permissions: z.number().int().min(52).max(260),
+  permissions: z.number().int().min(36).max(260),
 });
 export const openWithApplicationSchema = z.object({
   id: z.string().trim().min(1),

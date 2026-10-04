@@ -1,10 +1,12 @@
 import {
   DEFAULT_DETAIL_COLUMN_ORDER,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
+  DETAIL_COLUMN_WIDTH_LIMITS,
 } from "../../shared/appPreferences";
 import {
   DETAILS_LAYOUT,
   fitDetailColumns,
+  getDetailColumnFitWidth,
   getDetailsRowHeight,
   getDetailsTableWidth,
   getVisibleDetailColumns,
@@ -125,6 +127,46 @@ describe("detailsLayout", () => {
     it("leaves the saved widths of the other columns alone", () => {
       const fitted = fitDetailColumns({ columns, widths, availableWidth: 400 });
       expect(fitted.widths).toMatchObject({ modified: 152, size: 108, kind: 148 });
+    });
+  });
+
+  describe("getDetailColumnFitWidth", () => {
+    it("fits the wider of the title and the widest value, with a little room", () => {
+      expect(
+        getDetailColumnFitWidth("kind", {
+          headerWidth: 28,
+          valueWidths: [60.2, 84.5],
+          valueExtraWidth: 0,
+        }),
+      ).toBe(87);
+      expect(
+        getDetailColumnFitWidth("permissions", {
+          headerWidth: 69.4,
+          valueWidths: [24],
+          valueExtraWidth: 0,
+        }),
+      ).toBe(72);
+      // Name's cells hold the icon and its gap besides the text.
+      expect(
+        getDetailColumnFitWidth("name", {
+          headerWidth: 40,
+          valueWidths: [300],
+          valueExtraWidth: 24,
+        }),
+      ).toBe(326);
+    });
+
+    it("stays within the column's limits", () => {
+      expect(
+        getDetailColumnFitWidth("size", { headerWidth: 26, valueWidths: [], valueExtraWidth: 0 }),
+      ).toBe(DETAIL_COLUMN_WIDTH_LIMITS.size.min);
+      expect(
+        getDetailColumnFitWidth("name", {
+          headerWidth: 40,
+          valueWidths: [5000],
+          valueExtraWidth: 24,
+        }),
+      ).toBe(DETAIL_COLUMN_WIDTH_LIMITS.name.max);
     });
   });
 });

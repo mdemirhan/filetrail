@@ -657,4 +657,28 @@ describe("SettingsView", () => {
       [["permissions", "modified", "size", "kind", "created"]],
     ]);
   });
+
+  it("restores the default column order, and leaves the checked columns alone", () => {
+    const onDetailColumnOrderChange = vi.fn();
+    const onDetailColumnsChange = vi.fn();
+    const { unmount } = renderSettingsView({ onDetailColumnOrderChange, onDetailColumnsChange });
+    expect(screen.getByRole("button", { name: "Restore the default column order" })).toBeDisabled();
+    unmount();
+
+    renderSettingsView({
+      detailColumnOrder: ["permissions", "kind", "size", "modified", "created"],
+      onDetailColumnOrderChange,
+      onDetailColumnsChange,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Restore the default column order" }));
+
+    expect(onDetailColumnOrderChange).toHaveBeenCalledWith([
+      "modified",
+      "size",
+      "kind",
+      "created",
+      "permissions",
+    ]);
+    expect(onDetailColumnsChange).not.toHaveBeenCalled();
+  });
 });

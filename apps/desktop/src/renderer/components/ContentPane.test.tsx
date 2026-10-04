@@ -342,6 +342,83 @@ describe("ContentPane", () => {
     );
   });
 
+  it("fits a column to its title and its widest value on a double-click of its divider", () => {
+    // jsdom draws no text: every character is 7 pixels wide here.
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      font: "",
+      measureText: (text: string) => ({ width: text.length * 7 }),
+    } as unknown as CanvasRenderingContext2D);
+    const handleWidthsChange = vi.fn();
+    const file = (name: string) => ({
+      path: `/Users/demo/${name}`,
+      name,
+      extension: name.split(".").pop() ?? "",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+    });
+    const metadata = (name: string, kindLabel: string) => ({
+      path: `/Users/demo/${name}`,
+      kindLabel,
+      sizeBytes: 5,
+      sizeStatus: "ready" as const,
+      modifiedAt: null,
+      createdAt: null,
+      permissionMode: 0o644,
+    });
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[file("a.txt"), file("a much longer name.pdf")]}
+        viewMode="details"
+        loading={false}
+        error={null}
+        hiddenItemCount={0}
+        metadataByPath={{
+          "/Users/demo/a.txt": metadata("a.txt", "Plain Text"),
+          "/Users/demo/a much longer name.pdf": metadata("a much longer name.pdf", "PDF document"),
+        }}
+        detailColumns={{
+          modified: false,
+          size: true,
+          kind: true,
+          created: false,
+          permissions: true,
+        }}
+        onDetailColumnWidthsChange={handleWidthsChange}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("separator", { name: "Resize Kind column" }));
+    fireEvent.doubleClick(screen.getByRole("separator", { name: "Resize Size column" }));
+    fireEvent.doubleClick(screen.getByRole("separator", { name: "Resize Name column" }));
+    fireEvent.doubleClick(screen.getByRole("separator", { name: "Resize Permissions column" }));
+    getContext.mockRestore();
+
+    // The widest value, plus 2 pixels so rounding never cuts it; the title when it is
+    // wider ("Permissions" over "644"); never below the column's least width.
+    const fitted = handleWidthsChange.mock.calls.map(([widths]) => widths);
+    expect(fitted[0].kind).toBe(12 * 7 + 2);
+    expect(fitted[1].size).toBe(60);
+    expect(fitted[2].name).toBe(22 * 7 + 2);
+    expect(fitted[3].permissions).toBe("Permissions".length * 7 + 2);
+  });
+
   it("forwards modifier selection gestures in details mode", () => {
     const handleSelectionGesture = vi.fn();
 

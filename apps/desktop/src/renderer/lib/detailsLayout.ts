@@ -4,6 +4,7 @@ import type {
   DetailColumnVisibility,
   DetailColumnWidths,
 } from "../../shared/appPreferences";
+import { clampDetailColumnWidth } from "../../shared/appPreferences";
 
 // Shared details-view sizing contract. The renderer uses these values for sticky header
 // alignment, virtualization, keyboard paging, and compact-mode switching.
@@ -78,4 +79,22 @@ export function fitDetailColumns(args: {
     Math.min(widths.name, availableWidth - widthWithoutName),
   );
   return { columns, widths: { ...widths, name } };
+}
+
+// Added to a fitted width so a value measured to the pixel is not cut to an ellipsis by
+// rounding.
+const FIT_SLACK = 2;
+
+// The width that shows a column's title and its widest value whole (a double-click on its
+// divider, as in Finder), kept within the column's limits. `valueExtraWidth` is what a cell
+// holds besides its text: the icon and its gap, in the Name column.
+export function getDetailColumnFitWidth(
+  key: DetailColumnKey,
+  args: { headerWidth: number; valueWidths: ReadonlyArray<number>; valueExtraWidth: number },
+): number {
+  const widestValue = args.valueWidths.reduce((widest, width) => Math.max(widest, width), 0);
+  return clampDetailColumnWidth(
+    key,
+    Math.ceil(Math.max(args.headerWidth, widestValue + args.valueExtraWidth)) + FIT_SLACK,
+  );
 }

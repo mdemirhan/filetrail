@@ -27,6 +27,7 @@ import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import {
   DETAILS_LAYOUT,
   fitDetailColumns,
+  getDetailColumnFitWidth,
   getDetailsRowHeight,
   getDetailsTableWidth,
   getVisibleDetailColumns,
@@ -38,7 +39,13 @@ import {
   getFlowListRevealScrollLeft,
 } from "../lib/flowListLayout";
 import { focusGivesPaneTheKeyboard, isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
-import { formatSize, splitDisplayName, splitPermissionMode } from "../lib/formatting";
+import {
+  formatRelativeDateTime,
+  formatSize,
+  splitDisplayName,
+  splitPermissionMode,
+} from "../lib/formatting";
+import { getRelativeNow } from "../lib/relativeClock";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
 import { IconGridView } from "./IconGridView";
@@ -1548,6 +1555,53 @@ function DetailsView({
     window.addEventListener("pointercancel", handlePointerUp);
   }
 
+  // Fits a column to its title and its widest value, every row's and not only those on
+  // screen: their text is measured, in the fonts the cells on screen are drawn in. A value
+  // not loaded yet (a size, a kind) cannot count.
+  function fitColumnToContent(key: DetailColumnKey) {
+    const index = visibleColumns.indexOf(key);
+    const cell = containerRef.current?.querySelector(".details-row")?.children[index];
+    const headerCell = headerRef.current?.querySelectorAll('[role="columnheader"]')[index];
+    const title = headerCell?.querySelector(".details-header-text, .details-header-label");
+    if (!(headerCell instanceof HTMLElement) || !(title instanceof HTMLElement)) {
+      return;
+    }
+    // The title, and the sort arrow with its gap when the list is sorted by this column.
+    const indicator = headerCell.querySelector(".sort-indicator");
+    const headerWidth =
+      measureTextWidth(getCanvasFont(title), title.textContent ?? "") +
+      (indicator && title.parentElement
+        ? indicator.getBoundingClientRect().width +
+          (Number.parseFloat(getComputedStyle(title.parentElement).columnGap) || 0)
+        : 0);
+    let valueWidths: number[] = [];
+    let valueExtraWidth = 0;
+    if (cell instanceof HTMLElement) {
+      const textElement =
+        key === "name"
+          ? (cell.querySelector(".details-name-label") ?? cell)
+          : (cell.querySelector(".details-size-text") ?? cell);
+      const font = getCanvasFont(textElement as HTMLElement);
+      const now = getRelativeNow();
+      valueWidths = entries.map((entry) =>
+        measureTextWidth(
+          font,
+          getDetailCellText(key, entry, metadataByPath[entry.path], getFolderSizeLabel, now),
+        ),
+      );
+      if (key === "name") {
+        const icon = cell.querySelector(".file-icon");
+        valueExtraWidth =
+          (icon?.getBoundingClientRect().width ?? 0) +
+          (Number.parseFloat(getComputedStyle(cell).columnGap) || 0);
+      }
+    }
+    const width = getDetailColumnFitWidth(key, { headerWidth, valueWidths, valueExtraWidth });
+    if (width !== detailColumnWidths[key]) {
+      onDetailColumnWidthsChange({ ...detailColumnWidths, [key]: width });
+    }
+  }
+
   function nudgeColumnWidth(key: DetailColumnKey, direction: -1 | 1) {
     const width = clampDetailColumnWidth(key, columnWidths[key] + direction * 12);
     if (width === detailColumnWidths[key]) {
@@ -1590,6 +1644,7 @@ function DetailsView({
               onSortChange={onSortChange}
               onResizeStart={startColumnResize}
               onResizeNudge={nudgeColumnWidth}
+              onFitToContent={fitColumnToContent}
             />
           ))}
         </div>
@@ -1819,6 +1874,7 @@ function DetailsHeaderCell({
   onSortChange,
   onResizeStart,
   onResizeNudge,
+  onFitToContent,
 }: {
   columnKey: DetailColumnKey;
   active: boolean;
@@ -1826,6 +1882,7 @@ function DetailsHeaderCell({
   onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
   onResizeStart: (event: React.PointerEvent<HTMLSpanElement>, key: DetailColumnKey) => void;
   onResizeNudge: (key: DetailColumnKey, direction: -1 | 1) => void;
+  onFitToContent: (key: DetailColumnKey) => void;
 }) {
   const label = DETAIL_COLUMN_LABELS[columnKey];
   // Only columns the directory snapshot can order are sortable; Date Created and
@@ -1864,6 +1921,7 @@ function DetailsHeaderCell({
         aria-label={`Resize ${label} column`}
         tabIndex={0}
         onPointerDown={(event) => onResizeStart(event, columnKey)}
+        onDoubleClick={() => onFitToContent(columnKey)}
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft") {
             event.preventDefault();
@@ -2038,6 +2096,54 @@ function formatDetailSize(
     return "";
   }
   return formatSize(metadata.sizeBytes, metadata.sizeStatus);
+}
+
+// A cell's text as the list shows it, for fitting a column to its widest value.
+function getDetailCellText(
+  key: DetailColumnKey,
+  entry: DirectoryEntry,
+  metadata: DirectoryEntryMetadata | undefined,
+  getFolderSizeLabel: ((path: string) => string | null) | undefined,
+  now: number,
+): string {
+  switch (key) {
+    case "name":
+      return entry.name;
+    case "size":
+      return (
+        (isFolderLikeEntry(entry) ? getFolderSizeLabel?.(entry.path) : null) ??
+        formatDetailSize(entry, metadata)
+      );
+    case "kind":
+      return metadata?.kindLabel ?? "";
+    case "permissions":
+      return splitPermissionMode(metadata?.permissionMode ?? null)?.octal ?? "";
+    case "modified":
+    case "created": {
+      const ms = Date.parse(
+        (key === "modified" ? metadata?.modifiedAt : metadata?.createdAt) ?? "",
+      );
+      return Number.isNaN(ms) ? "" : formatRelativeDateTime(ms, now);
+    }
+  }
+}
+
+let measureContext: CanvasRenderingContext2D | null | undefined;
+
+function measureTextWidth(font: string, text: string): number {
+  if (measureContext === undefined) {
+    measureContext = document.createElement("canvas").getContext("2d");
+  }
+  if (!measureContext || text === "") {
+    return 0;
+  }
+  measureContext.font = font;
+  return measureContext.measureText(text).width;
+}
+
+function getCanvasFont(element: HTMLElement): string {
+  const style = getComputedStyle(element);
+  return `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
 }
 
 const FOLDER_LOADING_DELAY_MS = 400;

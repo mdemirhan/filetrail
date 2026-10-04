@@ -840,7 +840,7 @@ describe("appStateStore", () => {
       name: 720,
       size: 60,
       modified: 180,
-      permissions: 52,
+      permissions: 40,
       kind: 148,
       created: 168,
     });

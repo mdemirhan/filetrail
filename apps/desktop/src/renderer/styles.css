@@ -2716,20 +2716,23 @@ body.resizing-panels * {
   border-radius: var(--radius-capsule);
 }
 
+/* Where a column ends: a short line in the header, as macOS draws between column titles,
+   which is also where it is resized. It darkens under the pointer and while dragging. */
 .details-column-resizer::before {
   content: "";
   position: absolute;
-  top: 8px;
-  bottom: 8px;
+  top: 50%;
   left: 50%;
   width: 1px;
-  transform: translateX(-50%);
-  background: transparent;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  background: var(--border);
 }
 
 .details-column-resizer:hover::before,
-.details-column-resizer:focus-visible::before {
-  background: var(--border-strong);
+.details-column-resizer:focus-visible::before,
+.column-resize-active .details-column-resizer:active::before {
+  background: var(--text-tertiary);
 }
 
 .details-row {
