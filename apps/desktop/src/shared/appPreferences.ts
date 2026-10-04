@@ -355,7 +355,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "auto",
   accent: DEFAULT_ACCENT,
   zoomPercent: 100,
-  viewMode: "details",
+  viewMode: "icons",
   searchViewMode: "details",
   sortBy: "name",
   sortDirection: "asc",

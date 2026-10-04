@@ -46,7 +46,7 @@ describe("appPreferences helpers", () => {
       theme: "auto",
       accent: "#007aff",
       zoomPercent: 100,
-      viewMode: "details",
+      viewMode: "icons",
       sortBy: "name",
       sortDirection: "asc",
       foldersFirst: true,
