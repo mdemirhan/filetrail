@@ -422,35 +422,24 @@ describe("nativeCopyFile stop flag", () => {
   });
 
   // Across volumes the copy can't be a clone, so a large file takes long enough to stop.
+  // The stop lands as the destination appears, while copyfile is still copying extended
+  // attributes: a stop seen there once left an empty file behind.
   it.runIf(canMountDiskImages)(
     "stops part way through a large file and leaves no partial file",
-    async (context) => {
+    async () => {
       const volume = mountTestDiskImage({ sizeMb: 250 });
       try {
         const source = join(root, "big.bin");
         execFileSync("/usr/sbin/mkfile", ["150m", source]);
         const destination = join(volume.mountPath, "big.bin");
-        // Stop once the copy has begun writing, not after a fixed time a fast disk can beat.
-        // On a busy machine the copy may still finish before the stop is seen; that run
-        // proves nothing, so it is tried again.
-        let outcome: unknown = "completed";
-        for (let attempt = 0; attempt < 3 && outcome === "completed"; attempt += 1) {
-          rmSync(destination, { force: true });
-          const stop = new Int32Array(1);
-          const copy = addon.nativeCopyFile(source, destination, stop);
-          await waitFor(() => existsSync(destination));
-          stop[0] = 1;
-          outcome = await copy.then(
-            () => "completed",
-            (error: unknown) => error,
-          );
-        }
-        if (outcome === "completed") {
-          // On a very busy machine every copy finished before the stop could be seen: this
-          // run shows nothing either way, and says so instead of failing.
-          context.skip("each copy finished before the stop could be seen");
-        }
-        expect(outcome).toMatchObject({ code: "ECANCELED" });
+        const stop = new Int32Array(1);
+        const copy = addon.nativeCopyFile(source, destination, stop);
+        // Watched without yielding, so a busy machine can't delay the stop with a late
+        // timer until the copy has finished: it is set within microseconds of the file
+        // appearing, and the copy runs on its own thread for a second or more.
+        waitForSync(() => existsSync(destination));
+        stop[0] = 1;
+        await expect(copy).rejects.toMatchObject({ code: "ECANCELED" });
         expect(existsSync(destination)).toBe(false);
       } finally {
         volume.detach();
@@ -502,13 +491,12 @@ describe("nativeCopyFile stop flag", () => {
   );
 });
 
-async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
+function waitForSync(condition: () => boolean, timeoutMs = 10_000): void {
   const deadline = Date.now() + timeoutMs;
   while (!condition()) {
     if (Date.now() > deadline) {
       throw new Error("Timed out waiting for the condition.");
     }
-    await new Promise((resolve) => setTimeout(resolve, 1));
   }
 }
 

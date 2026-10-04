@@ -42,7 +42,11 @@ typedef struct {
 } copy_work_t;
 
 /* Called by copyfile(3) between chunks of data and between the parts of a file (data,
-   extended attributes, ...): stops the copy once the caller has asked it to.
+   extended attributes, ...): stops the copy once the caller has asked it to, but only
+   while the data is being copied. copyfile removes the file it created when told to quit
+   there; told to quit at the extended attributes, which it copies first (most files have
+   com.apple.provenance), it leaves an empty file behind. A stop asked for then is seen
+   at the first chunk of data.
    copyfile also calls it when a step fails (stage COPYFILE_ERR), and there CONTINUE means
    "try that again": a write that keeps failing (the disk is full, or was unplugged) would
    be retried forever. A failed data write ends the copy with its error instead; a failed
@@ -53,7 +57,7 @@ static int copy_status(int what, int stage, copyfile_state_t state, const char *
   (void)src;
   (void)dst;
   const int32_t *stop = (const int32_t *)ctx;
-  if (__atomic_load_n(stop, __ATOMIC_RELAXED) != 0) {
+  if (what == COPYFILE_COPY_DATA && __atomic_load_n(stop, __ATOMIC_RELAXED) != 0) {
     return COPYFILE_QUIT;
   }
   if (stage == COPYFILE_ERR) {
