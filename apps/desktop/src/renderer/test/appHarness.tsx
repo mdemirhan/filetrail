@@ -9,7 +9,7 @@ import {
   type WriteOperationProgressEvent,
   ipcContractSchemas,
 } from "@filetrail/contracts";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { DEFAULT_APP_PREFERENCES } from "../../shared/appPreferences";
 import { recordFolderVisit } from "../../shared/visitedFolders";
@@ -804,6 +804,16 @@ export function createAppHarness(
 
 export async function selectItem(path: string): Promise<void> {
   const button = await screen.findByTitle(path);
+  // Once loaded, the window gives the keyboard to a pane (the tree, as at launch). On a
+  // slow machine that can come after this click and take the keyboard from the list, so
+  // the click waits for it.
+  await waitFor(() => {
+    expect(
+      ["tree-focused", "content-focused"].some(
+        (id) => screen.queryByTestId(id)?.textContent === "true",
+      ),
+    ).toBe(true);
+  });
   await act(async () => {
     fireEvent.click(button);
   });

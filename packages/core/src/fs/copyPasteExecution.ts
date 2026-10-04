@@ -1037,6 +1037,7 @@ async function executeReplace(
     // A copy of a locked item is locked too, and a locked item can't be renamed: it is
     // unlocked for the swap and locked again after. Done before the old item goes.
     const stagedFlags = await unlockForMove(fileSystem, temporaryPath);
+    const stagedMode = await openForMove(fileSystem, temporaryPath);
     if ((await removeReplacedItem(context, currentNode, destination)) === "skipped") {
       await undoStaging();
       return skippedOutcome("runtime_conflict_resolution", finalPath);
@@ -1061,6 +1062,7 @@ async function executeReplace(
         },
       );
       await moveExclusive(fileSystem, temporaryPath, visiblePath);
+      await restoreAfterMove(fileSystem, visiblePath, stagedMode, stagedFlags);
       await journal?.remove(journalEntry.id).catch(() => undefined);
       return {
         itemStatus: "failed",
@@ -1070,9 +1072,7 @@ async function executeReplace(
         childItems: stagedChildItems,
       };
     }
-    if (stagedFlags !== null) {
-      await fileSystem.setFlags?.(finalPath, stagedFlags).catch(() => undefined);
-    }
+    await restoreAfterMove(fileSystem, finalPath, stagedMode, stagedFlags);
   } catch (error) {
     if (oldItemRemoved && journal && errorCode(error) !== "EEXIST") {
       // Neither name could be used: the journal keeps the new item, and the next start
@@ -1277,6 +1277,44 @@ export async function unlockForMove(
   }
   await fileSystem.setFlags(path, flags & ~USER_LOCK_FLAGS);
   return flags;
+}
+
+// A folder that can't be written to can't always be renamed: macOS 14 refuses it. The
+// hidden copy of a read-only folder is made writable for the swap, and given its mode
+// back by restoreAfterMove.
+async function openForMove(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<number | null> {
+  if (!fileSystem.chmod) {
+    return null;
+  }
+  const fingerprint = await captureFingerprint(fileSystem, path);
+  if (fingerprint.kind !== "directory" || fingerprint.mode === null) {
+    return null;
+  }
+  const mode = fingerprint.mode & 0o7777;
+  if ((mode & 0o200) !== 0) {
+    return null;
+  }
+  await fileSystem.chmod(path, mode | 0o200);
+  return mode;
+}
+
+// Puts back what openForMove and unlockForMove took off, the mode before the lock (a
+// locked item can't have its mode changed).
+async function restoreAfterMove(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  mode: number | null,
+  flags: number | null,
+): Promise<void> {
+  if (mode !== null) {
+    await fileSystem.chmod?.(path, mode).catch(() => undefined);
+  }
+  if (flags !== null) {
+    await fileSystem.setFlags?.(path, flags).catch(() => undefined);
+  }
 }
 
 // Removes a hidden copy built for a Replace. A read-only folder inside it can't have its
