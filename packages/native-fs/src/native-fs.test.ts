@@ -16,7 +16,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { canMountDiskImages, mountTestDiskImage } from "@filetrail/core/fs/testDiskImage";
+import {
+  canMountDiskImages,
+  canRunLargeFileTests,
+  mountTestDiskImage,
+} from "@filetrail/core/fs/testDiskImage";
 
 // Finder's "Locked".
 const UF_IMMUTABLE = 0x2;
@@ -424,7 +428,7 @@ describe("nativeCopyFile stop flag", () => {
   // Across volumes the copy can't be a clone, so a large file takes long enough to stop.
   // The stop lands as the destination appears, while copyfile is still copying extended
   // attributes: a stop seen there once left an empty file behind.
-  it.runIf(canMountDiskImages)(
+  it.runIf(canRunLargeFileTests)(
     "stops part way through a large file and leaves no partial file",
     async () => {
       const volume = mountTestDiskImage({ sizeMb: 250 });
@@ -450,7 +454,7 @@ describe("nativeCopyFile stop flag", () => {
 
   // copyfile asks the progress callback what to do when a write fails; answering
   // "continue" there retried the write forever, so a full disk hung the copy.
-  it.runIf(canMountDiskImages)(
+  it.runIf(canRunLargeFileTests)(
     "fails with ENOSPC on a full disk instead of retrying the write forever",
     async () => {
       const volume = mountTestDiskImage({ sizeMb: 32 });

@@ -23,6 +23,8 @@
 
 - Most tests should target mocked filesystem or mocked preload clients.
 - Real filesystem tests should use temporary fixtures and cover only the boundary behavior that mocks cannot prove.
+- Keep `bun run test` light on the disk: test disk images are sparse, and a test that writes large files (tens of MB or more) runs only with `canRunLargeFileTests`, in `bun run test:release` and `bun run ci`.
+- Keep test files small enough to run side by side: one file runs on one worker, so a file that takes far longer than the rest sets the time of the whole run. The App tests share their mocks and harness through `apps/desktop/src/renderer/test/appMocks.tsx` and `appHarness.tsx`.
 - Renderer tests should verify state transitions and visible behavior, not implementation details.
 
 ## Avoid

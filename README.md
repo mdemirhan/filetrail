@@ -144,6 +144,8 @@ bun run test
 bun run lint
 ```
 
+`bun run test` leaves out the few tests that write large files (stopping a long copy, filling a disk). Run them with `bun run test:release` before a release; `bun run ci` includes them too.
+
 ## How it is built
 
 File Trail is an Electron app written in TypeScript and React, with a small native layer in C and Objective-C where the filesystem work has to be fast or has to be done the way macOS does it: copying, folder sizes, file icons and Quick Look previews.

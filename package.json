@@ -9,6 +9,7 @@
     "format": "biome format --write .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun ./apps/desktop/scripts/runVitest.ts run",
+    "test:release": "FILETRAIL_LARGE_FILE_TESTS=1 bun ./apps/desktop/scripts/runVitest.ts run",
     "test:coverage": "bun ./apps/desktop/scripts/runVitest.ts run --coverage",
     "test:watch": "bun ./apps/desktop/scripts/runVitest.ts",
     "test:smoke": "bun run --cwd apps/desktop test:smoke",
@@ -19,7 +20,7 @@
     "desktop:make:mac": "bun run --cwd apps/desktop make:mac",
     "desktop:make:mac:notarized": "bun run --cwd apps/desktop make:mac:notarized",
     "desktop:make:mac:adhoc": "bun run --cwd apps/desktop make:mac:adhoc",
-    "ci": "bun run lint && bun run typecheck && bun run test:coverage"
+    "ci": "bun run lint && bun run typecheck && FILETRAIL_LARGE_FILE_TESTS=1 bun run test:coverage"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

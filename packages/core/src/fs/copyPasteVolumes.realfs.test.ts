@@ -6,7 +6,12 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { type TestDiskImage, canMountDiskImages, mountTestDiskImage } from "./testDiskImage";
+import {
+  type TestDiskImage,
+  canMountDiskImages,
+  canRunLargeFileTests,
+  mountTestDiskImage,
+} from "./testDiskImage";
 import { REPLACE_ALL, nativeFileSystemWithTrash, runPaste } from "./testNativePaste";
 
 let testDir: string;
@@ -205,7 +210,7 @@ describe.runIf(canMountDiskImages)("from a disk that tells upper and lower case 
   });
 });
 
-describe.runIf(canMountDiskImages)("pasting onto a disk that fills up", () => {
+describe.runIf(canRunLargeFileTests)("pasting onto a disk that fills up", () => {
   let small: TestDiskImage;
 
   beforeAll(() => {

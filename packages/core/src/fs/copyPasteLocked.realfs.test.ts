@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { recoverInterruptedReplaces } from "./copyPasteRecovery";
-import { canMountDiskImages, mountTestDiskImage } from "./testDiskImage";
+import { canMountDiskImages, canRunLargeFileTests, mountTestDiskImage } from "./testDiskImage";
 import {
   REPLACE_ALL,
   native,
@@ -309,7 +309,7 @@ describe("moving to another disk out of a folder that can't be changed", () => {
 
 describe("stopping part way through a file", () => {
   // Across disks a copy can't be a clone, so a large file takes long enough to stop.
-  it.runIf(canMountDiskImages)(
+  it.runIf(canRunLargeFileTests)(
     "stops a large copy at once and leaves nothing half written",
     async (context) => {
       const volume = mountTestDiskImage({ sizeMb: 250 });

@@ -16,6 +16,12 @@ export type TestDiskImage = {
 export const canMountDiskImages =
   process.platform === "darwin" && existsSync("/usr/bin/hdiutil") && process.env.CI !== "skip";
 
+// The tests that write files of 80 to 150 MB (stopping a long copy, filling a disk) guard
+// copy code that rarely changes: they run in `bun run test:release` and `bun run ci`, not on
+// every `bun run test`, to spare the Mac's disk.
+export const canRunLargeFileTests =
+  canMountDiskImages && process.env.FILETRAIL_LARGE_FILE_TESTS === "1";
+
 // The file systems a test disk can have: USB sticks and SD cards are FAT32 or exFAT.
 export type TestDiskFormat = "APFS" | "Case-sensitive APFS" | "MS-DOS FAT32" | "ExFAT";
 
@@ -32,13 +38,17 @@ export function mountTestDiskImage(
   const root = mkdtempSync(
     join(process.env.FILETRAIL_SYSTEM_TMPDIR ?? tmpdir(), "filetrail-volume-"),
   );
-  const imagePath = join(root, "volume.dmg");
+  const imagePath = join(root, "volume.sparseimage");
   const mountPath = join(root, "mnt");
   runHdiutil([
     "create",
     "-quiet",
     // A retry after a failed attempt replaces whatever that attempt left.
     "-ov",
+    // Grows as it is written to: a plain image is written out in full when it is made,
+    // which for the twenty a run makes is more than a gigabyte of writes to the Mac's disk.
+    "-type",
+    "SPARSE",
     "-size",
     `${options.sizeMb ?? 64}m`,
     "-fs",
