@@ -329,10 +329,10 @@ select:focus-visible {
   /* How far a capsule of buttons reaches past its first and last button. */
   --toolbar-capsule-padding: 3px;
   --toolbar-title-min-width: 96px;
-  /* Every control in the toolbar is this tall, as in a macOS 26 toolbar. */
-  --toolbar-control-height: 36px;
-  --toolbar-button-width: 34px;
-  --toolbar-overflow-button-width: 34px;
+  /* Every control in the toolbar is this tall, close to a macOS 26 toolbar's 36. */
+  --toolbar-control-height: 32px;
+  --toolbar-button-width: 32px;
+  --toolbar-overflow-button-width: 32px;
   --toolbar-search-width: 200px;
   --toolbar-search-min-width: 110px;
 }
@@ -598,8 +598,8 @@ select:focus-visible {
 .toolbar-customize-chip {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-capsule);
   background: var(--toolbar-capsule-bg);
   color: var(--toolbar-nav-icon-active);
@@ -643,8 +643,8 @@ select:focus-visible {
   justify-content: center;
   gap: 4px;
   box-sizing: border-box;
-  min-width: 34px;
-  height: 36px;
+  min-width: 32px;
+  height: 32px;
   padding: 0 8px;
   border-radius: var(--radius-capsule);
   background: var(--bg-elevated);
@@ -2719,6 +2719,12 @@ body.resizing-panels * {
   color: var(--text-secondary);
 }
 
+/* Clear of the divider that ends the column. */
+.details-header-button .sort-indicator,
+.search-results-column .sort-indicator {
+  margin-right: 6px;
+}
+
 .details-column-resizer {
   position: absolute;
   top: -6px;
@@ -3991,8 +3997,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   display: flex;
   align-items: stretch;
   min-width: 0;
-  /* Finder's tab bar height. */
-  height: 27px;
+  height: 29px;
   /* Half the divider's width to the left, so the band starts at the tree's hairline. */
   margin-left: -4px;
   /* The tree's own color: the band continues the sidebar. In the explorer window it is a
@@ -6200,17 +6205,17 @@ button.shortcut-slot-key.recording:hover {
 }
 
 /* The segments are toolbar buttons too, so the segmented control's look is restated here,
-   from its own tokens, over the toolbar button's fills. 26px segments in a 5px track make
-   the toolbar's 36px; they are 40px apart, as Finder's are. */
+   from its own tokens, over the toolbar button's fills. 24px segments in a 4px track make
+   the toolbar's 32px. */
 .toolbar-group-view .toolbar-segmented-native {
   gap: 4px;
-  padding: 5px;
+  padding: 4px;
 }
 
 .toolbar-group-view .toolbar-segmented-native .tb-btn.segmented-item {
-  width: 36px;
-  min-width: 36px;
-  height: 26px;
+  width: 32px;
+  min-width: 32px;
+  height: var(--control-height);
   padding: 0;
   border-radius: var(--radius-capsule);
   background: transparent;

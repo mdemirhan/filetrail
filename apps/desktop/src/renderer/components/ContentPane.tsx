@@ -1566,12 +1566,14 @@ function DetailsView({
     if (!(headerCell instanceof HTMLElement) || !(title instanceof HTMLElement)) {
       return;
     }
-    // The title, and the sort arrow with its gap when the list is sorted by this column.
+    // The title, and the sort arrow with its gap and margin when the list is sorted by this
+    // column.
     const indicator = headerCell.querySelector(".sort-indicator");
     const headerWidth =
       measureTextWidth(getCanvasFont(title), title.textContent ?? "") +
       (indicator && title.parentElement
         ? indicator.getBoundingClientRect().width +
+          (Number.parseFloat(getComputedStyle(indicator).marginRight) || 0) +
           (Number.parseFloat(getComputedStyle(title.parentElement).columnGap) || 0)
         : 0);
     let valueWidths: number[] = [];
