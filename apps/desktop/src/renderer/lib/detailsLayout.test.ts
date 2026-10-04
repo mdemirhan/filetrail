@@ -140,7 +140,7 @@ describe("detailsLayout", () => {
         }),
       ).toBe(87);
       expect(
-        getDetailColumnFitWidth("permissions", {
+        getDetailColumnFitWidth("size", {
           headerWidth: 69.4,
           valueWidths: [24],
           valueExtraWidth: 0,
@@ -154,6 +154,23 @@ describe("detailsLayout", () => {
           valueExtraWidth: 24,
         }),
       ).toBe(326);
+    });
+
+    it("fits Permissions to its codes, not its title", () => {
+      expect(
+        getDetailColumnFitWidth("permissions", {
+          headerWidth: 69.4,
+          valueWidths: [36.5],
+          valueExtraWidth: 0,
+        }),
+      ).toBe(39);
+      expect(
+        getDetailColumnFitWidth("permissions", {
+          headerWidth: 69.4,
+          valueWidths: [24],
+          valueExtraWidth: 0,
+        }),
+      ).toBe(DETAIL_COLUMN_WIDTH_LIMITS.permissions.min);
     });
 
     it("stays within the column's limits", () => {

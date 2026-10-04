@@ -411,12 +411,12 @@ describe("ContentPane", () => {
     getContext.mockRestore();
 
     // The widest value, plus 2 pixels so rounding never cuts it; the title when it is
-    // wider ("Permissions" over "644"); never below the column's least width.
+    // wider ("Kind" is not), except in Permissions; never below the column's least width.
     const fitted = handleWidthsChange.mock.calls.map(([widths]) => widths);
     expect(fitted[0].kind).toBe(12 * 7 + 2);
     expect(fitted[1].size).toBe(60);
     expect(fitted[2].name).toBe(22 * 7 + 2);
-    expect(fitted[3].permissions).toBe("Permissions".length * 7 + 2);
+    expect(fitted[3].permissions).toBe(36);
   });
 
   it("forwards modifier selection gestures in details mode", () => {

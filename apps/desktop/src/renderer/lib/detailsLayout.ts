@@ -86,15 +86,18 @@ export function fitDetailColumns(args: {
 const FIT_SLACK = 2;
 
 // The width that shows a column's title and its widest value whole (a double-click on its
-// divider, as in Finder), kept within the column's limits. `valueExtraWidth` is what a cell
-// holds besides its text: the icon and its gap, in the Name column.
+// divider, as in Finder), kept within the column's limits. Permissions fits its codes alone:
+// its title is three times as wide as "755", and ends in an ellipsis instead.
+// `valueExtraWidth` is what a cell holds besides its text: the icon and its gap, in the Name
+// column.
 export function getDetailColumnFitWidth(
   key: DetailColumnKey,
   args: { headerWidth: number; valueWidths: ReadonlyArray<number>; valueExtraWidth: number },
 ): number {
   const widestValue = args.valueWidths.reduce((widest, width) => Math.max(widest, width), 0);
+  const headerWidth = key === "permissions" ? 0 : args.headerWidth;
   return clampDetailColumnWidth(
     key,
-    Math.ceil(Math.max(args.headerWidth, widestValue + args.valueExtraWidth)) + FIT_SLACK,
+    Math.ceil(Math.max(headerWidth, widestValue + args.valueExtraWidth)) + FIT_SLACK,
   );
 }
