@@ -538,7 +538,8 @@ describe("SettingsView", () => {
     expect(onRemoveFavorite).toHaveBeenCalledWith(1);
   });
 
-  it("keeps the Trash in the favorites", () => {
+  // The Trash is always under Locations, so a Trash favorite is one like any other.
+  it("lets a Trash favorite be removed", () => {
     const onRemoveFavorite = vi.fn();
     renderSettingsView({
       favorites: [
@@ -550,9 +551,9 @@ describe("SettingsView", () => {
 
     const trash = screen.getByRole("option", { name: "Trash" });
     fireEvent.mouseDown(trash);
-    expect(screen.getByRole("button", { name: "Remove Trash" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove Trash" })).toBeEnabled();
     fireEvent.keyDown(trash, { key: "Backspace" });
-    expect(onRemoveFavorite).not.toHaveBeenCalled();
+    expect(onRemoveFavorite).toHaveBeenCalled();
   });
 
   it("renders favorite icon picker popovers in a body portal", () => {

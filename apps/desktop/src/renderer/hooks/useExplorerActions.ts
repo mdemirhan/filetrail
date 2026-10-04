@@ -501,12 +501,13 @@ export function useExplorerActions(args: {
     if (!targetPath) {
       return null;
     }
-    // The Trash is a permanent favorite: it can't be removed, wherever it is right-clicked.
+    // The Trash is always under Locations: a Trash favorite can be taken out, and none put in.
     if (targetPath === getTrashPath(homePath)) {
-      return null;
+      return isFavoritePath(favorites, targetPath) ? "Remove from Favorites" : null;
     }
+    // A favorite, or a place under Locations (which may be a favorite too).
     if (contextMenuState.surface === "favorite") {
-      return "Remove from Favorites";
+      return isFavoritePath(favorites, targetPath) ? "Remove from Favorites" : "Add to Favorites";
     }
     if (contextMenuState.surface !== "content" && contextMenuState.surface !== "treeFolder") {
       return null;
@@ -2521,11 +2522,11 @@ export function useExplorerActions(args: {
   }
 
   function toggleFavoritePath(path: string, options?: { revealInTreeOnRemove?: boolean }) {
-    // Trash is a permanent favorite — cannot be toggled off.
-    if (path === getTrashPath(homePath)) {
+    const shouldRemove = isFavoritePath(favorites, path);
+    // The Trash is always under Locations: it is never made a favorite.
+    if (!shouldRemove && path === getTrashPath(homePath)) {
       return;
     }
-    const shouldRemove = isFavoritePath(favorites, path);
     setFavorites((current) =>
       shouldRemove
         ? current.filter((favorite) => favorite.path !== path)

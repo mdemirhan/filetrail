@@ -588,7 +588,7 @@ describe("App copy/paste integration", () => {
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
 
-  it("rejects invalid drag targets like symlink folders and Trash favorites", async () => {
+  it("rejects invalid drag targets like symlink folders and the Trash under Locations", async () => {
     const harness = createAppHarness({
       directorySnapshots: {
         "/Users/demo": {
@@ -622,7 +622,7 @@ describe("App copy/paste integration", () => {
       false,
     );
 
-    const trashFavorite = await screen.findByTitle("favorite:/Users/demo/.Trash");
+    const trashFavorite = await screen.findByTitle("location:/Users/demo/.Trash");
     await dragBetween(sourceButton, trashFavorite);
     expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
       false,

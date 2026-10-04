@@ -141,10 +141,8 @@ export function App() {
   // The Rename sheet for several items.
   const batchRename = useBatchRename(client);
   const { trashIsEmpty, refreshTrashState } = useTrashState(client);
-  // The sidebar's Locations: Macintosh HD and the other disks, kept up to date as disks are
-  // mounted and unmounted.
+  // The disks mounted besides the startup disk, kept up to date as they come and go.
   const volumes = useVolumes(client);
-  const sidebarLocations = useMemo(() => buildSidebarLocations(volumes), [volumes]);
   // The plain folder and document icons, asked for before the first folder is drawn.
   useEffect(() => {
     preloadGenericIcons(client);
@@ -327,6 +325,11 @@ export function App() {
     leftPaneSubviewRef,
     lastLeftPaneSubviewRef,
   } = navigation;
+  // The sidebar's Locations, as in Finder's: Home, Macintosh HD, the other disks, the Trash.
+  const sidebarLocations = useMemo(
+    () => buildSidebarLocations(volumes, homePath),
+    [volumes, homePath],
+  );
   const {
     searchDraftQuery,
     setSearchDraftQuery,
@@ -1953,7 +1956,12 @@ export function App() {
                 openTreeItemContextMenu({
                   path: item.path,
                   sourceSubview: subview,
-                  targetKind: item.kind === "favorite" ? "favorite" : "treeFolder",
+                  // A location (a disk, Home, the Trash) has a favorite's menu: no Rename,
+                  // Move to Trash or Delete for it.
+                  targetKind:
+                    item.kind === "favorite" || item.kind === "location"
+                      ? "favorite"
+                      : "treeFolder",
                   folderExpansionLabel:
                     item.kind === "filesystem" && !item.isSymlink
                       ? item.expanded

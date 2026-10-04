@@ -1609,7 +1609,10 @@ describe("App copy/paste integration", () => {
   it("takes the tree back to Home's top when a favorite in Home is clicked", async () => {
     const harness = createAppHarness({
       preferences: {
-        favorites: [{ path: "/Users/demo/Documents", icon: "documents" }],
+        favorites: [
+          { path: "/Users/demo/Documents", icon: "documents" },
+          { path: "/Users/demo/.Trash", icon: "trash" },
+        ],
         favoritesInitialized: true,
       },
       directorySnapshots: {
@@ -1624,6 +1627,11 @@ describe("App copy/paste integration", () => {
         "/Applications": { path: "/Applications", parentPath: "/", entries: [] },
         "/Users/demo/Documents": {
           path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+        "/Users/demo/.Trash": {
+          path: "/Users/demo/.Trash",
           parentPath: "/Users/demo",
           entries: [],
         },
@@ -1648,6 +1656,15 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(screen.getByTestId("tree-root").textContent).toBe("/");
     });
+
+    // The Trash opens without moving the tree.
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/.Trash");
+    });
+    expect(screen.getByTestId("tree-root").textContent).toBe("/");
 
     await act(async () => {
       fireEvent.click(await screen.findByTitle("favorite:/Users/demo/Documents"));

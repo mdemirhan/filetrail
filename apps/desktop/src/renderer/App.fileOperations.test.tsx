@@ -2199,10 +2199,10 @@ describe("Delete Immediately and Empty Trash", () => {
     });
   });
 
-  it("empties the Trash from the Trash favorite's menu", async () => {
+  it("empties the Trash from its menu under Locations", async () => {
     const harness = createAppHarness();
     renderApp(harness);
-    const menuTarget = await screen.findByTitle("favorite:/Users/demo/.Trash");
+    const menuTarget = await screen.findByTitle("location:/Users/demo/.Trash");
     await act(async () => {
       fireEvent.contextMenu(menuTarget);
     });
@@ -2318,7 +2318,7 @@ describe("Empty Trash and Delete Immediately while another operation runs", () =
     expect(screen.queryByRole("button", { name: /^Delete Immediately/ })).toBeNull();
     await pressKey({ key: "Escape" });
     await act(async () => {
-      fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+      fireEvent.contextMenu(await screen.findByTitle("location:/Users/demo/.Trash"));
     });
     expect(screen.getByRole("button", { name: /^Show Info/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Empty Trash/ })).toBeNull();
@@ -2408,14 +2408,14 @@ describe("file commands in the Trash", () => {
     expect(screen.getByRole("button", { name: /^Move to…/ })).toBeInTheDocument();
   });
 
-  it("offers no Paste or New Folder on the Trash favorite", async () => {
+  it("offers no Paste or New Folder on the Trash under Locations", async () => {
     const harness = createAppHarness(inTrash);
     renderApp(harness);
     await selectItem("/Users/demo/source.txt");
     await pressKey({ key: "c", metaKey: true });
 
     await act(async () => {
-      fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+      fireEvent.contextMenu(await screen.findByTitle("location:/Users/demo/.Trash"));
     });
 
     expect(screen.getByRole("button", { name: /^Empty Trash/ })).toBeInTheDocument();
@@ -2886,7 +2886,7 @@ describe("Empty Trash with nothing in the Trash", () => {
     await screen.findByTitle("/Users/demo/source.txt");
 
     await act(async () => {
-      fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+      fireEvent.contextMenu(await screen.findByTitle("location:/Users/demo/.Trash"));
     });
 
     expect(screen.getByRole("button", { name: /^Show Info/ })).toBeInTheDocument();
@@ -2902,7 +2902,7 @@ describe("Empty Trash with nothing in the Trash", () => {
     await screen.findByTitle("/Users/demo/source.txt");
 
     await act(async () => {
-      fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+      fireEvent.contextMenu(await screen.findByTitle("location:/Users/demo/.Trash"));
     });
 
     expect(screen.getByRole("button", { name: /^Empty Trash/ })).toHaveAttribute(

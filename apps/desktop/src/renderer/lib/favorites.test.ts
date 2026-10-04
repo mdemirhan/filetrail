@@ -8,55 +8,68 @@ import {
 } from "./favorites";
 
 describe("favorites", () => {
-  it("builds default favorites in the requested order, leaving Macintosh HD to Locations", () => {
+  it("builds default favorites in the requested order, leaving Home, Macintosh HD and the Trash to Locations", () => {
     expect(getDefaultFavorites("/Users/demo")).toEqual([
-      { path: "/Users/demo", icon: "home" },
       { path: "/Applications", icon: "applications" },
       { path: "/Users/demo/Desktop", icon: "desktop" },
       { path: "/Users/demo/Documents", icon: "documents" },
       { path: "/Users/demo/Downloads", icon: "downloads" },
-      { path: "/Users/demo/.Trash", icon: "trash" },
     ]);
   });
 
-  it("lists Macintosh HD first under Locations, then the disks mounted", () => {
+  it("lists Home, Macintosh HD, the disks mounted and the Trash under Locations, as Finder does", () => {
     expect(
-      buildSidebarLocations([
-        { path: "/Volumes/Backup", name: "Backup" },
-        { path: "/Volumes/Install Xcode", name: "Install Xcode" },
-      ]),
+      buildSidebarLocations(
+        [
+          { path: "/Volumes/Backup", name: "Backup", isLocal: true },
+          { path: "/Volumes/Shared", name: "Shared", isLocal: false },
+        ],
+        "/Users/demo",
+      ),
     ).toEqual([
-      { path: "/", label: "Macintosh HD" },
-      { path: "/Volumes/Backup", label: "Backup" },
-      { path: "/Volumes/Install Xcode", label: "Install Xcode" },
+      { path: "/Users/demo", label: "demo", icon: "home" },
+      { path: "/", label: "Macintosh HD", icon: "drive" },
+      { path: "/Volumes/Backup", label: "Backup", icon: "drive" },
+      { path: "/Volumes/Shared", label: "Shared", icon: "server" },
+      { path: "/Users/demo/.Trash", label: "Trash", icon: "trash" },
+    ]);
+    // Without a home folder there is no Home or Trash to list.
+    expect(buildSidebarLocations([], "")).toEqual([
+      { path: "/", label: "Macintosh HD", icon: "drive" },
     ]);
   });
 
-  it("shows Locations after Favorites in the tree, its disks as places without folders", () => {
+  it("shows Locations after Favorites in the tree, its places as rows without folders", () => {
     const { items, visibleItemIds } = buildTreePresentation({
-      favorites: [{ path: "/Users/demo", icon: "home" }],
+      favorites: [{ path: "/Users/demo/Documents", icon: "documents" }],
       favoritesExpanded: true,
       homePath: "/Users/demo",
       rootPath: "/Users/demo",
       nodes: {},
-      locations: buildSidebarLocations([{ path: "/Volumes/Backup", name: "Backup" }]),
+      locations: buildSidebarLocations(
+        [{ path: "/Volumes/Backup", name: "Backup", isLocal: true }],
+        "/Users/demo",
+      ),
       locationsExpanded: true,
     });
     expect(visibleItemIds).toEqual([
       "favorites-root",
-      "favorite:/Users/demo",
+      "favorite:/Users/demo/Documents",
       "locations-root",
+      "location:/Users/demo",
       "location:/",
       "location:/Volumes/Backup",
+      "location:/Users/demo/.Trash",
     ]);
     expect(items["location:/Volumes/Backup"]).toMatchObject({
       kind: "location",
       label: "Backup",
       path: "/Volumes/Backup",
       canExpand: false,
+      icon: "drive",
     });
     expect(getShortcutItemPath("location:/Volumes/Backup")).toBe("/Volumes/Backup");
-    expect(getShortcutItemPath("favorite:/Users/demo")).toBe("/Users/demo");
+    expect(getShortcutItemPath("favorite:/Users/demo/Documents")).toBe("/Users/demo/Documents");
 
     // Folded, only its row is left; with favorites in their own list, it is not in the tree.
     expect(
@@ -66,7 +79,7 @@ describe("favorites", () => {
         homePath: "/Users/demo",
         rootPath: "",
         nodes: {},
-        locations: buildSidebarLocations([]),
+        locations: buildSidebarLocations([], "/Users/demo"),
         locationsExpanded: false,
       }).visibleItemIds,
     ).toEqual(["favorites-root", "locations-root"]);
@@ -78,7 +91,7 @@ describe("favorites", () => {
         rootPath: "",
         nodes: {},
         includeFavorites: false,
-        locations: buildSidebarLocations([]),
+        locations: buildSidebarLocations([], "/Users/demo"),
       }).visibleItemIds,
     ).toEqual([]);
   });

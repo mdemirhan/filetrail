@@ -1379,7 +1379,6 @@ export function SettingsView({
     onCompactIconViewChange(compact);
     onCompactTreeViewChange(compact);
   };
-  const trashPath = getTrashPath(homePath);
   return (
     <div className="settings-view overlay-scroll" data-layout={layoutMode}>
       <div className="settings-page">
@@ -1565,7 +1564,6 @@ export function SettingsView({
                 onAdd={onAddFavorite}
                 addLabel="Add Favorite"
                 onRemove={onRemoveFavorite}
-                canRemove={(favorite) => favorite.path !== trashPath}
                 onMove={onMoveFavorite}
                 onChange={onBrowseFavorite}
                 changeLabel="Change"

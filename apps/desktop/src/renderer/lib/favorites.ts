@@ -16,16 +16,37 @@ export type TreeItemId =
   | `location:${string}`
   | `fs:${string}`;
 
-// A disk in the sidebar's Locations: Macintosh HD, then the other disks mounted. Like a
-// favorite, it is a place to go to, not a folder to expand.
-export type SidebarLocation = { path: string; label: string };
+// A place in the sidebar's Locations, as in Finder's: the home folder (under the account's
+// name), Macintosh HD, the other disks mounted, and the Trash. Like a favorite, it is a
+// place to go to, not a folder to expand; its icon is drawn as an outline in gray.
+export type SidebarLocation = { path: string; label: string; icon: FavoriteIconId };
 
 export function buildSidebarLocations(
-  volumes: ReadonlyArray<{ path: string; name: string }>,
+  volumes: ReadonlyArray<{ path: string; name: string; isLocal: boolean }>,
+  homePath: string,
 ): SidebarLocation[] {
+  const home: SidebarLocation[] =
+    homePath.length > 0
+      ? [
+          {
+            path: homePath,
+            label: homePath.split("/").filter(Boolean).at(-1) ?? homePath,
+            icon: "home",
+          },
+        ]
+      : [];
+  const trash: SidebarLocation[] =
+    homePath.length > 0 ? [{ path: getTrashPath(homePath), label: "Trash", icon: "trash" }] : [];
   return [
-    { path: "/", label: "Macintosh HD" },
-    ...volumes.map((volume) => ({ path: volume.path, label: volume.name })),
+    ...home,
+    { path: "/", label: "Macintosh HD", icon: "drive" },
+    ...volumes.map((volume) => ({
+      path: volume.path,
+      label: volume.name,
+      // A network share is drawn as one; a drive or a disk image as a drive.
+      icon: volume.isLocal ? ("drive" as const) : ("server" as const),
+    })),
+    ...trash,
   ];
 }
 
@@ -62,19 +83,17 @@ export function isTrashListingRefused(
   return error.includes("EPERM") || error.toLowerCase().includes("operation not permitted");
 }
 
-// Finder's sidebar places, all ordinary favorites the user can remove or reorder.
-// Macintosh HD is under Locations, with the other disks.
+// Finder's sidebar places, all ordinary favorites the user can remove or reorder. Home,
+// Macintosh HD and the Trash are under Locations, as in Finder.
 export function getDefaultFavorites(homePath: string): FavoritePreference[] {
   if (homePath.length === 0) {
     return [{ path: "/Applications", icon: "applications" }];
   }
   return [
-    { path: homePath, icon: "home" },
     { path: "/Applications", icon: "applications" },
     { path: `${homePath}/Desktop`, icon: "desktop" },
     { path: `${homePath}/Documents`, icon: "documents" },
     { path: `${homePath}/Downloads`, icon: "downloads" },
-    { path: getTrashPath(homePath), icon: "trash" },
   ];
 }
 
@@ -229,7 +248,7 @@ export function buildLocationItems(
     error: null,
     isSymlink: false,
     childIds: [],
-    icon: null,
+    icon: location.icon,
   }));
 }
 

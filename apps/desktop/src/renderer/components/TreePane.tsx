@@ -882,7 +882,8 @@ function TreeItemRow({
     contextMenuTarget !== null &&
     contextMenuTarget.path === item.path &&
     contextMenuTarget.subview === subview &&
-    contextMenuTarget.kind === (item.kind === "favorite" ? "favorite" : "treeFolder");
+    contextMenuTarget.kind ===
+      (item.kind === "favorite" || item.kind === "location" ? "favorite" : "treeFolder");
   const canExpand =
     item.kind === "favorites-root" || item.kind === "locations-root"
       ? item.canExpand
@@ -1122,8 +1123,7 @@ function TreeItemRow({
           }}
           title={isLocation ? item.label : (itemPath ?? item.label)}
         >
-          {/* A disk is drawn as macOS draws it: a drive, a disk image, a network share. */}
-          {isFavorite || isFavoritesRoot ? (
+          {isFavorite || isFavoritesRoot || isLocation ? (
             <FavoriteItemIcon icon={item.icon ?? "folder"} />
           ) : (
             <TreeFolderIcon alias={item.isSymlink} path={itemPath} />

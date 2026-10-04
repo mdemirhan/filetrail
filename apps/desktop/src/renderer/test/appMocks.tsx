@@ -268,6 +268,8 @@ export const treePaneMock = () => ({
     getItemDropIndicator,
     nodes,
     favorites,
+    locations,
+    onSelectItem,
     favoritesPlacement,
     activeLeftPaneSubview,
     selectedTreeItemId,
@@ -279,12 +281,13 @@ export const treePaneMock = () => ({
     onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
     onNavigate: (path: string) => Promise<boolean> | undefined;
     onNavigateFavorite: (path: string) => Promise<boolean> | undefined;
+    onSelectItem?: (itemId: string) => Promise<unknown> | undefined;
     onSelectFavoritesRoot?: () => Promise<boolean> | undefined;
     onClearSelection?: () => void;
     onItemContextMenu?: (
       item: {
         id: string;
-        kind: "favorite" | "filesystem";
+        kind: "favorite" | "location" | "filesystem";
         label: string;
         depth: number;
         path: string | null;
@@ -303,7 +306,7 @@ export const treePaneMock = () => ({
     onItemDragEnter?: (
       item: {
         id: string;
-        kind: "favorite" | "filesystem";
+        kind: "favorite" | "location" | "filesystem";
         label: string;
         depth: number;
         path: string | null;
@@ -322,7 +325,7 @@ export const treePaneMock = () => ({
     onItemDragOver?: (
       item: {
         id: string;
-        kind: "favorite" | "filesystem";
+        kind: "favorite" | "location" | "filesystem";
         label: string;
         depth: number;
         path: string | null;
@@ -341,7 +344,7 @@ export const treePaneMock = () => ({
     onItemDrop?: (
       item: {
         id: string;
-        kind: "favorite" | "filesystem";
+        kind: "favorite" | "location" | "filesystem";
         label: string;
         depth: number;
         path: string | null;
@@ -360,7 +363,7 @@ export const treePaneMock = () => ({
     getItemDropIndicator?: (
       item: {
         id: string;
-        kind: "favorite" | "filesystem";
+        kind: "favorite" | "location" | "filesystem";
         label: string;
         depth: number;
         path: string | null;
@@ -380,6 +383,7 @@ export const treePaneMock = () => ({
       { path: string; name: string; isSymlink?: boolean; expanded?: boolean; childPaths?: string[] }
     >;
     favorites: Array<{ path: string }>;
+    locations?: Array<{ path: string }>;
     favoritesPlacement: "integrated" | "separate";
     activeLeftPaneSubview: "favorites" | "tree";
     selectedTreeItemId: string | null;
@@ -423,13 +427,24 @@ export const treePaneMock = () => ({
       >
         Clear Tree Selection
       </button>
-      {favorites.map((favorite) => {
-        const item = {
+      {[
+        ...favorites.map((favorite) => ({
           id: `favorite:${favorite.path}`,
           kind: "favorite" as const,
-          label: favorite.path.split("/").at(-1) ?? favorite.path,
-          depth: 0,
           path: favorite.path,
+        })),
+        ...(locations ?? []).map((location) => ({
+          id: `location:${location.path}`,
+          kind: "location" as const,
+          path: location.path,
+        })),
+      ].map((shortcut) => {
+        const item = {
+          id: shortcut.id,
+          kind: shortcut.kind,
+          label: shortcut.path.split("/").at(-1) ?? shortcut.path,
+          depth: 0,
+          path: shortcut.path,
           parentId: null,
           expanded: false,
           canExpand: false,
@@ -441,9 +456,9 @@ export const treePaneMock = () => ({
         };
         return (
           <button
-            key={`favorite:${favorite.path}`}
+            key={shortcut.id}
             type="button"
-            title={`favorite:${favorite.path}`}
+            title={shortcut.id}
             data-drop-target-state={
               getItemDropIndicator?.(
                 item,
@@ -453,7 +468,9 @@ export const treePaneMock = () => ({
             onClick={() => {
               onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
               onFocusChange(true);
-              void onNavigateFavorite(favorite.path);
+              void (shortcut.kind === "location"
+                ? onSelectItem?.(shortcut.id)
+                : onNavigateFavorite(shortcut.path));
             }}
             onContextMenu={(event) => {
               event.preventDefault();
@@ -482,7 +499,7 @@ export const treePaneMock = () => ({
               onItemDrop?.(item, event, favoritesPlacement === "separate" ? "favorites" : "tree")
             }
           >
-            Favorite {favorite.path}
+            {shortcut.kind === "location" ? "Location" : "Favorite"} {shortcut.path}
           </button>
         );
       })}

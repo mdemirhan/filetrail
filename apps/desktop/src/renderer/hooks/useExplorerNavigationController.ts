@@ -54,6 +54,7 @@ import {
   isFavoritesRootItemId,
   isLocationItemId,
   isLocationsRootItemId,
+  isPathInsideTrash,
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
 import { resolveFocusedEditTarget } from "../lib/focusedEditTarget";
@@ -926,7 +927,7 @@ export function useExplorerNavigationController(args: {
     sortByOverride = sortBy,
     sortDirectionOverride = sortDirection,
     foldersFirstOverride = foldersFirst,
-    options: {
+    requestedOptions: {
       syncTree?: boolean;
       treeSelectionMode?: "filesystem" | "favorite" | "preserve";
       favoritePath?: string;
@@ -948,6 +949,12 @@ export function useExplorerNavigationController(args: {
       viaGoTo?: boolean;
     } = {},
   ): Promise<boolean> {
+    // The Trash, gone to from the sidebar, leaves the tree as it is: it is not a folder of
+    // anything the tree could show from its top.
+    const options =
+      requestedOptions.sidebarJump && isPathInsideTrash(path, homePath)
+        ? { ...requestedOptions, sidebarJump: false, syncTree: false }
+        : requestedOptions;
     const requestId = ++directoryRequestRef.current;
     pendingNavigationRef.current = { requestId, path };
     const isSameView = createViewGuard();
