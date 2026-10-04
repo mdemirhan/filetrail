@@ -99,6 +99,7 @@ import {
   resolveFavoriteTargetPath,
 } from "./lib/rendererCommandAvailability";
 import { formatSearchStatus } from "./lib/searchResults";
+import { summarizeSelectionSize } from "./lib/selectionSize";
 import { createShortcutDisplay } from "./lib/shortcutDisplay";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupTabs } from "./lib/startupNavigation";
@@ -511,26 +512,32 @@ export function App() {
         .map((entry) => entry.path),
     [activeContentEntries, selectedPathSet],
   );
-  // The Info Row's total for several selected items: known only when each is a file whose
-  // size the list already has.
-  const selectionTotalBytes = useMemo(() => {
-    let total = 0;
-    for (const entry of activeContentEntries) {
-      if (!selectedPathSet.has(entry.path)) {
-        continue;
-      }
-      const metadata = metadataByPath[entry.path];
-      if (
-        entry.kind !== "file" ||
-        metadata?.sizeStatus !== "ready" ||
-        metadata.sizeBytes === null
-      ) {
-        return null;
-      }
-      total += metadata.sizeBytes;
+  // The size of several selected items, for the Info Row and the Info panel: files from the
+  // list, folders from the folder size cache, and a total only once every size is known.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: folderSizeVersion changes whenever a cached folder size does; getEntry reads that cache.
+  const selectionSize = useMemo(() => {
+    if (selectedPathSet.size < 2) {
+      return null;
     }
-    return total;
-  }, [activeContentEntries, metadataByPath, selectedPathSet]);
+    return summarizeSelectionSize(
+      activeContentEntries.filter((entry) => selectedPathSet.has(entry.path)),
+      (path) => {
+        // Search results have sizes of their own, read as they are shown.
+        const metadata = (isSearchMode ? searchMetadataByPath : metadataByPath)[path];
+        return metadata?.sizeStatus === "ready" ? metadata.sizeBytes : null;
+      },
+      getFolderSizeEntry,
+    );
+  }, [
+    activeContentEntries,
+    folderSizeVersion,
+    getFolderSizeEntry,
+    isSearchMode,
+    metadataByPath,
+    searchMetadataByPath,
+    selectedPathSet,
+  ]);
+  const selectionTotalBytes = selectionSize?.totalBytes ?? null;
   // Several selected items, summed up in the Info panel.
   const infoPanelSelection = useMemo<InfoPanelSelection | null>(() => {
     if (selectedPathSet.size < 2) {
@@ -850,6 +857,7 @@ export function App() {
     callbacks: {
       openPathInNewTab: (path) => openPathInNewTabRef.current(path),
       calculateFolderSize: (path) => folderSizeCache.recalculateFolderSize(path),
+      calculateFolderSizes: (paths) => void folderSizeCache.calculateFolderSizes(paths),
       restartActiveSearch: async () => {
         if (searchCommittedQuery.trim().length === 0) {
           return;
@@ -1698,6 +1706,18 @@ export function App() {
     (infoPanelItem.kind === "directory" || infoPanelItem.kind === "symlink_directory");
   const infoPanelFolderSizePath =
     infoPanelItem && isFolderSizeEligibleKind(infoPanelItem.kind) ? infoPanelItem.path : null;
+  // With several items selected, the size controls work on all their folders at once.
+  const selectionFolderPaths = selectionSize?.folderPaths ?? [];
+  const selectionSizeControls =
+    selectionSize?.folderSizeEntry != null
+      ? {
+          entry: selectionSize.folderSizeEntry,
+          onCalculate: () => void folderSizeCache.calculateFolderSizes(selectionFolderPaths),
+          onRecalculate: () =>
+            void folderSizeCache.calculateFolderSizes(selectionFolderPaths, true),
+          onCancel: () => folderSizeCache.cancelFolderSizes(selectionFolderPaths),
+        }
+      : null;
   const infoRowActiveEntry =
     selectedEntry ?? (currentPath ? { path: currentPath, kind: "directory" as const } : null);
   const infoRowFolderSizePath =
@@ -1983,24 +2003,32 @@ export function App() {
                   selectionTotalBytes={selectionTotalBytes}
                   item={getInfoItem}
                   folderSizeEntry={
-                    infoRowFolderSizePath
-                      ? folderSizeCache.getEntry(infoRowFolderSizePath)
-                      : undefined
+                    selectionSize
+                      ? selectionSizeControls?.entry
+                      : infoRowFolderSizePath
+                        ? folderSizeCache.getEntry(infoRowFolderSizePath)
+                        : undefined
                   }
                   onCalculateFolderSize={
-                    infoRowFolderSizePath
-                      ? () => void folderSizeCache.calculateFolderSize(infoRowFolderSizePath)
-                      : undefined
+                    selectionSize
+                      ? selectionSizeControls?.onCalculate
+                      : infoRowFolderSizePath
+                        ? () => void folderSizeCache.calculateFolderSize(infoRowFolderSizePath)
+                        : undefined
                   }
                   onRecalculateFolderSize={
-                    infoRowFolderSizePath
-                      ? () => folderSizeCache.recalculateFolderSize(infoRowFolderSizePath)
-                      : undefined
+                    selectionSize
+                      ? selectionSizeControls?.onRecalculate
+                      : infoRowFolderSizePath
+                        ? () => folderSizeCache.recalculateFolderSize(infoRowFolderSizePath)
+                        : undefined
                   }
                   onCancelFolderSize={
-                    infoRowFolderSizePath
-                      ? () => void folderSizeCache.cancelFolderSize(infoRowFolderSizePath)
-                      : undefined
+                    selectionSize
+                      ? selectionSizeControls?.onCancel
+                      : infoRowFolderSizePath
+                        ? () => void folderSizeCache.cancelFolderSize(infoRowFolderSizePath)
+                        : undefined
                   }
                 />
               ),
@@ -2055,18 +2083,27 @@ export function App() {
                   void runContextSubmenuAction(action, [infoPanelItem.path]);
                 }
               },
-              folderSizeEntry: infoPanelFolderSizePath
-                ? folderSizeCache.getEntry(infoPanelFolderSizePath)
-                : undefined,
-              onCalculateFolderSize: infoPanelFolderSizePath
-                ? () => void folderSizeCache.calculateFolderSize(infoPanelFolderSizePath)
-                : undefined,
-              onRecalculateFolderSize: infoPanelFolderSizePath
-                ? () => folderSizeCache.recalculateFolderSize(infoPanelFolderSizePath)
-                : undefined,
-              onCancelFolderSize: infoPanelFolderSizePath
-                ? () => void folderSizeCache.cancelFolderSize(infoPanelFolderSizePath)
-                : undefined,
+              ...(selectionSize
+                ? {
+                    folderSizeEntry: selectionSizeControls?.entry,
+                    onCalculateFolderSize: selectionSizeControls?.onCalculate,
+                    onRecalculateFolderSize: selectionSizeControls?.onRecalculate,
+                    onCancelFolderSize: selectionSizeControls?.onCancel,
+                  }
+                : {
+                    folderSizeEntry: infoPanelFolderSizePath
+                      ? folderSizeCache.getEntry(infoPanelFolderSizePath)
+                      : undefined,
+                    onCalculateFolderSize: infoPanelFolderSizePath
+                      ? () => void folderSizeCache.calculateFolderSize(infoPanelFolderSizePath)
+                      : undefined,
+                    onRecalculateFolderSize: infoPanelFolderSizePath
+                      ? () => folderSizeCache.recalculateFolderSize(infoPanelFolderSizePath)
+                      : undefined,
+                    onCancelFolderSize: infoPanelFolderSizePath
+                      ? () => void folderSizeCache.cancelFolderSize(infoPanelFolderSizePath)
+                      : undefined,
+                  }),
             }}
             currentPath={currentPath}
             topToolbarItems={topToolbarItems}

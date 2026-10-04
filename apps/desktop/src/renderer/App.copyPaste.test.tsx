@@ -3474,6 +3474,81 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  describe("Calculate Size for several items", () => {
+    async function rightClickSelection(paths: string[]) {
+      const harness = createAppHarness({ preferences: { viewMode: "icons" } });
+      harness.setDirectoryEntries("/Users/demo", [
+        createDirectoryEntry("/Users/demo/Folder", "directory"),
+        createDirectoryEntry("/Users/demo/Other", "directory"),
+        createDirectoryEntry("/Users/demo/source.txt", "file"),
+        createDirectoryEntry("/Users/demo/notes.txt", "file"),
+      ]);
+      render(
+        <FiletrailClientProvider value={harness.client}>
+          <App />
+        </FiletrailClientProvider>,
+      );
+      const [first, ...rest] = paths;
+      await selectItem(first ?? "");
+      await act(async () => {
+        for (const path of rest) {
+          fireEvent.click(screen.getByTitle(path), { metaKey: true });
+        }
+      });
+      await act(async () => {
+        fireEvent.contextMenu(screen.getByTitle(first ?? ""));
+      });
+      return harness;
+    }
+    const measured = (harness: ReturnType<typeof createAppHarness>) =>
+      harness.invocations
+        .filter(
+          (call) =>
+            call.channel === "folderSize:start" &&
+            !(call.payload as { probeOnly?: boolean }).probeOnly,
+        )
+        .map((call) => (call.payload as { path: string }).path);
+
+    it("measures the folders among them and opens the Info panel, which sums them up", async () => {
+      const harness = await rightClickSelection([
+        "/Users/demo/source.txt",
+        "/Users/demo/Folder",
+        "/Users/demo/Other",
+      ]);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Calculate Size" }));
+      });
+
+      await vi.waitFor(() =>
+        expect(measured(harness)).toEqual(["/Users/demo/Folder", "/Users/demo/Other"]),
+      );
+      // The panel is a stand-in here; its summary of a selection is tested with it.
+      await waitFor(() => expect(screen.getByTestId("info-panel")).toBeInTheDocument());
+    });
+
+    it("asks for the sizes of selected files in a view that doesn't show them", async () => {
+      const harness = await rightClickSelection([
+        "/Users/demo/source.txt",
+        "/Users/demo/notes.txt",
+      ]);
+
+      await vi.waitFor(() =>
+        expect(
+          harness.invocations
+            .filter((call) => call.channel === "directory:getMetadataBatch")
+            .flatMap((call) => (call.payload as { paths: string[] }).paths),
+        ).toEqual(expect.arrayContaining(["/Users/demo/source.txt", "/Users/demo/notes.txt"])),
+      );
+    });
+
+    it("is not offered for files alone, whose sizes are known", async () => {
+      await rightClickSelection(["/Users/demo/source.txt", "/Users/demo/notes.txt"]);
+
+      expect(screen.getByRole("button", { name: /^Duplicate/ })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Calculate Size" })).toBeNull();
+    });
+  });
+
   it("pastes immediately after copy without reading an empty clipboard state", async () => {
     const harness = createAppHarness();
 

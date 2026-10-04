@@ -35,8 +35,10 @@ export function InfoRow({
   item: ItemProperties | null;
   // With several items selected the row sums them up instead of describing one.
   selectionCount?: number;
-  // Their total size, when every one of them is a file whose size is known.
+  // Their total size, once the size of every one of them is known.
   selectionTotalBytes?: number | null;
+  // For one item, its folder size; for several, their folders' sizes summed up (see
+  // summarizeSelectionSize), with handlers that work on all of those folders.
   folderSizeEntry?: FolderSizeEntry | undefined;
   onCalculateFolderSize?: (() => void) | undefined;
   onRecalculateFolderSize?: (() => void) | undefined;
@@ -49,6 +51,24 @@ export function InfoRow({
   }
 
   if (selectionCount > 1) {
+    // Selected folders bring the same Calculate, spinner and totals as one folder does.
+    const selectionSize =
+      folderSizeEntry && onCalculateFolderSize && onCancelFolderSize ? (
+        <InfoRowFact
+          title={
+            folderSizeEntry.status === "ready" ? formatFolderSizeText(folderSizeEntry) : undefined
+          }
+        >
+          <InfoRowFolderSize
+            entry={folderSizeEntry}
+            onCalculate={onCalculateFolderSize}
+            onRecalculate={onRecalculateFolderSize ?? onCalculateFolderSize}
+            onCancel={onCancelFolderSize}
+          />
+        </InfoRowFact>
+      ) : selectionTotalBytes !== null ? (
+        <InfoRowFact>{formatSize(selectionTotalBytes, "ready")}</InfoRowFact>
+      ) : null;
     return (
       <div className={`info-row${open ? " open" : ""}`}>
         <div className="info-row-line">
@@ -56,11 +76,7 @@ export function InfoRow({
             <FileIcon entry={activeEntry} deferLoad />
           </span>
           <span className="info-row-name">{`${selectionCount.toLocaleString()} items`}</span>
-          <span className="info-row-facts">
-            {selectionTotalBytes !== null ? (
-              <InfoRowFact>{formatSize(selectionTotalBytes, "ready")}</InfoRowFact>
-            ) : null}
-          </span>
+          <span className="info-row-facts">{selectionSize}</span>
         </div>
       </div>
     );

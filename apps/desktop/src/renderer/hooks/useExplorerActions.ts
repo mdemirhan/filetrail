@@ -350,6 +350,8 @@ export function useExplorerActions(args: {
     restartActiveSearch?: (() => Promise<void>) | null;
     openPathInNewTab: (path: string) => void;
     calculateFolderSize: (path: string) => void;
+    /** Several folders, one after another, leaving those whose size is known. */
+    calculateFolderSizes: (paths: string[]) => void;
   };
 }) {
   const {
@@ -558,10 +560,7 @@ export function useExplorerActions(args: {
       if (!hasBundle) {
         hidden.add("showPackageContents");
       }
-      if (
-        contextMenuTargetEntries.length !== 1 ||
-        !isFolderSizeEligibleKind(contextMenuTargetEntries[0]?.kind)
-      ) {
+      if (!contextMenuTargetEntries.some((entry) => isFolderSizeEligibleKind(entry.kind))) {
         hidden.add("calculateSize");
       }
       // In the Trash things are only taken out or deleted for good: nothing is pasted,
@@ -620,11 +619,8 @@ export function useExplorerActions(args: {
     if (!hasBundle) {
       hidden.add("showPackageContents");
     }
-    // A folder size is calculated one at a time, so the item is for one folder or package.
-    if (
-      contextMenuTargetEntries.length !== 1 ||
-      !isFolderSizeEligibleKind(contextMenuTargetEntries[0]?.kind)
-    ) {
+    // For folders and packages: one, or a selection with any among it (files have a size).
+    if (!contextMenuTargetEntries.some((entry) => isFolderSizeEligibleKind(entry.kind))) {
       hidden.add("calculateSize");
     }
     return Array.from(hidden);
@@ -2666,17 +2662,29 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "calculateSize") {
-      const targetPath = contextMenuTargetPath ?? paths[0];
-      if (!targetPath) {
-        return;
-      }
-      callbacks.calculateFolderSize(targetPath);
       // The list's Size column shows the size as it comes in, in the Details view; anywhere
       // else (another view, the column hidden, search results, the tree) the Info panel does.
       const sizeColumnShowsIt =
         (contextMenuSurface === "content" || contextMenuSurface === "trash") &&
         viewMode === "details" &&
         detailColumns.size;
+      if (contextMenuTargetEntries.length > 1) {
+        // Several items: the folders among them, and the Info panel sums up the selection.
+        callbacks.calculateFolderSizes(
+          contextMenuTargetEntries
+            .filter((entry) => isFolderSizeEligibleKind(entry.kind))
+            .map((entry) => entry.path),
+        );
+        if (!sizeColumnShowsIt) {
+          setInfoPanelOpen(true);
+        }
+        return;
+      }
+      const targetPath = contextMenuTargetPath ?? paths[0];
+      if (!targetPath) {
+        return;
+      }
+      callbacks.calculateFolderSize(targetPath);
       if (!sizeColumnShowsIt) {
         await showInfoForPath(targetPath);
       }

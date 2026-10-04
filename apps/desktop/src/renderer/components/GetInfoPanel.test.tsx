@@ -73,6 +73,20 @@ describe("InfoPanel", () => {
     expect(screen.getByText("2 files · 4.0 KB")).toBeInTheDocument();
     expect(screen.getByText("Several folders")).toBeInTheDocument();
 
+    // Folders among them: the Size row offers to calculate, as for one folder.
+    const onCalculateFolderSize = vi.fn();
+    rerender(
+      <InfoPanel
+        {...props}
+        selection={{ count: 2, folderCount: 1, fileCount: 1, totalBytes: null, parentPath: null }}
+        folderSizeEntry={{ status: "idle" }}
+        onCalculateFolderSize={onCalculateFolderSize}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
+    expect(onCalculateFolderSize).toHaveBeenCalledTimes(1);
+
     // One item selected: the item itself.
     rerender(
       <InfoPanel

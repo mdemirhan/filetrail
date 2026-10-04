@@ -258,7 +258,7 @@ export function getContextMenuItems(
     { id: "showPackageContents", label: "Show Package Contents", icon: "showPackageContents" },
     { type: "separator", key: "separator-open" },
     { id: "showInfo", label: "Show Info", icon: "showInfo" },
-    // For one folder only: hidden by the caller otherwise.
+    // For folders, or a selection with folders among it: hidden by the caller otherwise.
     { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },
     { type: "separator", key: "separator-info" },
     { id: "cut", label: "Cut", icon: "cut" },

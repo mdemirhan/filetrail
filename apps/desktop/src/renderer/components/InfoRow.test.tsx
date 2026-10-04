@@ -303,4 +303,40 @@ describe("InfoRow as one line", () => {
     );
     expect(container.querySelectorAll(".info-row-fact")).toHaveLength(0);
   });
+
+  it("offers to calculate the size of several items with folders among them", () => {
+    const onCalculate = vi.fn();
+    const props = {
+      open: true,
+      currentPath: "/Users/demo",
+      selectedEntry: fileEntry,
+      item: fileItem,
+      selectionCount: 3,
+      onCalculateFolderSize: onCalculate,
+      onCancelFolderSize: () => undefined,
+    };
+    const { container, rerender } = render(
+      <InfoRow {...props} selectionTotalBytes={null} folderSizeEntry={{ status: "idle" }} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Calculate size" }));
+    expect(onCalculate).toHaveBeenCalledTimes(1);
+
+    // Every size known: the total, and what it holds.
+    rerender(
+      <InfoRow
+        {...props}
+        selectionTotalBytes={5_000_000}
+        folderSizeEntry={{
+          status: "ready",
+          sizeBytes: 5_000_000,
+          diskBytes: 5_000_000,
+          fileCount: 12,
+          folderCount: 2,
+        }}
+      />,
+    );
+    expect(container.querySelector(".folder-size-detail")).toHaveTextContent(
+      "5.0 MB · 12 files, 2 folders",
+    );
+  });
 });

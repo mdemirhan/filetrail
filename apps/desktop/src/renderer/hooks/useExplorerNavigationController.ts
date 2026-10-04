@@ -18,6 +18,7 @@ import {
 import { getDetailsRowHeight } from "../lib/detailsLayout";
 import {
   createTreeNode,
+  isFolderSizeEligibleKind,
   isPathWithinRoot,
   resolveExplorerTreeRootPath,
 } from "../lib/explorerAppUtils";
@@ -1896,13 +1897,34 @@ export function useExplorerNavigationController(args: {
     searchShellRef,
   ]);
 
+  // The details of the items on screen in the Details view, which shows them, and of several
+  // selected files in any view, whose sizes the Info Row and the Info panel add up.
   useEffect(() => {
-    if (isSearchMode || viewMode !== "details" || currentPath.length === 0 || directoryLoading) {
+    if (isSearchMode || currentPath.length === 0 || directoryLoading) {
       return;
     }
     const entryIndexByPath = new Map(currentEntries.map((entry, index) => [entry.path, index]));
-    const prioritizedPaths = new Set(visiblePaths.filter((path) => entryIndexByPath.has(path)));
-    if (visiblePaths.length > 0 && currentEntries.length > visiblePaths.length) {
+    const prioritizedPaths = new Set<string>();
+    if (contentSelection.paths.length > 1) {
+      for (const path of contentSelection.paths) {
+        const entry = currentEntries[entryIndexByPath.get(path) ?? -1];
+        if (entry && !isFolderSizeEligibleKind(entry.kind)) {
+          prioritizedPaths.add(path);
+        }
+      }
+    }
+    if (viewMode === "details") {
+      for (const path of visiblePaths) {
+        if (entryIndexByPath.has(path)) {
+          prioritizedPaths.add(path);
+        }
+      }
+    }
+    if (
+      viewMode === "details" &&
+      visiblePaths.length > 0 &&
+      currentEntries.length > visiblePaths.length
+    ) {
       const lastVisibleIndex = visiblePaths.reduce((maxIndex, path) => {
         const index = entryIndexByPath.get(path);
         return index === undefined ? maxIndex : Math.max(maxIndex, index);
@@ -1960,6 +1982,10 @@ export function useExplorerNavigationController(args: {
         paths: missingPaths,
       })
       .then((response) => {
+        // Nothing new (the items are gone): the list stays as it is, or this would ask again.
+        if (response.items.length === 0) {
+          return;
+        }
         for (const item of response.items) {
           metadataCacheRef.current.set(item.path, item);
         }
@@ -1979,6 +2005,7 @@ export function useExplorerNavigationController(args: {
       });
   }, [
     client,
+    contentSelection.paths,
     currentEntries,
     currentPath,
     directoryLoading,

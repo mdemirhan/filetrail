@@ -459,4 +459,83 @@ describe("useFolderSizeCache", () => {
     expect(result.current.getEntry("/Users/demo/Project").status).toBe("idle");
     expect(result.current.getEntry("/Users/demo/Music").status).toBe("ready");
   });
+
+  // A main process that measures folders one at a time, each until the test finishes it.
+  function createOneAtATimeClient() {
+    const started: string[] = [];
+    const finished = new Set<string>();
+    const client = createMockFiletrailClient({
+      "folderSize:start": vi.fn(
+        async (payload: { path: string; probeOnly?: boolean | undefined }) => {
+          if (payload.probeOnly) {
+            return { jobId: `probe:${payload.path}`, status: "deferred" as const };
+          }
+          started.push(payload.path);
+          return { jobId: payload.path, status: "running" as const };
+        },
+      ),
+      "folderSize:getStatus": vi.fn(async (payload: { jobId: string }) => ({
+        jobId: payload.jobId,
+        status: finished.has(payload.jobId) ? ("ready" as const) : ("running" as const),
+        sizeBytes: finished.has(payload.jobId) ? 100 : null,
+        diskBytes: finished.has(payload.jobId) ? 100 : null,
+        fileCount: finished.has(payload.jobId) ? 1 : null,
+        folderCount: finished.has(payload.jobId) ? 0 : null,
+        error: null,
+      })),
+      "folderSize:cancel": vi.fn(async () => ({ ok: true })),
+    });
+    const finish = async (path: string) => {
+      finished.add(path);
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+    };
+    return { client, started, finish };
+  }
+
+  it("measures several folders one after another, leaving those already known", async () => {
+    const { client, started, finish } = createOneAtATimeClient();
+    const { result } = renderHook(() => useFolderSizeCache(client));
+    await act(async () => {
+      await result.current.calculateFolderSize("/b");
+    });
+    await finish("/b");
+    expect(result.current.getEntry("/b").status).toBe("ready");
+
+    await act(async () => {
+      void result.current.calculateFolderSizes(["/a", "/b", "/c"]);
+    });
+    // One at a time: a second walk would stop the first in the main process.
+    expect(started).toEqual(["/b", "/a"]);
+
+    await finish("/a");
+    expect(started).toEqual(["/b", "/a", "/c"]);
+    await finish("/c");
+    expect(["/a", "/b", "/c"].map((path) => result.current.getEntry(path).status)).toEqual([
+      "ready",
+      "ready",
+      "ready",
+    ]);
+  });
+
+  it("stops measuring several folders when told to", async () => {
+    const { client, started, finish } = createOneAtATimeClient();
+    const { result } = renderHook(() => useFolderSizeCache(client));
+
+    await act(async () => {
+      void result.current.calculateFolderSizes(["/a", "/c"]);
+    });
+    await act(async () => {
+      result.current.cancelFolderSizes(["/a", "/c"]);
+    });
+    await finish("/a");
+
+    expect(result.current.getEntry("/a").status).toBe("idle");
+    expect(result.current.getEntry("/c").status).toBe("idle");
+    expect(started).toEqual(["/a"]);
+  });
 });

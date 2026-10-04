@@ -27,7 +27,7 @@ export type InfoPanelSelection = {
   count: number;
   folderCount: number;
   fileCount: number;
-  // Known when every item is a file whose size the list has.
+  // Known once the size of every item is (see summarizeSelectionSize).
   totalBytes: number | null;
   // The folder they are all in, or null when they are in different folders.
   parentPath: string | null;
@@ -137,7 +137,14 @@ export function InfoPanel({
         </button>
       </div>
       {selection && selection.count > 1 ? (
-        <InfoPanelSelectionContent selection={selection} onNavigateToPath={onNavigateToPath} />
+        <InfoPanelSelectionContent
+          selection={selection}
+          onNavigateToPath={onNavigateToPath}
+          folderSizeEntry={folderSizeEntry}
+          onCalculateFolderSize={onCalculateFolderSize}
+          onRecalculateFolderSize={onRecalculateFolderSize}
+          onCancelFolderSize={onCancelFolderSize}
+        />
       ) : item ? (
         <GetInfoPanelContent
           copied={copied}
@@ -187,9 +194,18 @@ function describeSelectionKinds(selection: InfoPanelSelection): string {
 function InfoPanelSelectionContent({
   selection,
   onNavigateToPath,
+  folderSizeEntry,
+  onCalculateFolderSize,
+  onRecalculateFolderSize,
+  onCancelFolderSize,
 }: {
   selection: InfoPanelSelection;
   onNavigateToPath: (path: string) => void;
+  // The selected folders' sizes summed up, with handlers that work on all of them.
+  folderSizeEntry?: FolderSizeEntry | undefined;
+  onCalculateFolderSize?: (() => void) | undefined;
+  onRecalculateFolderSize?: (() => void) | undefined;
+  onCancelFolderSize?: (() => void) | undefined;
 }) {
   const contains =
     selection.fileCount === 0 ? "folders" : selection.folderCount === 0 ? "files" : "mixed";
@@ -213,7 +229,20 @@ function InfoPanelSelectionContent({
         <dl className="get-info-meta">
           <div className="get-info-meta-row">
             <dt className="get-info-meta-label">Size</dt>
-            <dd className={`get-info-meta-value${size ? "" : " muted"}`}>{size ?? "--"}</dd>
+            {folderSizeEntry && onCalculateFolderSize && onCancelFolderSize ? (
+              <dd
+                className={`get-info-meta-value${folderSizeEntry.status === "idle" ? " muted" : ""}`}
+              >
+                <FolderSizeCell
+                  entry={folderSizeEntry}
+                  onCalculate={onCalculateFolderSize}
+                  onRecalculate={onRecalculateFolderSize ?? onCalculateFolderSize}
+                  onCancel={onCancelFolderSize}
+                />
+              </dd>
+            ) : (
+              <dd className={`get-info-meta-value${size ? "" : " muted"}`}>{size ?? "--"}</dd>
+            )}
           </div>
           <div className="get-info-meta-row last">
             <dt className="get-info-meta-label">Where</dt>

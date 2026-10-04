@@ -39,6 +39,11 @@ export function useFolderSizeCache(client: FiletrailClient) {
   const bumpVersion = useCallback(() => setVersion((v) => v + 1), []);
 
   const pollTimers = useRef(new Map<string, ReturnType<typeof setInterval>>());
+  // Calculations a run of several folders waits for, told how each ended (ready, error, or
+  // idle when stopped).
+  const finishWaiters = useRef(new Map<string, Array<(entry: FolderSizeEntry) => void>>());
+  // Bumped to stop a run of several folders after the one being measured.
+  const folderRunRef = useRef(0);
   const probedPaths = useRef(new Set<string>());
   const probeMissedAt = useRef(new Map<string, number>());
   // Set below, once probeCache exists: re-asks for the folders inside `path`.
@@ -69,6 +74,13 @@ export function useFolderSizeCache(client: FiletrailClient) {
         }
         cache.delete(cachedPath);
         probedPaths.current.delete(cachedPath);
+      }
+      if (entry.status !== "calculating") {
+        const waiters = finishWaiters.current.get(path);
+        finishWaiters.current.delete(path);
+        for (const resolve of waiters ?? []) {
+          resolve(entry);
+        }
       }
       bumpVersion();
     },
@@ -152,6 +164,34 @@ export function useFolderSizeCache(client: FiletrailClient) {
     [calculateFolderSize],
   );
 
+  // Several folders, one after another: the main process measures one at a time, and a
+  // new calculation stops the one under way. With `recalculate` false, folders whose size
+  // is known or being calculated are left alone. A folder stopped part way (by Stop, or by
+  // another calculation started meanwhile) stops the run.
+  const calculateFolderSizes = useCallback(
+    async (paths: readonly string[], recalculate = false) => {
+      const run = ++folderRunRef.current;
+      for (const path of paths) {
+        if (folderRunRef.current !== run) {
+          return;
+        }
+        const status = cacheRef.current.get(path)?.status;
+        if (!recalculate && (status === "ready" || status === "calculating")) {
+          continue;
+        }
+        const finished = new Promise<FolderSizeEntry>((resolve) => {
+          finishWaiters.current.set(path, [...(finishWaiters.current.get(path) ?? []), resolve]);
+        });
+        void calculateFolderSize(path, recalculate);
+        const entry = await finished;
+        if (entry.status === "idle") {
+          return;
+        }
+      }
+    },
+    [calculateFolderSize],
+  );
+
   const cancelFolderSize = useCallback(
     async (path: string) => {
       const entry = cacheRef.current.get(path);
@@ -166,6 +206,19 @@ export function useFolderSizeCache(client: FiletrailClient) {
       updateEntry(path, { status: "idle" });
     },
     [client, stopPolling, updateEntry],
+  );
+
+  // Stops a run of several folders, and the one of them being measured.
+  const cancelFolderSizes = useCallback(
+    (paths: readonly string[]) => {
+      folderRunRef.current += 1;
+      for (const path of paths) {
+        if (cacheRef.current.get(path)?.status === "calculating") {
+          void cancelFolderSize(path);
+        }
+      }
+    },
+    [cancelFolderSize],
   );
 
   /**
@@ -269,5 +322,13 @@ export function useFolderSizeCache(client: FiletrailClient) {
 
   // `version` changes whenever a cached entry does, for views that derive from the cache
   // (sorting by size).
-  return { getEntry, calculateFolderSize, recalculateFolderSize, cancelFolderSize, version };
+  return {
+    getEntry,
+    calculateFolderSize,
+    recalculateFolderSize,
+    cancelFolderSize,
+    calculateFolderSizes,
+    cancelFolderSizes,
+    version,
+  };
 }
