@@ -25,6 +25,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
         kind: true,
         created: false,
       }}
+      detailColumnOrder={["modified", "size", "kind", "created", "permissions"]}
       layoutMode="wide"
       notificationsEnabled={true}
       markClipboardItems={true}
@@ -79,6 +80,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onCompactTreeViewChange={() => undefined}
       onSingleClickExpandTreeItemsChange={() => undefined}
       onDetailColumnsChange={() => undefined}
+      onDetailColumnOrderChange={() => undefined}
       onNotificationsEnabledChange={() => undefined}
       onMarkClipboardItemsChange={() => undefined}
       onRestoreSessionOnStartupChange={() => undefined}
@@ -587,5 +589,72 @@ describe("SettingsView", () => {
     expect(onBrowseOpenWithApplication).toHaveBeenCalledWith("vscode");
     expect(onMoveOpenWithApplication).toHaveBeenCalledWith("zed", 0);
     expect(onRemoveOpenWithApplication).toHaveBeenCalledWith("zed");
+  });
+
+  it("lists the columns in their order, with Name first and fixed", () => {
+    renderSettingsView({
+      detailColumnOrder: ["kind", "modified", "size", "permissions", "created"],
+    });
+
+    const list = screen.getByRole("listbox", { name: "Columns in List view" });
+    const rows = within(list).getAllByRole("option");
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
+      "Name",
+      "Kind",
+      "Date Modified",
+      "Size",
+      "Permissions",
+      "Date Created",
+    ]);
+    expect(rows[0]).toHaveAttribute("aria-disabled", "true");
+    expect(rows[0]).not.toHaveAttribute("draggable");
+    expect(within(rows[0] as HTMLElement).getByRole("checkbox", { hidden: true })).toBeDisabled();
+    expect(within(list).getByRole("checkbox", { name: "Show Date Created" })).not.toBeChecked();
+  });
+
+  it("checks a column with its checkbox or with Space", () => {
+    const onDetailColumnsChange = vi.fn();
+    renderSettingsView({ onDetailColumnsChange });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show Date Created" }));
+    fireEvent.keyDown(screen.getByRole("option", { name: "Size" }), { key: " " });
+
+    expect(onDetailColumnsChange.mock.calls).toEqual([
+      [{ size: true, modified: true, permissions: true, kind: true, created: true }],
+      [{ size: false, modified: true, permissions: true, kind: true, created: false }],
+    ]);
+  });
+
+  it("moves a column with the arrow buttons, the keyboard or a drag", () => {
+    const onDetailColumnOrderChange = vi.fn();
+    renderSettingsView({ onDetailColumnOrderChange });
+
+    const moveUp = screen.getByRole("button", { name: "Move Up" });
+    expect(moveUp).toBeDisabled();
+    const size = screen.getByRole("option", { name: "Size" });
+    fireEvent.mouseDown(size);
+    fireEvent.click(screen.getByRole("button", { name: "Move Size Up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Size Down" }));
+    fireEvent.keyDown(size, { key: "ArrowDown", altKey: true });
+
+    // The first optional column cannot go above Name; the last cannot go further down.
+    fireEvent.mouseDown(screen.getByRole("option", { name: "Date Modified" }));
+    expect(screen.getByRole("button", { name: "Move Date Modified Up" })).toBeDisabled();
+    fireEvent.mouseDown(screen.getByRole("option", { name: "Permissions" }));
+    expect(screen.getByRole("button", { name: "Move Permissions Down" })).toBeDisabled();
+
+    const dataTransfer = { setData: () => undefined, effectAllowed: "", dropEffect: "" };
+    const permissions = screen.getByRole("option", { name: "Permissions" });
+    const modified = screen.getByRole("option", { name: "Date Modified" });
+    fireEvent.dragStart(permissions, { dataTransfer });
+    fireEvent.dragOver(modified, { dataTransfer });
+    fireEvent.drop(modified, { dataTransfer });
+
+    expect(onDetailColumnOrderChange.mock.calls).toEqual([
+      [["size", "modified", "kind", "created", "permissions"]],
+      [["modified", "kind", "size", "created", "permissions"]],
+      [["modified", "kind", "size", "created", "permissions"]],
+      [["permissions", "modified", "size", "kind", "created"]],
+    ]);
   });
 });

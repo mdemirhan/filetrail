@@ -5,8 +5,10 @@ import {
   type AppPreferences,
   type ApplicationSelection,
   DEFAULT_APP_PREFERENCES,
+  DEFAULT_DETAIL_COLUMN_ORDER,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
+  type DetailColumnOrder,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   type ExplorerViewMode,
@@ -42,6 +44,9 @@ export function useAppPreferences() {
   );
   const [detailColumns, setDetailColumns] = useState<DetailColumnVisibility>(
     DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  );
+  const [detailColumnOrder, setDetailColumnOrder] = useState<DetailColumnOrder>(
+    DEFAULT_DETAIL_COLUMN_ORDER,
   );
   const [detailColumnWidths, setDetailColumnWidths] = useState<DetailColumnWidths>(
     DEFAULT_DETAIL_COLUMN_WIDTHS,
@@ -126,6 +131,8 @@ export function useAppPreferences() {
     setSingleClickExpandTreeItems,
     detailColumns,
     setDetailColumns,
+    detailColumnOrder,
+    setDetailColumnOrder,
     detailColumnWidths,
     setDetailColumnWidths,
     notificationsEnabled,
@@ -212,6 +219,7 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("compactTreeView", store.setCompactTreeView);
   set("singleClickExpandTreeItems", store.setSingleClickExpandTreeItems);
   set("detailColumns", store.setDetailColumns);
+  set("detailColumnOrder", store.setDetailColumnOrder);
   set("notificationsEnabled", store.setNotificationsEnabled);
   set("markClipboardItems", store.setMarkClipboardItems);
   set("topToolbarItems", store.setTopToolbarItems);

@@ -14,12 +14,14 @@ import type { SettingsTab as IpcSettingsTab } from "@filetrail/contracts";
 import type {
   AccentMode,
   ApplicationSelection,
+  DetailColumnOrder,
   DetailColumnVisibility,
   FavoriteIconId,
   FavoritePreference,
   FavoritesPlacement,
   FileActivationAction,
   OpenWithApplication,
+  OptionalDetailColumnKey,
   ReturnKeyAction,
   SearchPatternModePreference,
   ThemePreference,
@@ -30,7 +32,6 @@ import {
   DEFAULT_TEXT_EDITOR,
   DETAIL_COLUMN_LABELS,
   FAVORITE_ICON_OPTIONS,
-  OPTIONAL_DETAIL_COLUMN_KEYS,
   SEARCH_PATTERN_MODES,
   SEARCH_PATTERN_MODE_LABELS,
   THEME_OPTIONS,
@@ -90,23 +91,6 @@ function Toggle({
       disabled={disabled}
       onClick={onToggle}
     />
-  );
-}
-
-function Checkbox({
-  checked,
-  onToggle,
-  label,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-  label: string;
-}) {
-  return (
-    <label className="settings-checkbox">
-      <input type="checkbox" checked={checked} onChange={onToggle} />
-      {label}
-    </label>
   );
 }
 
@@ -644,6 +628,195 @@ function SettingsListText({ name, path }: { name: string; path: string }) {
   );
 }
 
+// The List view's columns, to check and to drag into order, as a list in Settings is. Name is
+// always shown and always first: its row is there, but it cannot be unchecked or moved. The
+// arrow keys select, Space checks, and ⌥ or ⌘ with an arrow moves the selected column.
+function DetailColumnList({
+  visibility,
+  order,
+  onVisibilityChange,
+  onOrderChange,
+}: {
+  visibility: DetailColumnVisibility;
+  order: DetailColumnOrder;
+  onVisibilityChange: (value: DetailColumnVisibility) => void;
+  onOrderChange: (value: DetailColumnOrder) => void;
+}) {
+  const [selectedKey, setSelectedKey] = useState<OptionalDetailColumnKey | null>(null);
+  const [draggedKey, setDraggedKey] = useState<OptionalDetailColumnKey | null>(null);
+  const [dropKey, setDropKey] = useState<OptionalDetailColumnKey | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const selectedIndex = selectedKey === null ? -1 : order.indexOf(selectedKey);
+
+  const focusRow = (key: OptionalDetailColumnKey) => {
+    setSelectedKey(key);
+    listRef.current?.querySelector<HTMLElement>(`[data-column="${key}"]`)?.focus();
+  };
+
+  const move = (key: OptionalDetailColumnKey, toIndex: number) => {
+    const fromIndex = order.indexOf(key);
+    if (fromIndex === toIndex || toIndex < 0 || toIndex >= order.length) {
+      return;
+    }
+    const next = order.filter((other) => other !== key);
+    next.splice(toIndex, 0, key);
+    onOrderChange(next);
+    setSelectedKey(key);
+  };
+
+  const toggle = (key: OptionalDetailColumnKey) =>
+    onVisibilityChange({ ...visibility, [key]: !visibility[key] });
+
+  const endDrag = () => {
+    setDraggedKey(null);
+    setDropKey(null);
+  };
+
+  return (
+    <div className="settings-list">
+      {/* biome-ignore lint/a11y/useFocusableInteractive: the rows take the focus, one at a time. */}
+      <div
+        ref={listRef}
+        className="settings-list-rows"
+        // biome-ignore lint/a11y/useSemanticElements: a native select cannot hold rows that are dragged, or a checkbox.
+        role="listbox"
+        aria-label="Columns in List view"
+        onDragOver={(event) => {
+          if (draggedKey !== null) {
+            event.preventDefault();
+          }
+        }}
+      >
+        <div
+          className="settings-list-row settings-column-row"
+          // biome-ignore lint/a11y/useSemanticElements: see the listbox note above.
+          role="option"
+          aria-label={DETAIL_COLUMN_LABELS.name}
+          aria-selected={false}
+          aria-disabled="true"
+          tabIndex={-1}
+        >
+          <span className="settings-checkbox">
+            <input type="checkbox" checked disabled tabIndex={-1} aria-hidden="true" />
+          </span>
+          <span className="settings-list-name">{DETAIL_COLUMN_LABELS.name}</span>
+        </div>
+        {order.map((key, index) => {
+          const label = DETAIL_COLUMN_LABELS[key];
+          const draggedIndex = draggedKey === null ? -1 : order.indexOf(draggedKey);
+          const dropSide =
+            draggedKey !== null && dropKey === key && draggedKey !== key
+              ? draggedIndex < index
+                ? "after"
+                : "before"
+              : undefined;
+          return (
+            <div
+              key={key}
+              className="settings-list-row settings-column-row"
+              // biome-ignore lint/a11y/useSemanticElements: see the listbox note above.
+              role="option"
+              aria-label={label}
+              aria-selected={selectedKey === key}
+              aria-checked={visibility[key]}
+              tabIndex={selectedKey === key || (selectedKey === null && index === 0) ? 0 : -1}
+              data-column={key}
+              data-drop={dropSide}
+              data-dragging={draggedKey === key || undefined}
+              draggable
+              onMouseDown={() => setSelectedKey(key)}
+              onFocus={() => setSelectedKey(key)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                  event.preventDefault();
+                  const target = index + (event.key === "ArrowUp" ? -1 : 1);
+                  if (event.altKey || event.metaKey) {
+                    move(key, target);
+                    window.requestAnimationFrame(() => focusRow(key));
+                  } else {
+                    const targetKey = order[target];
+                    if (targetKey !== undefined) {
+                      focusRow(targetKey);
+                    }
+                  }
+                } else if (event.key === " ") {
+                  event.preventDefault();
+                  toggle(key);
+                }
+              }}
+              onDragStart={(event) => {
+                setDraggedKey(key);
+                setSelectedKey(key);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", label);
+              }}
+              onDragEnter={() => setDropKey(key)}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDropKey(key);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (draggedKey !== null) {
+                  move(draggedKey, index);
+                }
+                endDrag();
+              }}
+              onDragEnd={endDrag}
+            >
+              <span className="settings-checkbox">
+                <input
+                  type="checkbox"
+                  checked={visibility[key]}
+                  tabIndex={-1}
+                  aria-label={`Show ${label}`}
+                  onChange={() => toggle(key)}
+                />
+              </span>
+              <span className="settings-list-name">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="settings-list-bar">
+        <button
+          type="button"
+          className="settings-list-bar-button"
+          aria-label={selectedKey ? `Move ${DETAIL_COLUMN_LABELS[selectedKey]} Up` : "Move Up"}
+          title="Move Up"
+          disabled={selectedIndex <= 0}
+          onClick={() => {
+            if (selectedKey !== null) {
+              move(selectedKey, selectedIndex - 1);
+            }
+          }}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 10l4-4 4 4" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="settings-list-bar-button"
+          aria-label={selectedKey ? `Move ${DETAIL_COLUMN_LABELS[selectedKey]} Down` : "Move Down"}
+          title="Move Down"
+          disabled={selectedIndex < 0 || selectedIndex >= order.length - 1}
+          onClick={() => {
+            if (selectedKey !== null) {
+              move(selectedKey, selectedIndex + 1);
+            }
+          }}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // A menu that hangs below a control in Settings: it opens where the control is, closes on
 // Escape, Tab or a click elsewhere, and moves between its items with the arrow keys, starting
 // on the checked one. `focusTarget` takes the keyboard back when it closes.
@@ -1021,6 +1194,7 @@ export function SettingsView({
   compactTreeView,
   singleClickExpandTreeItems,
   detailColumns,
+  detailColumnOrder,
   layoutMode = "wide",
   notificationsEnabled,
   markClipboardItems,
@@ -1048,6 +1222,7 @@ export function SettingsView({
   onCompactTreeViewChange,
   onSingleClickExpandTreeItemsChange,
   onDetailColumnsChange,
+  onDetailColumnOrderChange,
   onNotificationsEnabledChange,
   onMarkClipboardItemsChange,
   onRestoreSessionOnStartupChange,
@@ -1084,6 +1259,7 @@ export function SettingsView({
   compactTreeView: boolean;
   singleClickExpandTreeItems: boolean;
   detailColumns: DetailColumnVisibility;
+  detailColumnOrder: DetailColumnOrder;
   layoutMode?: "wide" | "narrow" | "compact";
   notificationsEnabled: boolean;
   markClipboardItems: boolean;
@@ -1112,6 +1288,7 @@ export function SettingsView({
   onCompactTreeViewChange: (value: boolean) => void;
   onSingleClickExpandTreeItemsChange: (value: boolean) => void;
   onDetailColumnsChange: (value: DetailColumnVisibility) => void;
+  onDetailColumnOrderChange: (value: DetailColumnOrder) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
   onMarkClipboardItemsChange: (value: boolean) => void;
   onRestoreSessionOnStartupChange: (value: boolean) => void;
@@ -1292,23 +1469,21 @@ export function SettingsView({
                 />
               }
             />
-            <div className="settings-row settings-row-stacked">
-              <div className="settings-row-title">Columns in List view</div>
-              <div className="settings-checkboxes">
-                {OPTIONAL_DETAIL_COLUMN_KEYS.map((key) => (
-                  <Checkbox
-                    key={key}
-                    checked={detailColumns[key]}
-                    label={DETAIL_COLUMN_LABELS[key]}
-                    onToggle={() =>
-                      onDetailColumnsChange({
-                        ...detailColumns,
-                        [key]: !detailColumns[key],
-                      })
-                    }
-                  />
-                ))}
-              </div>
+          </SectionCard>
+        ) : null}
+
+        {showSection("browsing") ? (
+          <SectionCard
+            title="Columns in List View"
+            note="Name always comes first. Drag the other columns into the order you want."
+          >
+            <div className="settings-row settings-row-list">
+              <DetailColumnList
+                visibility={detailColumns}
+                order={detailColumnOrder}
+                onVisibilityChange={onDetailColumnsChange}
+                onOrderChange={onDetailColumnOrderChange}
+              />
             </div>
           </SectionCard>
         ) : null}

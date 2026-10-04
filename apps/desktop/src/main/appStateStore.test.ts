@@ -348,6 +348,7 @@ describe("appStateStore", () => {
         created: false,
         permissions: false,
       },
+      detailColumnOrder: ["modified", "size", "kind", "created", "permissions"],
       detailColumnWidths: {
         name: 320,
         size: 108,
@@ -450,6 +451,7 @@ describe("appStateStore", () => {
         kind: true,
         created: false,
       },
+      detailColumnOrder: ["kind", "size", "modified", "permissions", "created"],
       detailColumnWidths: {
         name: 360,
         size: 120,
@@ -560,6 +562,7 @@ describe("appStateStore", () => {
         kind: true,
         created: false,
       },
+      detailColumnOrder: ["kind", "size", "modified", "permissions", "created"],
       detailColumnWidths: {
         name: 360,
         size: 120,
@@ -753,6 +756,8 @@ describe("appStateStore", () => {
         modified: false,
         permissions: true,
       } as never,
+      // A repeated key, one that does not exist, and three left out.
+      detailColumnOrder: ["kind", "kind", "bogus", "size"] as never,
       detailColumnWidths: {
         name: 9999,
         size: 1,
@@ -824,11 +829,18 @@ describe("appStateStore", () => {
       kind: true,
       created: false,
     });
+    expect(reloaded.getPreferences().detailColumnOrder).toEqual([
+      "kind",
+      "size",
+      "modified",
+      "created",
+      "permissions",
+    ]);
     expect(reloaded.getPreferences().detailColumnWidths).toEqual({
       name: 720,
-      size: 84,
+      size: 60,
       modified: 180,
-      permissions: 96,
+      permissions: 52,
       kind: 148,
       created: 168,
     });

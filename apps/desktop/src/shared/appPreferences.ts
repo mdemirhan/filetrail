@@ -30,6 +30,8 @@ export type SearchResultsSortDirectionPreference = "asc" | "desc";
 export type DetailColumnKey = "name" | "modified" | "size" | "kind" | "created" | "permissions";
 export type OptionalDetailColumnKey = Exclude<DetailColumnKey, "name">;
 export type DetailColumnVisibility = Record<OptionalDetailColumnKey, boolean>;
+// The optional columns in the order the list shows them, each once; Name always comes first.
+export type DetailColumnOrder = OptionalDetailColumnKey[];
 export type DetailColumnWidths = Record<DetailColumnKey, number>;
 export type ApplicationSelection = {
   appPath: string;
@@ -142,6 +144,7 @@ export const DETAIL_COLUMN_LABELS: Record<DetailColumnKey, string> = {
   created: "Date Created",
   permissions: "Permissions",
 };
+export const DEFAULT_DETAIL_COLUMN_ORDER: DetailColumnOrder = [...OPTIONAL_DETAIL_COLUMN_KEYS];
 // `name` is always visible, so only optional columns are persisted as booleans. The
 // defaults are Finder's list view columns; Date Created and Permissions are opt-in.
 export const DEFAULT_DETAIL_COLUMN_VISIBILITY: DetailColumnVisibility = {
@@ -162,13 +165,16 @@ export const DEFAULT_DETAIL_COLUMN_WIDTHS: DetailColumnWidths = {
   created: 152,
   permissions: 108,
 };
+// A column may be made narrower than its title or its longest value: both end in an
+// ellipsis, and a date's tooltip has it in full. The least widths still show a short value
+// ("Mar 3, 2024", "123.5 MB", "Folder", "755") and a few letters of the title.
 export const DETAIL_COLUMN_WIDTH_LIMITS = {
-  name: { min: 220, max: 720 },
-  modified: { min: 132, max: 280 },
-  size: { min: 84, max: 240 },
-  kind: { min: 96, max: 320 },
-  created: { min: 132, max: 280 },
-  permissions: { min: 96, max: 260 },
+  name: { min: 140, max: 720 },
+  modified: { min: 80, max: 280 },
+  size: { min: 60, max: 240 },
+  kind: { min: 60, max: 320 },
+  created: { min: 80, max: 280 },
+  permissions: { min: 52, max: 260 },
 } as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
 export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
   {
@@ -239,6 +245,7 @@ export type AppPreferences = {
   compactTreeView: boolean;
   singleClickExpandTreeItems: boolean;
   detailColumns: DetailColumnVisibility;
+  detailColumnOrder: DetailColumnOrder;
   detailColumnWidths: DetailColumnWidths;
   notificationsEnabled: boolean;
   // Items that were copied or cut flash and keep a mark, in the folder tree and the file list.
@@ -295,6 +302,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   compactTreeView: false,
   singleClickExpandTreeItems: false,
   detailColumns: DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  detailColumnOrder: DEFAULT_DETAIL_COLUMN_ORDER,
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
   notificationsEnabled: true,
   markClipboardItems: true,
@@ -348,6 +356,23 @@ export function clampOpenItemLimit(value: number): number {
 export function clampDetailColumnWidth(key: DetailColumnKey, value: number): number {
   const limits = DETAIL_COLUMN_WIDTH_LIMITS[key];
   return Math.round(Math.max(limits.min, Math.min(limits.max, value)));
+}
+
+// A saved column order made whole: unknown and repeated keys are dropped, and columns it
+// leaves out (one added in a later version) follow in their default order.
+export function normalizeDetailColumnOrder(value: unknown): DetailColumnOrder {
+  const known = new Set<string>(OPTIONAL_DETAIL_COLUMN_KEYS);
+  const order: DetailColumnOrder = [];
+  for (const key of Array.isArray(value) ? value : []) {
+    if (
+      typeof key === "string" &&
+      known.has(key) &&
+      !order.includes(key as OptionalDetailColumnKey)
+    ) {
+      order.push(key as OptionalDetailColumnKey);
+    }
+  }
+  return [...order, ...DEFAULT_DETAIL_COLUMN_ORDER.filter((key) => !order.includes(key))];
 }
 
 // The look actually painted: "auto" follows the current macOS appearance.

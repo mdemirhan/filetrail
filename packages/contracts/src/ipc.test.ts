@@ -316,6 +316,16 @@ describe("ipc contracts", () => {
     });
   });
 
+  it("takes a column order only with each optional column once", () => {
+    const update = ipcContractSchemas["app:updatePreferences"].request;
+    const parse = (detailColumnOrder: unknown) =>
+      update.safeParse({ preferences: { detailColumnOrder } }).success;
+    expect(parse(["permissions", "kind", "size", "modified", "created"])).toBe(true);
+    expect(parse(["kind", "kind", "size", "modified", "created"])).toBe(false);
+    expect(parse(["kind", "size", "modified", "created"])).toBe(false);
+    expect(parse(["name", "kind", "size", "modified", "created"])).toBe(false);
+  });
+
   it("validates app preference payloads", () => {
     expect(
       ipcContractSchemas["app:getPreferences"].response.parse({
@@ -341,6 +351,7 @@ describe("ipc contracts", () => {
             kind: true,
             created: false,
           },
+          detailColumnOrder: ["modified", "size", "kind", "created", "permissions"],
           detailColumnWidths: {
             name: 320,
             size: 108,
@@ -424,6 +435,7 @@ describe("ipc contracts", () => {
           kind: true,
           created: false,
         },
+        detailColumnOrder: ["modified", "size", "kind", "created", "permissions"],
         detailColumnWidths: {
           name: 320,
           size: 108,
@@ -515,6 +527,7 @@ describe("ipc contracts", () => {
             kind: true,
             created: false,
           },
+          detailColumnOrder: ["modified", "size", "kind", "created", "permissions"],
           detailColumnWidths: {
             name: 360,
             size: 120,
@@ -580,6 +593,7 @@ describe("ipc contracts", () => {
           kind: true,
           created: false,
         },
+        detailColumnOrder: ["modified", "size", "kind", "created", "permissions"],
         detailColumnWidths: {
           name: 360,
           size: 120,

@@ -23,6 +23,7 @@ import {
   clampPaneWidth,
   clampZoomPercent,
   normalizeAccentColor,
+  normalizeDetailColumnOrder,
 } from "../shared/appPreferences";
 import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import { sanitizeTopToolbarItems } from "../shared/toolbarItems";
@@ -506,6 +507,10 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
         ? record.compactTreeView
         : currentDefaults.compactTreeView,
     detailColumns: sanitizeDetailColumns(record.detailColumns, currentDefaults.detailColumns),
+    detailColumnOrder:
+      record.detailColumnOrder === undefined
+        ? currentDefaults.detailColumnOrder
+        : normalizeDetailColumnOrder(record.detailColumnOrder),
     detailColumnWidths: sanitizeDetailColumnWidths(
       record.detailColumnWidths,
       currentDefaults.detailColumnWidths,

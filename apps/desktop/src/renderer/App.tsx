@@ -164,6 +164,8 @@ export function App() {
     setSingleClickExpandTreeItems,
     detailColumns,
     setDetailColumns,
+    detailColumnOrder,
+    setDetailColumnOrder,
     detailColumnWidths,
     setDetailColumnWidths,
     notificationsEnabled,
@@ -1224,6 +1226,7 @@ export function App() {
     compactTreeView,
     singleClickExpandTreeItems,
     detailColumns,
+    detailColumnOrder,
     detailColumnWidths,
     notificationsEnabled,
     markClipboardItems,
@@ -1382,6 +1385,7 @@ export function App() {
         setCompactTreeView(preferences.compactTreeView);
         setSingleClickExpandTreeItems(preferences.singleClickExpandTreeItems);
         setDetailColumns(preferences.detailColumns);
+        setDetailColumnOrder(preferences.detailColumnOrder);
         setDetailColumnWidths(preferences.detailColumnWidths);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setMarkClipboardItems(preferences.markClipboardItems);
@@ -1947,6 +1951,7 @@ export function App() {
                 compactDetailsView,
                 compactIconView,
                 detailColumns,
+                detailColumnOrder,
                 detailColumnWidths,
                 onDetailColumnWidthsChange: setDetailColumnWidths,
                 inlineRename: renameDialogState?.inline

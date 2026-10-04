@@ -3,10 +3,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import {
+  DEFAULT_DETAIL_COLUMN_ORDER,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   DETAIL_COLUMN_LABELS,
   type DetailColumnKey,
+  type DetailColumnOrder,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   type ExplorerViewMode,
@@ -135,6 +137,7 @@ export function ContentPane({
   compactDetailsView = false,
   compactIconView = false,
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  detailColumnOrder = DEFAULT_DETAIL_COLUMN_ORDER,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
   filterQuery = "",
@@ -204,6 +207,7 @@ export function ContentPane({
   compactDetailsView?: boolean;
   compactIconView?: boolean;
   detailColumns?: DetailColumnVisibility;
+  detailColumnOrder?: DetailColumnOrder;
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   /** What has been typed to narrow `entries`, which already are the matching ones. */
@@ -542,6 +546,7 @@ export function ContentPane({
             getItemDropIndicator={getItemDropIndicator}
             compactDetailsView={compactDetailsView}
             detailColumns={detailColumns}
+            detailColumnOrder={detailColumnOrder}
             detailColumnWidths={detailColumnWidths}
             onDetailColumnWidthsChange={onDetailColumnWidthsChange}
             getFolderSizeLabel={getFolderSizeLabel}
@@ -1327,6 +1332,7 @@ function DetailsView({
   getItemDropIndicator,
   compactDetailsView = false,
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  detailColumnOrder = DEFAULT_DETAIL_COLUMN_ORDER,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
   getFolderSizeLabel,
@@ -1373,6 +1379,7 @@ function DetailsView({
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactDetailsView?: boolean;
   detailColumns?: DetailColumnVisibility;
+  detailColumnOrder?: DetailColumnOrder;
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
@@ -1401,14 +1408,14 @@ function DetailsView({
   const { columns: visibleColumns, widths: columnWidths } = useMemo(
     () =>
       fitDetailColumns({
-        columns: getVisibleDetailColumns(detailColumns),
+        columns: getVisibleDetailColumns(detailColumns, detailColumnOrder),
         widths: detailColumnWidths,
         availableWidth: Math.max(
           0,
           viewportWidth - DETAILS_SCROLLBAR_WIDTH - 2 * DETAILS_LAYOUT.rowInset,
         ),
       }),
-    [detailColumnWidths, detailColumns, viewportWidth],
+    [detailColumnOrder, detailColumnWidths, detailColumns, viewportWidth],
   );
   const rowHeight = getDetailsRowHeight(compactDetailsView);
   const gridTemplateColumns = useMemo(
@@ -2004,7 +2011,7 @@ function SortButton({
       onClick={onClick}
       aria-label={label}
     >
-      <span>{label}</span>
+      <span className="details-header-text">{label}</span>
       {active ? <SortIndicator direction={direction} /> : null}
     </button>
   );

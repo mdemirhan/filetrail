@@ -53,13 +53,18 @@ export const detailColumnVisibilitySchema = z.object({
   created: z.boolean(),
   permissions: z.boolean(),
 });
+// The optional columns in display order, each exactly once.
+export const detailColumnOrderSchema = z
+  .array(z.enum(["modified", "size", "kind", "created", "permissions"]))
+  .length(5)
+  .refine((keys) => new Set(keys).size === keys.length, "Each column appears once");
 export const detailColumnWidthsSchema = z.object({
-  name: z.number().int().min(220).max(720),
-  modified: z.number().int().min(132).max(280),
-  size: z.number().int().min(84).max(240),
-  kind: z.number().int().min(96).max(320),
-  created: z.number().int().min(132).max(280),
-  permissions: z.number().int().min(96).max(260),
+  name: z.number().int().min(140).max(720),
+  modified: z.number().int().min(80).max(280),
+  size: z.number().int().min(60).max(240),
+  kind: z.number().int().min(60).max(320),
+  created: z.number().int().min(80).max(280),
+  permissions: z.number().int().min(52).max(260),
 });
 export const openWithApplicationSchema = z.object({
   id: z.string().trim().min(1),
@@ -598,6 +603,7 @@ export const appPreferencesSchema = z.object({
   compactTreeView: z.boolean(),
   singleClickExpandTreeItems: z.boolean(),
   detailColumns: detailColumnVisibilitySchema,
+  detailColumnOrder: detailColumnOrderSchema,
   detailColumnWidths: detailColumnWidthsSchema,
   notificationsEnabled: z.boolean(),
   markClipboardItems: z.boolean(),

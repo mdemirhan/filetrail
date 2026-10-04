@@ -253,13 +253,14 @@ textarea {
   color: inherit;
 }
 
+/* The arrow, as everywhere on the Mac: the pointing hand is for links only (the
+   link-styled buttons set it themselves). */
 button {
-  cursor: pointer;
+  cursor: default;
 }
 
 button:disabled {
   opacity: var(--disabled-opacity);
-  cursor: default;
 }
 
 input::placeholder {
@@ -2641,13 +2642,18 @@ body.resizing-panels * {
   font-weight: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
+  min-width: 0;
   padding: 0;
 }
 
-.details-header-label {
-  display: inline-flex;
-  align-items: center;
+/* A title wider than its column ends in an ellipsis, as in Finder, so a column can be
+   narrower than its title. */
+.details-header-label,
+.details-header-text {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .details-header-button.active {
@@ -3386,7 +3392,6 @@ body.resizing-panels * {
   border: 0;
   background: transparent;
   color: var(--text-dim);
-  cursor: pointer;
   transition: color var(--duration-fast) ease;
 }
 
@@ -5412,13 +5417,6 @@ body .settings-window .settings-view[data-layout] {
   transform: translateX(14px);
 }
 
-.settings-checkboxes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  margin-top: 8px;
-}
-
 .settings-checkbox {
   display: inline-flex;
   align-items: center;
@@ -5447,6 +5445,10 @@ body .settings-window .settings-view[data-layout] {
 .settings-checkbox input:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+.settings-checkbox input:disabled {
+  opacity: var(--disabled-opacity);
 }
 
 /* Auto / Light / Dark, each a little picture of a window. */
@@ -5624,6 +5626,15 @@ body .settings-window .settings-view[data-layout] {
   cursor: default;
 }
 
+/* A row of the column list: a checkbox and a name, no second line. */
+.settings-column-row {
+  min-height: 28px;
+}
+
+.settings-column-row[aria-disabled="true"] .settings-list-name {
+  color: var(--settings-label-secondary);
+}
+
 .settings-list-row .file-icon {
   width: 20px;
   height: 20px;
@@ -5713,6 +5724,7 @@ body .settings-window .settings-view[data-layout] {
   stroke: currentColor;
   stroke-width: 1.5;
   stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .settings-list-bar-text-button {

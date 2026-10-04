@@ -49,6 +49,9 @@ export function toPreferencePatch(
   if (value.detailColumns !== undefined) {
     patch.detailColumns = value.detailColumns;
   }
+  if (value.detailColumnOrder !== undefined) {
+    patch.detailColumnOrder = value.detailColumnOrder;
+  }
   if (value.detailColumnWidths !== undefined) {
     patch.detailColumnWidths = value.detailColumnWidths;
   }

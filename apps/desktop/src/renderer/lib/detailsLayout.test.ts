@@ -1,4 +1,7 @@
-import { DEFAULT_DETAIL_COLUMN_WIDTHS } from "../../shared/appPreferences";
+import {
+  DEFAULT_DETAIL_COLUMN_ORDER,
+  DEFAULT_DETAIL_COLUMN_WIDTHS,
+} from "../../shared/appPreferences";
 import {
   DETAILS_LAYOUT,
   fitDetailColumns,
@@ -13,25 +16,31 @@ describe("detailsLayout", () => {
     expect(getDetailsRowHeight(true)).toBe(DETAILS_LAYOUT.compactRowHeight);
   });
 
-  it("keeps the name column first and the optional columns in Finder's order", () => {
+  it("keeps the name column first and the optional columns in their chosen order", () => {
     expect(
-      getVisibleDetailColumns({
-        modified: false,
-        size: true,
-        kind: true,
-        created: false,
-        permissions: true,
-      }),
+      getVisibleDetailColumns(
+        {
+          modified: false,
+          size: true,
+          kind: true,
+          created: false,
+          permissions: true,
+        },
+        DEFAULT_DETAIL_COLUMN_ORDER,
+      ),
     ).toEqual(["name", "size", "kind", "permissions"]);
     expect(
-      getVisibleDetailColumns({
-        modified: true,
-        size: true,
-        kind: true,
-        created: true,
-        permissions: true,
-      }),
-    ).toEqual(["name", "modified", "size", "kind", "created", "permissions"]);
+      getVisibleDetailColumns(
+        {
+          modified: true,
+          size: true,
+          kind: true,
+          created: true,
+          permissions: true,
+        },
+        ["kind", "permissions", "modified", "created", "size"],
+      ),
+    ).toEqual(["name", "kind", "permissions", "modified", "created", "size"]);
   });
 
   it("adds gaps between visible columns and the row padding", () => {
