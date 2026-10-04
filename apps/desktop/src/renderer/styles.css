@@ -246,6 +246,9 @@ body {
   /* No -webkit-font-smoothing: antialiased. That turns off the macOS text smoothing every
      AppKit app draws with, and the app's text came out about a weight lighter than Finder's. */
   text-rendering: optimizeLegibility;
+  /* Text reads like a Mac app's labels: it can't be selected. Fields take a selection, and
+     so do the few read-only places worth copying from (below). */
+  user-select: none;
 }
 
 button,
@@ -260,6 +263,24 @@ textarea {
    link-styled buttons set it themselves). */
 button {
   cursor: default;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable]:not([contenteditable="false"]) {
+  user-select: text;
+}
+
+/* Read-only text worth copying, as on the Mac: Get Info's values, an alert's message, the
+   items a copy or move couldn't finish, Help, About's details and the license texts. */
+.get-info-meta-value,
+.alert-message,
+.copy-paste-result-items,
+.help-page,
+.about-details,
+.acknowledgement-text {
+  user-select: text;
 }
 
 button:disabled {
@@ -496,7 +517,6 @@ select:focus-visible {
   cursor: default;
   pointer-events: auto;
   touch-action: none;
-  user-select: none;
   -webkit-app-region: no-drag;
 }
 
@@ -536,7 +556,6 @@ select:focus-visible {
   cursor: default;
   outline: none;
   transform: translateX(-50%);
-  user-select: none;
   -webkit-app-region: no-drag;
 }
 
@@ -1342,8 +1361,6 @@ select:focus-visible {
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-body);
-  user-select: text;
-  -webkit-user-select: text;
 }
 
 .search-field-input:focus,
@@ -1906,7 +1923,6 @@ select:focus-visible {
 
 body.resizing-panels {
   cursor: col-resize;
-  user-select: none;
 }
 
 body.resizing-panels * {
@@ -1917,18 +1933,6 @@ body.resizing-panels * {
 .get-info-panel {
   display: grid;
   min-height: 0;
-}
-
-.tree-pane,
-.sidebar-header,
-.sidebar-tree,
-.favorites-pane-section,
-.tree-row,
-.tree-expand,
-.tree-label,
-.tree-label-text {
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 :root {
@@ -2004,9 +2008,6 @@ body.resizing-panels * {
   white-space: nowrap;
   padding: 0;
   background: transparent;
-  /* Folder names are buttons, not text: a right-click must not select them. */
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .pathbar.pathbar-expanded {
@@ -2525,8 +2526,6 @@ body.resizing-panels * {
   border-radius: var(--radius-control);
   background: transparent;
   text-align: left;
-  user-select: none;
-  -webkit-user-select: none;
   box-sizing: border-box;
 }
 
@@ -2758,8 +2757,6 @@ body.resizing-panels * {
   background: transparent;
   text-align: left;
   color: var(--text-secondary);
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .details-row > span {
@@ -3990,7 +3987,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   color: var(--text-secondary);
   font-size: var(--font-size-small);
   cursor: default;
-  user-select: none;
 }
 
 .tab-strip-tab:not(.active):hover {
@@ -5011,8 +5007,6 @@ body.page-window-body {
 
 .about-details {
   border-top: 1px solid var(--border);
-  user-select: text;
-  -webkit-user-select: text;
 }
 
 .about-detail {
@@ -5137,8 +5131,6 @@ body.page-window-body {
   font-size: var(--font-size-small);
   line-height: 1.5;
   white-space: pre-wrap;
-  user-select: text;
-  -webkit-user-select: text;
 }
 
 /* Settings → Shortcuts: a list of commands, each with its keys as buttons. */
@@ -7724,8 +7716,6 @@ button.shortcut-slot-key.recording:hover {
   color: var(--text-primary);
   font: inherit;
   font-size: var(--font-size-body);
-  user-select: text;
-  -webkit-user-select: text;
 }
 
 /* A name being edited whose row is scrolled out of view: kept, with the keyboard, off screen. */
@@ -7811,8 +7801,6 @@ button.shortcut-slot-key.recording:hover {
   font: inherit;
   text-align: center;
   cursor: default;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .icon-grid.compact .icon-item {
