@@ -39,7 +39,6 @@ export type TabSearchSession = {
   resultsSortDirection: SearchResultsSortDirectionPreference;
   resultsVisible: boolean;
   results: SearchResultItem[];
-  resultsScrollTop: number;
   status: SearchStatus;
   error: string | null;
   startedLive: boolean;
@@ -77,6 +76,8 @@ export type TabSnapshot = {
   historyPaths: string[];
   historyIndex: number;
   viewMode: ExplorerViewMode;
+  // The view of search results in this tab, apart from the folder's.
+  searchViewMode: ExplorerViewMode;
   sortBy: SortBy;
   sortDirection: SortDirection;
   treeRootPath: string;

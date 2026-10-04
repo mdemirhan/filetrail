@@ -66,6 +66,7 @@ export type StartupTab = {
   rootPath: string;
   favoritePath: string | null;
   viewMode: AppPreferences["viewMode"];
+  searchViewMode: AppPreferences["searchViewMode"];
   sortBy: AppPreferences["sortBy"];
   sortDirection: AppPreferences["sortDirection"];
   includeHidden: boolean;
@@ -86,6 +87,7 @@ export function resolveStartupTabs(
     | "lastVisitedFavoritePath"
     | "treeRootPath"
     | "viewMode"
+    | "searchViewMode"
     | "sortBy"
     | "sortDirection"
     | "includeHidden"
@@ -96,6 +98,7 @@ export function resolveStartupTabs(
 ): { tabs: StartupTab[]; activeIndex: number } {
   const view = {
     viewMode: preferences.viewMode,
+    searchViewMode: preferences.searchViewMode,
     sortBy: preferences.sortBy,
     sortDirection: preferences.sortDirection,
     includeHidden: preferences.includeHidden,
@@ -123,6 +126,7 @@ export function resolveStartupTabs(
   const tabs = preferences.openTabs.map((tab): StartupTab => {
     const tabView = {
       viewMode: tab.viewMode,
+      searchViewMode: tab.searchViewMode,
       sortBy: tab.sortBy,
       sortDirection: tab.sortDirection,
       includeHidden: tab.includeHidden,

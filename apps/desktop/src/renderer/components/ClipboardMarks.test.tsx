@@ -10,7 +10,6 @@ import {
 } from "../lib/clipboardMarks";
 import { ContentPane } from "./ContentPane";
 import { IconGridView } from "./IconGridView";
-import { SearchResultsPane } from "./SearchResultsPane";
 
 type Entry = ComponentProps<typeof ContentPane>["entries"][number];
 
@@ -94,34 +93,6 @@ function iconGrid() {
   );
 }
 
-function searchResults() {
-  return (
-    <SearchResultsPane
-      isFocused
-      rootPath="/Users/demo"
-      query="txt"
-      status="complete"
-      results={ENTRIES.map((entry) => ({
-        ...entry,
-        parentPath: "/Users/demo",
-        relativeParentPath: "",
-      }))}
-      totalCount={ENTRIES.length}
-      error={null}
-      truncated={false}
-      sortBy="path"
-      sortDirection="asc"
-      onSortColumn={() => undefined}
-      onStopSearch={() => undefined}
-      onClearResults={() => undefined}
-      onCloseResults={() => undefined}
-      onSelectPath={() => undefined}
-      onActivateResult={() => undefined}
-      onFocusChange={() => undefined}
-    />
-  );
-}
-
 function rowOf(name: string): HTMLElement {
   const row = document.querySelector(`[data-selectable-entry-path="/Users/demo/${name}"]`);
   if (!(row instanceof HTMLElement)) {
@@ -146,7 +117,6 @@ describe("clipboard marks in the file list", () => {
   it.each([
     ["list", () => contentPane("list")],
     ["details", () => contentPane("details")],
-    ["search results", searchResults],
   ])(
     "puts the copy icon after the copied item's name in %s view, and on no other",
     (_view, pane) => {
@@ -190,7 +160,6 @@ describe("clipboard marks in the file list", () => {
     ["list", () => contentPane("list")],
     ["details", () => contentPane("details")],
     ["icon", iconGrid],
-    ["search results", searchResults],
   ])("marks nothing in %s view when the file list's highlight is switched off", (_view, pane) => {
     render(withContentMarks(null, pane()));
 

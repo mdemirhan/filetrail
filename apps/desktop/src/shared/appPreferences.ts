@@ -30,7 +30,8 @@ export const SEARCH_PATTERN_MODE_LABELS: Record<SearchPatternModePreference, str
   regex: "Regex",
 };
 export type SearchMatchScopePreference = "name" | "path";
-export type SearchResultsSortByPreference = "name" | "path";
+// Search results sort by name, by the folder they are in, or by kind (told from the extension).
+export type SearchResultsSortByPreference = "name" | "path" | "kind";
 export type SearchResultsSortDirectionPreference = "asc" | "desc";
 export type DetailColumnKey = "name" | "modified" | "size" | "kind" | "created" | "permissions";
 export type OptionalDetailColumnKey = Exclude<DetailColumnKey, "name">;
@@ -82,6 +83,8 @@ export type OpenTabPreference = {
   treeRootPath: string | null;
   favoritePath: string | null;
   viewMode: ExplorerViewMode;
+  // How the tab shows search results, kept apart from how it shows folders.
+  searchViewMode: ExplorerViewMode;
   sortBy: "name" | "modified" | "kind" | "size";
   sortDirection: "asc" | "desc";
   // Each tab shows hidden files, and folders before files, or not, on its own.
@@ -182,6 +185,52 @@ export const DETAIL_COLUMN_WIDTH_LIMITS = {
   created: { min: 80, max: 280 },
   permissions: { min: 36, max: 260 },
 } as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
+// Search results' List view: the folder's columns, and the folder each result is in. Which
+// are shown, their order and their widths are kept apart from a folder's.
+export type SearchColumnKey = DetailColumnKey | "folder";
+export type OptionalSearchColumnKey = Exclude<SearchColumnKey, "name">;
+export type SearchColumnVisibility = Record<OptionalSearchColumnKey, boolean>;
+export type SearchColumnOrder = OptionalSearchColumnKey[];
+export type SearchColumnWidths = Record<SearchColumnKey, number>;
+export const OPTIONAL_SEARCH_COLUMN_KEYS = [
+  "folder",
+  "modified",
+  "size",
+  "kind",
+  "created",
+  "permissions",
+] as const satisfies ReadonlyArray<OptionalSearchColumnKey>;
+export const SEARCH_COLUMN_LABELS: Record<SearchColumnKey, string> = {
+  ...DETAIL_COLUMN_LABELS,
+  folder: "Folder",
+};
+export const DEFAULT_SEARCH_COLUMN_ORDER: SearchColumnOrder = [...OPTIONAL_SEARCH_COLUMN_KEYS];
+export const DEFAULT_SEARCH_COLUMN_VISIBILITY: SearchColumnVisibility = {
+  folder: true,
+  modified: true,
+  size: true,
+  kind: false,
+  created: false,
+  permissions: false,
+};
+// In the order of the columns, which is also how a saved value is read back.
+export const DEFAULT_SEARCH_COLUMN_WIDTHS: SearchColumnWidths = {
+  name: 300,
+  folder: 240,
+  modified: DEFAULT_DETAIL_COLUMN_WIDTHS.modified,
+  size: DEFAULT_DETAIL_COLUMN_WIDTHS.size,
+  kind: DEFAULT_DETAIL_COLUMN_WIDTHS.kind,
+  created: DEFAULT_DETAIL_COLUMN_WIDTHS.created,
+  permissions: DEFAULT_DETAIL_COLUMN_WIDTHS.permissions,
+};
+export const SEARCH_COLUMN_WIDTH_LIMITS = {
+  ...DETAIL_COLUMN_WIDTH_LIMITS,
+  folder: { min: 80, max: 720 },
+} as const satisfies Record<SearchColumnKey, { min: number; max: number }>;
+export function clampSearchColumnWidth(key: SearchColumnKey, value: number): number {
+  const limits = SEARCH_COLUMN_WIDTH_LIMITS[key];
+  return Math.round(Math.max(limits.min, Math.min(limits.max, value)));
+}
 export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
   {
     id: "visual-studio-code",
@@ -242,6 +291,8 @@ export type AppPreferences = {
   accent: AccentMode;
   zoomPercent: number;
   viewMode: ExplorerViewMode;
+  // The view search results are shown in, for the tab on screen; List to begin with.
+  searchViewMode: ExplorerViewMode;
   sortBy: "name" | "modified" | "kind" | "size";
   sortDirection: "asc" | "desc";
   foldersFirst: boolean;
@@ -253,6 +304,9 @@ export type AppPreferences = {
   detailColumns: DetailColumnVisibility;
   detailColumnOrder: DetailColumnOrder;
   detailColumnWidths: DetailColumnWidths;
+  searchColumns: SearchColumnVisibility;
+  searchColumnOrder: SearchColumnOrder;
+  searchColumnWidths: SearchColumnWidths;
   notificationsEnabled: boolean;
   // Items that were copied or cut flash and keep a mark, in the folder tree and the file list.
   markClipboardItems: boolean;
@@ -302,6 +356,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   accent: DEFAULT_ACCENT,
   zoomPercent: 100,
   viewMode: "details",
+  searchViewMode: "details",
   sortBy: "name",
   sortDirection: "asc",
   foldersFirst: true,
@@ -313,6 +368,9 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   detailColumns: DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnOrder: DEFAULT_DETAIL_COLUMN_ORDER,
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
+  searchColumns: DEFAULT_SEARCH_COLUMN_VISIBILITY,
+  searchColumnOrder: DEFAULT_SEARCH_COLUMN_ORDER,
+  searchColumnWidths: DEFAULT_SEARCH_COLUMN_WIDTHS,
   notificationsEnabled: true,
   markClipboardItems: true,
   folderTreeOpen: true,
@@ -372,18 +430,21 @@ export function clampDetailColumnWidth(key: DetailColumnKey, value: number): num
 // A saved column order made whole: unknown and repeated keys are dropped, and columns it
 // leaves out (one added in a later version) follow in their default order.
 export function normalizeDetailColumnOrder(value: unknown): DetailColumnOrder {
-  const known = new Set<string>(OPTIONAL_DETAIL_COLUMN_KEYS);
-  const order: DetailColumnOrder = [];
+  return normalizeColumnOrder(value, DEFAULT_DETAIL_COLUMN_ORDER);
+}
+
+export function normalizeSearchColumnOrder(value: unknown): SearchColumnOrder {
+  return normalizeColumnOrder(value, DEFAULT_SEARCH_COLUMN_ORDER);
+}
+
+function normalizeColumnOrder<K extends string>(value: unknown, defaults: readonly K[]): K[] {
+  const order: K[] = [];
   for (const key of Array.isArray(value) ? value : []) {
-    if (
-      typeof key === "string" &&
-      known.has(key) &&
-      !order.includes(key as OptionalDetailColumnKey)
-    ) {
-      order.push(key as OptionalDetailColumnKey);
+    if (typeof key === "string" && defaults.includes(key as K) && !order.includes(key as K)) {
+      order.push(key as K);
     }
   }
-  return [...order, ...DEFAULT_DETAIL_COLUMN_ORDER.filter((key) => !order.includes(key))];
+  return [...order, ...defaults.filter((key) => !order.includes(key))];
 }
 
 // The look actually painted: "auto" follows the current macOS appearance.

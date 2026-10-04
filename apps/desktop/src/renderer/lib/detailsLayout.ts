@@ -2,9 +2,19 @@ import type {
   DetailColumnKey,
   DetailColumnOrder,
   DetailColumnVisibility,
-  DetailColumnWidths,
 } from "../../shared/appPreferences";
-import { clampDetailColumnWidth } from "../../shared/appPreferences";
+import {
+  SEARCH_COLUMN_LABELS,
+  type SearchColumnKey,
+  clampDetailColumnWidth,
+} from "../../shared/appPreferences";
+
+// The List view's columns: a folder's, and search results', which add the folder each
+// result is in.
+export type ListColumnKey = SearchColumnKey;
+export const LIST_COLUMN_LABELS = SEARCH_COLUMN_LABELS;
+// Widths by column, Name's always among them.
+type ColumnWidths<K extends string> = Readonly<Record<K | "name", number>>;
 
 // Shared details-view sizing contract. The renderer uses these values for sticky header
 // alignment, virtualization, keyboard paging, and compact-mode switching.
@@ -38,9 +48,9 @@ export function getVisibleDetailColumns(
 
 // Width of the table: its columns, the gaps between them and the row padding. Rows are
 // also at least as wide as the pane, so a narrow table still fills it.
-export function getDetailsTableWidth(
-  widths: DetailColumnWidths,
-  visibleColumns: ReadonlyArray<DetailColumnKey>,
+export function getDetailsTableWidth<K extends string>(
+  widths: ColumnWidths<K>,
+  visibleColumns: ReadonlyArray<K | "name">,
 ): number {
   const contentWidth = visibleColumns.reduce((total, key) => total + widths[key], 0);
   return (
@@ -55,11 +65,11 @@ export function getDetailsTableWidth(
 // then columns drop away one at a time from the right. The saved widths and the saved
 // column choices are not changed: everything comes back when the pane is wider again.
 // An `availableWidth` of 0 means the pane has not been measured yet, so nothing is fitted.
-export function fitDetailColumns(args: {
-  columns: ReadonlyArray<DetailColumnKey>;
-  widths: DetailColumnWidths;
+export function fitDetailColumns<K extends string>(args: {
+  columns: ReadonlyArray<K | "name">;
+  widths: ColumnWidths<K>;
   availableWidth: number;
-}): { columns: ReadonlyArray<DetailColumnKey>; widths: DetailColumnWidths } {
+}): { columns: ReadonlyArray<K | "name">; widths: ColumnWidths<K> } {
   const { widths, availableWidth } = args;
   if (availableWidth <= 0 || getDetailsTableWidth(widths, args.columns) <= availableWidth) {
     return { columns: args.columns, widths };
@@ -94,10 +104,16 @@ export function getDetailColumnFitWidth(
   key: DetailColumnKey,
   args: { headerWidth: number; valueWidths: ReadonlyArray<number>; valueExtraWidth: number },
 ): number {
+  return getColumnFitWidth(key, args, (width) => clampDetailColumnWidth(key, width));
+}
+
+// The same for a column of any List view, kept within its limits by `clamp`.
+export function getColumnFitWidth(
+  key: string,
+  args: { headerWidth: number; valueWidths: ReadonlyArray<number>; valueExtraWidth: number },
+  clamp: (width: number) => number,
+): number {
   const widestValue = args.valueWidths.reduce((widest, width) => Math.max(widest, width), 0);
   const headerWidth = key === "permissions" ? 0 : args.headerWidth;
-  return clampDetailColumnWidth(
-    key,
-    Math.ceil(Math.max(headerWidth, widestValue + args.valueExtraWidth)) + FIT_SLACK,
-  );
+  return clamp(Math.ceil(Math.max(headerWidth, widestValue + args.valueExtraWidth)) + FIT_SLACK);
 }

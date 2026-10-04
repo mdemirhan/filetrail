@@ -1,6 +1,11 @@
 import type { IpcResponse } from "@filetrail/contracts";
 
-import { appendSearchResults, sortSearchResults } from "./searchResults";
+import {
+  appendSearchResults,
+  buildSearchHighlightPattern,
+  formatSearchResultFolder,
+  sortSearchResults,
+} from "./searchResults";
 
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 
@@ -62,6 +67,64 @@ describe("search result ordering", () => {
       "zeta.ts",
       "beta.ts",
       "alpha.ts",
+    ]);
+  });
+});
+
+describe("search result helpers", () => {
+  it("marks the matched part of names for plain text and regex name searches", () => {
+    const pattern = buildSearchHighlightPattern;
+    expect(pattern("app", "regex", "name")?.exec("MyApp.tsx")?.[0]).toBe("App");
+    expect(pattern("App", "regex", "name")?.exec("MyApp.tsx")?.[0]).toBe("App");
+    expect(pattern("App", "regex", "name")?.exec("myapp.tsx")).toBeNull();
+    expect(pattern("*.ts", "glob", "name")).toBeNull();
+    expect(pattern("src/app", "regex", "path")).toBeNull();
+    expect(pattern("(", "regex", "name")).toBeNull();
+    // Plain text is found as typed, with the same smart case.
+    expect(pattern("(1).pdf", "text", "name")?.exec("report (1).pdf")?.[0]).toBe("(1).pdf");
+    expect(pattern("c++", "text", "name")?.exec("My C++ notes")?.[0]).toBe("C++");
+    expect(pattern("C++", "text", "name")?.exec("my c++ notes")).toBeNull();
+    expect(pattern("a.c", "text", "name")?.exec("abc")).toBeNull();
+  });
+
+  it("says which folder a result is in, from where the search started", () => {
+    expect(formatSearchResultFolder("/Users/demo/app/src/main.ts", "/Users/demo/app")).toBe("src");
+    expect(formatSearchResultFolder("/Users/demo/app/src/lib/a.ts", "/Users/demo/app/")).toBe(
+      "src › lib",
+    );
+    // Right in the folder searched: that folder's name.
+    expect(formatSearchResultFolder("/Users/demo/app/README.md", "/Users/demo/app")).toBe("app");
+    expect(formatSearchResultFolder("/etc/hosts", "/")).toBe("etc");
+    expect(formatSearchResultFolder("/notes.txt", "/")).toBe("Macintosh HD");
+  });
+});
+
+describe("sorting search results by kind", () => {
+  it("puts folders first, then files by extension, those without one last", () => {
+    const folder = {
+      ...createSearchResult("/Users/demo/project/zeta"),
+      kind: "directory" as const,
+    };
+    const items = [
+      createSearchResult("/Users/demo/project/b.ts"),
+      createSearchResult("/Users/demo/project/Makefile"),
+      createSearchResult("/Users/demo/project/a.md"),
+      folder,
+      createSearchResult("/Users/demo/project/a.ts"),
+    ];
+    expect(sortSearchResults(items, "kind", "asc").map((item) => item.name)).toEqual([
+      "zeta",
+      "a.md",
+      "a.ts",
+      "b.ts",
+      "Makefile",
+    ]);
+    expect(sortSearchResults(items, "kind", "desc").map((item) => item.name)).toEqual([
+      "Makefile",
+      "b.ts",
+      "a.ts",
+      "a.md",
+      "zeta",
     ]);
   });
 });

@@ -1,4 +1,13 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
@@ -26,8 +35,10 @@ import {
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import {
   DETAILS_LAYOUT,
+  LIST_COLUMN_LABELS,
+  type ListColumnKey,
   fitDetailColumns,
-  getDetailColumnFitWidth,
+  getColumnFitWidth,
   getDetailsRowHeight,
   getDetailsTableWidth,
   getVisibleDetailColumns,
@@ -101,6 +112,29 @@ type SelectionGestureModifiers = {
   shiftKey: boolean;
 };
 
+// The List view's columns as the view draws them: which are shown (Name first), how wide
+// each is, and the order a click on a header asks for. A folder's come from Settings;
+// search results bring their own, with the folder each result is in.
+export type ListColumnSet = {
+  keys: ReadonlyArray<ListColumnKey>;
+  widths: Readonly<Record<ListColumnKey, number>>;
+  clampWidth: (key: ListColumnKey, width: number) => number;
+  onWidthsChange: (widths: Record<ListColumnKey, number>) => void;
+  // null for a column the list cannot be sorted by.
+  getSortKey: (key: ListColumnKey) => string | null;
+  sortBy: string;
+  sortDirection: "asc" | "desc";
+  onSortChange: (sortKey: string) => void;
+  getFolderLabel?: ((entry: DirectoryEntry) => string) | undefined;
+};
+
+// What a view shows when it has no rows, in place of the folder's own messages (loading,
+// empty, could not open): search results say how the search went instead. Undefined
+// leaves the folder's messages.
+const ContentStateOverrideContext = createContext<ReactNode | undefined>(undefined);
+// What a search matched in names, marked in the List and Compact List views.
+const NameHighlightContext = createContext<RegExp | null>(null);
+
 // `ContentPane` is the shared shell for icon, list and details view. It owns path navigation,
 // path suggestions, pane focus, and typeahead forwarding, then delegates actual entry
 // rendering to the active layout implementation.
@@ -158,9 +192,27 @@ export function ContentPane({
   onInlineRenameSubmit = () => undefined,
   onInlineRenameCancel = () => undefined,
   infoRow = null,
+  header = null,
+  pathbarPath = currentPath,
+  viewKey = currentPath,
+  listColumns,
+  contentStateOverride,
+  nameHighlight = null,
 }: {
   /** The Info Row, shown between the list and the path bar. */
   infoRow?: React.ReactNode;
+  /** Drawn above the list: the search bar while search results are shown. */
+  header?: ReactNode;
+  /** The path the path bar shows: the folder on screen, or a search result's place. */
+  pathbarPath?: string;
+  /** Changes when the list shows something else, which starts it at the top. */
+  viewKey?: string;
+  /** The List view's columns, when they are not the folder's (search results). */
+  listColumns?: ListColumnSet | undefined;
+  /** Shown by every view instead of its folder messages (see ContentStateOverrideContext). */
+  contentStateOverride?: ReactNode | undefined;
+  /** What a search matched in names. */
+  nameHighlight?: RegExp | null;
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
   currentPath: string;
@@ -259,7 +311,32 @@ export function ContentPane({
     inputRef: pathInputRef,
     onRequestPathSuggestions,
   });
-  const pathSegments = useMemo(() => buildPathSegments(currentPath), [currentPath]);
+  const pathSegments = useMemo(() => buildPathSegments(pathbarPath), [pathbarPath]);
+  // The folder's columns, from Settings, unless the list brings its own.
+  const folderListColumns = useMemo<ListColumnSet>(
+    () => ({
+      keys: getVisibleDetailColumns(detailColumns, detailColumnOrder),
+      widths: { ...detailColumnWidths, folder: 0 },
+      clampWidth: (key, width) => (key === "folder" ? width : clampDetailColumnWidth(key, width)),
+      onWidthsChange: ({ folder: _folder, ...widths }) => onDetailColumnWidthsChange(widths),
+      // Date Created and Permissions come from metadata that loads only for the rows on
+      // screen, so the folder cannot be ordered by them.
+      getSortKey: (key) =>
+        key === "created" || key === "permissions" || key === "folder" ? null : key,
+      sortBy,
+      sortDirection,
+      onSortChange: (sortKey) => onSortChange(sortKey as typeof sortBy),
+    }),
+    [
+      detailColumnOrder,
+      detailColumnWidths,
+      detailColumns,
+      onDetailColumnWidthsChange,
+      onSortChange,
+      sortBy,
+      sortDirection,
+    ],
+  );
   const { width: pathbarWidth } = useElementSize(pathbarRef);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const { width: viewportWidth, height: viewportHeight } = useElementSize(viewportRef);
@@ -370,7 +447,7 @@ export function ContentPane({
   return (
     <section
       ref={paneRef}
-      className="content-pane pane pane-focus-target"
+      className={`content-pane pane pane-focus-target${header ? " has-header" : ""}`}
       tabIndex={-1}
       onMouseDownCapture={(event) => {
         const target = event.target;
@@ -429,141 +506,140 @@ export function ContentPane({
         onTypeaheadInput(event.key);
       }}
     >
-      <div ref={viewportRef} className="content-viewport">
-        <ListFilterPill
-          query={filterQuery}
-          shownCount={entries.length}
-          totalCount={filterTotalCount}
-          onClear={onClearFilter}
-        />
-        {filterQuery.length > 0 && entries.length === 0 && !loading && !error ? (
-          <div className="content-state content-empty">
-            <strong className="empty-state-title">No items match “{filterQuery}”</strong>
-            <span className="empty-state-message">
-              Nothing in this folder has that in its name.
-            </span>
-            {onSearchForFilter ? (
-              <PushButton
-                className="empty-state-action"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={onSearchForFilter}
-              >
-                Search Subfolders
-              </PushButton>
-            ) : null}
-          </div>
-        ) : viewMode === "icons" ? (
-          <IconGridView
-            key={currentPath}
-            entries={entries}
-            isFocused={isFocused}
-            selectedPaths={selectedPaths}
-            selectionLeadPath={selectionLeadPath}
-            viewportWidth={viewportWidth}
-            viewportHeight={viewportHeight}
-            onActivateEntry={onActivateEntry}
-            onLayoutColumnsChange={onLayoutColumnsChange}
-            onSelectionGesture={onSelectionGesture}
-            onClearSelection={onClearSelection}
-            onVisiblePathsChange={onVisiblePathsChange}
-            onItemContextMenu={onItemContextMenu}
-            onItemDragStart={onItemDragStart}
-            onItemDragEnd={onItemDragEnd}
-            onItemDragEnter={onItemDragEnter}
-            onItemDragOver={onItemDragOver}
-            onItemDragLeave={onItemDragLeave}
-            onItemDrop={onItemDrop}
-            getItemDropIndicator={getItemDropIndicator}
-            compactIconView={compactIconView}
-            inlineRename={inlineRename}
-            onInlineRenameSubmit={onInlineRenameSubmit}
-            onInlineRenameCancel={onInlineRenameCancel}
-          >
-            <ContentState
-              loading={loading}
-              error={error}
-              onOpenFullDiskAccess={onOpenFullDiskAccess}
-              currentPath={currentPath}
-              entriesLength={entries.length}
-              hiddenItemCount={hiddenItemCount}
+      {header}
+      <ContentStateOverrideContext.Provider value={contentStateOverride}>
+        <NameHighlightContext.Provider value={nameHighlight}>
+          <div ref={viewportRef} className="content-viewport">
+            <ListFilterPill
+              query={filterQuery}
+              shownCount={entries.length}
+              totalCount={filterTotalCount}
+              onClear={onClearFilter}
             />
-          </IconGridView>
-        ) : viewMode === "list" ? (
-          <FlowListView
-            key={currentPath}
-            currentPath={currentPath}
-            entries={entries}
-            isFocused={isFocused}
-            loading={loading}
-            error={error}
-            onOpenFullDiskAccess={onOpenFullDiskAccess}
-            hiddenItemCount={hiddenItemCount}
-            selectedPaths={selectedPaths}
-            selectionLeadPath={selectionLeadPath}
-            viewportWidth={viewportWidth}
-            viewportHeight={viewportHeight}
-            onActivateEntry={onActivateEntry}
-            onLayoutColumnsChange={onLayoutColumnsChange}
-            onSelectionGesture={onSelectionGesture}
-            onClearSelection={onClearSelection}
-            onVisiblePathsChange={onVisiblePathsChange}
-            onItemContextMenu={onItemContextMenu}
-            onItemDragStart={onItemDragStart}
-            onItemDragEnd={onItemDragEnd}
-            onItemDragEnter={onItemDragEnter}
-            onItemDragOver={onItemDragOver}
-            onItemDragLeave={onItemDragLeave}
-            onItemDrop={onItemDrop}
-            getItemDropIndicator={getItemDropIndicator}
-            compactListView={compactListView}
-            inlineRename={inlineRename}
-            onInlineRenameSubmit={onInlineRenameSubmit}
-            onInlineRenameCancel={onInlineRenameCancel}
-          />
-        ) : (
-          <DetailsView
-            key={currentPath}
-            currentPath={currentPath}
-            entries={entries}
-            isFocused={isFocused}
-            loading={loading}
-            error={error}
-            onOpenFullDiskAccess={onOpenFullDiskAccess}
-            hiddenItemCount={hiddenItemCount}
-            metadataByPath={metadataByPath}
-            selectedPaths={selectedPaths}
-            selectionLeadPath={selectionLeadPath}
-            sortBy={sortBy}
-            sortDirection={sortDirection}
-            viewportWidth={viewportWidth}
-            viewportHeight={viewportHeight}
-            onActivateEntry={onActivateEntry}
-            onSortChange={onSortChange}
-            onLayoutColumnsChange={onLayoutColumnsChange}
-            onSelectionGesture={onSelectionGesture}
-            onClearSelection={onClearSelection}
-            onVisiblePathsChange={onVisiblePathsChange}
-            onItemContextMenu={onItemContextMenu}
-            onItemDragStart={onItemDragStart}
-            onItemDragEnd={onItemDragEnd}
-            onItemDragEnter={onItemDragEnter}
-            onItemDragOver={onItemDragOver}
-            onItemDragLeave={onItemDragLeave}
-            onItemDrop={onItemDrop}
-            getItemDropIndicator={getItemDropIndicator}
-            compactDetailsView={compactDetailsView}
-            detailColumns={detailColumns}
-            detailColumnOrder={detailColumnOrder}
-            detailColumnWidths={detailColumnWidths}
-            onDetailColumnWidthsChange={onDetailColumnWidthsChange}
-            getFolderSizeLabel={getFolderSizeLabel}
-            sizeBars={sizeBars}
-            inlineRename={inlineRename}
-            onInlineRenameSubmit={onInlineRenameSubmit}
-            onInlineRenameCancel={onInlineRenameCancel}
-          />
-        )}
-      </div>
+            {filterQuery.length > 0 && entries.length === 0 && !loading && !error ? (
+              <div className="content-state content-empty">
+                <strong className="empty-state-title">No items match “{filterQuery}”</strong>
+                <span className="empty-state-message">
+                  Nothing in this folder has that in its name.
+                </span>
+                {onSearchForFilter ? (
+                  <PushButton
+                    className="empty-state-action"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={onSearchForFilter}
+                  >
+                    Search Subfolders
+                  </PushButton>
+                ) : null}
+              </div>
+            ) : viewMode === "icons" ? (
+              <IconGridView
+                key={viewKey}
+                entries={entries}
+                isFocused={isFocused}
+                selectedPaths={selectedPaths}
+                selectionLeadPath={selectionLeadPath}
+                viewportWidth={viewportWidth}
+                viewportHeight={viewportHeight}
+                onActivateEntry={onActivateEntry}
+                onLayoutColumnsChange={onLayoutColumnsChange}
+                onSelectionGesture={onSelectionGesture}
+                onClearSelection={onClearSelection}
+                onVisiblePathsChange={onVisiblePathsChange}
+                onItemContextMenu={onItemContextMenu}
+                onItemDragStart={onItemDragStart}
+                onItemDragEnd={onItemDragEnd}
+                onItemDragEnter={onItemDragEnter}
+                onItemDragOver={onItemDragOver}
+                onItemDragLeave={onItemDragLeave}
+                onItemDrop={onItemDrop}
+                getItemDropIndicator={getItemDropIndicator}
+                compactIconView={compactIconView}
+                inlineRename={inlineRename}
+                onInlineRenameSubmit={onInlineRenameSubmit}
+                onInlineRenameCancel={onInlineRenameCancel}
+              >
+                <ContentState
+                  loading={loading}
+                  error={error}
+                  onOpenFullDiskAccess={onOpenFullDiskAccess}
+                  currentPath={currentPath}
+                  entriesLength={entries.length}
+                  hiddenItemCount={hiddenItemCount}
+                />
+              </IconGridView>
+            ) : viewMode === "list" ? (
+              <FlowListView
+                key={viewKey}
+                currentPath={currentPath}
+                entries={entries}
+                isFocused={isFocused}
+                loading={loading}
+                error={error}
+                onOpenFullDiskAccess={onOpenFullDiskAccess}
+                hiddenItemCount={hiddenItemCount}
+                selectedPaths={selectedPaths}
+                selectionLeadPath={selectionLeadPath}
+                viewportWidth={viewportWidth}
+                viewportHeight={viewportHeight}
+                onActivateEntry={onActivateEntry}
+                onLayoutColumnsChange={onLayoutColumnsChange}
+                onSelectionGesture={onSelectionGesture}
+                onClearSelection={onClearSelection}
+                onVisiblePathsChange={onVisiblePathsChange}
+                onItemContextMenu={onItemContextMenu}
+                onItemDragStart={onItemDragStart}
+                onItemDragEnd={onItemDragEnd}
+                onItemDragEnter={onItemDragEnter}
+                onItemDragOver={onItemDragOver}
+                onItemDragLeave={onItemDragLeave}
+                onItemDrop={onItemDrop}
+                getItemDropIndicator={getItemDropIndicator}
+                compactListView={compactListView}
+                inlineRename={inlineRename}
+                onInlineRenameSubmit={onInlineRenameSubmit}
+                onInlineRenameCancel={onInlineRenameCancel}
+              />
+            ) : (
+              <DetailsView
+                key={viewKey}
+                currentPath={currentPath}
+                entries={entries}
+                isFocused={isFocused}
+                loading={loading}
+                error={error}
+                onOpenFullDiskAccess={onOpenFullDiskAccess}
+                hiddenItemCount={hiddenItemCount}
+                metadataByPath={metadataByPath}
+                selectedPaths={selectedPaths}
+                selectionLeadPath={selectionLeadPath}
+                columns={listColumns ?? folderListColumns}
+                viewportWidth={viewportWidth}
+                viewportHeight={viewportHeight}
+                onActivateEntry={onActivateEntry}
+                onLayoutColumnsChange={onLayoutColumnsChange}
+                onSelectionGesture={onSelectionGesture}
+                onClearSelection={onClearSelection}
+                onVisiblePathsChange={onVisiblePathsChange}
+                onItemContextMenu={onItemContextMenu}
+                onItemDragStart={onItemDragStart}
+                onItemDragEnd={onItemDragEnd}
+                onItemDragEnter={onItemDragEnter}
+                onItemDragOver={onItemDragOver}
+                onItemDragLeave={onItemDragLeave}
+                onItemDrop={onItemDrop}
+                getItemDropIndicator={getItemDropIndicator}
+                compactDetailsView={compactDetailsView}
+                getFolderSizeLabel={getFolderSizeLabel}
+                sizeBars={sizeBars}
+                inlineRename={inlineRename}
+                onInlineRenameSubmit={onInlineRenameSubmit}
+                onInlineRenameCancel={onInlineRenameCancel}
+              />
+            )}
+          </div>
+        </NameHighlightContext.Provider>
+      </ContentStateOverrideContext.Provider>
       {/* The selection's details sit under the list they describe, above the path bar,
           which stays at the window's bottom edge like Finder's status bar. */}
       {infoRow}
@@ -1319,14 +1395,12 @@ function DetailsView({
   metadataByPath,
   selectedPaths,
   selectionLeadPath,
-  sortBy,
-  sortDirection,
+  columns,
   viewportWidth,
   viewportHeight,
   onSelectionGesture,
   onClearSelection,
   onActivateEntry,
-  onSortChange,
   onLayoutColumnsChange,
   onVisiblePathsChange,
   onItemContextMenu = () => undefined,
@@ -1338,10 +1412,6 @@ function DetailsView({
   onItemDrop,
   getItemDropIndicator,
   compactDetailsView = false,
-  detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
-  detailColumnOrder = DEFAULT_DETAIL_COLUMN_ORDER,
-  detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
-  onDetailColumnWidthsChange = () => undefined,
   getFolderSizeLabel,
   sizeBars = null,
   inlineRename,
@@ -1358,14 +1428,12 @@ function DetailsView({
   metadataByPath: Record<string, DirectoryEntryMetadata>;
   selectedPaths: string[];
   selectionLeadPath: string | null;
-  sortBy: IpcRequest<"directory:getSnapshot">["sortBy"];
-  sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"];
+  columns: ListColumnSet;
   viewportWidth: number;
   viewportHeight: number;
   onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
   onClearSelection: () => void;
   onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
-  onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
@@ -1385,10 +1453,6 @@ function DetailsView({
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactDetailsView?: boolean;
-  detailColumns?: DetailColumnVisibility;
-  detailColumnOrder?: DetailColumnOrder;
-  detailColumnWidths?: DetailColumnWidths;
-  onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
   sizeBars?: SizeBars | null;
   inlineRename: InlineRenameState | null;
@@ -1415,14 +1479,14 @@ function DetailsView({
   const { columns: visibleColumns, widths: columnWidths } = useMemo(
     () =>
       fitDetailColumns({
-        columns: getVisibleDetailColumns(detailColumns, detailColumnOrder),
-        widths: detailColumnWidths,
+        columns: columns.keys,
+        widths: columns.widths,
         availableWidth: Math.max(
           0,
           viewportWidth - DETAILS_SCROLLBAR_WIDTH - 2 * DETAILS_LAYOUT.rowInset,
         ),
       }),
-    [detailColumnOrder, detailColumnWidths, detailColumns, viewportWidth],
+    [columns.keys, columns.widths, viewportWidth],
   );
   const rowHeight = getDetailsRowHeight(compactDetailsView);
   const gridTemplateColumns = useMemo(
@@ -1510,7 +1574,7 @@ function DetailsView({
 
   // Resizing uses global pointer listeners so the drag continues even if the pointer
   // leaves the resize handle while the user is dragging quickly.
-  function startColumnResize(event: React.PointerEvent<HTMLSpanElement>, key: DetailColumnKey) {
+  function startColumnResize(event: React.PointerEvent<HTMLSpanElement>, key: ListColumnKey) {
     if (event.button !== 0) {
       return;
     }
@@ -1520,7 +1584,7 @@ function DetailsView({
     const startX = event.clientX;
     // Start from the width on screen: Name may be showing narrower than its saved width.
     const startWidth = columnWidths[key];
-    const startWidths = detailColumnWidths;
+    const startWidths = columns.widths;
     const finishResize = () => {
       resizeCleanupRef.current = null;
       document.body.classList.remove("column-resize-active");
@@ -1532,11 +1596,11 @@ function DetailsView({
       if (moveEvent.pointerId !== pointerId) {
         return;
       }
-      const width = clampDetailColumnWidth(key, startWidth + (moveEvent.clientX - startX));
+      const width = columns.clampWidth(key, startWidth + (moveEvent.clientX - startX));
       if (width === startWidths[key]) {
         return;
       }
-      onDetailColumnWidthsChange({
+      columns.onWidthsChange({
         ...startWidths,
         [key]: width,
       });
@@ -1558,7 +1622,7 @@ function DetailsView({
   // Fits a column to its title and its widest value, every row's and not only those on
   // screen: their text is measured, in the fonts the cells on screen are drawn in. A value
   // not loaded yet (a size, a kind) cannot count.
-  function fitColumnToContent(key: DetailColumnKey) {
+  function fitColumnToContent(key: ListColumnKey) {
     const index = visibleColumns.indexOf(key);
     const cell = containerRef.current?.querySelector(".details-row")?.children[index];
     const headerCell = headerRef.current?.querySelectorAll('[role="columnheader"]')[index];
@@ -1566,12 +1630,14 @@ function DetailsView({
     if (!(headerCell instanceof HTMLElement) || !(title instanceof HTMLElement)) {
       return;
     }
-    // The title, and the sort arrow with its gap when the list is sorted by this column.
+    // The title, and the sort arrow with its gap and margin when the list is sorted by this
+    // column.
     const indicator = headerCell.querySelector(".sort-indicator");
     const headerWidth =
       measureTextWidth(getCanvasFont(title), title.textContent ?? "") +
       (indicator && title.parentElement
         ? indicator.getBoundingClientRect().width +
+          (Number.parseFloat(getComputedStyle(indicator).marginRight) || 0) +
           (Number.parseFloat(getComputedStyle(title.parentElement).columnGap) || 0)
         : 0);
     let valueWidths: number[] = [];
@@ -1586,7 +1652,14 @@ function DetailsView({
       valueWidths = entries.map((entry) =>
         measureTextWidth(
           font,
-          getDetailCellText(key, entry, metadataByPath[entry.path], getFolderSizeLabel, now),
+          getDetailCellText(
+            key,
+            entry,
+            metadataByPath[entry.path],
+            getFolderSizeLabel,
+            columns.getFolderLabel,
+            now,
+          ),
         ),
       );
       if (key === "name") {
@@ -1596,19 +1669,21 @@ function DetailsView({
           (Number.parseFloat(getComputedStyle(cell).columnGap) || 0);
       }
     }
-    const width = getDetailColumnFitWidth(key, { headerWidth, valueWidths, valueExtraWidth });
-    if (width !== detailColumnWidths[key]) {
-      onDetailColumnWidthsChange({ ...detailColumnWidths, [key]: width });
+    const width = getColumnFitWidth(key, { headerWidth, valueWidths, valueExtraWidth }, (value) =>
+      columns.clampWidth(key, value),
+    );
+    if (width !== columns.widths[key]) {
+      columns.onWidthsChange({ ...columns.widths, [key]: width });
     }
   }
 
-  function nudgeColumnWidth(key: DetailColumnKey, direction: -1 | 1) {
-    const width = clampDetailColumnWidth(key, columnWidths[key] + direction * 12);
-    if (width === detailColumnWidths[key]) {
+  function nudgeColumnWidth(key: ListColumnKey, direction: -1 | 1) {
+    const width = columns.clampWidth(key, columnWidths[key] + direction * 12);
+    if (width === columns.widths[key]) {
       return;
     }
-    onDetailColumnWidthsChange({
-      ...detailColumnWidths,
+    columns.onWidthsChange({
+      ...columns.widths,
       [key]: width,
     });
   }
@@ -1639,9 +1714,10 @@ function DetailsView({
             <DetailsHeaderCell
               key={columnKey}
               columnKey={columnKey}
-              active={sortBy === columnKey}
-              direction={sortDirection}
-              onSortChange={onSortChange}
+              sortKey={columns.getSortKey(columnKey)}
+              active={columns.getSortKey(columnKey) === columns.sortBy}
+              direction={columns.sortDirection}
+              onSortChange={columns.onSortChange}
               onResizeStart={startColumnResize}
               onResizeNudge={nudgeColumnWidth}
               onFitToContent={fitColumnToContent}
@@ -1743,6 +1819,9 @@ function DetailsView({
                       columnKey={columnKey}
                       entry={entry}
                       metadata={metadata}
+                      folderLabel={
+                        columnKey === "folder" ? (columns.getFolderLabel?.(entry) ?? "") : null
+                      }
                       folderSizeLabel={
                         columnKey === "size" && isFolderLikeEntry(entry)
                           ? (getFolderSizeLabel?.(entry.path) ?? null)
@@ -1835,6 +1914,9 @@ function DetailsView({
                     columnKey={columnKey}
                     entry={entry}
                     metadata={metadata}
+                    folderLabel={
+                      columnKey === "folder" ? (columns.getFolderLabel?.(entry) ?? "") : null
+                    }
                     folderSizeLabel={
                       columnKey === "size" && isFolderLikeEntry(entry)
                         ? (getFolderSizeLabel?.(entry.path) ?? null)
@@ -1869,6 +1951,7 @@ function DetailsView({
 
 function DetailsHeaderCell({
   columnKey,
+  sortKey,
   active,
   direction,
   onSortChange,
@@ -1876,18 +1959,17 @@ function DetailsHeaderCell({
   onResizeNudge,
   onFitToContent,
 }: {
-  columnKey: DetailColumnKey;
+  columnKey: ListColumnKey;
+  // The order a click asks for; null for a column the list cannot be sorted by.
+  sortKey: string | null;
   active: boolean;
   direction: "asc" | "desc";
-  onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
-  onResizeStart: (event: React.PointerEvent<HTMLSpanElement>, key: DetailColumnKey) => void;
-  onResizeNudge: (key: DetailColumnKey, direction: -1 | 1) => void;
-  onFitToContent: (key: DetailColumnKey) => void;
+  onSortChange: (sortKey: string) => void;
+  onResizeStart: (event: React.PointerEvent<HTMLSpanElement>, key: ListColumnKey) => void;
+  onResizeNudge: (key: ListColumnKey, direction: -1 | 1) => void;
+  onFitToContent: (key: ListColumnKey) => void;
 }) {
-  const label = DETAIL_COLUMN_LABELS[columnKey];
-  // Only columns the directory snapshot can order are sortable; Date Created and
-  // Permissions come from metadata that loads lazily for the visible rows.
-  const sortKey = columnKey === "created" || columnKey === "permissions" ? null : columnKey;
+  const label = LIST_COLUMN_LABELS[columnKey];
   const sortable = sortKey !== null;
   const ariaSort = sortable
     ? active
@@ -1954,14 +2036,17 @@ function DetailsCell({
   columnKey,
   entry,
   metadata,
+  folderLabel = null,
   folderSizeLabel = null,
   sizeBarFraction = null,
   nameEditor = null,
   nameTag = null,
 }: {
-  columnKey: DetailColumnKey;
+  columnKey: ListColumnKey;
   entry: DirectoryEntry;
   metadata: DirectoryEntryMetadata | undefined;
+  // The folder a search result is in, for the Folder column.
+  folderLabel?: string | null;
   folderSizeLabel?: string | null;
   /** 0 to 1: how much of the size cell its bar fills. */
   sizeBarFraction?: number | null;
@@ -2014,6 +2099,15 @@ function DetailsCell({
             </span>
           );
         })()}
+      </span>
+    );
+  }
+  if (columnKey === "folder") {
+    return (
+      // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+      // biome-ignore lint/a11y/useSemanticElements: see note above.
+      <span role="gridcell" className="details-folder" title={getParentPath(entry.path)}>
+        {folderLabel}
       </span>
     );
   }
@@ -2100,15 +2194,18 @@ function formatDetailSize(
 
 // A cell's text as the list shows it, for fitting a column to its widest value.
 function getDetailCellText(
-  key: DetailColumnKey,
+  key: ListColumnKey,
   entry: DirectoryEntry,
   metadata: DirectoryEntryMetadata | undefined,
   getFolderSizeLabel: ((path: string) => string | null) | undefined,
+  getFolderLabel: ((entry: DirectoryEntry) => string) | undefined,
   now: number,
 ): string {
   switch (key) {
     case "name":
       return entry.name;
+    case "folder":
+      return getFolderLabel?.(entry) ?? "";
     case "size":
       return (
         (isFolderLikeEntry(entry) ? getFolderSizeLabel?.(entry.path) : null) ??
@@ -2164,6 +2261,10 @@ function ContentState({
   hiddenItemCount: number;
 }) {
   const showLoading = useDelayedFlag(loading && entriesLength === 0, FOLDER_LOADING_DELAY_MS);
+  const override = useContext(ContentStateOverrideContext);
+  if (override !== undefined) {
+    return override;
+  }
   if (loading && entriesLength === 0) {
     // Nothing for the moment most folders take to list; "Loading…" for one that is slow.
     return showLoading ? (
@@ -2205,6 +2306,30 @@ function ContentState({
   return null;
 }
 
+// Part of a name with the stretch a search matched marked; `offset` is where the part
+// starts in the whole name.
+function renderHighlighted(
+  text: string,
+  offset: number,
+  range: { start: number; end: number } | null,
+): ReactNode {
+  if (!range) {
+    return text;
+  }
+  const start = Math.max(0, range.start - offset);
+  const end = Math.min(text.length, range.end - offset);
+  if (start >= end) {
+    return text;
+  }
+  return (
+    <>
+      {text.slice(0, start)}
+      <mark className="search-result-match">{text.slice(start, end)}</mark>
+      {text.slice(end)}
+    </>
+  );
+}
+
 function showHiddenFoldersLabel(hiddenCount: number): string {
   return `Show ${hiddenCount} More ${hiddenCount === 1 ? "Folder" : "Folders"}`;
 }
@@ -2219,10 +2344,21 @@ function FileNameLabel({
   extension: string;
 }) {
   const { stem, extensionSuffix } = splitDisplayName(name, extension);
+  // A search's match is found in the whole name, then marked across stem and extension.
+  const highlight = useContext(NameHighlightContext);
+  const match = highlight ? highlight.exec(`${stem}${extensionSuffix}`) : null;
+  const range =
+    match && match[0].length > 0
+      ? { start: match.index, end: match.index + match[0].length }
+      : null;
   return (
     <span className={className}>
-      <span className="truncated-name-stem">{stem}</span>
-      {extensionSuffix ? <span className="truncated-name-extension">{extensionSuffix}</span> : null}
+      <span className="truncated-name-stem">{renderHighlighted(stem, 0, range)}</span>
+      {extensionSuffix ? (
+        <span className="truncated-name-extension">
+          {renderHighlighted(extensionSuffix, stem.length, range)}
+        </span>
+      ) : null}
     </span>
   );
 }

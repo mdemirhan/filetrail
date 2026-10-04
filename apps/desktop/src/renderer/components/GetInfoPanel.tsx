@@ -15,12 +15,19 @@ import {
   splitPermissionMode,
 } from "../lib/formatting";
 import { formatTooltip } from "../lib/tooltips";
+import { isVolumeRootPath } from "../lib/volumes";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { ClearButton } from "./ClearButton";
 import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
 import { PushButton } from "./PushButton";
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
+
+// A volume's capacity and free space, given while the panel describes the volume's root.
+export type InfoPanelVolume = {
+  totalBytes: number | null;
+  availableBytes: number | null;
+};
 
 // Several selected items, which the panel sums up as Finder's inspector does.
 export type InfoPanelSelection = {
@@ -39,6 +46,7 @@ export function InfoPanel({
   loading,
   item,
   selection = null,
+  volume = null,
   pending = false,
   onClose,
   onNavigateToPath,
@@ -65,6 +73,7 @@ export function InfoPanel({
   item: ItemProperties | null;
   // Given while more than one item is selected: the panel then describes them together.
   selection?: InfoPanelSelection | null;
+  volume?: InfoPanelVolume | null;
   // `item` is a preview from the file list; the rest of its details are still loading.
   pending?: boolean;
   onClose: () => void;
@@ -149,6 +158,7 @@ export function InfoPanel({
         <GetInfoPanelContent
           copied={copied}
           item={item}
+          volume={volume}
           pending={pending}
           permissionParts={permissionParts}
           copyPathDisabled={copyPathDisabled}
@@ -270,6 +280,7 @@ function InfoPanelSelectionContent({
 function GetInfoPanelContent({
   copied,
   item,
+  volume,
   pending,
   permissionParts,
   copyPathDisabled,
@@ -294,6 +305,7 @@ function GetInfoPanelContent({
 }: {
   copied: "path" | "name" | null;
   item: ItemProperties;
+  volume: InfoPanelVolume | null;
   pending: boolean;
   permissionParts: { symbolic: string; octal: string } | null;
   copyPathDisabled: boolean;
@@ -378,17 +390,37 @@ function GetInfoPanelContent({
   }
 
   const parentPath = getParentPath(item.path);
+  // A volume's root shows the disk's capacity, free and used space, as Finder's Get Info
+  // does, instead of the size of everything on it.
+  const isVolumeRoot = isVolumeRootPath(item.path);
+  const volumeBytes = (value: number | null | undefined): string =>
+    value === null || value === undefined ? PENDING_VALUE : formatSize(value, "ready");
+  const usedBytes =
+    volume?.totalBytes != null && volume.availableBytes !== null
+      ? Math.max(0, volume.totalBytes - volume.availableBytes)
+      : null;
+  const sizeRows: { label: string; value: ReactNode; muted: boolean }[] = isVolumeRoot
+    ? [
+        {
+          label: "Capacity",
+          value: volumeBytes(volume?.totalBytes),
+          muted: volume?.totalBytes == null,
+        },
+        {
+          label: "Available",
+          value: volumeBytes(volume?.availableBytes),
+          muted: volume?.availableBytes == null,
+        },
+        { label: "Used", value: volumeBytes(usedBytes), muted: usedBytes === null },
+      ]
+    : [{ label: "Size", value: sizeValue, muted: sizeMuted }];
   const metadataRows: { label: string; value: ReactNode; muted: boolean }[] = [
     {
       label: "Kind",
       value: item.kindLabel,
       muted: false,
     },
-    {
-      label: "Size",
-      value: sizeValue,
-      muted: sizeMuted,
-    },
+    ...sizeRows,
     {
       label: "Created",
       value: pendingOr(item.createdAt, formatDateTime),
@@ -432,13 +464,17 @@ function GetInfoPanelContent({
       muted: parentPath === null,
     },
   ];
-  const sizeSummary = showFolderSizeForItem
-    ? folderSizeEntry?.status === "ready"
-      ? formatSize(folderSizeEntry.sizeBytes, "ready")
+  const sizeSummary = isVolumeRoot
+    ? volume?.availableBytes != null
+      ? `${formatSize(volume.availableBytes, "ready")} available`
       : null
-    : pending && item.sizeBytes === null
-      ? null
-      : formatSize(item.sizeBytes, item.sizeStatus);
+    : showFolderSizeForItem
+      ? folderSizeEntry?.status === "ready"
+        ? formatSize(folderSizeEntry.sizeBytes, "ready")
+        : null
+      : pending && item.sizeBytes === null
+        ? null
+        : formatSize(item.sizeBytes, item.sizeStatus);
 
   // A value that hasn't arrived yet keeps its row, with a placeholder, so nothing moves
   // when it does.

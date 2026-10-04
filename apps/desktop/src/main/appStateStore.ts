@@ -16,14 +16,17 @@ import {
   type FavoritePreference,
   OPEN_TABS_LIMIT,
   OPTIONAL_DETAIL_COLUMN_KEYS,
+  OPTIONAL_SEARCH_COLUMN_KEYS,
   type OpenTabPreference,
   type ThemePreference,
   clampDetailColumnWidth,
   clampOpenItemLimit,
   clampPaneWidth,
+  clampSearchColumnWidth,
   clampZoomPercent,
   normalizeAccentColor,
   normalizeDetailColumnOrder,
+  normalizeSearchColumnOrder,
 } from "../shared/appPreferences";
 import { sanitizeBatchRenamePresets, sanitizeBatchRenameSettings } from "../shared/batchRename";
 import { sanitizeShortcutOverrides } from "../shared/shortcuts";
@@ -110,6 +113,7 @@ const NAVIGATION_PREFERENCE_KEYS: ReadonlySet<string> = new Set<keyof AppPrefere
   "openTabs",
   "activeTabIndex",
   "viewMode",
+  "searchViewMode",
   "sortBy",
   "sortDirection",
   "searchResultsSortBy",
@@ -409,10 +413,11 @@ function writeFileAtomically(
 }
 
 // A saved view mode, or the default one (List, Finder's table) for anything else.
-function sanitizeViewMode(value: unknown): ExplorerViewMode {
-  return value === "icons" || value === "list" || value === "details"
-    ? value
-    : DEFAULT_APP_PREFERENCES.viewMode;
+function sanitizeViewMode(
+  value: unknown,
+  fallback: ExplorerViewMode = DEFAULT_APP_PREFERENCES.viewMode,
+): ExplorerViewMode {
+  return value === "icons" || value === "list" || value === "details" ? value : fallback;
 }
 
 // Tabs from a damaged file are kept as far as they make sense; a tab that does not is
@@ -436,6 +441,10 @@ function sanitizeOpenTabs(
       treeRootPath: nonEmptyString(candidate.treeRootPath),
       favoritePath: nonEmptyString(candidate.favoritePath),
       viewMode: sanitizeViewMode(candidate.viewMode),
+      searchViewMode: sanitizeViewMode(
+        candidate.searchViewMode,
+        DEFAULT_APP_PREFERENCES.searchViewMode,
+      ),
       sortBy:
         candidate.sortBy === "modified" ||
         candidate.sortBy === "kind" ||
@@ -478,6 +487,7 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       typeof record.zoomPercent === "number" ? record.zoomPercent : currentDefaults.zoomPercent,
     ),
     viewMode: sanitizeViewMode(record.viewMode),
+    searchViewMode: sanitizeViewMode(record.searchViewMode, DEFAULT_APP_PREFERENCES.searchViewMode),
     sortBy:
       record.sortBy === "modified" ||
       record.sortBy === "kind" ||
@@ -515,6 +525,15 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
     detailColumnWidths: sanitizeDetailColumnWidths(
       record.detailColumnWidths,
       currentDefaults.detailColumnWidths,
+    ),
+    searchColumns: sanitizeSearchColumns(record.searchColumns, currentDefaults.searchColumns),
+    searchColumnOrder:
+      record.searchColumnOrder === undefined
+        ? currentDefaults.searchColumnOrder
+        : normalizeSearchColumnOrder(record.searchColumnOrder),
+    searchColumnWidths: sanitizeSearchColumnWidths(
+      record.searchColumnWidths,
+      currentDefaults.searchColumnWidths,
     ),
     notificationsEnabled:
       typeof record.notificationsEnabled === "boolean"
@@ -589,7 +608,9 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
         ? record.searchSkipGitIgnored
         : currentDefaults.searchSkipGitIgnored,
     searchResultsSortBy:
-      record.searchResultsSortBy === "name" || record.searchResultsSortBy === "path"
+      record.searchResultsSortBy === "name" ||
+      record.searchResultsSortBy === "path" ||
+      record.searchResultsSortBy === "kind"
         ? record.searchResultsSortBy
         : currentDefaults.searchResultsSortBy,
     searchResultsSortDirection:
@@ -776,6 +797,39 @@ function sanitizeDetailColumns(
       typeof record[key] === "boolean" ? record[key] : defaults[key],
     ]),
   ) as AppPreferences["detailColumns"];
+}
+
+// Search results' columns, kept apart from a folder's and sanitized the same way.
+function sanitizeSearchColumns(
+  value: unknown,
+  defaults: AppPreferences["searchColumns"],
+): AppPreferences["searchColumns"] {
+  if (!isPlainObject(value)) {
+    return defaults;
+  }
+  const record = value;
+  return Object.fromEntries(
+    OPTIONAL_SEARCH_COLUMN_KEYS.map((key) => [
+      key,
+      typeof record[key] === "boolean" ? record[key] : defaults[key],
+    ]),
+  ) as AppPreferences["searchColumns"];
+}
+
+function sanitizeSearchColumnWidths(
+  value: unknown,
+  defaults: AppPreferences["searchColumnWidths"],
+): AppPreferences["searchColumnWidths"] {
+  if (!isPlainObject(value)) {
+    return defaults;
+  }
+  const record = value;
+  return Object.fromEntries(
+    (["name", ...OPTIONAL_SEARCH_COLUMN_KEYS] as const).map((key) => [
+      key,
+      clampSearchColumnWidth(key, typeof record[key] === "number" ? record[key] : defaults[key]),
+    ]),
+  ) as AppPreferences["searchColumnWidths"];
 }
 
 function sanitizeDetailColumnWidths(

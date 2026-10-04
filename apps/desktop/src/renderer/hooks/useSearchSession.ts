@@ -44,7 +44,6 @@ export function useSearchSession() {
   const [searchPopoverOpen, setSearchPopoverOpen] = useState(false);
   const [searchResultsVisible, setSearchResultsVisible] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
-  const [searchResultsScrollTop, setSearchResultsScrollTop] = useState(0);
   const [searchStatus, setSearchStatus] = useState<SearchJobStatus | "idle">("idle");
   const [searchError, setSearchError] = useState<string | null>(null);
   // Whether the search on screen was started by typing rather than by Return. A pattern
@@ -135,8 +134,6 @@ export function useSearchSession() {
     setSearchResultsVisible,
     searchResults,
     setSearchResults,
-    searchResultsScrollTop,
-    setSearchResultsScrollTop,
     searchStatus,
     setSearchStatus,
     searchError,

@@ -164,7 +164,8 @@ export async function getItemProperties(
   return {
     item: {
       path: resolvedPath,
-      name: basename(resolvedPath),
+      // `/` has no base name, and the response needs one: it is named as the app names it.
+      name: resolvedPath === "/" ? "Macintosh HD" : basename(resolvedPath),
       extension: extname(resolvedPath).replace(/^\./, "").toLowerCase(),
       kind,
       kindLabel: getKindLabel(kind, resolvedPath),

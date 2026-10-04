@@ -17,8 +17,10 @@
   --border-active: rgba(0, 0, 0, 0.12);
   --border-light: rgba(0, 0, 0, 0.07);
   --text-primary: #1d1d1f;
-  --text-secondary: #4a4a50;
-  --text-tertiary: #86868b;
+  /* macOS secondaryLabelColor, as Finder draws dates, sizes, kinds, "--" and the path
+     bar; tertiaryLabelColor only for placeholders and text that reads as unavailable. */
+  --text-secondary: rgba(0, 0, 0, 0.5);
+  --text-tertiary: rgba(0, 0, 0, 0.26);
   --text-dim: #a1a1a6;
   --ft-accent-solid: #007aff;
   --ft-accent-solid-dark: #0064d1;
@@ -164,8 +166,8 @@
   --border-active: rgba(255, 255, 255, 0.1);
   --border-light: rgba(255, 255, 255, 0.07);
   --text-primary: #f2f2f5;
-  --text-secondary: #c7c7cc;
-  --text-tertiary: #98989d;
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-tertiary: rgba(255, 255, 255, 0.25);
   --text-dim: #6e6e73;
   --icon-neutral: #a1a1a6;
   --danger: #f08080;
@@ -241,7 +243,8 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   overflow: visible;
-  -webkit-font-smoothing: antialiased;
+  /* No -webkit-font-smoothing: antialiased. That turns off the macOS text smoothing every
+     AppKit app draws with, and the app's text came out about a weight lighter than Finder's. */
   text-rendering: optimizeLegibility;
 }
 
@@ -326,7 +329,10 @@ select:focus-visible {
   /* How far a capsule of buttons reaches past its first and last button. */
   --toolbar-capsule-padding: 3px;
   --toolbar-title-min-width: 96px;
-  --toolbar-overflow-button-width: 28px;
+  /* Every control in the toolbar is this tall, close to a macOS 26 toolbar's 36. */
+  --toolbar-control-height: 32px;
+  --toolbar-button-width: 32px;
+  --toolbar-overflow-button-width: 32px;
   --toolbar-search-width: 200px;
   --toolbar-search-min-width: 110px;
 }
@@ -592,8 +598,8 @@ select:focus-visible {
 .toolbar-customize-chip {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-capsule);
   background: var(--toolbar-capsule-bg);
   color: var(--toolbar-nav-icon-active);
@@ -637,8 +643,8 @@ select:focus-visible {
   justify-content: center;
   gap: 4px;
   box-sizing: border-box;
-  min-width: 34px;
-  height: 30px;
+  min-width: 32px;
+  height: 32px;
   padding: 0 8px;
   border-radius: var(--radius-capsule);
   background: var(--bg-elevated);
@@ -715,7 +721,7 @@ select:focus-visible {
   border: none;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   padding: 6px 10px;
   font-size: var(--font-size-callout);
   font-weight: 500;
@@ -1307,7 +1313,7 @@ select:focus-visible {
   border-radius: var(--radius-control);
   background: var(--field-bg);
   box-shadow: var(--field-edge);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .search-field:focus-within {
@@ -1663,7 +1669,7 @@ select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
@@ -1809,7 +1815,7 @@ select:focus-visible {
 
 .pane-typeahead-label {
   font-size: var(--font-size-callout);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .pane-typeahead-value {
@@ -1846,7 +1852,7 @@ select:focus-visible {
 }
 
 .list-filter-pill-label {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .list-filter-pill-value {
@@ -1861,7 +1867,7 @@ select:focus-visible {
 
 .list-filter-pill-count {
   flex: none;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1874,8 +1880,7 @@ select:focus-visible {
 .tree-label:focus-visible,
 .flow-item:focus-visible,
 .details-row:focus-visible,
-.details-header-button:focus-visible,
-.search-result-row:focus-visible {
+.details-header-button:focus-visible {
   outline: none;
   border-color: transparent;
   box-shadow: none;
@@ -2085,7 +2090,7 @@ body.resizing-panels * {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-body);
   font-weight: 400;
   overflow: hidden;
@@ -2205,7 +2210,7 @@ body.resizing-panels * {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--mono-font-size);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-weight: 400;
 }
@@ -2413,7 +2418,7 @@ body.resizing-panels * {
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   transition: transform var(--duration-fast) ease;
 }
 
@@ -2469,7 +2474,7 @@ body.resizing-panels * {
   padding: 1px 6px;
   border-radius: var(--radius-capsule);
   background: var(--bg-hover);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-mini);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -2656,6 +2661,13 @@ body.resizing-panels * {
   white-space: nowrap;
 }
 
+/* The title takes the column's room, so the sort arrow sits at its right edge, as in
+   Finder. */
+.details-header-text {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
 .details-header-button.active {
   color: var(--text-primary);
 }
@@ -2703,7 +2715,12 @@ body.resizing-panels * {
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
+}
+
+/* Clear of the divider that ends the column. */
+.details-header-button .sort-indicator {
+  margin-right: 6px;
 }
 
 .details-column-resizer {
@@ -2732,7 +2749,7 @@ body.resizing-panels * {
 .details-column-resizer:hover::before,
 .details-column-resizer:focus-visible::before,
 .column-resize-active .details-column-resizer:active::before {
-  background: var(--text-tertiary);
+  background: var(--text-secondary);
 }
 
 .details-row {
@@ -2756,11 +2773,13 @@ body.resizing-panels * {
   font-size: var(--font-size-callout);
 }
 
-/* Size with a bar behind it (while the list is sorted by size). */
+/* Size with a bar behind it (while the list is sorted by size). Sizes line up on the
+   right, as in Finder; the title stays on the left. */
 .details-size {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   align-self: stretch;
 }
 
@@ -2773,7 +2792,7 @@ body.resizing-panels * {
   position: absolute;
   top: 3px;
   bottom: 3px;
-  left: -4px;
+  right: -4px;
   min-width: 2px;
   max-width: calc(100% + 4px);
   border-radius: var(--radius-xs);
@@ -2791,7 +2810,7 @@ body.resizing-panels * {
 
 /* "--" for a folder whose size is not calculated: there, but quiet. */
 .details-size-text.is-placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .details-row.active:not(.inactive) .details-size-text.is-placeholder {
@@ -2830,7 +2849,7 @@ body.resizing-panels * {
   margin: 0;
   padding: 16px 18px;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .flow-list,
@@ -2842,11 +2861,6 @@ body.resizing-panels * {
 
 .column-resize-active {
   cursor: col-resize;
-}
-
-.search-results-scroll {
-  height: 100%;
-  min-height: 0;
 }
 
 .content-state strong {
@@ -2878,11 +2892,6 @@ body.resizing-panels * {
   text-align: center;
 }
 
-.search-results-body {
-  position: relative;
-  min-height: 0;
-}
-
 .search-results-header {
   gap: 0;
   height: auto;
@@ -2890,17 +2899,6 @@ body.resizing-panels * {
   padding: 0;
   align-items: stretch;
   overflow: hidden;
-}
-
-/* With the row's 6px margin, rows sit 10px in from the pane's edges, as in Details. */
-.search-results-scroll {
-  padding: 10px 4px 12px;
-}
-
-.search-results-scroll:focus,
-.search-results-scroll:focus-visible {
-  outline: none;
-  box-shadow: none;
 }
 
 .search-results-banner {
@@ -2911,20 +2909,6 @@ body.resizing-panels * {
   background: color-mix(in srgb, var(--ft-accent-solid) 6%, transparent);
   color: var(--text-secondary);
   font-size: var(--font-size-callout);
-}
-
-.search-result-row {
-  align-items: center;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.search-result-row:active,
-.search-result-row.active {
-  background: var(--bg-active);
 }
 
 .internal-drag-preview {
@@ -3012,20 +2996,6 @@ body.resizing-panels * {
   font-variant-numeric: tabular-nums;
 }
 
-.search-result-name {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  color: var(--text-primary);
-}
-
-.search-result-path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .empty-state-title {
   color: var(--text-secondary);
   font-size: var(--font-size-title3);
@@ -3033,7 +3003,7 @@ body.resizing-panels * {
 }
 
 .empty-state-message {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
 }
 
@@ -3486,7 +3456,7 @@ body.resizing-panels * {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
-  stroke: var(--text-tertiary);
+  stroke: var(--text-secondary);
   stroke-width: 1.5;
 }
 
@@ -3541,7 +3511,7 @@ body.resizing-panels * {
   justify-content: space-between;
   gap: 12px;
   padding: 0 10px 4px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-weight: 600;
 }
@@ -3563,7 +3533,7 @@ body.resizing-panels * {
 
 .go-to-folder-empty-state {
   padding: 18px 16px 22px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
   text-align: center;
 }
@@ -3594,7 +3564,7 @@ body.resizing-panels * {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .go-to-folder-suggestion.is-selected .go-to-folder-suggestion-icon {
@@ -3631,7 +3601,7 @@ body.resizing-panels * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
   text-align: left;
 }
@@ -3676,7 +3646,7 @@ body.resizing-panels * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
 
@@ -3901,7 +3871,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .sidebar-section-title {
@@ -3952,14 +3922,14 @@ body.platform-macos .settings-view[data-layout="compact"] {
   white-space: nowrap;
   color: var(--text-primary);
   font-size: var(--font-size-title3);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .toolbar-subtitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
@@ -3976,7 +3946,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   display: flex;
   align-items: stretch;
   min-width: 0;
-  height: 33px;
+  height: 29px;
   /* Half the divider's width to the left, so the band starts at the tree's hairline. */
   margin-left: -4px;
   /* The tree's own color: the band continues the sidebar. In the explorer window it is a
@@ -4010,7 +3980,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   padding: 0 28px 0 12px;
   border-right: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: var(--font-size-callout);
+  font-size: var(--font-size-small);
   cursor: default;
   user-select: none;
 }
@@ -4023,7 +3993,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   background: var(--bg-base);
   box-shadow: inset 0 2px 0 var(--ft-accent-solid);
   color: var(--text-primary);
-  font-weight: 600;
 }
 
 .tab-strip-label {
@@ -4037,7 +4006,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .tab-strip-search {
   display: inline-flex;
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .tab-strip-search .toolbar-icon {
@@ -4062,7 +4031,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   opacity: 0;
   transform: translateY(-50%);
 }
@@ -4369,6 +4338,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
   grid-template-rows: minmax(0, 1fr) auto auto;
 }
 
+/* Search results: the search bar above the list. */
+.content-pane.has-header {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+
 .content-pathbar-row {
   height: 28px;
   min-height: 28px;
@@ -4392,10 +4366,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .content-pathbar-row .pathbar-segment.active {
   background: transparent;
   color: var(--text-primary);
+  font-weight: 400;
 }
 
 .content-pathbar-row .pathbar-separator {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .content-pathbar-row .pathbar-suggestions {
@@ -4407,7 +4382,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .details-header {
   min-height: 28px;
-  font-size: var(--font-size-callout);
+  font-size: var(--font-size-small);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
@@ -4465,23 +4440,19 @@ body.window-inactive {
 /* Focused selection is the accent as a fill with white text (see `selectionColors`);
    unfocused selection turns gray. */
 .flow-item.active:not(.inactive),
-.details-row.active:not(.inactive),
-.search-result-row.active:not(.inactive) {
+.details-row.active:not(.inactive) {
   background: var(--ft-accent-selection-bg);
   color: var(--ft-accent-on-selection);
 }
 
 .flow-item.active:not(.inactive) .flow-item-label,
 .details-row.active:not(.inactive) > span,
-.details-row.active:not(.inactive) .details-name-label,
-.search-result-row.active:not(.inactive) .search-result-name,
-.search-result-row.active:not(.inactive) .search-result-path {
+.details-row.active:not(.inactive) .details-name-label {
   color: var(--ft-accent-on-selection);
 }
 
 .flow-item.active.inactive,
-.details-row.active.inactive,
-.search-result-row.active.inactive {
+.details-row.active.inactive {
   background: var(--bg-active-inactive);
 }
 
@@ -4507,58 +4478,11 @@ body.window-inactive {
 
 .search-scope-label {
   margin-right: 2px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .search-scope-spacer {
   flex: 1 1 auto;
-}
-
-.search-results-columns {
-  display: grid;
-  gap: 8px;
-  height: 26px;
-  border-top: 1px solid var(--border-light);
-}
-
-.search-results-column {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-callout);
-  text-align: left;
-  cursor: default;
-}
-
-.search-results-column.active {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.search-result-row {
-  display: grid;
-  gap: 8px;
-  width: calc(100% - 12px);
-  height: 28px;
-  min-height: 28px;
-  margin: 0 6px;
-  padding: 0 10px;
-  border-radius: var(--radius-control);
-}
-
-.search-result-name {
-  font-size: var(--font-size-body);
-  font-weight: 400;
-}
-
-.search-result-path {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-callout);
 }
 
 /* Remaining uppercase letter-spaced labels read as web UI; macOS uses sentence case. */
@@ -4570,18 +4494,13 @@ body.window-inactive {
   text-transform: none;
 }
 
-.search-results-pane {
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
 .content-pathbar-row,
 .content-pathbar-row.pane-header-focused {
   background: var(--bg-base);
 }
 
 .flow-item.active:not(.inactive) .truncated-name-extension,
-.details-row.active:not(.inactive) .truncated-name-extension,
-.search-result-row.active:not(.inactive) .truncated-name-extension {
+.details-row.active:not(.inactive) .truncated-name-extension {
   color: var(--ft-accent-on-selection-soft);
 }
 
@@ -4651,7 +4570,7 @@ body.window-inactive {
 }
 
 .get-info-subtitle {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -4722,7 +4641,7 @@ body.window-inactive {
 
 .get-info-section-title {
   margin: 0 0 4px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-weight: 600;
 }
@@ -4736,7 +4655,7 @@ body.window-inactive {
 }
 
 .get-info-meta-label {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-callout);
   font-weight: 400;
 }
@@ -4754,7 +4673,7 @@ body.window-inactive {
 }
 
 .get-info-permissions-code {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: var(--font-size-small);
 }
@@ -5018,7 +4937,7 @@ body.page-window-body {
 }
 
 .about-detail dt {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .about-detail dd {
@@ -5036,7 +4955,7 @@ body.page-window-body {
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
 
@@ -5078,7 +4997,7 @@ body.page-window-body {
 
 .acknowledgement summary {
   padding: 8px 0;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-body);
   cursor: default;
 }
@@ -5099,7 +5018,7 @@ body.page-window-body {
 }
 
 .acknowledgement-version {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
@@ -5156,7 +5075,7 @@ body.page-window-body {
   --settings-card-border: rgba(0, 0, 0, 0.08);
   --settings-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --settings-separator: rgba(0, 0, 0, 0.07);
-  --settings-label-secondary: var(--text-tertiary);
+  --settings-label-secondary: var(--text-secondary);
   /* A pop-up is as wide as its longest choice, and never narrower than this. */
   --settings-popup-min-width: 120px;
   --settings-switch-off: #e3e3e8;
@@ -5907,7 +5826,7 @@ body .settings-window .settings-view[data-layout] {
 .shortcut-settings-intro,
 .shortcut-settings-empty {
   margin: 0 4px 14px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--font-size-small);
 }
@@ -5948,7 +5867,7 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .shortcut-row-hint {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   line-height: 1.4;
 }
@@ -6092,7 +6011,7 @@ button.shortcut-slot-key.recording:hover {
 
 .content-pathbar-status {
   margin-left: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -6100,14 +6019,13 @@ button.shortcut-slot-key.recording:hover {
 
 .content-pathbar-row.pane-header-focused,
 .content-pathbar-row.pane-header-focused .content-pathbar-status {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 /* Every text span in a focused selected row takes the selection text color, including names
    without an extension (which otherwise match `.details-name span:last-child` and stay dark). */
 .flow-item.active:not(.inactive) .flow-item-label span,
-.details-row.active:not(.inactive) .details-name span,
-.search-result-row.active:not(.inactive) .search-result-name span {
+.details-row.active:not(.inactive) .details-name span {
   color: var(--ft-accent-on-selection);
 }
 
@@ -6120,7 +6038,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .get-info-meta-value .folder-size-items {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--font-size-small);
 }
 
@@ -6145,9 +6063,9 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .window-toolbar .tb-btn.tb-btn-icon {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: var(--toolbar-button-width);
+  min-width: var(--toolbar-button-width);
+  height: var(--toolbar-control-height);
   border-radius: var(--radius-control);
   color: var(--text-secondary);
 }
@@ -6180,11 +6098,16 @@ button.shortcut-slot-key.recording:hover {
 }
 
 /* The segments are toolbar buttons too, so the segmented control's look is restated here,
-   from its own tokens, over the toolbar button's fills. 24px segments in the 2px track make
-   28px, the height of every control in the toolbar. */
+   from its own tokens, over the toolbar button's fills. 24px segments in a 4px track make
+   the toolbar's 32px. */
+.toolbar-group-view .toolbar-segmented-native {
+  gap: 4px;
+  padding: 4px;
+}
+
 .toolbar-group-view .toolbar-segmented-native .tb-btn.segmented-item {
-  width: 34px;
-  min-width: 34px;
+  width: 32px;
+  min-width: 32px;
   height: var(--control-height);
   padding: 0;
   border-radius: var(--radius-capsule);
@@ -6226,9 +6149,9 @@ button.shortcut-slot-key.recording:hover {
   box-shadow: var(--focus-ring);
 }
 
-/* 26px inside its 1px border: 28px, the height of every control in the toolbar. */
+/* Inside its 1px border, the height of every control in the toolbar. */
 .window-toolbar .toolbar-search-row {
-  min-height: 26px;
+  min-height: calc(var(--toolbar-control-height) - 2px);
   padding: 0 8px;
   gap: 6px;
 }
@@ -6332,6 +6255,19 @@ button.shortcut-slot-key.recording:hover {
   margin-top: 4px;
 }
 
+.sidebar-main-native .tree-row[data-tree-kind="favorites-root"] .tree-label {
+  color: var(--text-secondary);
+}
+
+.sidebar-main-native .tree-row[data-tree-kind="favorites-root"] .tree-label-text {
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+.sidebar-main-native .tree-row.active .tree-label-text {
+  font-weight: 600;
+}
+
 .sidebar-main-native .tree-row.active {
   background: var(--bg-active-inactive);
 }
@@ -6401,48 +6337,6 @@ button.shortcut-slot-key.recording:hover {
   scroll-margin-top: 10px;
 }
 
-/* The header is laid out like a row (the list's 4px padding, the row's 6px margin and
-   10px padding, and the same columns), so each title sits over its column. "Name" spans
-   the icon's column too, and starts where the icons do, as in the Details view. */
-.search-results-columns {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 170px 76px;
-  padding: 0 20px;
-}
-
-.search-results-columns > .search-results-column:first-child {
-  grid-column: span 2;
-}
-
-.search-results-column-static {
-  cursor: default;
-}
-
-.search-results-column-size {
-  justify-content: flex-end;
-}
-
-.search-result-row {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 170px 76px;
-}
-
-.search-result-meta {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-  font-size: var(--font-size-callout);
-  font-variant-numeric: tabular-nums;
-}
-
-.search-result-size {
-  text-align: right;
-}
-
-.search-result-row.active:not(.inactive) .search-result-meta {
-  color: var(--ft-accent-on-selection-soft);
-}
-
 .search-result-match {
   border-radius: var(--radius-xs);
   padding: 0 1px;
@@ -6452,7 +6346,8 @@ button.shortcut-slot-key.recording:hover {
 
 /* On a selected row the match is underlined: a tinted box there turns into a dark or
    washed-out block, depending on the accent, and costs the name its contrast. */
-.search-result-row.active:not(.inactive) .search-result-match {
+.details-row.active:not(.inactive) .search-result-match,
+.flow-item.active:not(.inactive) .search-result-match {
   background: transparent;
   text-decoration: underline;
   text-decoration-thickness: 1.5px;
@@ -6472,7 +6367,7 @@ button.shortcut-slot-key.recording:hover {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   text-align: left;
   cursor: default;
 }
@@ -6483,7 +6378,7 @@ button.shortcut-slot-key.recording:hover {
 
 .sidebar-section-chevron {
   display: inline-flex;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   opacity: 0;
   transform: rotate(90deg);
   transition: opacity var(--duration-fast) ease, transform var(--duration-base) ease;
@@ -7156,12 +7051,12 @@ button.shortcut-slot-key.recording:hover {
 
 .copy-paste-glyph-file {
   fill: var(--bg-elevated);
-  stroke: var(--text-tertiary);
+  stroke: var(--text-secondary);
 }
 
 .copy-paste-glyph-file-fold {
   fill: none;
-  stroke: var(--text-tertiary);
+  stroke: var(--text-secondary);
 }
 
 .copy-paste-sheet-row-text {
@@ -7191,7 +7086,7 @@ button.shortcut-slot-key.recording:hover {
 /* Where a deeply nested row is, once rows stop indenting. */
 .copy-paste-sheet-row-path {
   overflow: hidden;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -7209,7 +7104,7 @@ button.shortcut-slot-key.recording:hover {
 
 .copy-paste-sheet-row.is-muted .copy-paste-sheet-row-detail,
 .copy-paste-sheet-row-detail.is-muted {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .copy-paste-sheet-row-added {
@@ -7571,8 +7466,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .tree-row.active:not(.inactive) .clipboard-mark-icon,
-.flow-item.active:not(.inactive) .clipboard-mark-icon,
-.search-result-row.active:not(.inactive) .clipboard-mark-icon {
+.flow-item.active:not(.inactive) .clipboard-mark-icon {
   color: var(--ft-accent-on-selection);
 }
 
@@ -7589,10 +7483,6 @@ button.shortcut-slot-key.recording:hover {
 
 .details-row.active:not(.inactive) .details-name > span.clipboard-mark-icon {
   color: var(--ft-accent-on-selection);
-}
-
-.search-result-row.clipboard-flash {
-  position: relative;
 }
 
 /* A search result's name and its icon share the name column. */
@@ -7628,7 +7518,6 @@ button.shortcut-slot-key.recording:hover {
 .clipboard-cut .tree-label-text,
 .clipboard-cut .flow-item-label,
 .clipboard-cut .details-name-label,
-.clipboard-cut .search-result-name,
 .clipboard-cut .icon-item-label {
   opacity: 0.55;
 }
@@ -7652,8 +7541,7 @@ button.shortcut-slot-key.recording:hover {
    text on it. */
 .tree-row.clipboard-flash.active:not(.inactive)::after,
 .flow-item.clipboard-flash.active:not(.inactive)::after,
-.details-row.clipboard-flash.active:not(.inactive)::after,
-.search-result-row.clipboard-flash.active:not(.inactive)::after {
+.details-row.clipboard-flash.active:not(.inactive)::after {
   background: var(--ft-accent-on-selection);
 }
 
@@ -7684,32 +7572,6 @@ button.shortcut-slot-key.recording:hover {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Search results drop the date, then the size, as their pane narrows (SearchResultsPane
-   sets `data-columns` from the measured width). */
-.search-results-pane[data-columns="no-date"] .search-results-columns {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 76px;
-}
-
-.search-results-pane[data-columns="no-date"] .search-result-row {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 76px;
-}
-
-.search-results-pane[data-columns="names"] .search-results-columns {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr);
-}
-
-.search-results-pane[data-columns="names"] .search-result-row {
-  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr);
-}
-
-.search-results-pane:not([data-columns="full"])
-  .search-results-column-static:not(.search-results-column-size),
-.search-results-pane:not([data-columns="full"]) .search-result-meta:not(.search-result-size),
-.search-results-pane[data-columns="names"] .search-results-column-size,
-.search-results-pane[data-columns="names"] .search-result-size {
-  display: none;
 }
 
 /* ── Renaming an item in its row ──────────────────────────────────────── */
