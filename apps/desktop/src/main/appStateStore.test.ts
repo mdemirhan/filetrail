@@ -361,6 +361,24 @@ describe("appStateStore", () => {
         kind: 148,
         created: 152,
       },
+      searchColumns: {
+        folder: true,
+        modified: true,
+        size: true,
+        kind: false,
+        created: false,
+        permissions: false,
+      },
+      searchColumnOrder: ["folder", "modified", "size", "kind", "created", "permissions"],
+      searchColumnWidths: {
+        name: 300,
+        folder: 240,
+        modified: 152,
+        size: 108,
+        kind: 148,
+        created: 152,
+        permissions: 108,
+      },
       notificationsEnabled: true,
       markClipboardItems: true,
       folderTreeOpen: true,
@@ -464,6 +482,24 @@ describe("appStateStore", () => {
         permissions: 160,
         kind: 148,
         created: 168,
+      },
+      searchColumns: {
+        folder: true,
+        modified: true,
+        size: true,
+        kind: false,
+        created: false,
+        permissions: false,
+      },
+      searchColumnOrder: ["folder", "modified", "size", "kind", "created", "permissions"],
+      searchColumnWidths: {
+        name: 300,
+        folder: 240,
+        modified: 152,
+        size: 108,
+        kind: 148,
+        created: 152,
+        permissions: 108,
       },
       notificationsEnabled: true,
       markClipboardItems: false,
@@ -578,6 +614,24 @@ describe("appStateStore", () => {
         permissions: 160,
         kind: 148,
         created: 168,
+      },
+      searchColumns: {
+        folder: true,
+        modified: true,
+        size: true,
+        kind: false,
+        created: false,
+        permissions: false,
+      },
+      searchColumnOrder: ["folder", "modified", "size", "kind", "created", "permissions"],
+      searchColumnWidths: {
+        name: 300,
+        folder: 240,
+        modified: 152,
+        size: 108,
+        kind: 148,
+        created: 152,
+        permissions: 108,
       },
       notificationsEnabled: true,
       markClipboardItems: false,
@@ -768,6 +822,10 @@ describe("appStateStore", () => {
       } as never,
       // A repeated key, one that does not exist, and three left out.
       detailColumnOrder: ["kind", "kind", "bogus", "size"] as never,
+      searchColumns: { folder: false, kind: "yes", created: true } as never,
+      searchColumnOrder: ["size", "name", "size", "folder"] as never,
+      searchColumnWidths: { folder: 5, name: 400 } as never,
+      searchResultsSortBy: "kind",
       detailColumnWidths: {
         name: 9999,
         size: 1,
@@ -854,6 +912,29 @@ describe("appStateStore", () => {
       kind: 148,
       created: 168,
     });
+    // Search results' columns are read the same way, apart from a folder's.
+    expect(reloaded.getPreferences().searchColumns).toEqual({
+      folder: false,
+      modified: true,
+      size: true,
+      kind: false,
+      created: true,
+      permissions: false,
+    });
+    expect(reloaded.getPreferences().searchColumnOrder).toEqual([
+      "size",
+      "folder",
+      "modified",
+      "kind",
+      "created",
+      "permissions",
+    ]);
+    expect(reloaded.getPreferences().searchColumnWidths).toMatchObject({
+      name: 400,
+      folder: 80,
+      size: 108,
+    });
+    expect(reloaded.getPreferences().searchResultsSortBy).toBe("kind");
     expect(reloaded.getPreferences().fileActivationAction).toBe("open");
     expect(reloaded.getPreferences().openItemLimit).toBe(50);
     expect(reloaded.getPreferences().treeRootPath).toBeNull();

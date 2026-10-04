@@ -98,3 +98,33 @@ describe("search result helpers", () => {
     expect(formatSearchResultFolder("/notes.txt", "/")).toBe("Macintosh HD");
   });
 });
+
+describe("sorting search results by kind", () => {
+  it("puts folders first, then files by extension, those without one last", () => {
+    const folder = {
+      ...createSearchResult("/Users/demo/project/zeta"),
+      kind: "directory" as const,
+    };
+    const items = [
+      createSearchResult("/Users/demo/project/b.ts"),
+      createSearchResult("/Users/demo/project/Makefile"),
+      createSearchResult("/Users/demo/project/a.md"),
+      folder,
+      createSearchResult("/Users/demo/project/a.ts"),
+    ];
+    expect(sortSearchResults(items, "kind", "asc").map((item) => item.name)).toEqual([
+      "zeta",
+      "a.md",
+      "a.ts",
+      "b.ts",
+      "Makefile",
+    ]);
+    expect(sortSearchResults(items, "kind", "desc").map((item) => item.name)).toEqual([
+      "Makefile",
+      "b.ts",
+      "a.ts",
+      "a.md",
+      "zeta",
+    ]);
+  });
+});

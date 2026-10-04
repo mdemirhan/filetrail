@@ -17,6 +17,9 @@ import {
   type FileActivationAction,
   type OpenWithApplication,
   type ReturnKeyAction,
+  type SearchColumnOrder,
+  type SearchColumnVisibility,
+  type SearchColumnWidths,
   type ThemePreference,
   resolveEffectiveTheme,
 } from "../../shared/appPreferences";
@@ -53,6 +56,15 @@ export function useAppPreferences() {
   );
   const [detailColumnWidths, setDetailColumnWidths] = useState<DetailColumnWidths>(
     DEFAULT_DETAIL_COLUMN_WIDTHS,
+  );
+  const [searchColumns, setSearchColumns] = useState<SearchColumnVisibility>(
+    DEFAULT_APP_PREFERENCES.searchColumns,
+  );
+  const [searchColumnOrder, setSearchColumnOrder] = useState<SearchColumnOrder>(
+    DEFAULT_APP_PREFERENCES.searchColumnOrder,
+  );
+  const [searchColumnWidths, setSearchColumnWidths] = useState<SearchColumnWidths>(
+    DEFAULT_APP_PREFERENCES.searchColumnWidths,
   );
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     DEFAULT_APP_PREFERENCES.notificationsEnabled,
@@ -140,6 +152,12 @@ export function useAppPreferences() {
     setDetailColumnOrder,
     detailColumnWidths,
     setDetailColumnWidths,
+    searchColumns,
+    setSearchColumns,
+    searchColumnOrder,
+    setSearchColumnOrder,
+    searchColumnWidths,
+    setSearchColumnWidths,
     notificationsEnabled,
     setNotificationsEnabled,
     markClipboardItems,
@@ -225,6 +243,8 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("singleClickExpandTreeItems", store.setSingleClickExpandTreeItems);
   set("detailColumns", store.setDetailColumns);
   set("detailColumnOrder", store.setDetailColumnOrder);
+  set("searchColumns", store.setSearchColumns);
+  set("searchColumnOrder", store.setSearchColumnOrder);
   set("notificationsEnabled", store.setNotificationsEnabled);
   set("markClipboardItems", store.setMarkClipboardItems);
   set("topToolbarItems", store.setTopToolbarItems);

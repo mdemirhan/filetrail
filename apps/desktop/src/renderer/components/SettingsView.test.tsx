@@ -591,6 +591,58 @@ describe("SettingsView", () => {
     expect(onRemoveOpenWithApplication).toHaveBeenCalledWith("zed");
   });
 
+  it("lists search results' columns on the Search tab, apart from a folder's", () => {
+    const onSearchColumnsChange = vi.fn();
+    const onSearchColumnOrderChange = vi.fn();
+    renderSettingsView({
+      activeTab: "search",
+      searchDefaults: {
+        searchPatternMode: "text",
+        searchMatchScope: "name",
+        searchRecursive: true,
+        searchSkipGitFolders: true,
+        searchSkipGitIgnored: false,
+      },
+      searchColumnOrder: ["folder", "kind", "modified", "size", "created", "permissions"],
+      onSearchColumnsChange,
+      onSearchColumnOrderChange,
+    });
+
+    expect(screen.queryByRole("listbox", { name: "Columns in List view" })).toBeNull();
+    const list = screen.getByRole("listbox", { name: "Columns in search results" });
+    const rows = within(list).getAllByRole("option");
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
+      "Name",
+      "Folder",
+      "Kind",
+      "Date Modified",
+      "Size",
+      "Date Created",
+      "Permissions",
+    ]);
+    // Folder, Date Modified and Size are shown to begin with.
+    expect(rows.map((row) => row.getAttribute("aria-checked"))).toEqual([
+      null,
+      "true",
+      "false",
+      "true",
+      "true",
+      "false",
+      "false",
+    ]);
+    fireEvent.click(within(list).getByRole("checkbox", { name: "Show Kind" }));
+    expect(onSearchColumnsChange).toHaveBeenCalledWith(expect.objectContaining({ kind: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Restore the default column order" }));
+    expect(onSearchColumnOrderChange).toHaveBeenCalledWith([
+      "folder",
+      "modified",
+      "size",
+      "kind",
+      "created",
+      "permissions",
+    ]);
+  });
+
   it("lists the columns in their order, with Name first and fixed", () => {
     renderSettingsView({
       detailColumnOrder: ["kind", "modified", "size", "permissions", "created"],

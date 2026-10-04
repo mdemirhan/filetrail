@@ -3,15 +3,16 @@ import type {
   DetailColumnOrder,
   DetailColumnVisibility,
 } from "../../shared/appPreferences";
-import { DETAIL_COLUMN_LABELS, clampDetailColumnWidth } from "../../shared/appPreferences";
+import {
+  SEARCH_COLUMN_LABELS,
+  type SearchColumnKey,
+  clampDetailColumnWidth,
+} from "../../shared/appPreferences";
 
 // The List view's columns: a folder's, and search results', which add the folder each
 // result is in.
-export type ListColumnKey = DetailColumnKey | "folder";
-export const LIST_COLUMN_LABELS: Record<ListColumnKey, string> = {
-  ...DETAIL_COLUMN_LABELS,
-  folder: "Folder",
-};
+export type ListColumnKey = SearchColumnKey;
+export const LIST_COLUMN_LABELS = SEARCH_COLUMN_LABELS;
 // Widths by column, Name's always among them.
 type ColumnWidths<K extends string> = Readonly<Record<K | "name", number>>;
 

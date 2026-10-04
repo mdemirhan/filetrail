@@ -88,6 +88,8 @@ export function SettingsWindowApp() {
     singleClickExpandTreeItems: preferences.singleClickExpandTreeItems,
     detailColumns: preferences.detailColumns,
     detailColumnOrder: preferences.detailColumnOrder,
+    searchColumns: preferences.searchColumns,
+    searchColumnOrder: preferences.searchColumnOrder,
     notificationsEnabled: preferences.notificationsEnabled,
     markClipboardItems: preferences.markClipboardItems,
     restoreSessionOnStartup: preferences.restoreSessionOnStartup,
@@ -311,6 +313,8 @@ export function SettingsWindowApp() {
             singleClickExpandTreeItems={preferences.singleClickExpandTreeItems}
             detailColumns={preferences.detailColumns}
             detailColumnOrder={preferences.detailColumnOrder}
+            searchColumns={preferences.searchColumns}
+            searchColumnOrder={preferences.searchColumnOrder}
             layoutMode="wide"
             notificationsEnabled={preferences.notificationsEnabled}
             markClipboardItems={preferences.markClipboardItems}
@@ -339,6 +343,8 @@ export function SettingsWindowApp() {
             onSingleClickExpandTreeItemsChange={preferences.setSingleClickExpandTreeItems}
             onDetailColumnsChange={preferences.setDetailColumns}
             onDetailColumnOrderChange={preferences.setDetailColumnOrder}
+            onSearchColumnsChange={preferences.setSearchColumns}
+            onSearchColumnOrderChange={preferences.setSearchColumnOrder}
             onNotificationsEnabledChange={preferences.setNotificationsEnabled}
             onMarkClipboardItemsChange={preferences.setMarkClipboardItems}
             onRestoreSessionOnStartupChange={preferences.setRestoreSessionOnStartup}

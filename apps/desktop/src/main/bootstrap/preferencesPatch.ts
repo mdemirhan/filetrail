@@ -58,6 +58,15 @@ export function toPreferencePatch(
   if (value.detailColumnWidths !== undefined) {
     patch.detailColumnWidths = value.detailColumnWidths;
   }
+  if (value.searchColumns !== undefined) {
+    patch.searchColumns = value.searchColumns;
+  }
+  if (value.searchColumnOrder !== undefined) {
+    patch.searchColumnOrder = value.searchColumnOrder;
+  }
+  if (value.searchColumnWidths !== undefined) {
+    patch.searchColumnWidths = value.searchColumnWidths;
+  }
   if (value.notificationsEnabled !== undefined) {
     patch.notificationsEnabled = value.notificationsEnabled;
   }

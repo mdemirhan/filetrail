@@ -5,13 +5,12 @@ import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@file
 import {
   type AppPreferences,
   DEFAULT_APP_PREFERENCES,
-  DEFAULT_SEARCH_COLUMN_WIDTHS,
   DEFAULT_TERMINAL_APPLICATION,
   DETAIL_COLUMN_LABELS,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   SORT_BY_ORDER,
-  type SearchColumnWidths,
+  type SearchResultsSortByPreference,
   VIEW_MODE_NAMES,
   VIEW_MODE_ORDER,
   clampOpenItemLimit,
@@ -59,7 +58,6 @@ import {
 } from "./lib/contentSelection";
 import type { ContextMenuSubmenus } from "./lib/contextMenu";
 import { buildPasteRequest, describeClipboard } from "./lib/copyPasteClipboard";
-import type { ListColumnKey } from "./lib/detailsLayout";
 import {
   createOpenItemLimitMessage,
   formatPathForShell,
@@ -123,13 +121,6 @@ import { ShortcutDisplayProvider } from "./state/shortcutDisplayContext";
 const logger = createRendererLogger("filetrail.renderer");
 
 type PreferencesPersistPayload = IpcRequest<"app:updatePreferences">["preferences"];
-// The columns of search results' List view, in order.
-const SEARCH_LIST_COLUMN_KEYS: ReadonlyArray<ListColumnKey> = [
-  "name",
-  "folder",
-  "modified",
-  "size",
-];
 
 export function App() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -194,6 +185,12 @@ export function App() {
     setDetailColumnOrder,
     detailColumnWidths,
     setDetailColumnWidths,
+    searchColumns,
+    setSearchColumns,
+    searchColumnOrder,
+    setSearchColumnOrder,
+    searchColumnWidths,
+    setSearchColumnWidths,
     notificationsEnabled,
     setNotificationsEnabled,
     markClipboardItems,
@@ -533,28 +530,31 @@ export function App() {
   // The view on screen: search results have one of their own in each tab, List to begin with.
   const shownViewMode = isSearchMode ? searchViewMode : viewMode;
   const setShownViewMode = isSearchMode ? setSearchViewMode : setViewMode;
-  // Search results' List view: Name, the folder each is in, Date Modified and Size. Their
-  // widths are the window's own for now; Name and Folder sort the results.
-  const [searchColumnWidths, setSearchColumnWidths] = useState<SearchColumnWidths>(
-    DEFAULT_SEARCH_COLUMN_WIDTHS,
-  );
+  // Search results' List view: the columns chosen for search results in Settings, Name
+  // first, with widths of their own. Name, Folder and Kind sort the results; the dates, size
+  // and permissions load only for the rows on screen.
   const searchListColumns = useMemo<ListColumnSet>(
     () => ({
-      keys: SEARCH_LIST_COLUMN_KEYS,
+      keys: ["name", ...searchColumnOrder.filter((key) => searchColumns[key])],
       widths: searchColumnWidths,
       clampWidth: clampSearchColumnWidth,
       onWidthsChange: setSearchColumnWidths,
-      getSortKey: (key) => (key === "name" ? "name" : key === "folder" ? "path" : null),
+      getSortKey: (key) =>
+        key === "name" ? "name" : key === "folder" ? "path" : key === "kind" ? "kind" : null,
       sortBy: searchResultsSortBy,
       sortDirection: searchResultsSortDirection,
-      onSortChange: (sortKey) => sortSearchResultsByColumn(sortKey as "name" | "path"),
+      onSortChange: (sortKey) =>
+        sortSearchResultsByColumn(sortKey as SearchResultsSortByPreference),
       getFolderLabel: (entry) => formatSearchResultFolder(entry.path, searchRootPath),
     }),
     [
+      searchColumnOrder,
       searchColumnWidths,
+      searchColumns,
       searchResultsSortBy,
       searchResultsSortDirection,
       searchRootPath,
+      setSearchColumnWidths,
       sortSearchResultsByColumn,
     ],
   );
@@ -1285,6 +1285,9 @@ export function App() {
     detailColumns,
     detailColumnOrder,
     detailColumnWidths,
+    searchColumns,
+    searchColumnOrder,
+    searchColumnWidths,
     notificationsEnabled,
     markClipboardItems,
     topToolbarItems,
@@ -1451,6 +1454,9 @@ export function App() {
         setDetailColumns(preferences.detailColumns);
         setDetailColumnOrder(preferences.detailColumnOrder);
         setDetailColumnWidths(preferences.detailColumnWidths);
+        setSearchColumns(preferences.searchColumns);
+        setSearchColumnOrder(preferences.searchColumnOrder);
+        setSearchColumnWidths(preferences.searchColumnWidths);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setMarkClipboardItems(preferences.markClipboardItems);
         setTopToolbarItems(preferences.topToolbarItems);

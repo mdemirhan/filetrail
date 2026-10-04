@@ -40,8 +40,30 @@ export function compareSearchResults(
       left.path.localeCompare(right.path, undefined, { sensitivity: "base" })
     );
   }
+  if (sortBy === "kind") {
+    // Kind is told from the extension, which every result has at once (the kind's name
+    // loads only for the rows on screen): folders first, then files by extension, those
+    // without one last, each group by name.
+    return (
+      compareKindKeys(searchResultKindKey(left), searchResultKindKey(right)) ||
+      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
+      left.path.localeCompare(right.path, undefined, { sensitivity: "base" })
+    );
+  }
 
   return left.path.localeCompare(right.path, undefined, { sensitivity: "base" });
+}
+
+// Folders (and links to them) are 0, files with an extension 1, files without one 2.
+function searchResultKindKey(item: SearchResultItem): [number, string] {
+  if (item.kind === "directory" || item.kind === "symlink_directory") {
+    return [0, ""];
+  }
+  return item.extension ? [1, item.extension.toLowerCase()] : [2, ""];
+}
+
+function compareKindKeys(left: [number, string], right: [number, string]): number {
+  return left[0] - right[0] || left[1].localeCompare(right[1]);
 }
 
 // One line of search status: the result count and the selection. (How long the search

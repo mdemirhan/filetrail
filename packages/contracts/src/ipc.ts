@@ -45,7 +45,7 @@ export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
 export const searchPatternModeSchema = z.enum(["text", "glob", "regex"]);
 export const searchMatchScopeSchema = z.enum(["name", "path"]);
-export const searchResultsSortBySchema = z.enum(["name", "path"]);
+export const searchResultsSortBySchema = z.enum(["name", "path", "kind"]);
 export const detailColumnVisibilitySchema = z.object({
   modified: z.boolean(),
   size: z.boolean(),
@@ -65,6 +65,22 @@ export const detailColumnWidthsSchema = z.object({
   kind: z.number().int().min(60).max(320),
   created: z.number().int().min(80).max(280),
   permissions: z.number().int().min(36).max(260),
+});
+export const searchColumnVisibilitySchema = z.object({
+  folder: z.boolean(),
+  modified: z.boolean(),
+  size: z.boolean(),
+  kind: z.boolean(),
+  created: z.boolean(),
+  permissions: z.boolean(),
+});
+// Search results' optional columns in display order, each exactly once.
+export const searchColumnOrderSchema = z
+  .array(z.enum(["folder", "modified", "size", "kind", "created", "permissions"]))
+  .length(6)
+  .refine((keys) => new Set(keys).size === keys.length, "Each column appears once");
+export const searchColumnWidthsSchema = detailColumnWidthsSchema.extend({
+  folder: z.number().int().min(80).max(720),
 });
 export const openWithApplicationSchema = z.object({
   id: z.string().trim().min(1),
@@ -607,6 +623,9 @@ export const appPreferencesSchema = z.object({
   detailColumns: detailColumnVisibilitySchema,
   detailColumnOrder: detailColumnOrderSchema,
   detailColumnWidths: detailColumnWidthsSchema,
+  searchColumns: searchColumnVisibilitySchema,
+  searchColumnOrder: searchColumnOrderSchema,
+  searchColumnWidths: searchColumnWidthsSchema,
   notificationsEnabled: z.boolean(),
   markClipboardItems: z.boolean(),
   folderTreeOpen: z.boolean(),

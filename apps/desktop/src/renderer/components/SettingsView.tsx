@@ -21,18 +21,22 @@ import type {
   FavoritesPlacement,
   FileActivationAction,
   OpenWithApplication,
-  OptionalDetailColumnKey,
   ReturnKeyAction,
+  SearchColumnOrder,
+  SearchColumnVisibility,
   SearchPatternModePreference,
   ThemePreference,
 } from "../../shared/appPreferences";
 import {
   DEFAULT_APP_PREFERENCES,
   DEFAULT_DETAIL_COLUMN_ORDER,
+  DEFAULT_SEARCH_COLUMN_ORDER,
+  DEFAULT_SEARCH_COLUMN_VISIBILITY,
   DEFAULT_TERMINAL_APPLICATION,
   DEFAULT_TEXT_EDITOR,
   DETAIL_COLUMN_LABELS,
   FAVORITE_ICON_OPTIONS,
+  SEARCH_COLUMN_LABELS,
   SEARCH_PATTERN_MODES,
   SEARCH_PATTERN_MODE_LABELS,
   THEME_OPTIONS,
@@ -629,33 +633,40 @@ function SettingsListText({ name, path }: { name: string; path: string }) {
   );
 }
 
-// The List view's columns, to check and to drag into order, as a list in Settings is; Restore
-// Defaults puts back the order only, not which columns are shown. Name is
-// always shown and always first: its row is there, but it cannot be unchecked or moved. The
-// arrow keys select, Space checks, and ⌥ or ⌘ with an arrow moves the selected column.
-function DetailColumnList({
+// A List view's columns (a folder's, or search results'), to check and to drag into order, as
+// a list in Settings is; Restore Defaults puts back the order only, not which columns are
+// shown. Name is always shown and always first: its row is there, but it cannot be unchecked
+// or moved. The arrow keys select, Space checks, and ⌘ or ⌥ with an arrow moves the selected
+// column.
+function ColumnList<K extends string>({
+  label,
+  labels,
+  defaultOrder,
   visibility,
   order,
   onVisibilityChange,
   onOrderChange,
 }: {
-  visibility: DetailColumnVisibility;
-  order: DetailColumnOrder;
-  onVisibilityChange: (value: DetailColumnVisibility) => void;
-  onOrderChange: (value: DetailColumnOrder) => void;
+  label: string;
+  labels: Record<K | "name", string>;
+  defaultOrder: readonly K[];
+  visibility: Record<K, boolean>;
+  order: K[];
+  onVisibilityChange: (value: Record<K, boolean>) => void;
+  onOrderChange: (value: K[]) => void;
 }) {
-  const [selectedKey, setSelectedKey] = useState<OptionalDetailColumnKey | null>(null);
-  const [draggedKey, setDraggedKey] = useState<OptionalDetailColumnKey | null>(null);
-  const [dropKey, setDropKey] = useState<OptionalDetailColumnKey | null>(null);
+  const [selectedKey, setSelectedKey] = useState<K | null>(null);
+  const [draggedKey, setDraggedKey] = useState<K | null>(null);
+  const [dropKey, setDropKey] = useState<K | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const selectedIndex = selectedKey === null ? -1 : order.indexOf(selectedKey);
 
-  const focusRow = (key: OptionalDetailColumnKey) => {
+  const focusRow = (key: K) => {
     setSelectedKey(key);
     listRef.current?.querySelector<HTMLElement>(`[data-column="${key}"]`)?.focus();
   };
 
-  const move = (key: OptionalDetailColumnKey, toIndex: number) => {
+  const move = (key: K, toIndex: number) => {
     const fromIndex = order.indexOf(key);
     if (fromIndex === toIndex || toIndex < 0 || toIndex >= order.length) {
       return;
@@ -666,8 +677,7 @@ function DetailColumnList({
     setSelectedKey(key);
   };
 
-  const toggle = (key: OptionalDetailColumnKey) =>
-    onVisibilityChange({ ...visibility, [key]: !visibility[key] });
+  const toggle = (key: K) => onVisibilityChange({ ...visibility, [key]: !visibility[key] });
 
   const endDrag = () => {
     setDraggedKey(null);
@@ -682,7 +692,7 @@ function DetailColumnList({
         className="settings-list-rows"
         // biome-ignore lint/a11y/useSemanticElements: a native select cannot hold rows that are dragged, or a checkbox.
         role="listbox"
-        aria-label="Columns in List view"
+        aria-label={label}
         onDragOver={(event) => {
           if (draggedKey !== null) {
             event.preventDefault();
@@ -693,7 +703,7 @@ function DetailColumnList({
           className="settings-list-row settings-column-row"
           // biome-ignore lint/a11y/useSemanticElements: see the listbox note above.
           role="option"
-          aria-label={DETAIL_COLUMN_LABELS.name}
+          aria-label={labels.name}
           aria-selected={false}
           aria-disabled="true"
           tabIndex={-1}
@@ -701,10 +711,10 @@ function DetailColumnList({
           <span className="settings-checkbox">
             <input type="checkbox" checked disabled tabIndex={-1} aria-hidden="true" />
           </span>
-          <span className="settings-list-name">{DETAIL_COLUMN_LABELS.name}</span>
+          <span className="settings-list-name">{labels.name}</span>
         </div>
         {order.map((key, index) => {
-          const label = DETAIL_COLUMN_LABELS[key];
+          const columnLabel = labels[key];
           const draggedIndex = draggedKey === null ? -1 : order.indexOf(draggedKey);
           const dropSide =
             draggedKey !== null && dropKey === key && draggedKey !== key
@@ -718,7 +728,7 @@ function DetailColumnList({
               className="settings-list-row settings-column-row"
               // biome-ignore lint/a11y/useSemanticElements: see the listbox note above.
               role="option"
-              aria-label={label}
+              aria-label={columnLabel}
               aria-selected={selectedKey === key}
               aria-checked={visibility[key]}
               tabIndex={selectedKey === key || (selectedKey === null && index === 0) ? 0 : -1}
@@ -750,7 +760,7 @@ function DetailColumnList({
                 setDraggedKey(key);
                 setSelectedKey(key);
                 event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", label);
+                event.dataTransfer.setData("text/plain", columnLabel);
               }}
               onDragEnter={() => setDropKey(key)}
               onDragOver={(event) => {
@@ -772,11 +782,11 @@ function DetailColumnList({
                   type="checkbox"
                   checked={visibility[key]}
                   tabIndex={-1}
-                  aria-label={`Show ${label}`}
+                  aria-label={`Show ${columnLabel}`}
                   onChange={() => toggle(key)}
                 />
               </span>
-              <span className="settings-list-name">{label}</span>
+              <span className="settings-list-name">{columnLabel}</span>
             </div>
           );
         })}
@@ -785,7 +795,7 @@ function DetailColumnList({
         <button
           type="button"
           className="settings-list-bar-button"
-          aria-label={selectedKey ? `Move ${DETAIL_COLUMN_LABELS[selectedKey]} Up` : "Move Up"}
+          aria-label={selectedKey ? `Move ${labels[selectedKey]} Up` : "Move Up"}
           title="Move Up"
           disabled={selectedIndex <= 0}
           onClick={() => {
@@ -801,7 +811,7 @@ function DetailColumnList({
         <button
           type="button"
           className="settings-list-bar-button"
-          aria-label={selectedKey ? `Move ${DETAIL_COLUMN_LABELS[selectedKey]} Down` : "Move Down"}
+          aria-label={selectedKey ? `Move ${labels[selectedKey]} Down` : "Move Down"}
           title="Move Down"
           disabled={selectedIndex < 0 || selectedIndex >= order.length - 1}
           onClick={() => {
@@ -819,8 +829,8 @@ function DetailColumnList({
           type="button"
           className="settings-list-bar-text-button"
           aria-label="Restore the default column order"
-          disabled={order.every((key, index) => key === DEFAULT_DETAIL_COLUMN_ORDER[index])}
-          onClick={() => onOrderChange([...DEFAULT_DETAIL_COLUMN_ORDER])}
+          disabled={order.every((key, index) => key === defaultOrder[index])}
+          onClick={() => onOrderChange([...defaultOrder])}
         >
           Restore Defaults
         </button>
@@ -1207,6 +1217,8 @@ export function SettingsView({
   singleClickExpandTreeItems,
   detailColumns,
   detailColumnOrder,
+  searchColumns = DEFAULT_SEARCH_COLUMN_VISIBILITY,
+  searchColumnOrder = DEFAULT_SEARCH_COLUMN_ORDER,
   layoutMode = "wide",
   notificationsEnabled,
   markClipboardItems,
@@ -1235,6 +1247,8 @@ export function SettingsView({
   onSingleClickExpandTreeItemsChange,
   onDetailColumnsChange,
   onDetailColumnOrderChange,
+  onSearchColumnsChange = () => undefined,
+  onSearchColumnOrderChange = () => undefined,
   onNotificationsEnabledChange,
   onMarkClipboardItemsChange,
   onRestoreSessionOnStartupChange,
@@ -1272,6 +1286,9 @@ export function SettingsView({
   singleClickExpandTreeItems: boolean;
   detailColumns: DetailColumnVisibility;
   detailColumnOrder: DetailColumnOrder;
+  // Search results' columns, apart from a folder's.
+  searchColumns?: SearchColumnVisibility;
+  searchColumnOrder?: SearchColumnOrder;
   layoutMode?: "wide" | "narrow" | "compact";
   notificationsEnabled: boolean;
   markClipboardItems: boolean;
@@ -1301,6 +1318,8 @@ export function SettingsView({
   onSingleClickExpandTreeItemsChange: (value: boolean) => void;
   onDetailColumnsChange: (value: DetailColumnVisibility) => void;
   onDetailColumnOrderChange: (value: DetailColumnOrder) => void;
+  onSearchColumnsChange?: (value: SearchColumnVisibility) => void;
+  onSearchColumnOrderChange?: (value: SearchColumnOrder) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
   onMarkClipboardItemsChange: (value: boolean) => void;
   onRestoreSessionOnStartupChange: (value: boolean) => void;
@@ -1490,7 +1509,10 @@ export function SettingsView({
             note="Name always comes first. Drag the other columns into the order you want."
           >
             <div className="settings-row settings-row-list">
-              <DetailColumnList
+              <ColumnList
+                label="Columns in List view"
+                labels={DETAIL_COLUMN_LABELS}
+                defaultOrder={DEFAULT_DETAIL_COLUMN_ORDER}
                 visibility={detailColumns}
                 order={detailColumnOrder}
                 onVisibilityChange={onDetailColumnsChange}
@@ -1637,6 +1659,25 @@ export function SettingsView({
                 />
               }
             />
+          </SectionCard>
+        ) : null}
+
+        {searchDefaults && showSection("search") ? (
+          <SectionCard
+            title="Columns in Search Results"
+            note="For search results in List view. Name always comes first. Drag the other columns into the order you want."
+          >
+            <div className="settings-row settings-row-list">
+              <ColumnList
+                label="Columns in search results"
+                labels={SEARCH_COLUMN_LABELS}
+                defaultOrder={DEFAULT_SEARCH_COLUMN_ORDER}
+                visibility={searchColumns}
+                order={searchColumnOrder}
+                onVisibilityChange={onSearchColumnsChange}
+                onOrderChange={onSearchColumnOrderChange}
+              />
+            </div>
           </SectionCard>
         ) : null}
 

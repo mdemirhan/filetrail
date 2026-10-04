@@ -16,14 +16,17 @@ import {
   type FavoritePreference,
   OPEN_TABS_LIMIT,
   OPTIONAL_DETAIL_COLUMN_KEYS,
+  OPTIONAL_SEARCH_COLUMN_KEYS,
   type OpenTabPreference,
   type ThemePreference,
   clampDetailColumnWidth,
   clampOpenItemLimit,
   clampPaneWidth,
+  clampSearchColumnWidth,
   clampZoomPercent,
   normalizeAccentColor,
   normalizeDetailColumnOrder,
+  normalizeSearchColumnOrder,
 } from "../shared/appPreferences";
 import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import { sanitizeTopToolbarItems } from "../shared/toolbarItems";
@@ -522,6 +525,15 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       record.detailColumnWidths,
       currentDefaults.detailColumnWidths,
     ),
+    searchColumns: sanitizeSearchColumns(record.searchColumns, currentDefaults.searchColumns),
+    searchColumnOrder:
+      record.searchColumnOrder === undefined
+        ? currentDefaults.searchColumnOrder
+        : normalizeSearchColumnOrder(record.searchColumnOrder),
+    searchColumnWidths: sanitizeSearchColumnWidths(
+      record.searchColumnWidths,
+      currentDefaults.searchColumnWidths,
+    ),
     notificationsEnabled:
       typeof record.notificationsEnabled === "boolean"
         ? record.notificationsEnabled
@@ -595,7 +607,9 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
         ? record.searchSkipGitIgnored
         : currentDefaults.searchSkipGitIgnored,
     searchResultsSortBy:
-      record.searchResultsSortBy === "name" || record.searchResultsSortBy === "path"
+      record.searchResultsSortBy === "name" ||
+      record.searchResultsSortBy === "path" ||
+      record.searchResultsSortBy === "kind"
         ? record.searchResultsSortBy
         : currentDefaults.searchResultsSortBy,
     searchResultsSortDirection:
@@ -780,6 +794,39 @@ function sanitizeDetailColumns(
       typeof record[key] === "boolean" ? record[key] : defaults[key],
     ]),
   ) as AppPreferences["detailColumns"];
+}
+
+// Search results' columns, kept apart from a folder's and sanitized the same way.
+function sanitizeSearchColumns(
+  value: unknown,
+  defaults: AppPreferences["searchColumns"],
+): AppPreferences["searchColumns"] {
+  if (!isPlainObject(value)) {
+    return defaults;
+  }
+  const record = value;
+  return Object.fromEntries(
+    OPTIONAL_SEARCH_COLUMN_KEYS.map((key) => [
+      key,
+      typeof record[key] === "boolean" ? record[key] : defaults[key],
+    ]),
+  ) as AppPreferences["searchColumns"];
+}
+
+function sanitizeSearchColumnWidths(
+  value: unknown,
+  defaults: AppPreferences["searchColumnWidths"],
+): AppPreferences["searchColumnWidths"] {
+  if (!isPlainObject(value)) {
+    return defaults;
+  }
+  const record = value;
+  return Object.fromEntries(
+    (["name", ...OPTIONAL_SEARCH_COLUMN_KEYS] as const).map((key) => [
+      key,
+      clampSearchColumnWidth(key, typeof record[key] === "number" ? record[key] : defaults[key]),
+    ]),
+  ) as AppPreferences["searchColumnWidths"];
 }
 
 function sanitizeDetailColumnWidths(
