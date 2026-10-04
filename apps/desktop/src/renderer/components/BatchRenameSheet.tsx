@@ -588,7 +588,6 @@ function FormatOptions({
                   id="batch-rename-date-pattern"
                   inputRef={customPatternRef}
                   value={settings.customDatePattern}
-                  mono
                   onChange={(value) => set("customDatePattern", value)}
                 />
                 <div className="batch-rename-tokens">
@@ -894,7 +893,6 @@ function TextField({
   value,
   onChange,
   inputRef,
-  mono = false,
   disabled = false,
   invalid = false,
   describedBy,
@@ -903,7 +901,6 @@ function TextField({
   value: string;
   onChange: (value: string) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
-  mono?: boolean;
   disabled?: boolean;
   invalid?: boolean;
   describedBy?: string | undefined;
@@ -912,7 +909,7 @@ function TextField({
     <input
       id={id}
       ref={inputRef}
-      className={`batch-rename-field${mono ? " is-mono" : ""}`}
+      className="batch-rename-field"
       value={value}
       disabled={disabled}
       aria-invalid={invalid || undefined}

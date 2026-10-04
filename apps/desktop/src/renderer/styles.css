@@ -6587,11 +6587,6 @@ button.shortcut-slot-key.recording:hover {
   color: var(--danger-text);
 }
 
-.batch-rename-field.is-mono {
-  font-family: var(--font-mono);
-  font-size: var(--mono-font-size);
-}
-
 .batch-rename-field.is-number {
   width: 72px;
   text-align: right;
@@ -6738,7 +6733,6 @@ button.shortcut-slot-key.recording:hover {
   border-radius: var(--radius-xs);
   background: var(--batch-rename-mark-bg);
   color: var(--batch-rename-mark-text);
-  font-family: var(--font-mono);
   font-size: var(--font-size-small);
 }
 
