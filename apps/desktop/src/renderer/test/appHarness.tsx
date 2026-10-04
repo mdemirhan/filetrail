@@ -217,6 +217,8 @@ export function createAppHarness(
     holdTreeChildrenFor?: string;
     // Which disk the folders under each path are on (the longest matching path wins).
     diskIds?: Record<string, number>;
+    // Folder sizes a calculation finds, by path. Without them sizes are not answered.
+    folderSizes?: Record<string, number>;
     // Answers about a scripted search wait until `releaseSearchUpdates`.
     holdSearchUpdates?: boolean;
     copyPastePlanError?: Error;
@@ -683,6 +685,27 @@ export function createAppHarness(
               /^\/Volumes\/[^/]+/.exec(path)?.[0].length ??
               1,
           ),
+        } as IpcResponse<C>;
+      }
+      if (channel === "folderSize:start" && args.folderSizes) {
+        // Nothing is known before it is calculated: a probe of the cache finds nothing.
+        const { path, probeOnly } = payload as IpcRequestInput<"folderSize:start">;
+        return {
+          jobId: `folder-size:${path}`,
+          status: probeOnly ? "deferred" : "ready",
+        } as IpcResponse<C>;
+      }
+      if (channel === "folderSize:getStatus" && args.folderSizes) {
+        const { jobId } = payload as IpcRequestInput<"folderSize:getStatus">;
+        const sizeBytes = args.folderSizes[jobId.slice("folder-size:".length)] ?? 0;
+        return {
+          jobId,
+          status: "ready",
+          sizeBytes,
+          diskBytes: sizeBytes,
+          fileCount: 0,
+          folderCount: 0,
+          error: null,
         } as IpcResponse<C>;
       }
       throw new Error(`Unhandled channel in test harness: ${channel}`);

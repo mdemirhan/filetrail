@@ -37,8 +37,11 @@ export const contentPaneMock = () => ({
     isFocused,
     header,
     paneRef,
+    statusSummary,
   }: {
     isFocused?: boolean;
+    // The path bar's right-hand summary: counts, and a size when known.
+    statusSummary?: string;
     // Given while the pane shows search results (the search bar).
     header?: React.ReactNode;
     paneRef?: React.RefObject<HTMLElement | null>;
@@ -97,6 +100,7 @@ export const contentPaneMock = () => ({
         data-testid="search-results-pane"
         tabIndex={-1}
       >
+        <output data-testid="content-status">{statusSummary}</output>
         {/* Stands in for the filter: a text field takes the keyboard from the pane. */}
         <input aria-label="Filter results" onFocus={() => onFocusChange(false)} />
         {/* Stands in for the name field a result row shows while its item is renamed. */}
@@ -145,6 +149,7 @@ export const contentPaneMock = () => ({
         <output data-testid="content-current-path">{currentPath}</output>
         <output data-testid="content-entry-count">{entries.length}</output>
         <output data-testid="content-focused">{String(isFocused ?? false)}</output>
+        <output data-testid="content-status">{statusSummary}</output>
         <label>
           Current folder path
           <input

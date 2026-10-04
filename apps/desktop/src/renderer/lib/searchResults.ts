@@ -6,6 +6,7 @@ import type {
   SearchResultsSortByPreference,
   SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
+import { type StatusSize, formatStatusSize } from "./statusSummary";
 
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 
@@ -66,18 +67,20 @@ function compareKindKeys(left: [number, string], right: [number, string]): numbe
   return left[0] - right[0] || left[1].localeCompare(right[1]);
 }
 
-// One line of search status: the result count and the selection. (How long the search
-// took is for the log, not the window.)
+// One line of search status: the result count, and the selection with its size when known.
+// (How long the search took is for the log, not the window.)
 export function formatSearchStatus({
   isSearching,
   shown,
   totalCount,
   selectedCount,
+  selectionSize = null,
 }: {
   isSearching: boolean;
   shown: number;
   totalCount: number;
   selectedCount: number;
+  selectionSize?: StatusSize;
 }): string {
   const noun = totalCount === 1 ? "result" : "results";
   const count =
@@ -85,6 +88,10 @@ export function formatSearchStatus({
   const parts = [isSearching ? `Searching… ${count}` : count];
   if (selectedCount > 0) {
     parts.push(`${selectedCount} selected`);
+    const sizeText = formatStatusSize(selectionSize);
+    if (sizeText) {
+      parts.push(sizeText);
+    }
   }
   return parts.join(" · ");
 }

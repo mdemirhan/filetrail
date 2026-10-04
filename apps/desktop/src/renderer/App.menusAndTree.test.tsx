@@ -352,108 +352,88 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  describe("Calculate Size from a folder's menu", () => {
-    async function calculateSizeFromMenu(
-      preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>,
+  // The status bar shows a size as it comes in: the selection's, which a right-clicked item
+  // is part of, or the folder on screen's. The Info panel opens only for a folder in the
+  // sidebar that nothing else on screen shows.
+  describe("Calculate Size", () => {
+    const folderSizes = { "/Users/demo": 9_000_000, "/Users/demo/Folder": 4_000 };
+
+    async function renderApp(
+      preferences: Partial<IpcResponse<"app:getPreferences">["preferences"]> = {},
     ) {
-      const harness = createAppHarness(preferences ? { preferences } : {});
+      const harness = createAppHarness({ preferences, folderSizes });
       render(
         <FiletrailClientProvider value={harness.client}>
           <App />
         </FiletrailClientProvider>,
       );
-      const folder = await screen.findByTitle("/Users/demo/Folder");
+      await screen.findByTitle("/Users/demo/Folder");
+      return harness;
+    }
+    async function chooseCalculateSize(target: HTMLElement) {
       await act(async () => {
-        fireEvent.contextMenu(folder);
+        fireEvent.contextMenu(target);
       });
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Calculate Size" }));
       });
-      await vi.waitFor(() => {
-        expect(
-          harness.invocations.find(
-            (call) =>
-              call.channel === "folderSize:start" &&
-              (call.payload as { path: string }).path === "/Users/demo/Folder" &&
-              !(call.payload as { probeOnly?: boolean }).probeOnly,
-          )?.payload,
-        ).toMatchObject({ recalculate: true });
-      });
     }
+    const calculated = (harness: ReturnType<typeof createAppHarness>) =>
+      harness.invocations
+        .filter(
+          (call) =>
+            call.channel === "folderSize:start" &&
+            !(call.payload as { probeOnly?: boolean }).probeOnly,
+        )
+        .map((call) => call.payload);
 
-    it("shows the folder's Info in the icon view, which has no Size column", async () => {
-      await calculateSizeFromMenu({ viewMode: "icons" });
+    it("shows a folder's size in the status bar, in a view without a Size column", async () => {
+      const harness = await renderApp({ viewMode: "icons" });
+      await chooseCalculateSize(screen.getByTitle("/Users/demo/Folder"));
 
-      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
-    });
-
-    it("leaves the Info panel closed in the Details view, whose Size column shows it", async () => {
-      await calculateSizeFromMenu({ viewMode: "details" });
-
-      expect(screen.queryByTestId("info-panel")).toBeNull();
-    });
-
-    it("shows the folder's Info in the Details view when its Size column is hidden", async () => {
-      await calculateSizeFromMenu({
-        viewMode: "details",
-        detailColumns: {
-          modified: true,
-          size: false,
-          kind: true,
-          created: false,
-          permissions: false,
-        },
-      });
-
-      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
-    });
-
-    it("leaves the Info panel closed when the Info Row is shown", async () => {
-      await calculateSizeFromMenu({ viewMode: "icons", detailRowOpen: true });
-
-      expect(screen.queryByTestId("info-panel")).toBeNull();
-    });
-  });
-
-  describe("Calculate Size from the menu of empty space", () => {
-    async function calculateSizeFromBackground(
-      preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>,
-    ) {
-      const harness = createAppHarness(preferences ? { preferences } : {});
-      render(
-        <FiletrailClientProvider value={harness.client}>
-          <App />
-        </FiletrailClientProvider>,
+      await waitFor(() =>
+        expect(screen.getByTestId("content-status")).toHaveTextContent(/selected · 4\.0 KB$/),
       );
-      const background = await screen.findByTestId("content-pane-background");
-      await act(async () => {
-        fireEvent.contextMenu(background);
-      });
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Calculate Size" }));
-      });
-      await vi.waitFor(() => {
-        expect(
-          harness.invocations.find(
-            (call) =>
-              call.channel === "folderSize:start" &&
-              (call.payload as { path: string }).path === "/Users/demo" &&
-              !(call.payload as { probeOnly?: boolean }).probeOnly,
-          )?.payload,
-        ).toMatchObject({ recalculate: true });
-      });
-    }
-
-    it("sizes the folder on screen and shows its Info", async () => {
-      await calculateSizeFromBackground({ viewMode: "details" });
-
-      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("demo"));
+      expect(calculated(harness)).toEqual([{ path: "/Users/demo/Folder", recalculate: true }]);
+      expect(screen.queryByTestId("info-panel")).toBeNull();
     });
 
-    it("leaves the Info panel closed when the Info Row is shown", async () => {
-      await calculateSizeFromBackground({ detailRowOpen: true });
+    it("shows the size of the folder on screen in the status bar, from empty space", async () => {
+      const harness = await renderApp({ viewMode: "icons" });
+      await chooseCalculateSize(screen.getByTestId("content-pane-background"));
 
+      await waitFor(() =>
+        expect(screen.getByTestId("content-status")).toHaveTextContent(/items · 9\.0 MB$/),
+      );
+      expect(calculated(harness)).toEqual([{ path: "/Users/demo", recalculate: true }]);
       expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
+
+    it("leaves the Info panel closed for the sidebar's folder on screen", async () => {
+      await renderApp({ viewMode: "icons" });
+      await chooseCalculateSize(await screen.findByTitle("tree:/Users/demo"));
+
+      await waitFor(() =>
+        expect(screen.getByTestId("content-status")).toHaveTextContent(/9\.0 MB$/),
+      );
+      expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
+
+    it("leaves the Info panel closed for a sidebar folder in the Details view's Size column", async () => {
+      const harness = await renderApp({ viewMode: "details" });
+      await chooseCalculateSize(await screen.findByTitle("tree:/Users/demo/Folder"));
+
+      await vi.waitFor(() =>
+        expect(calculated(harness)).toEqual([{ path: "/Users/demo/Folder", recalculate: true }]),
+      );
+      expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
+
+    it("shows the Info of a sidebar folder that nothing else on screen shows", async () => {
+      await renderApp({ viewMode: "icons" });
+      await chooseCalculateSize(await screen.findByTitle("tree:/Users/demo/Folder"));
+
+      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
     });
   });
 
@@ -492,7 +472,7 @@ describe("App copy/paste integration", () => {
         )
         .map((call) => (call.payload as { path: string }).path);
 
-    it("measures the folders among them and opens the Info panel, which sums them up", async () => {
+    it("measures the folders among them, for the status bar to sum up", async () => {
       const harness = await rightClickSelection([
         "/Users/demo/source.txt",
         "/Users/demo/Folder",
@@ -505,8 +485,7 @@ describe("App copy/paste integration", () => {
       await vi.waitFor(() =>
         expect(measured(harness)).toEqual(["/Users/demo/Folder", "/Users/demo/Other"]),
       );
-      // The panel is a stand-in here; its summary of a selection is tested with it.
-      await waitFor(() => expect(screen.getByTestId("info-panel")).toBeInTheDocument());
+      expect(screen.queryByTestId("info-panel")).toBeNull();
     });
 
     it("asks for the sizes of selected files in a view that doesn't show them", async () => {
