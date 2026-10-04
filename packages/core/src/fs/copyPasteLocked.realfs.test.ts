@@ -8,7 +8,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { recoverInterruptedReplaces } from "./copyPasteRecovery";
-import { canMountDiskImages, canRunLargeFileTests, mountTestDiskImage } from "./testDiskImage";
+import {
+  type TestDiskImage,
+  canMountDiskImages,
+  canRunLargeFileTests,
+  mountTestDiskImage,
+} from "./testDiskImage";
 import {
   REPLACE_ALL,
   native,
@@ -38,6 +43,33 @@ afterEach(async () => {
   execFileSync("chflags", ["-R", "nouchg", testDir]);
   execFileSync("chmod", ["-R", "u+rwx", testDir]);
   await rm(testDir, { recursive: true, force: true });
+});
+
+// The other disk the moves across disks go to: one for the whole file, made when a test
+// first needs it (making a disk takes about a second) and emptied after each test.
+let otherDisk: TestDiskImage | undefined;
+
+function otherDiskPath(): string {
+  otherDisk ??= mountTestDiskImage({ name: "FileTrailLocked" });
+  return otherDisk.mountPath;
+}
+
+afterEach(async () => {
+  if (!otherDisk) {
+    return;
+  }
+  // What a test made there; the disk's own hidden folders (.fseventsd, .Trashes) stay.
+  for (const name of await readdir(otherDisk.mountPath)) {
+    if (!name.startsWith(".") || name === ".test-trash") {
+      const path = join(otherDisk.mountPath, name);
+      execFileSync("chflags", ["-R", "nouchg", path]);
+      await rm(path, { recursive: true, force: true });
+    }
+  }
+});
+
+afterAll(() => {
+  otherDisk?.detach();
 });
 
 function lock(path: string): void {
@@ -142,29 +174,23 @@ describe("moving locked items", () => {
   it.runIf(canMountDiskImages)(
     "doesn't copy a locked folder to another disk it can't then remove",
     async () => {
-      const volume = mountTestDiskImage();
-      try {
-        await mkdir(join(src, "Vault"));
-        await writeFile(join(src, "Vault", "a.txt"), "a");
-        lock(join(src, "Vault"));
+      const disk = otherDiskPath();
+      await mkdir(join(src, "Vault"));
+      await writeFile(join(src, "Vault", "a.txt"), "a");
+      lock(join(src, "Vault"));
 
-        const { result } = await runPaste({
-          mode: "cut",
-          sourcePaths: [join(src, "Vault")],
-          destinationDirectoryPath: volume.mountPath,
-        });
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "Vault")],
+        destinationDirectoryPath: disk,
+      });
 
-        expect(result?.items[0]).toMatchObject({
-          status: "failed",
-          error: "“Vault” is locked. Unlock it in Finder's Get Info and try again.",
-        });
-        expect(await readdir(join(src, "Vault"))).toEqual(["a.txt"]);
-        expect((await readdir(volume.mountPath)).filter((name) => !name.startsWith("."))).toEqual(
-          [],
-        );
-      } finally {
-        volume.detach();
-      }
+      expect(result?.items[0]).toMatchObject({
+        status: "failed",
+        error: "“Vault” is locked. Unlock it in Finder's Get Info and try again.",
+      });
+      expect(await readdir(join(src, "Vault"))).toEqual(["a.txt"]);
+      expect((await readdir(disk)).filter((name) => !name.startsWith("."))).toEqual([]);
     },
     30_000,
   );
@@ -176,32 +202,28 @@ describe("moving to another disk with Replace", () => {
   it.runIf(canMountDiskImages)(
     "refuses a locked file before anything is replaced",
     async () => {
-      const volume = mountTestDiskImage();
-      const otherTrash = join(volume.mountPath, ".test-trash");
-      try {
-        await mkdir(otherTrash);
-        await writeFile(join(src, "f.txt"), "new");
-        lock(join(src, "f.txt"));
-        await writeFile(join(volume.mountPath, "f.txt"), "old");
+      const disk = otherDiskPath();
+      const otherTrash = join(disk, ".test-trash");
+      await mkdir(otherTrash);
+      await writeFile(join(src, "f.txt"), "new");
+      lock(join(src, "f.txt"));
+      await writeFile(join(disk, "f.txt"), "old");
 
-        const { result } = await runPaste({
-          mode: "cut",
-          sourcePaths: [join(src, "f.txt")],
-          destinationDirectoryPath: volume.mountPath,
-          policy: REPLACE_ALL,
-          fileSystem: nativeFileSystemWithTrash(otherTrash),
-        });
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "f.txt")],
+        destinationDirectoryPath: disk,
+        policy: REPLACE_ALL,
+        fileSystem: nativeFileSystemWithTrash(otherTrash),
+      });
 
-        expect(result?.items[0]).toMatchObject({
-          status: "failed",
-          error: "“f.txt” is locked. Unlock it in Finder's Get Info and try again.",
-        });
-        expect(await readFile(join(volume.mountPath, "f.txt"), "utf8")).toBe("old");
-        expect(await readdir(otherTrash)).toEqual([]);
-        expect(await readdir(src)).toEqual(["f.txt"]);
-      } finally {
-        volume.detach();
-      }
+      expect(result?.items[0]).toMatchObject({
+        status: "failed",
+        error: "“f.txt” is locked. Unlock it in Finder's Get Info and try again.",
+      });
+      expect(await readFile(join(disk, "f.txt"), "utf8")).toBe("old");
+      expect(await readdir(otherTrash)).toEqual([]);
+      expect(await readdir(src)).toEqual(["f.txt"]);
     },
     30_000,
   );
@@ -209,33 +231,29 @@ describe("moving to another disk with Replace", () => {
   it.runIf(canMountDiskImages)(
     "refuses a folder holding a locked item before anything is replaced",
     async () => {
-      const volume = mountTestDiskImage();
-      const otherTrash = join(volume.mountPath, ".test-trash");
-      try {
-        await mkdir(otherTrash);
-        await mkdir(join(src, "Docs"));
-        await writeFile(join(src, "Docs", "keep.txt"), "keep");
-        lock(join(src, "Docs", "keep.txt"));
-        await mkdir(join(volume.mountPath, "Docs"));
-        await writeFile(join(volume.mountPath, "Docs", "old.txt"), "old");
+      const disk = otherDiskPath();
+      const otherTrash = join(disk, ".test-trash");
+      await mkdir(otherTrash);
+      await mkdir(join(src, "Docs"));
+      await writeFile(join(src, "Docs", "keep.txt"), "keep");
+      lock(join(src, "Docs", "keep.txt"));
+      await mkdir(join(disk, "Docs"));
+      await writeFile(join(disk, "Docs", "old.txt"), "old");
 
-        const { result } = await runPaste({
-          mode: "cut",
-          sourcePaths: [join(src, "Docs")],
-          destinationDirectoryPath: volume.mountPath,
-          policy: REPLACE_ALL,
-          fileSystem: nativeFileSystemWithTrash(otherTrash),
-        });
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "Docs")],
+        destinationDirectoryPath: disk,
+        policy: REPLACE_ALL,
+        fileSystem: nativeFileSystemWithTrash(otherTrash),
+      });
 
-        expect(result?.items[0]).toMatchObject({
-          status: "failed",
-          error: "“keep.txt” is locked. Unlock it in Finder's Get Info and try again.",
-        });
-        expect(await readdir(join(volume.mountPath, "Docs"))).toEqual(["old.txt"]);
-        expect(await readdir(otherTrash)).toEqual([]);
-      } finally {
-        volume.detach();
-      }
+      expect(result?.items[0]).toMatchObject({
+        status: "failed",
+        error: "“keep.txt” is locked. Unlock it in Finder's Get Info and try again.",
+      });
+      expect(await readdir(join(disk, "Docs"))).toEqual(["old.txt"]);
+      expect(await readdir(otherTrash)).toEqual([]);
     },
     30_000,
   );
@@ -247,7 +265,7 @@ describe("moving to another disk out of a folder that can't be changed", () => {
   it.runIf(canMountDiskImages)(
     "copies nothing out of a read-only folder, and says why",
     async () => {
-      const volume = mountTestDiskImage();
+      const disk = otherDiskPath();
       try {
         await mkdir(join(src, "Docs"));
         await writeFile(join(src, "Docs", "a.txt"), "a");
@@ -257,7 +275,7 @@ describe("moving to another disk out of a folder that can't be changed", () => {
         const { result } = await runPaste({
           mode: "cut",
           sourcePaths: [join(src, "Docs")],
-          destinationDirectoryPath: volume.mountPath,
+          destinationDirectoryPath: disk,
         });
 
         expect(result?.items[0]).toMatchObject({
@@ -265,13 +283,10 @@ describe("moving to another disk out of a folder that can't be changed", () => {
           error:
             "“Docs” wasn't moved, because you don't have permission to remove what is inside it.",
         });
-        expect((await readdir(volume.mountPath)).filter((name) => !name.startsWith("."))).toEqual(
-          [],
-        );
+        expect((await readdir(disk)).filter((name) => !name.startsWith("."))).toEqual([]);
         expect((await readdir(join(src, "Docs"))).sort()).toEqual(["a.txt", "b.txt"]);
       } finally {
         await chmod(join(src, "Docs"), 0o755);
-        volume.detach();
       }
     },
     30_000,
@@ -280,7 +295,7 @@ describe("moving to another disk out of a folder that can't be changed", () => {
   it.runIf(canMountDiskImages)(
     "doesn't move a file out of a folder that can't be changed",
     async () => {
-      const volume = mountTestDiskImage();
+      const disk = otherDiskPath();
       try {
         await mkdir(join(src, "Docs"));
         await writeFile(join(src, "Docs", "a.txt"), "a");
@@ -289,18 +304,15 @@ describe("moving to another disk out of a folder that can't be changed", () => {
         const { result } = await runPaste({
           mode: "cut",
           sourcePaths: [join(src, "Docs", "a.txt")],
-          destinationDirectoryPath: volume.mountPath,
+          destinationDirectoryPath: disk,
         });
 
         expect(result?.items[0]?.error).toBe(
           "“a.txt” wasn't moved, because you don't have permission to remove it from “Docs”.",
         );
-        expect((await readdir(volume.mountPath)).filter((name) => !name.startsWith("."))).toEqual(
-          [],
-        );
+        expect((await readdir(disk)).filter((name) => !name.startsWith("."))).toEqual([]);
       } finally {
         await chmod(join(src, "Docs"), 0o755);
-        volume.detach();
       }
     },
     30_000,
