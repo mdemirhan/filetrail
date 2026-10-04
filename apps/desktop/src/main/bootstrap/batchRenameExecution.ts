@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import type { IpcRequest, WriteOperationResult } from "@filetrail/contracts";
 import { describeCopyPasteError, fileIdOf, findLockedRefusal } from "@filetrail/core";
 
-import { splitItemName } from "../../shared/batchRename";
+import { addNumberToName } from "../../shared/batchRename";
 
 type Stats = { isDirectory(): boolean; dev?: number; ino?: number };
 
@@ -102,7 +102,12 @@ export async function runBatchRename(args: {
   const levels = new Map<number, PlannedItem[]>();
   for (const item of planned) {
     const depth = item.sourcePath.split("/").length;
-    levels.set(depth, [...(levels.get(depth) ?? []), item]);
+    const level = levels.get(depth);
+    if (level) {
+      level.push(item);
+    } else {
+      levels.set(depth, [item]);
+    }
   }
   const deepestFirst = [...levels.entries()]
     .sort(([left], [right]) => right - left)
@@ -142,18 +147,23 @@ export async function runBatchRename(args: {
           error: "Not started because the operation was stopped.",
           skipReason: null,
         });
+        followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
         continue;
       }
-      args.onItemStart?.(
-        { sourcePath: item.sourcePath, destinationPath: item.destinationPath },
-        completedItemCount,
-      );
+      // Saying how far it got must never stop it halfway, with items under hidden names.
+      try {
+        args.onItemStart?.(
+          { sourcePath: item.sourcePath, destinationPath: item.destinationPath },
+          completedItemCount,
+        );
+      } catch {}
       results[item.index] = await renameItem(fs, item, request);
       if (results[item.index]?.status === "completed") {
         completedItemCount += 1;
         anyRenamed = true;
-        followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
       }
+      // Renamed, or put back under another name ("sub 2"): what is inside goes along.
+      followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
       if (signal.aborted) {
         cancelled = true;
       }
@@ -168,8 +178,9 @@ export async function runBatchRename(args: {
   };
 }
 
-// A folder just renamed takes along what was renamed inside it before: their new paths say
-// where they are now, under the folder's new name.
+// A folder that just changed its name (renamed, or put back under another) takes along the
+// items inside it, which were all settled before it:
+// their paths say where they are now, under the folder's new name, renamed or not.
 function followFolderRename(
   results: Array<ResultItem | null>,
   from: string,
@@ -180,11 +191,12 @@ function followFolderRename(
   }
   const prefix = `${from}/`;
   results.forEach((result, index) => {
-    if (result?.destinationPath?.startsWith(prefix)) {
-      results[index] = {
-        ...result,
-        destinationPath: `${to}/${result.destinationPath.slice(prefix.length)}`,
-      };
+    // Only what was inside this very item: another item may have its old name by now, with
+    // items of its own under it. Only this item has moved them since they were settled, and
+    // a folder's items stay in it, so their paths still start where it was.
+    const at = result?.destinationPath ?? result?.sourcePath;
+    if (result?.sourcePath?.startsWith(prefix) && at?.startsWith(prefix)) {
+      results[index] = { ...result, destinationPath: `${to}/${at.slice(prefix.length)}` };
     }
   });
 }
@@ -345,8 +357,7 @@ export function numberedName(
   separator: string,
   number: number,
 ): string {
-  const { stem, extension } = splitItemName(name, isFolder);
-  return `${stem}${separator}${number}${extension === null ? "" : `.${extension}`}`;
+  return addNumberToName(name, isFolder, separator, number).name;
 }
 
 function completed(item: PlannedItem, destinationPath: string): ResultItem {

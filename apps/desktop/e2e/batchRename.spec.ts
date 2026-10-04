@@ -4,6 +4,8 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
+  statSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -158,7 +160,7 @@ test("passes names along: one file takes the name another gives up", async () =>
   await launch();
   await openSheetFor(["y 1.txt", "y 2.txt"]);
   await chooseMode("Format");
-  await sheet().getByLabel("Custom Format").fill("y");
+  await sheet().getByLabel("Custom format").fill("y");
   await sheet().getByLabel("Start numbers at").fill("2");
   await waitUntil(async () => (await previewText()).includes("y 3.txt"));
   await clickRename();
@@ -170,24 +172,91 @@ test("passes names along: one file takes the name another gives up", async () =>
   expect(readdirSync(folder).filter((name) => name.startsWith(".filetrail"))).toEqual([]);
 });
 
+// A date as the sheet writes it with no separator, read in this Mac's time zone.
+function dateStamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+}
+
 test("names files by the date they were created, numbering repeats", async () => {
   makeFiles({ "a.txt": "alpha", "b.txt": "beta" });
-  const today = new Date();
-  const stamp = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(
-    today.getDate(),
-  ).padStart(2, "0")}`;
+  // The sheet's default date is the date created. Setting a file's modified date earlier
+  // than its creation moves the creation back too (APFS), so both files were made at noon
+  // on a day long past: the two can't fall either side of midnight, and the name can't
+  // come from today's date.
+  const longAgo = new Date(2021, 2, 15, 12, 0, 0);
+  for (const name of ["a.txt", "b.txt"]) {
+    utimesSync(join(folder, name), longAgo, longAgo);
+  }
+  const stamps = ["a.txt", "b.txt"].map((name) =>
+    dateStamp(statSync(join(folder, name)).birthtime),
+  );
+  expect(stamps).toEqual(["20210315", "20210315"]);
+  const stamp = "20210315";
   await launch();
   await openSheetFor(["a.txt", "b.txt"]);
   await chooseMode("Format");
-  await sheet().getByLabel("Name Format").selectOption("date");
-  await sheet().getByLabel("Date Separator").selectOption("");
-  await sheet().getByLabel("Custom Format").fill("Notes");
+  await sheet().getByLabel("Name format").selectOption("date");
+  await sheet().getByLabel("Date separator").selectOption("");
+  await sheet().getByLabel("Custom format").fill("Notes");
   await waitUntil(async () => (await previewText()).includes(`Notes ${stamp} 2.txt`));
   await clickRename();
 
   await expect
     .poll(namesOnDisk, { timeout: 15_000 })
     .toEqual([`Notes ${stamp} 2.txt`, `Notes ${stamp}.txt`]);
+});
+
+test("swaps two names, the contents going with them", async () => {
+  makeFiles({ "File 1.txt": "was one", "File 2.txt": "was two" });
+  await launch();
+  await waitUntil(() => isListed("File 2.txt"), 30_000);
+  // Name from Z to A: the list, and so the numbering, has File 2 first.
+  await window.locator('button.details-header-button[aria-label="Name"]').click();
+  await waitUntil(async () =>
+    window.evaluate(
+      () =>
+        document
+          .querySelector("[data-selectable-entry-path]")
+          ?.getAttribute("data-selectable-entry-path")
+          ?.endsWith("/File 2.txt") ?? false,
+    ),
+  );
+  await openSheetFor(["File 2.txt", "File 1.txt"]);
+  await chooseMode("Format");
+  await sheet().getByLabel("Name format").selectOption("index");
+  await sheet().getByLabel("Custom format").fill("File");
+  await waitUntil(async () =>
+    window.evaluate(
+      () => document.querySelector(".batch-rename-summary")?.textContent === "2 will be renamed",
+    ),
+  );
+  await clickRename();
+
+  await expect
+    .poll(() => readFileSync(join(folder, "File 1.txt"), "utf8"), { timeout: 15_000 })
+    .toBe("was two");
+  expect(readFileSync(join(folder, "File 2.txt"), "utf8")).toBe("was one");
+  expect(namesOnDisk()).toEqual(["File 1.txt", "File 2.txt"]);
+  // Nothing is left under a temporary name.
+  expect(readdirSync(folder).filter((name) => name.startsWith(".filetrail"))).toEqual([]);
+});
+
+test("changes only the case of names on a disk that ignores case", async () => {
+  makeFiles({ "notes.txt": "notes", "todo.txt": "todo" });
+  await launch();
+  await openSheetFor(["notes.txt", "todo.txt"]);
+  await chooseMode("Change Case");
+  await sheet().getByLabel("Change to").selectOption("title");
+  await waitUntil(async () => (await previewText()).includes("Notes.txt"));
+  await clickRename();
+
+  // The folder lists the names in their new case: not the old case, not a numbered name.
+  await expect
+    .poll(() => readdirSync(folder).sort(), { timeout: 15_000 })
+    .toEqual(["Notes.txt", "Todo.txt"]);
+  expect(readFileSync(join(folder, "Notes.txt"), "utf8")).toBe("notes");
+  expect(readFileSync(join(folder, "Todo.txt"), "utf8")).toBe("todo");
 });
 
 test("keeps the settings and presets after the app quits", async () => {

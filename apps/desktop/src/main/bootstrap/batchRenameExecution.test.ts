@@ -498,7 +498,7 @@ describe("renaming several items", () => {
       signal: new AbortController().signal,
       temporaryName: () => ".taken",
     });
-    // Neither could move aside; each then found its new name taken, and was numbered.
+    // Neither could move aside, so each failed there, and both keep their names.
     expect(result.items.map((item) => item.status)).toEqual(["failed", "failed"]);
     expect(result.items[0]?.error).toBe("An item named “b” already exists.");
     expect(disk.names()).toEqual([".taken", "a", "b"]);
@@ -520,6 +520,24 @@ describe("renaming several items", () => {
     const disk = new MemoryDisk(files);
     const result = await run(disk, request([["a", "b"]]));
     expect(result.items[0]).toMatchObject({ status: "failed" });
+  });
+
+  it("goes on when saying how far it got fails", async () => {
+    const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
+    const result = await run(
+      disk,
+      request([
+        ["a", "b"],
+        ["b", "a"],
+      ]),
+      {
+        onItemStart: () => {
+          throw new Error("The window is gone.");
+        },
+      },
+    );
+    expect(result.completedItemCount).toBe(2);
+    expect(disk.names()).toEqual(["a", "b"]);
   });
 
   describe("a folder and items inside it", () => {
@@ -551,7 +569,7 @@ describe("renaming several items", () => {
       expect(result.completedItemCount).toBe(3);
     });
 
-    it("still renames the folder when an item inside it fails", async () => {
+    it("still renames the folder when an item inside it fails, and says where that item is", async () => {
       const disk = new MemoryDisk(["/trip/sub", "/trip/sub/x.jpg"]);
       disk.failures.set("renameExclusive:/trip/sub/x.jpg->/trip/sub/y.jpg", errno("EACCES"));
       const result = await run(
@@ -566,7 +584,8 @@ describe("renaming several items", () => {
       );
       expect(result.items.map((item) => [item.status, item.destinationPath])).toEqual([
         ["completed", "/trip/Day 1"],
-        ["failed", null],
+        // Not renamed, but in the folder's new name.
+        ["failed", "/trip/Day 1/x.jpg"],
       ]);
       expect(disk.names("/trip/Day 1")).toEqual(["x.jpg"]);
     });
@@ -694,5 +713,29 @@ describe("numbered names", () => {
     expect(numberedName("archive.tar.gz", false, "_", 3)).toBe("archive.tar_3.gz");
     expect(numberedName("photos.2026", true, " ", 2)).toBe("photos.2026 2");
     expect(numberedName(".env", false, "-", 2)).toBe(".env-2");
+  });
+
+  it("shortens a name the number would make too long, never cutting a letter from its accent", () => {
+    const long = `${"a".repeat(251)}.jpg`;
+    expect(numberedName(long, false, " ", 2)).toBe(`${"a".repeat(249)} 2.jpg`);
+    // "é" written as "e" and an accent is three bytes; it goes whole or not at all.
+    const accented = `${"a".repeat(248)}e\u0301.jpg`;
+    expect(numberedName(accented, false, " ", 2)).toBe(`${"a".repeat(248)} 2.jpg`);
+    // Spaces left at the cut go too.
+    expect(numberedName(`${"a".repeat(246)}  b.jpg`, false, " ", 12)).toBe(
+      `${"a".repeat(246)} 12.jpg`,
+    );
+  });
+
+  it("numbers a name taken at the last moment within the length a name can have", async () => {
+    const long = `${"a".repeat(251)}.jpg`;
+    const disk = new MemoryDisk(["/trip/x.jpg"]);
+    // Taken after the sheet checked, so the main process numbers it.
+    disk.add(`/trip/${long}`);
+    const result = await run(disk, request([["x.jpg", long]]));
+    expect(result.items[0]).toMatchObject({
+      status: "completed",
+      destinationPath: `/trip/${"a".repeat(249)} 2.jpg`,
+    });
   });
 });

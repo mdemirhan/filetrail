@@ -470,6 +470,9 @@ export function useExplorerActions(args: {
   const pendingInlineRenamePathRef = useRef<string | null>(null);
   // A paste start request on its way, which Stop marks to stop once it has an id.
   const startRequestRef = useRef<{ cancelled: boolean } | null>(null);
+  // Which items of the last rename of several were folders, by the path asked for, for
+  // trying again those that weren't renamed wherever they are now.
+  const batchRenameFoldersRef = useRef(new Map<string, boolean>());
   const reviewStartInFlightRef = useRef<string | null>(null);
   // A cut clipboard to clear when its move finishes having moved something.
   const clipboardClearAfterMoveRef = useRef<{ operationId: string; capturedAt: string } | null>(
@@ -1363,10 +1366,12 @@ export function useExplorerActions(args: {
     if (!result) {
       return;
     }
-    // What is made or renamed in the folder on screen is already in sight there.
+    // What is made or renamed in the folder on screen is already in sight there, and a
+    // rename of several that left anything as it was is told in the result dialog.
     if (
       event.action === "new_folder" ||
       event.action === "rename" ||
+      event.action === "batch_rename" ||
       event.action === "duplicate"
     ) {
       return;
@@ -2064,12 +2069,19 @@ export function useExplorerActions(args: {
     }
     // A rename is tried again from its sheet, for the items that weren't renamed, where
     // each is now: the names are worked out anew from what the folders hold now.
+    // They are taken from the result, not the list: one may be outside what is listed, or
+    // under a hidden name.
     if (event.action === "batch_rename") {
-      const retryPaths = result.items.flatMap((item) =>
-        item.status === "completed" ? [] : [item.destinationPath ?? item.sourcePath ?? ""],
-      );
+      const targets = result.items.flatMap((item) => {
+        const path = item.destinationPath ?? item.sourcePath;
+        if (item.status === "completed" || !path) {
+          return [];
+        }
+        const isFolder = batchRenameFoldersRef.current.get(item.sourcePath ?? path) ?? false;
+        return [{ path, name: getPathLeafName(path), isFolder }];
+      });
       dismissCopyPasteDialog();
-      openBatchRenameFor(retryPaths.filter((path) => path.length > 0));
+      openBatchRenameSheet(targets);
       return;
     }
     if (
@@ -3262,19 +3274,24 @@ export function useExplorerActions(args: {
   // The Rename sheet for several items, in the order the list shows them (which numbers
   // them). A folder's whole name is its name; a package (an .app) keeps its extension.
   function openBatchRenameFor(paths: string[]) {
+    const wanted = new Set(paths);
+    openBatchRenameSheet(
+      activeContentEntries
+        .filter((entry) => wanted.has(entry.path))
+        .map((entry) => ({
+          path: entry.path,
+          name: entry.name,
+          isFolder: entry.kind === "directory" || entry.kind === "symlink_directory",
+        })),
+    );
+  }
+
+  function openBatchRenameSheet(targets: BatchRenameTarget[]) {
     closeContextMenu();
     if (isWriteOperationInFlight()) {
       showWriteOperationBusyNotice("batch_rename");
       return;
     }
-    const wanted = new Set(paths);
-    const targets = activeContentEntries
-      .filter((entry) => wanted.has(entry.path))
-      .map((entry) => ({
-        path: entry.path,
-        name: entry.name,
-        isFolder: entry.kind === "directory" || entry.kind === "symlink_directory",
-      }));
     if (targets.length === 0) {
       return;
     }
@@ -3293,6 +3310,9 @@ export function useExplorerActions(args: {
       showWriteOperationBusyNotice("batch_rename");
       return;
     }
+    batchRenameFoldersRef.current = new Map(
+      request.items.map((item) => [item.sourcePath, item.isFolder]),
+    );
     takeWriteOperationLock("batch_rename", {
       targetPath: first,
       totalItemCount: request.items.length,

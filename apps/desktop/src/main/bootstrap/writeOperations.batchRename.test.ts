@@ -2,10 +2,12 @@ import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,6 +86,18 @@ function request(
     numberSeparator: options.numberSeparator ?? " ",
   };
 }
+
+// Whether the temporary folders' disk ignores case, as a Mac's startup disk does unless set
+// up otherwise.
+const tmpIgnoresCase = (() => {
+  const folder = mkdtempSync(join(tmpdir(), "filetrail-case-"));
+  try {
+    writeFileSync(join(folder, "a"), "");
+    return existsSync(join(folder, "A"));
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+})();
 
 function visibleNames(root: string): string[] {
   return readdirSync(root)
@@ -180,19 +194,62 @@ describe("renaming several items on a real disk", () => {
     ]);
   });
 
-  it("changes only the case of names, and how an accented letter is written", async () => {
-    const root = makeFolder({ "notes.txt": "n", "café.txt": "c" });
-    if (existsSync(join(root, "NOTES.TXT")) === false) {
-      // This disk minds case: a different test covers it.
-      return;
+  // On a disk that minds case, "Notes.txt" is simply another name: a test below covers it.
+  it.runIf(tmpIgnoresCase)(
+    "changes only the case of names, and how an accented letter is written",
+    async () => {
+      const decomposed = "cafe\u0301.txt";
+      const composed = "caf\u00e9.txt";
+      const root = makeFolder({ "notes.txt": "n", [decomposed]: "c" });
+      const { terminal } = await rename(root, [
+        ["notes.txt", "Notes.txt"],
+        [decomposed, composed],
+      ]);
+      expect(terminal.status).toBe("completed");
+      // Spelled exactly as asked: APFS keeps the form a name is written in.
+      expect(readdirSync(root).sort()).toEqual(["Notes.txt", composed]);
+      expect(readFileSync(join(root, composed), "utf8")).toBe("c");
+    },
+  );
+
+  it("finishes a swap under way when the app quits, leaving nothing under a hidden name", async () => {
+    const root = makeFolder({ a: "A", b: "B" });
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolveHeld) => {
+      release = resolveHeld;
+    });
+    let heldOnce = false;
+    const fs = realFs({
+      // The first rename to a new name waits, with both items under hidden names.
+      renameExclusive: async (from, to) => {
+        if (!heldOnce && !to.includes(".filetrail-rename-")) {
+          heldOnce = true;
+          await held;
+        }
+        return realFs().renameExclusive(from, to);
+      },
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/nobody-batch-rename",
+    });
+    const sender = createSender();
+    const started = await coordinator.handlers["writeOperation:batchRename"](
+      request(root, [
+        ["a", "b"],
+        ["b", "a"],
+      ]),
+      { sender },
+    );
+    while (!heldOnce) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 1));
     }
-    const { terminal } = await rename(root, [
-      ["notes.txt", "Notes.txt"],
-      ["café.txt", "café.txt"],
-    ]);
-    expect(terminal.status).toBe("completed");
-    expect(readdirSync(root)).toContain("Notes.txt");
-    expect(readdirSync(root).some((name) => name.normalize("NFC") === "café.txt")).toBe(true);
+    const quitting = coordinator.shutdown();
+    release();
+    await quitting;
+    const terminal = await waitForTerminalEvent(sender, started.operationId);
+    expect(terminal.result?.items.map((item) => item.status)).toEqual(["completed", "completed"]);
+    expect(readdirSync(root).sort()).toEqual(["a", "b"]);
+    expect(readFileSync(join(root, "a"), "utf8")).toBe("B");
   });
 
   it("handles a name taken since the sheet checked it as the setting says", async () => {
@@ -272,6 +329,69 @@ describe("renaming several items on a real disk", () => {
     },
     60_000,
   );
+
+  it.runIf(canMountDiskImages)(
+    "numbers a name another link to the same file has, on a disk that minds case",
+    async () => {
+      const volume = mountTestDiskImage({ caseSensitive: true, name: "FTBatchLink" });
+      try {
+        writeFileSync(join(volume.mountPath, "h"), "one file");
+        linkSync(join(volume.mountPath, "h"), join(volume.mountPath, "H"));
+        const { terminal } = await rename(volume.mountPath, [["h", "H"]]);
+        expect(terminal.status).toBe("completed");
+        // "H" is the same file under another name, not "h" itself: it is kept.
+        expect(visibleNames(volume.mountPath)).toEqual(["H", "H 2"]);
+      } finally {
+        volume.detach();
+      }
+    },
+    60_000,
+  );
+
+  for (const format of ["MS-DOS FAT32", "ExFAT"] as const) {
+    it.runIf(canMountDiskImages)(
+      `swaps, chains and changes case on ${format}`,
+      async () => {
+        const volume = mountTestDiskImage({ format, name: "FTBATCH" });
+        try {
+          const at = (name: string) => join(volume.mountPath, name);
+          for (const [name, contents] of [
+            ["a.txt", "A"],
+            ["b.txt", "B"],
+            ["notes.txt", "N"],
+            ["1.txt", "1"],
+            ["2.txt", "2"],
+          ] as const) {
+            writeFileSync(at(name), contents);
+          }
+          const { terminal } = await rename(volume.mountPath, [
+            ["a.txt", "b.txt"],
+            ["b.txt", "a.txt"],
+            ["notes.txt", "Notes.txt"],
+            ["1.txt", "2.txt"],
+            ["2.txt", "3.txt"],
+          ]);
+          expect(terminal.status).toBe("completed");
+          expect(readFileSync(at("a.txt"), "utf8")).toBe("B");
+          expect(readFileSync(at("b.txt"), "utf8")).toBe("A");
+          expect(readFileSync(at("3.txt"), "utf8")).toBe("2");
+          expect(visibleNames(volume.mountPath)).toEqual([
+            "2.txt",
+            "3.txt",
+            "Notes.txt",
+            "a.txt",
+            "b.txt",
+          ]);
+          expect(readdirSync(volume.mountPath).some((name) => name.includes("filetrail"))).toBe(
+            false,
+          );
+        } finally {
+          volume.detach();
+        }
+      },
+      60_000,
+    );
+  }
 });
 
 describe("what a rename of several items checks first", () => {
@@ -376,6 +496,25 @@ describe("what a rename of several items checks first", () => {
       release();
       coordinator.shutdown();
     }
+  });
+
+  it("still ends, failing every item, when something unexpected goes wrong", async () => {
+    const root = makeFolder({ "notes.txt": "n" });
+    const { terminal } = await rename(
+      root,
+      [["notes.txt", "Notes.txt"]],
+      {},
+      realFs({
+        lstat: (() => {
+          throw new Error("Disk gone.");
+        }) as WriteOperationFs["lstat"],
+      }),
+    );
+    expect(terminal.status).toBe("failed");
+    expect(terminal.result?.items[0]).toMatchObject({
+      status: "failed",
+      error: "The rename stopped unexpectedly: Disk gone.",
+    });
   });
 
   it("stops when asked, leaving the rest as they were", async () => {

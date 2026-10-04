@@ -95,6 +95,11 @@ export function shouldRenderCopyPasteResultDialog(
   if (event.status === "failed") {
     return true;
   }
+  // The sheet said every item would be renamed: one skipped after all (its name was taken
+  // since) is told, even when the rest went.
+  if (event.action === "batch_rename" && event.result.summary.skippedItemCount > 0) {
+    return true;
+  }
   if (event.status === "partial") {
     return !isExpectedPlannedSkipResult(event);
   }
@@ -379,6 +384,24 @@ export function resolveWriteOperationTreeSelectionPath(
  *  the old paths, and what is inside, is followed to the new ones. */
 export function isRenameOrMove(action: WriteOperationAction): boolean {
   return action === "rename" || action === "batch_rename" || action === "move_to";
+}
+
+/**
+ * Where a rename or move took each item, for following it there. Only what really moved
+ * counts: completed items, and for a rename of several also an item that couldn't take its
+ * new name but was put back under another ("b 2"), since its result says where it is.
+ */
+export function collectFollowedMoves(
+  result: WriteOperationResult,
+): Array<{ from: string; to: string }> {
+  return result.items.flatMap((item) =>
+    item.sourcePath &&
+    item.destinationPath &&
+    item.destinationPath !== item.sourcePath &&
+    (item.status === "completed" || result.action === "batch_rename")
+      ? [{ from: item.sourcePath, to: item.destinationPath }]
+      : [],
+  );
 }
 
 export function resolveWriteOperationTreeReloadPaths(result: WriteOperationResult): string[] {

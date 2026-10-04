@@ -66,6 +66,19 @@ describe("splitting a name", () => {
 });
 
 describe("Replace Text", () => {
+  it("finds accented letters however they are written, and leaves an unmatched name as it is", () => {
+    const decomposed = "Café menu.pdf";
+    expect(names({ find: "Café", replaceWith: "Bistro" }, [decomposed])).toEqual([
+      "Bistro menu.pdf",
+    ]);
+    // Typed as "e" and an accent, it finds the name written with "é".
+    expect(names({ find: "Café", replaceWith: "Bistro" }, ["Café.pdf"])).toEqual(["Bistro.pdf"]);
+    // No match: the name keeps the way its accents are written.
+    expect(names({ find: "tea", replaceWith: "x" }, [decomposed])).toEqual([null]);
+    // A change that only writes the accent another way is no change.
+    expect(names({ find: "é", replaceWith: "é" }, [decomposed])).toEqual([null]);
+  });
+
   it("replaces every match in the name, ignoring case unless asked not to", () => {
     expect(names({ find: "img_", replaceWith: "Lisbon " }, ["IMG_2041.jpg"])).toEqual([
       "Lisbon 2041.jpg",
@@ -101,6 +114,10 @@ describe("Replace Text", () => {
     expect(names({ find: ".", replaceWith: "_", applyTo: "both" }, ["a.b.txt"])).toEqual([
       "a_b_txt",
     ]);
+    // An extension replaced with nothing takes its dot with it.
+    expect(
+      names({ find: "bak", replaceWith: "", applyTo: "extension" }, ["notes.bak", "x.bak"]),
+    ).toEqual(["notes", "x"]);
   });
 
   it("uses a regular expression's groups in the replacement", () => {
@@ -255,6 +272,13 @@ describe("Change Case", () => {
     expect(changeCase("my-project_notes (draft)", "title")).toBe("My-Project_Notes (Draft)");
     expect(changeCase("élan vital", "title")).toBe("Élan Vital");
     expect(changeCase("2026 trip", "title")).toBe("2026 Trip");
+    // A word after a dot is a word: the extension, too, when Apply To takes it in.
+    expect(names({ mode: "case", caseStyle: "title", applyTo: "both" }, ["my photo.jpg"])).toEqual([
+      "My Photo.Jpg",
+    ]);
+    expect(names({ mode: "case", caseStyle: "title" }, ["archive.tar.gz"])).toEqual([
+      "Archive.Tar.gz",
+    ]);
   });
 });
 
@@ -349,6 +373,31 @@ describe("Format", () => {
         ["a.jpg"],
       ),
     ).toEqual(["File 2026-01-10 at 08.30.15.jpg"]);
+  });
+
+  it("keeps text in square brackets as typed, even letters that are tokens", () => {
+    const pattern = (customDatePattern: string) =>
+      names(
+        format({
+          nameFormat: "date",
+          dateSource: "modified",
+          dateFormat: "custom",
+          customDatePattern,
+        }),
+        ["a.jpg"],
+      );
+    expect(pattern("[Mission] YYYY")).toEqual(["File Mission 2026.jpg"]);
+    expect(pattern("Mission YYYY")).toEqual(["File Mi15ion 2026.jpg"]);
+    // An unclosed bracket is only a bracket.
+    expect(pattern("[YYYY")).toEqual(["File [2026.jpg"]);
+    // Bracketed tokens don't count as the token the pattern needs.
+    expect(
+      proposeNames(
+        settings(format({ nameFormat: "date", dateFormat: "custom", customDatePattern: "[YYYY]" })),
+        [item("a.jpg")],
+        NOW,
+      ).settingsError,
+    ).toMatch(/at least one of YYYY/u);
   });
 
   it("asks for a token in a custom date pattern that has none", () => {
@@ -586,6 +635,22 @@ describe("the plan", () => {
     ]);
   });
 
+  it("numbers thousands of items wanting one name without looking from 2 for each", () => {
+    const itemNames = Array.from({ length: 20_000 }, (_, index) => `IMG_${index}.jpg`);
+    // A taken number in the middle is still passed over.
+    const started = performance.now();
+    const result = plan({ useRegex: true, find: "IMG_\\d+", replaceWith: "Lisbon" }, itemNames, [
+      ...itemNames,
+      "Lisbon 500.jpg",
+    ]);
+    expect(performance.now() - started).toBeLessThan(2_000);
+    const given = result.items.map(outcome);
+    expect(given.slice(0, 3)).toEqual(["Lisbon.jpg", "Lisbon 2.jpg", "Lisbon 3.jpg"]);
+    expect(given[498]).toBe("Lisbon 499.jpg");
+    expect(given[499]).toBe("Lisbon 501.jpg");
+    expect(new Set(given).size).toBe(20_000);
+  });
+
   it("counts names as the disk does: case and accents, unless the disk tells case apart", () => {
     const upper = plan({ find: "x", replaceWith: "" }, ["Ax.txt"], ["Ax.txt", "a.TXT"]);
     expect(upper.items.map(outcome)).toEqual(["A 2.txt"]);
@@ -600,7 +665,8 @@ describe("the plan", () => {
   });
 
   it("lets items swap names and change only the case of their own", () => {
-    const swap = plan(
+    // On a disk that minds case, "A" is free for "a" while "A.TXT" stays as it is.
+    const minded = plan(
       { mode: "case", caseStyle: "upper", applyTo: "both" },
       ["a", "A.TXT"],
       ["a", "A.TXT"],
@@ -608,7 +674,7 @@ describe("the plan", () => {
         caseSensitive: true,
       },
     );
-    expect(swap.items.map(outcome)).toEqual(["A", "unchanged"]);
+    expect(minded.items.map(outcome)).toEqual(["A", "unchanged"]);
     const ownCase = plan({ mode: "case", caseStyle: "upper" }, ["photo.jpg"]);
     expect(ownCase.items.map(outcome)).toEqual(["PHOTO.jpg"]);
     // File 1 and File 2 numbered the other way round: each takes the other's name.
@@ -657,7 +723,8 @@ describe("the plan", () => {
       "skippedTaken:File 1.txt",
       "skippedTaken:File 2.txt",
     ]);
-    expect(cascade.items[0]).toMatchObject({ problem: { byItemInBatch: true } });
+    // "File 1.txt" keeps its name, so it is in the folder: no other item is getting it.
+    expect(cascade.items[0]).toMatchObject({ problem: { byItemInBatch: false } });
     expect(cascade).toMatchObject({ renameCount: 0, skippedCount: 2 });
   });
 
@@ -678,6 +745,7 @@ describe("the plan", () => {
       "File 2026-09-30.jpg",
       "taken:File 2026-09-30.jpg",
     ]);
+    expect(inBatch.items[1]).toMatchObject({ problem: { kind: "taken", byItemInBatch: true } });
   });
 
   it("never renames to an invalid name, whatever the setting", () => {
@@ -706,6 +774,35 @@ describe("the plan", () => {
     );
     expect(result.items.map(outcome)).toEqual(["cannotRename:x 1.txt", "x 2.txt"]);
     expect(result).toMatchObject({ skippedCount: 1, blockingCount: 0, renameCount: 1 });
+    // Another item asking for the locked item's name finds it taken.
+    const wanted = plan(
+      { find: "draft", replaceWith: "locked" },
+      ["locked.txt", "draft.txt"],
+      ["locked.txt", "draft.txt"],
+      { cannotRename: new Map([["/trip/locked.txt", "The item is locked."]]) },
+    );
+    expect(wanted.items.map(outcome)).toEqual(["unchanged", "locked 2.txt"]);
+  });
+
+  it("shortens a name that a number makes too long, and holds one that can't be", () => {
+    const long = `${"a".repeat(251)}.txt`;
+    const shortened = plan({ find: "x", replaceWith: "a".repeat(251) }, ["x.txt"], ["x.txt", long]);
+    expect(shortened.items.map(outcome)).toEqual([`${"a".repeat(249)} 2.txt`]);
+    expect(shortened.items[0]).toMatchObject({
+      segments: [
+        { text: `${"a".repeat(249)} 2`, changed: true },
+        { text: ".txt", changed: false },
+      ],
+    });
+    // Only the extension is long: nothing before it can give way.
+    const extension = "e".repeat(252);
+    const held = plan(
+      { find: "x", replaceWith: "y" },
+      [`x.${extension}`],
+      [`x.${extension}`, `y.${extension}`],
+    );
+    expect(held.items.map(outcome)).toEqual([`invalid:y 2.${extension}`]);
+    expect(held.blockingCount).toBe(1);
   });
 
   it("warns when a new name starts with a dot", () => {

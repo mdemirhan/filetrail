@@ -1,7 +1,8 @@
 // APFS and HFS+ allow a name of at most 255 bytes once it is written out as UTF-8, not 255
 // characters: "é" or "日" take two or three bytes, so a name of 100 such characters is
 // already too long.
-const MAX_ITEM_NAME_BYTES = 255;
+/** The longest name macOS disks take, in UTF-8 bytes. */
+export const MAX_ITEM_NAME_BYTES = 255;
 const utf8Encoder = new TextEncoder();
 
 // A user-supplied file or folder name must name a single entry inside its parent

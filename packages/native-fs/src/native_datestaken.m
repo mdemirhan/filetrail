@@ -62,12 +62,15 @@ static NSString *local_date_from_moment(NSDate *date) {
   if (!date) {
     return nil;
   }
+  /* Built without ARC, as the module's other files are: what is made here is released here. */
   NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
   formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
   formatter.calendar = [NSCalendar calendarWithIdentifier:NSCalendarIdentifierGregorian];
   formatter.timeZone = [NSTimeZone localTimeZone];
   formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss";
-  return [formatter stringFromDate:date];
+  NSString *text = [formatter stringFromDate:date];
+  [formatter release];
+  return text;
 }
 
 static NSString *photo_date(NSURL *url) {
@@ -101,13 +104,16 @@ static NSString *video_date(NSURL *url) {
     return nil;
   }
   dispatch_semaphore_t loaded = dispatch_semaphore_create(0);
+  /* The handler, copied by AVFoundation, keeps the semaphore while it may still signal it,
+     so it can be let go here even when the wait gives up first. */
   [asset loadValuesAsynchronouslyForKeys:@[ @"creationDate" ]
                        completionHandler:^{
                          dispatch_semaphore_signal(loaded);
                        }];
-  if (dispatch_semaphore_wait(loaded, dispatch_time(DISPATCH_TIME_NOW,
-                                                    VIDEO_LOAD_TIMEOUT_SECONDS * NSEC_PER_SEC)) !=
-      0) {
+  long timedOut = dispatch_semaphore_wait(
+      loaded, dispatch_time(DISPATCH_TIME_NOW, VIDEO_LOAD_TIMEOUT_SECONDS * NSEC_PER_SEC));
+  dispatch_release(loaded);
+  if (timedOut != 0) {
     [asset cancelLoading];
     return nil;
   }

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { OPEN_TABS_LIMIT, type OpenTabPreference } from "../../shared/appPreferences";
 import { EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
-import { createTreeNode, isRenameOrMove } from "../lib/explorerAppUtils";
+import { collectFollowedMoves, createTreeNode, isRenameOrMove } from "../lib/explorerAppUtils";
 import {
   CLOSED_TABS_LIMIT,
   type ExplorerTab,
@@ -724,11 +724,7 @@ export function useExplorerTabs(args: {
         ) {
           return;
         }
-        const moves = event.result.items.flatMap((item) =>
-          item.status === "completed" && item.sourcePath && item.destinationPath
-            ? [{ from: item.sourcePath, to: item.destinationPath }]
-            : [],
-        );
+        const moves = collectFollowedMoves(event.result);
         if (moves.length === 0) {
           return;
         }

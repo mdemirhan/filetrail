@@ -63,7 +63,10 @@ export function CopyPasteResultDialog({
 
   useDialogFocus(dialogRef, doneButtonRef);
 
-  const outcome = useMemo(() => summarizeResultItems(result?.items ?? []), [result]);
+  const outcome = useMemo(
+    () => summarizeResultItems(result?.items ?? [], { eachOnItsOwn: renaming }),
+    [result, renaming],
+  );
   const retryCount = canRetry ? outcome.retryCount : 0;
 
   // A folder copied without some of its items counts as copied here; the message says what
@@ -156,7 +159,12 @@ export function CopyPasteResultDialog({
             label="Not started"
             items={outcome.notStarted}
             displayPaths={outcome.displayPaths}
-            describe={() => "The operation was stopped first."}
+            // A rename's item put back under another name says which.
+            describe={(item) =>
+              renaming && item.destinationPath !== null && item.error
+                ? item.error
+                : "The operation was stopped first."
+            }
             tone="muted"
           />
           <ResultSection
@@ -253,9 +261,13 @@ type ResultOutcome = {
 };
 
 // Top-level items come from a set lookup of each item's ancestors (a handful of lookups per
-// item), so results with tens of thousands of items stay fast.
-function summarizeResultItems(items: ResultItem[]): ResultOutcome {
-  const topLevel = selectTopLevelItems(items);
+// item), so results with tens of thousands of items stay fast. With `eachOnItsOwn` (a rename
+// of several), every item is one of those asked for, even one inside a folder renamed too.
+function summarizeResultItems(
+  items: ResultItem[],
+  options: { eachOnItsOwn: boolean },
+): ResultOutcome {
+  const topLevel = options.eachOnItsOwn ? items : selectTopLevelItems(items);
   const topLevelSet = new Set(topLevel);
   const topLevelPaths = new Set<string>();
   for (const item of topLevel) {
@@ -285,7 +297,7 @@ function summarizeResultItems(items: ResultItem[]): ResultOutcome {
   };
   // Top-level folders with something done inside them (by the items listed from inside).
   const startedFolders = new Set<string>();
-  for (const item of items) {
+  for (const item of options.eachOnItsOwn ? [] : items) {
     if (item.status === "completed" && typeof item.sourcePath === "string") {
       const folder = findAncestor(item.sourcePath, topLevelPaths);
       if (folder !== null) {
@@ -310,7 +322,12 @@ function summarizeResultItems(items: ResultItem[]): ResultOutcome {
   }
   for (const item of items) {
     const path = item.sourcePath;
-    outcome.displayPaths.set(item, displayPath(item, topLevelSet.has(item), topLevelPaths));
+    outcome.displayPaths.set(
+      item,
+      options.eachOnItsOwn
+        ? leafName(path ?? item.destinationPath ?? "")
+        : displayPath(item, topLevelSet.has(item), topLevelPaths),
+    );
     if (item.status === "failed") {
       outcome.failed.push(item);
       if (!isFolderWithFailuresInside(item)) {

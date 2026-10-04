@@ -3,7 +3,7 @@
 // preview and the rename itself are built from the same plan, so what is shown is what is
 // done. Pure functions only: the folders' contents and the items' dates are passed in.
 
-import { getItemNameError } from "@filetrail/contracts";
+import { MAX_ITEM_NAME_BYTES, getItemNameError } from "@filetrail/contracts";
 
 export type BatchRenameMode = "replace" | "add" | "format" | "case";
 export type BatchRenameNameFormat = "index" | "counter" | "date";
@@ -83,7 +83,9 @@ export const DATE_TOKENS = ["YYYY", "YY", "MM", "DD", "HH", "mm", "ss"] as const
 export type DateToken = (typeof DATE_TOKENS)[number];
 // Longest first, so "YYYY" is not read as two "YY". The global one replaces; the other only
 // asks whether a pattern has any (a global pattern's test() would carry its position over).
-const DATE_TOKEN_PATTERN = /YYYY|YY|MM|DD|HH|mm|ss/gu;
+// Text in square brackets is kept as typed, so a word can hold letters like "ss".
+const DATE_TOKEN_PATTERN = /\[([^\]]*)\]|YYYY|YY|MM|DD|HH|mm|ss/gu;
+const BRACKETED_TEXT = /\[[^\]]*\]/gu;
 const HAS_DATE_TOKEN = /YYYY|YY|MM|DD|HH|mm|ss/u;
 
 // Finder's starting point: Replace Text, and "File 1" for Format.
@@ -230,6 +232,46 @@ export function splitItemName(
   return { stem: name.slice(0, dot), extension: name.slice(dot + 1) };
 }
 
+/**
+ * The name with a number added before its extension: "Lisbon 2.jpg", or "Lisbon 2" for a
+ * folder. When that would make the name too long for the disk, the name before the
+ * extension gives up characters at its end, as Finder's numbered names do.
+ */
+export function addNumberToName(
+  name: string,
+  isFolder: boolean,
+  separator: string,
+  number: number,
+): { name: string; keptStemLength: number; stemLength: number } {
+  const { stem, extension } = splitItemName(name, isFolder);
+  const tail = `${separator}${number}${extension === null ? "" : `.${extension}`}`;
+  const room = MAX_ITEM_NAME_BYTES - utf8Length(tail);
+  let kept = stem;
+  if (utf8Length(stem) > room) {
+    // Whole characters only: an accent is never cut from its letter.
+    kept = "";
+    for (const { segment } of graphemes.segment(stem)) {
+      if (utf8Length(kept + segment) > room) {
+        break;
+      }
+      kept += segment;
+    }
+    kept = kept.trimEnd();
+    // Nothing would be left: the name stays too long, and is reported as such.
+    if (kept.length === 0) {
+      kept = stem;
+    }
+  }
+  return { name: `${kept}${tail}`, keptStemLength: kept.length, stemLength: stem.length };
+}
+
+const utf8 = new TextEncoder();
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+function utf8Length(text: string): number {
+  return utf8.encode(text).length;
+}
+
 /** A piece of a new name, marked when it is what the rename changed. */
 export type NameSegment = { text: string; changed: boolean };
 
@@ -277,7 +319,8 @@ export function proposeNames(
     }
     const trimmed = trimSegments(result.segments);
     const name = trimmed.map((segment) => segment.text).join("");
-    if (name === item.name) {
+    // The same name with its accents written another way is the same name to the disk.
+    if (name.normalize("NFC") === item.name.normalize("NFC")) {
       return { kind: "unchanged" };
     }
     return {
@@ -305,9 +348,9 @@ export function getSettingsError(settings: BatchRenameSettings): string | null {
     settings.mode === "format" &&
     settings.nameFormat === "date" &&
     settings.dateFormat === "custom" &&
-    !HAS_DATE_TOKEN.test(settings.customDatePattern)
+    !HAS_DATE_TOKEN.test(settings.customDatePattern.replace(BRACKETED_TEXT, ""))
   ) {
-    return "Put at least one of YYYY, YY, MM, DD, HH, mm or ss in the date pattern.";
+    return "Put at least one of YYYY, YY, MM, DD, HH, mm or ss in the date pattern";
   }
   return null;
 }
@@ -316,7 +359,11 @@ function buildFindPattern(settings: BatchRenameSettings): RegExp | null {
   if (settings.find.length === 0) {
     return null;
   }
-  const source = settings.useRegex ? settings.find : escapeRegExp(settings.find);
+  // Names and what is typed are compared with accents written one way: "é" typed as one
+  // character finds it written as "e" and an accent, as names from some disks and archives
+  // are.
+  const find = settings.find.normalize("NFC");
+  const source = settings.useRegex ? find : escapeRegExp(find);
   return new RegExp(source, `g${settings.matchCase ? "" : "i"}u`);
 }
 
@@ -347,7 +394,14 @@ function transformInScope(
       return null;
     }
     const changed = transform(extension);
-    return changed ? wrap([{ text: `${stem}.`, changed: false }, ...changed]) : null;
+    if (!changed) {
+      return null;
+    }
+    // An extension replaced with nothing takes its dot with it: "a", not "a.".
+    if (changed.every((segment) => segment.text.trim().length === 0)) {
+      return wrap([{ text: stem, changed: false }]);
+    }
+    return wrap([{ text: `${stem}.`, changed: false }, ...changed]);
   }
   const changed = transform(stem);
   if (!changed) {
@@ -393,10 +447,11 @@ function transformText(
 // Every match is replaced. With a regular expression, the replacement can name what the
 // pattern captured ($1, $<name>, $&); plain text is put in as typed.
 function replaceText(
-  part: string,
+  originalPart: string,
   pattern: RegExp,
   settings: BatchRenameSettings,
 ): NameSegment[] | null {
+  const part = originalPart.normalize("NFC");
   pattern.lastIndex = 0;
   const segments: NameSegment[] = [];
   let position = 0;
@@ -585,8 +640,10 @@ export function formatDate(date: LocalDateTime, settings: BatchRenameSettings): 
     }
   };
   if (settings.dateFormat === "custom") {
-    return settings.customDatePattern.replace(DATE_TOKEN_PATTERN, (token) =>
-      value(token as DateToken),
+    return settings.customDatePattern.replace(
+      DATE_TOKEN_PATTERN,
+      (token, bracketed: string | undefined) =>
+        bracketed === undefined ? value(token as DateToken) : bracketed,
     );
   }
   return DATE_FORMAT_TOKENS[settings.dateFormat].map(value).join(settings.dateSeparator);
@@ -704,6 +761,8 @@ export type BatchRenamePlanItem =
       segments: NameSegment[];
       /** The number added because the name was taken. */
       addedNumber: number | null;
+      /** The name was taken by another item of the batch getting it, not by the folder. */
+      numberedForItemInBatch: boolean;
       usedCreatedForTaken: boolean;
       /** The new name starts with a dot, so the item will be hidden. */
       becomesHidden: boolean;
@@ -753,13 +812,17 @@ export function planBatchRename(input: BatchRenamePlanInput): BatchRenamePlan {
     // proposeNames gives exactly one name per item, in order.
     const entry: Entry = { item, name: proposed.names[index] as ProposedName, index };
     const folderPath = parentPathOf(item.path);
-    byFolder.set(folderPath, [...(byFolder.get(folderPath) ?? []), entry]);
+    const entries = byFolder.get(folderPath);
+    if (entries) {
+      entries.push(entry);
+    } else {
+      byFolder.set(folderPath, [entry]);
+    }
   });
 
   for (const [folderPath, entries] of byFolder) {
     const folder = input.folders.get(folderPath);
     const key = (name: string) => nameKey(name, folder?.caseSensitive ?? false);
-    const batchOldKeys = new Set(entries.map((entry) => key(entry.item.name)));
     // Items that stay as they are, whatever happens: their names stay taken.
     const leftAsIs = new Set<Entry>();
     for (const entry of entries) {
@@ -790,6 +853,11 @@ export function planBatchRename(input: BatchRenamePlanInput): BatchRenamePlan {
     for (let newlySkipped = true; newlySkipped; ) {
       newlySkipped = false;
       const taken = new Set((folder?.names ?? []).map(key));
+      // The number to try first for each name wanted more than once: names are only ever
+      // added to `taken`, so the numbers below the last one given stay taken.
+      const nextNumber = new Map<string, number>();
+      // The names given to items of the batch so far.
+      const given = new Set<string>();
       for (const entry of entries) {
         if (leftAsIs.has(entry)) {
           taken.add(key(entry.item.name));
@@ -804,16 +872,45 @@ export function planBatchRename(input: BatchRenamePlanInput): BatchRenamePlan {
         }
         if (!taken.has(key(name.name))) {
           taken.add(key(name.name));
-          plan[index] = renamed(item, name, name.name, name.segments, null);
+          given.add(key(name.name));
+          plan[index] = renamed(item, name, name.name, name.segments, null, false);
           continue;
         }
-        const byItemInBatch = batchOldKeys.has(key(name.name));
+        const byItemInBatch = given.has(key(name.name));
         if (input.settings.onConflict === "number") {
-          const numbered = findNumberedName(name, item, input.settings, (candidate) =>
-            taken.has(key(candidate)),
+          const numbered = findNumberedName(
+            name,
+            item,
+            input.settings,
+            nextNumber.get(key(name.name)) ?? 2,
+            (candidate) => taken.has(key(candidate)),
           );
           taken.add(key(numbered.name));
-          plan[index] = renamed(item, name, numbered.name, numbered.segments, numbered.number);
+          given.add(key(numbered.name));
+          nextNumber.set(key(name.name), numbered.number + 1);
+          const tooLong = getItemNameError(numbered.name);
+          // "File 1 2.jpg" asking for the taken "File 1.jpg" is numbered back to its own name:
+          // it stays as it is.
+          if (numbered.name.normalize("NFC") === item.name.normalize("NFC")) {
+            plan[index] = { status: "unchanged" };
+            continue;
+          }
+          plan[index] =
+            tooLong === null
+              ? renamed(
+                  item,
+                  name,
+                  numbered.name,
+                  numbered.segments,
+                  numbered.number,
+                  byItemInBatch,
+                )
+              : {
+                  status: "problem",
+                  proposedName: numbered.name,
+                  segments: numbered.segments,
+                  problem: { kind: "invalid", message: tooLong },
+                };
         } else {
           const skip = input.settings.onConflict === "skip";
           plan[index] = {
@@ -862,12 +959,14 @@ function renamed(
   name: string,
   segments: NameSegment[],
   addedNumber: number | null,
+  numberedForItemInBatch: boolean,
 ): BatchRenamePlanItem {
   return {
     status: "rename",
     name,
     segments,
     addedNumber,
+    numberedForItemInBatch,
     usedCreatedForTaken: proposed.usedCreatedForTaken === true,
     becomesHidden: name.startsWith(".") && !item.name.startsWith("."),
   };
@@ -883,25 +982,25 @@ function findNumberedName(
   name: Extract<ProposedName, { kind: "renamed" }>,
   item: BatchRenameItem,
   settings: BatchRenameSettings,
+  firstNumber: number,
   isTaken: (candidate: string) => boolean,
 ): { name: string; segments: NameSegment[]; number: number } {
   const separator =
     settings.mode === "format" && settings.separator.length > 0 ? settings.separator : " ";
-  const { stem, extension } = splitItemName(name.name, item.isFolder);
-  const tail = extension === null ? "" : `.${extension}`;
-  const candidate = (number: number) => `${stem}${separator}${number}${tail}`;
-  let number = 2;
-  while (isTaken(candidate(number)) && number < MAX_ADDED_NUMBER) {
+  const candidate = (number: number) =>
+    addNumberToName(name.name, item.isFolder, separator, number);
+  let number = firstNumber;
+  while (isTaken(candidate(number).name) && number < MAX_ADDED_NUMBER) {
     number += 1;
   }
-  const segments = splitSegmentsAt(name.segments, stem.length);
+  const numbered = candidate(number);
   return {
-    name: candidate(number),
+    name: numbered.name,
     number,
     segments: mergeSegments([
-      ...segments.before,
+      ...splitSegmentsAt(name.segments, numbered.keptStemLength).before,
       { text: `${separator}${number}`, changed: true },
-      ...segments.after,
+      ...splitSegmentsAt(name.segments, numbered.stemLength).after,
     ]),
   };
 }

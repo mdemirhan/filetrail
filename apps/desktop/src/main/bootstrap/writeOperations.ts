@@ -717,24 +717,43 @@ export function createWriteOperationCoordinator(
   ): Promise<void> {
     const startedAt = new Date().toISOString();
     const totalItemCount = request.items.length;
-    const run = await runBatchRename({
-      request,
-      fs,
-      signal: controller.signal,
-      onItemStart: (item, completedItemCount) =>
-        emitLocalWriteOperationEvent({
-          operationId,
-          action: "batch_rename",
-          status: "running",
-          completedItemCount,
-          totalItemCount,
-          completedByteCount: 0,
-          totalBytes: null,
-          currentSourcePath: item.sourcePath,
-          currentDestinationPath: item.destinationPath,
-          result: null,
-        }),
-    });
+    let run: Awaited<ReturnType<typeof runBatchRename>>;
+    try {
+      run = await runBatchRename({
+        request,
+        fs,
+        signal: controller.signal,
+        onItemStart: (item, completedItemCount) =>
+          emitLocalWriteOperationEvent({
+            operationId,
+            action: "batch_rename",
+            status: "running",
+            completedItemCount,
+            totalItemCount,
+            completedByteCount: 0,
+            totalBytes: null,
+            currentSourcePath: item.sourcePath,
+            currentDestinationPath: item.destinationPath,
+            result: null,
+          }),
+      });
+    } catch (error) {
+      // Nothing expected gets here: every item's failure is in its result. Should something
+      // else go wrong, the window still hears the end, so it isn't left waiting.
+      run = {
+        items: request.items.map((item) => ({
+          sourcePath: resolve(item.sourcePath),
+          destinationPath: null,
+          status: "failed" as const,
+          error: `The rename stopped unexpectedly: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          skipReason: null,
+        })),
+        completedItemCount: 0,
+        cancelled: false,
+      };
+    }
     const failedItemCount = run.items.filter((item) => item.status === "failed").length;
     const status = resolveLocalTerminalStatus({
       cancelled: run.cancelled,

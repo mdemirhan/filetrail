@@ -2,7 +2,15 @@ import { existsSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import { DEFAULT_BATCH_RENAME_SETTINGS } from "../shared/batchRename";
+import { appPreferencesSchema } from "@filetrail/contracts";
+
+import {
+  type BatchRenameSettings,
+  DEFAULT_BATCH_RENAME_SETTINGS,
+  sanitizeBatchRenamePresets,
+  sanitizeBatchRenameSettings,
+} from "../shared/batchRename";
+import { type Random, random } from "./bootstrap/batchRenameMemoryDisk.testkit";
 
 // The Rename sheet's preferences as a new install has them.
 const BATCH_RENAME_DEFAULTS = {
@@ -879,5 +887,160 @@ describe("appStateStore", () => {
     });
 
     expect(reloaded.getPreferences().openWithApplications).toEqual([]);
+  });
+
+  describe("the Rename sheet's saved settings", () => {
+    const settingsSchema = appPreferencesSchema.shape.batchRenameSettings;
+    const presetsSchema = appPreferencesSchema.shape.batchRenamePresets;
+
+    // A value as a damaged, hand-edited or older file might hold: a right one, a wrong type,
+    // too long, out of range, or not a number at all.
+    function garbage(rng: Random, depth = 0): unknown {
+      const highSurrogate = String.fromCharCode(0xd83d);
+      return rng.pick<() => unknown>([
+        () => null,
+        () => undefined,
+        () => rng.chance(0.5),
+        () =>
+          rng.pick([
+            0,
+            -0,
+            -1,
+            1,
+            2,
+            2.5,
+            5,
+            1e12,
+            -1e12,
+            Number.NaN,
+            Number.POSITIVE_INFINITY,
+            Number.NEGATIVE_INFINITY,
+          ]),
+        () => rng.pick(["", " ", "auto", "replace", "format", "date", "-", "_", "x".repeat(300)]),
+        () => `${"a".repeat(254)}${highSurrogate}\u{1F600}`,
+        () => (depth < 2 ? [garbage(rng, depth + 1)] : []),
+        () => (depth < 2 ? { value: garbage(rng, depth + 1) } : {}),
+      ])();
+    }
+
+    function garbageSettings(rng: Random): unknown {
+      if (rng.chance(0.1)) {
+        return garbage(rng);
+      }
+      const record: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(DEFAULT_BATCH_RENAME_SETTINGS)) {
+        if (rng.chance(0.2)) {
+          continue;
+        }
+        record[key] = rng.chance(0.3) ? value : garbage(rng);
+      }
+      record.notASetting = garbage(rng);
+      return record;
+    }
+
+    function garbagePresets(rng: Random): unknown {
+      if (rng.chance(0.1)) {
+        return garbage(rng);
+      }
+      const names = [
+        "",
+        "   ",
+        "Photos",
+        "photos",
+        " Photos ",
+        `${"n".repeat(79)} tail`,
+        `${"n".repeat(79)}${String.fromCharCode(0xd83d)}\u{1F600}`,
+        "x".repeat(200),
+      ];
+      return Array.from({ length: rng.integer(0, 60) }, (_, index) =>
+        rng.chance(0.1)
+          ? garbage(rng)
+          : {
+              name: rng.chance(0.8)
+                ? `${rng.pick(names)}${rng.chance(0.5) ? index : ""}`
+                : garbage(rng),
+              settings: garbageSettings(rng),
+            },
+      );
+    }
+
+    it("are always ones the preferences accept, whatever the file held", () => {
+      expect(settingsSchema.safeParse(DEFAULT_BATCH_RENAME_SETTINGS).success).toBe(true);
+      for (let seed = 1; seed <= 500; seed += 1) {
+        const rng = random(seed);
+        const settings = sanitizeBatchRenameSettings(garbageSettings(rng));
+        const presets = sanitizeBatchRenamePresets(garbagePresets(rng));
+        const parsed = {
+          settings: settingsSchema.safeParse(settings).error?.issues ?? null,
+          presets: presetsSchema.safeParse(presets).error?.issues ?? null,
+        };
+        expect({ seed, ...parsed }).toEqual({ seed, settings: null, presets: null });
+      }
+    });
+
+    it("are read back from a damaged file as preferences the window accepts", () => {
+      const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+      const filePath = resolveAppStatePath(userDataPath);
+      for (let seed = 1; seed <= 50; seed += 1) {
+        const rng = random(seed);
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            preferences: {
+              batchRenameSettings: garbageSettings(rng),
+              batchRenamePresets: garbagePresets(rng),
+            },
+          }),
+          "utf8",
+        );
+        const preferences = createAppStateStore(filePath).getPreferences();
+        const issues = appPreferencesSchema.safeParse(preferences).error?.issues ?? null;
+        expect({ seed, issues }).toEqual({ seed, issues: null });
+      }
+    });
+
+    it("keep settings and presets that aren't the defaults across a restart", () => {
+      const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+      const filePath = resolveAppStatePath(userDataPath);
+      const settings: BatchRenameSettings = {
+        mode: "format",
+        find: "IMG_",
+        replaceWith: "Trip $1",
+        matchCase: true,
+        useRegex: true,
+        addText: " (copy)",
+        addWhere: "before",
+        nameFormat: "date",
+        formatWhere: "before",
+        customName: "Lisbon",
+        keepNames: true,
+        startAt: 0,
+        step: 10,
+        digits: "auto",
+        separator: "",
+        dateSource: "taken",
+        dateFormat: "custom",
+        dateSeparator: ".",
+        customDatePattern: "[Day] DD.MM.YYYY HH-mm-ss",
+        caseStyle: "title",
+        applyTo: "both",
+        onConflict: "skip",
+      };
+      const presets = [
+        { name: "Photos by date", settings },
+        {
+          name: "Lower case",
+          settings: { ...DEFAULT_BATCH_RENAME_SETTINGS, mode: "case" as const },
+        },
+      ];
+      const store = createAppStateStore(filePath);
+      store.updatePreferences({ batchRenameSettings: settings, batchRenamePresets: presets });
+      store.flush();
+
+      const reloaded = createAppStateStore(filePath).getPreferences();
+      expect(reloaded.batchRenameSettings).toEqual(settings);
+      expect(reloaded.batchRenamePresets).toEqual(presets);
+      expect(appPreferencesSchema.safeParse(reloaded).success).toBe(true);
+    });
   });
 });
