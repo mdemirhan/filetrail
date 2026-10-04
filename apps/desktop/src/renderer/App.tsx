@@ -105,6 +105,7 @@ import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupTabs } from "./lib/startupNavigation";
 import { buildContentStatusSummary } from "./lib/statusSummary";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
+import { isVolumeRootPath } from "./lib/volumes";
 import { ExplorerStoreProvider } from "./state/explorerStoreContext";
 import { useExplorerServices, useSelectionActions } from "./state/explorerStores";
 import { ShortcutDisplayProvider } from "./state/shortcutDisplayContext";
@@ -126,7 +127,13 @@ export function App() {
   }, [client]);
   // The folders that have been opened, loaded each time the Go To or Move To box opens.
   const [visitedFolders, setVisitedFolders] = useState<VisitedFolder[]>([]);
-  const [volumeAvailableBytes, setVolumeAvailableBytes] = useState<number | null>(null);
+  // Capacity and free space of the volume the Info panel describes, when it is a volume's
+  // root (Macintosh HD, a disk under /Volumes).
+  const [infoPanelVolume, setInfoPanelVolume] = useState<{
+    path: string;
+    totalBytes: number | null;
+    availableBytes: number | null;
+  } | null>(null);
   // Modified date and size for search results, fetched for the rows on screen.
   const [searchMetadataByPath, setSearchMetadataByPath] = useState<
     Record<string, DirectoryEntryMetadata>
@@ -1307,28 +1314,34 @@ export function App() {
     [client],
   );
 
-  // Free space for the path bar summary; refreshed when the folder changes.
+  // A volume's capacity and free space, for the Info panel while it describes the volume's
+  // root; asked again each time the panel comes to it.
+  const infoPanelVolumeRootPath =
+    infoPanelOpen && infoPanelTargetPath && isVolumeRootPath(infoPanelTargetPath)
+      ? infoPanelTargetPath
+      : null;
   useEffect(() => {
-    if (currentPath.length === 0) {
+    if (infoPanelVolumeRootPath === null) {
+      setInfoPanelVolume(null);
       return;
     }
     let cancelled = false;
     void Promise.resolve()
-      .then(() => client.invoke("system:getVolumeInfo", { path: currentPath }))
+      .then(() => client.invoke("system:getVolumeInfo", { path: infoPanelVolumeRootPath }))
       .then((response) => {
         if (!cancelled) {
-          setVolumeAvailableBytes(response.availableBytes);
+          setInfoPanelVolume({ path: infoPanelVolumeRootPath, ...response });
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setVolumeAvailableBytes(null);
+          setInfoPanelVolume(null);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [client, currentPath]);
+  }, [client, infoPanelVolumeRootPath]);
 
   // Writes only changed keys (debounced) and applies edits made in the Settings window.
   const { markSynced } = usePreferencesSync({
@@ -1987,7 +2000,6 @@ export function App() {
                     const metadata = metadataByPath[path];
                     return metadata?.sizeStatus === "ready" ? metadata.sizeBytes : null;
                   },
-                  availableBytes: volumeAvailableBytes,
                 }),
                 sizeBars,
                 getFolderSizeLabel: (path) => {
@@ -2042,6 +2054,10 @@ export function App() {
               loading: getInfoLoading,
               item: infoPanelItem,
               selection: infoPanelSelection,
+              volume:
+                infoPanelVolume && infoPanelVolume.path === infoPanelItem?.path
+                  ? infoPanelVolume
+                  : null,
               pending: infoPanelView?.pending ?? false,
               onClose: () => setInfoPanelOpen(false),
               onNavigateToPath: (path) => {

@@ -32,6 +32,49 @@ const bundleItem = {
 };
 
 describe("InfoPanel", () => {
+  it("shows a volume root's capacity, free and used space instead of its size", () => {
+    const volumeItem = {
+      ...baseItem,
+      path: "/Volumes/Backup",
+      name: "Backup",
+      extension: "",
+      kind: "directory" as const,
+      kindLabel: "Volume",
+      sizeBytes: null,
+      sizeStatus: "deferred" as const,
+    };
+    const props = {
+      loading: false,
+      item: volumeItem,
+      onClose: () => undefined,
+      onNavigateToPath: () => undefined,
+      onOpen: () => undefined,
+      onOpenInTerminal: () => undefined,
+      onShowInFinder: () => undefined,
+      onCopyPath: () => true,
+    };
+    const { rerender } = render(<InfoPanel {...props} />);
+    // Until the volume's numbers arrive, its rows wait with a placeholder.
+    expect(screen.getByText("Capacity")).toBeInTheDocument();
+    expect(screen.queryByText("Size")).not.toBeInTheDocument();
+
+    rerender(
+      <InfoPanel
+        {...props}
+        volume={{ totalBytes: 500 * 1000 ** 3, availableBytes: 200 * 1000 ** 3 }}
+      />,
+    );
+    expect(screen.getByText("500 GB")).toBeInTheDocument();
+    expect(screen.getByText("200 GB")).toBeInTheDocument();
+    expect(screen.getByText("300 GB")).toBeInTheDocument();
+    expect(screen.getByText("Volume · 200 GB available")).toBeInTheDocument();
+
+    // Any other folder keeps its Size row.
+    rerender(<InfoPanel {...props} item={{ ...volumeItem, path: "/Volumes/Backup/Photos" }} />);
+    expect(screen.getByText("Size")).toBeInTheDocument();
+    expect(screen.queryByText("Capacity")).not.toBeInTheDocument();
+  });
+
   it("sums up several selected items instead of describing the first", () => {
     const onNavigateToPath = vi.fn();
     const props = {

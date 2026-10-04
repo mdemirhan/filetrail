@@ -1089,12 +1089,14 @@ export const ipcContractSchemas = {
       error: z.string().nullable(),
     }),
   },
+  // The size of the volume holding `path` and the space left on it.
   "system:getVolumeInfo": {
     request: z.object({
       path: z.string().min(1),
     }),
     response: z.object({
       availableBytes: z.number().nonnegative().nullable(),
+      totalBytes: z.number().nonnegative().nullable(),
     }),
   },
   // Which disk each path is on (its device number, symlinks followed; null when unreadable),

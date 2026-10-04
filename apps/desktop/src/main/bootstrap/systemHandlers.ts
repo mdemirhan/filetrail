@@ -45,15 +45,19 @@ export async function openFullDiskAccessSettings(): Promise<
   }
 }
 
-// Free space on the volume holding `path`, shown next to the path bar like Finder's status bar.
+// The capacity of the volume holding `path` and its free space, which the Info panel shows
+// for a volume's root as Finder's Get Info does.
 export async function getVolumeInfo(
   payload: IpcRequest<"system:getVolumeInfo">,
 ): Promise<IpcResponse<"system:getVolumeInfo">> {
   try {
     const stats = await statfs(payload.path);
-    return { availableBytes: Number(stats.bavail) * Number(stats.bsize) };
+    return {
+      availableBytes: Number(stats.bavail) * Number(stats.bsize),
+      totalBytes: Number(stats.blocks) * Number(stats.bsize),
+    };
   } catch {
-    return { availableBytes: null };
+    return { availableBytes: null, totalBytes: null };
   }
 }
 

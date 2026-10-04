@@ -2,13 +2,13 @@ import { formatSize } from "./formatting";
 import { formatItemCount } from "./listFilter";
 
 // The path bar's right-hand summary replaces Finder's separate status bar: item or selection
-// count, the selection's total size when every selected size is known, and free space.
+// count, and the selection's total size when every selected size is known. Free space is in
+// the Info panel, for a volume's root.
 export function buildContentStatusSummary({
   itemCount,
   shownCount = itemCount,
   selectedPaths,
   getKnownSizeBytes,
-  availableBytes,
 }: {
   itemCount: number;
   // How many of them the list shows, when typing has narrowed it.
@@ -16,7 +16,6 @@ export function buildContentStatusSummary({
   selectedPaths: readonly string[];
   // Size of a path when known (file metadata or a calculated folder size), else null.
   getKnownSizeBytes: (path: string) => number | null;
-  availableBytes: number | null;
 }): string {
   const parts: string[] = [];
   if (selectedPaths.length === 0) {
@@ -40,9 +39,6 @@ export function buildContentStatusSummary({
     if (allKnown) {
       parts.push(formatSize(totalBytes, "ready"));
     }
-  }
-  if (availableBytes !== null) {
-    parts.push(`${formatSize(availableBytes, "ready")} available`);
   }
   return parts.join(" · ");
 }
