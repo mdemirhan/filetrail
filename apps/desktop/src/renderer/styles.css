@@ -6356,6 +6356,30 @@ button.shortcut-slot-key.recording:hover {
   display: none;
 }
 
+/* A favorite dragged to a new place: it dims, and a line in the accent color shows where
+   it will land, on the edge of the row it goes before or after. */
+.tree-row[data-favorite-dragging="true"] {
+  opacity: 0.45;
+}
+
+.favorite-drop-line {
+  position: absolute;
+  right: 6px;
+  left: 6px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ft-accent-solid);
+  pointer-events: none;
+}
+
+.favorite-drop-line[data-position="before"] {
+  top: -3px;
+}
+
+.favorite-drop-line[data-position="after"] {
+  bottom: -3px;
+}
+
 /* The first heading sits just below the toolbar's bottom edge. */
 .sidebar-sections > :first-child .sidebar-section-header {
   margin-top: 2px;

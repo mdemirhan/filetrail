@@ -1,7 +1,9 @@
 import {
   type Dispatch,
   type SetStateAction,
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -51,6 +53,23 @@ export type TreeContextMenuTarget = {
   kind: "favorite" | "treeFolder";
 };
 
+// A favorite dragged to a new place in its list. The drag carries this type alone, no files,
+// so the file drops of the sidebar and the window take no notice of it.
+const FAVORITE_DRAG_TYPE = "application/x-filetrail-favorite";
+
+type FavoriteDropTarget = { path: string; position: "before" | "after" };
+
+type FavoriteReorder = {
+  draggedPath: string | null;
+  dropTarget: FavoriteDropTarget | null;
+  start: (path: string) => void;
+  over: (target: FavoriteDropTarget | null) => void;
+  drop: () => void;
+  end: () => void;
+};
+
+const FavoriteReorderContext = createContext<FavoriteReorder | null>(null);
+
 export function TreePane({
   paneRef,
   isFocused,
@@ -85,6 +104,7 @@ export function TreePane({
   locationsExpanded = true,
   onToggleLocationsExpanded = () => undefined,
   onSelectItem,
+  onReorderFavorites,
   typeaheadQuery,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
@@ -149,8 +169,46 @@ export function TreePane({
   onToggleLocationsExpanded?: () => void;
   /** Selects a row that is neither a folder nor a favorite: a disk, or the Locations row. */
   onSelectItem?: ((itemId: TreeItemId) => Promise<unknown> | undefined) | undefined;
+  /** A favorite dragged just before or after another. Unset, favorites can't be dragged. */
+  onReorderFavorites?:
+    | ((movedPath: string, targetPath: string, position: "before" | "after") => void)
+    | undefined;
   typeaheadQuery?: string;
 }) {
+  const [favoriteDrag, setFavoriteDrag] = useState<{
+    draggedPath: string;
+    dropTarget: FavoriteDropTarget | null;
+  } | null>(null);
+  const favoriteReorder = useMemo<FavoriteReorder | null>(
+    () =>
+      onReorderFavorites
+        ? {
+            draggedPath: favoriteDrag?.draggedPath ?? null,
+            dropTarget: favoriteDrag?.dropTarget ?? null,
+            start: (path) => setFavoriteDrag({ draggedPath: path, dropTarget: null }),
+            over: (target) =>
+              setFavoriteDrag((current) =>
+                current &&
+                (current.dropTarget?.path !== target?.path ||
+                  current.dropTarget?.position !== target?.position)
+                  ? { ...current, dropTarget: target }
+                  : current,
+              ),
+            drop: () => {
+              if (favoriteDrag?.dropTarget) {
+                onReorderFavorites(
+                  favoriteDrag.draggedPath,
+                  favoriteDrag.dropTarget.path,
+                  favoriteDrag.dropTarget.position,
+                );
+              }
+              setFavoriteDrag(null);
+            },
+            end: () => setFavoriteDrag(null),
+          }
+        : null,
+    [favoriteDrag, onReorderFavorites],
+  );
   const integratedPresentation = useMemo(
     () =>
       buildTreePresentation({
@@ -364,6 +422,10 @@ export function TreePane({
   ) {
     return (event: React.DragEvent<HTMLDivElement>) => {
       const item = resolveDragTargetItem(event, items);
+      // A favorite being put in order shows where it lands only over another favorite.
+      if (favoriteReorder?.draggedPath && item?.kind !== "favorite") {
+        favoriteReorder.over(null);
+      }
       if (!item || item.kind === "favorites-root" || item.kind === "locations-root") {
         return;
       }
@@ -485,163 +547,168 @@ export function TreePane({
   }
 
   return (
-    <aside
-      ref={paneRef}
-      className={`tree-pane sidebar pane pane-focus-target${compactTreeView ? " compact-tree-view" : ""}`}
-      tabIndex={-1}
-      onMouseDownCapture={(event) => {
-        const target = event.target;
-        if (
-          !(target instanceof Element) ||
-          !target.closest(".tree-scroll, .tree-row, .sidebar-sections, .sidebar-tree")
-        ) {
-          return;
-        }
-        paneRef?.current?.focus({ preventScroll: true });
-      }}
-      onFocusCapture={() => onFocusChange(true)}
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
-          onFocusChange(false);
-        }
-      }}
-    >
-      {/* Space for the window's traffic lights; the sidebar runs the full window height. */}
-      <div className="sidebar-titlebar" aria-hidden="true" />
-      <div className="sidebar-shell">
-        <div className="sidebar-main sidebar-main-native">
-          {/* Finder layout: a labeled Favorites list above the folder tree, or Favorites as
+    <FavoriteReorderContext.Provider value={favoriteReorder}>
+      <aside
+        ref={paneRef}
+        className={`tree-pane sidebar pane pane-focus-target${compactTreeView ? " compact-tree-view" : ""}`}
+        tabIndex={-1}
+        onMouseDownCapture={(event) => {
+          const target = event.target;
+          if (
+            !(target instanceof Element) ||
+            !target.closest(".tree-scroll, .tree-row, .sidebar-sections, .sidebar-tree")
+          ) {
+            return;
+          }
+          paneRef?.current?.focus({ preventScroll: true });
+        }}
+        onFocusCapture={() => onFocusChange(true)}
+        onBlurCapture={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+            onFocusChange(false);
+          }
+        }}
+      >
+        {/* Space for the window's traffic lights; the sidebar runs the full window height. */}
+        <div className="sidebar-titlebar" aria-hidden="true" />
+        <div className="sidebar-shell">
+          <div className="sidebar-main sidebar-main-native">
+            {/* Finder layout: a labeled Favorites list above the folder tree, or Favorites as
               a root row inside the tree. */}
-          {favoritesPlacement === "separate" &&
-          (favoriteItems.length > 0 || locationItems.length > 0) ? (
-            <div className="sidebar-sections overlay-scroll">
-              {favoriteItems.length > 0 ? (
-                <section
-                  className={`sidebar-favorites favorites-pane-section${
-                    activeLeftPaneSubview === "favorites" ? " active" : ""
-                  }`}
-                  aria-label="Favorites"
-                  data-drag-active={dragActive ? "true" : "false"}
-                  data-left-subview="favorites"
-                  onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
-                  onDragEnterCapture={handlePaneDragEnterCapture(favoriteItemsById, "favorites")}
-                  onDragOverCapture={handlePaneDragOverCapture(favoriteItemsById, "favorites")}
-                  onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
-                >
-                  {renderSectionHeader(
-                    "Favorites",
-                    favoritesExpanded,
-                    () => {
-                      // Keyboard navigation cannot stay in a hidden list.
-                      if (favoritesExpanded && activeLeftPaneSubview === "favorites") {
-                        onLeftPaneSubviewChange("tree");
-                      }
-                      onToggleFavoritesExpanded();
-                    },
-                    "sidebar-favorites-list",
-                  )}
-                  {favoritesExpanded ? (
-                    <div
-                      id="sidebar-favorites-list"
-                      className="tree-list favorites-list"
-                      role="tree"
-                      aria-label="Favorites"
-                    >
-                      {favoriteItems.map(renderSidebarListRow)}
-                    </div>
-                  ) : null}
-                </section>
-              ) : null}
-              {locationItems.length > 0 ? (
-                <section
-                  className="sidebar-locations favorites-pane-section"
-                  aria-label="Locations"
-                  data-drag-active={dragActive ? "true" : "false"}
-                  data-left-subview="favorites"
-                  onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
-                  onDragEnterCapture={handlePaneDragEnterCapture(locationItemsById, "favorites")}
-                  onDragOverCapture={handlePaneDragOverCapture(locationItemsById, "favorites")}
-                  onDropCapture={handlePaneDropCapture(locationItemsById, "favorites")}
-                >
-                  {renderSectionHeader(
-                    "Locations",
-                    locationsExpanded,
-                    onToggleLocationsExpanded,
-                    "sidebar-locations-list",
-                  )}
-                  {locationsExpanded ? (
-                    <div
-                      id="sidebar-locations-list"
-                      className="tree-list favorites-list"
-                      role="tree"
-                      aria-label="Locations"
-                    >
-                      {locationItems.map(renderSidebarListRow)}
-                    </div>
-                  ) : null}
-                </section>
-              ) : null}
-            </div>
-          ) : null}
-          {favoritesPlacement === "separate" ? (
-            <div className={`sidebar-header${isFocused ? " sidebar-header-focused" : ""}`}>
-              <span className="sidebar-title">Folders</span>
-            </div>
-          ) : null}
-          {typeaheadQuery ? (
-            <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-              <span className="pane-typeahead-label">Jump to</span>
-              <span className="pane-typeahead-value">{typeaheadQuery}</span>
-            </div>
-          ) : null}
-          {favoritesPlacement === "separate" ? (
-            <div
-              className={`sidebar-tree filesystem-tree-section${
-                activeLeftPaneSubview === "tree" ? " active" : ""
-              }`}
-              data-drag-active={dragActive ? "true" : "false"}
-              data-left-subview="tree"
-              onMouseDownCapture={handlePaneMouseDownCapture("tree")}
-              onDragEnterCapture={handlePaneDragEnterCapture(filesystemPresentation.items, "tree")}
-              onDragOverCapture={handlePaneDragOverCapture(filesystemPresentation.items, "tree")}
-              onDropCapture={handlePaneDropCapture(filesystemPresentation.items, "tree")}
-            >
-              <TreeList
-                items={filesystemPresentation.items}
-                visibleItemIds={filesystemPresentation.visibleItemIds}
-                isPaneFocused={isFocused}
-                selectedTreeItemId={selectedTreeItemId}
-                clickTimeoutRef={clickTimeoutRef}
-                optimisticSelectedItemId={optimisticSelectedItemId}
-                setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-                onToggleExpand={onToggleExpand}
-                onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-                onToggleLocationsExpanded={onToggleLocationsExpanded}
-                onSelectItem={onSelectItem}
-                singleClickExpandTreeItems={singleClickExpandTreeItems}
-                onClearSelection={onClearSelection}
-                onNavigate={onNavigate}
-                onNavigateFavorite={onNavigateFavorite}
-                onOpenInNewTab={onOpenInNewTab}
-                onSelectFavoritesRoot={onSelectFavoritesRoot}
-                onItemContextMenu={onItemContextMenu}
-                contextMenuTarget={contextMenuTarget}
-                onItemDragEnter={onItemDragEnter}
-                onItemDragOver={onItemDragOver}
-                onItemDrop={onItemDrop}
-                getItemDropIndicator={getItemDropIndicator}
-                subview="tree"
-                onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
-                registerRowRef={registerTreeRowRef}
-              />
-            </div>
-          ) : (
-            renderIntegratedTree()
-          )}
+            {favoritesPlacement === "separate" &&
+            (favoriteItems.length > 0 || locationItems.length > 0) ? (
+              <div className="sidebar-sections overlay-scroll">
+                {favoriteItems.length > 0 ? (
+                  <section
+                    className={`sidebar-favorites favorites-pane-section${
+                      activeLeftPaneSubview === "favorites" ? " active" : ""
+                    }`}
+                    aria-label="Favorites"
+                    data-drag-active={dragActive ? "true" : "false"}
+                    data-left-subview="favorites"
+                    onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
+                    onDragEnterCapture={handlePaneDragEnterCapture(favoriteItemsById, "favorites")}
+                    onDragOverCapture={handlePaneDragOverCapture(favoriteItemsById, "favorites")}
+                    onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
+                  >
+                    {renderSectionHeader(
+                      "Favorites",
+                      favoritesExpanded,
+                      () => {
+                        // Keyboard navigation cannot stay in a hidden list.
+                        if (favoritesExpanded && activeLeftPaneSubview === "favorites") {
+                          onLeftPaneSubviewChange("tree");
+                        }
+                        onToggleFavoritesExpanded();
+                      },
+                      "sidebar-favorites-list",
+                    )}
+                    {favoritesExpanded ? (
+                      <div
+                        id="sidebar-favorites-list"
+                        className="tree-list favorites-list"
+                        role="tree"
+                        aria-label="Favorites"
+                      >
+                        {favoriteItems.map(renderSidebarListRow)}
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
+                {locationItems.length > 0 ? (
+                  <section
+                    className="sidebar-locations favorites-pane-section"
+                    aria-label="Locations"
+                    data-drag-active={dragActive ? "true" : "false"}
+                    data-left-subview="favorites"
+                    onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
+                    onDragEnterCapture={handlePaneDragEnterCapture(locationItemsById, "favorites")}
+                    onDragOverCapture={handlePaneDragOverCapture(locationItemsById, "favorites")}
+                    onDropCapture={handlePaneDropCapture(locationItemsById, "favorites")}
+                  >
+                    {renderSectionHeader(
+                      "Locations",
+                      locationsExpanded,
+                      onToggleLocationsExpanded,
+                      "sidebar-locations-list",
+                    )}
+                    {locationsExpanded ? (
+                      <div
+                        id="sidebar-locations-list"
+                        className="tree-list favorites-list"
+                        role="tree"
+                        aria-label="Locations"
+                      >
+                        {locationItems.map(renderSidebarListRow)}
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
+              </div>
+            ) : null}
+            {favoritesPlacement === "separate" ? (
+              <div className={`sidebar-header${isFocused ? " sidebar-header-focused" : ""}`}>
+                <span className="sidebar-title">Folders</span>
+              </div>
+            ) : null}
+            {typeaheadQuery ? (
+              <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
+                <span className="pane-typeahead-label">Jump to</span>
+                <span className="pane-typeahead-value">{typeaheadQuery}</span>
+              </div>
+            ) : null}
+            {favoritesPlacement === "separate" ? (
+              <div
+                className={`sidebar-tree filesystem-tree-section${
+                  activeLeftPaneSubview === "tree" ? " active" : ""
+                }`}
+                data-drag-active={dragActive ? "true" : "false"}
+                data-left-subview="tree"
+                onMouseDownCapture={handlePaneMouseDownCapture("tree")}
+                onDragEnterCapture={handlePaneDragEnterCapture(
+                  filesystemPresentation.items,
+                  "tree",
+                )}
+                onDragOverCapture={handlePaneDragOverCapture(filesystemPresentation.items, "tree")}
+                onDropCapture={handlePaneDropCapture(filesystemPresentation.items, "tree")}
+              >
+                <TreeList
+                  items={filesystemPresentation.items}
+                  visibleItemIds={filesystemPresentation.visibleItemIds}
+                  isPaneFocused={isFocused}
+                  selectedTreeItemId={selectedTreeItemId}
+                  clickTimeoutRef={clickTimeoutRef}
+                  optimisticSelectedItemId={optimisticSelectedItemId}
+                  setOptimisticSelectedItemId={setOptimisticSelectedItemId}
+                  onToggleExpand={onToggleExpand}
+                  onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+                  onToggleLocationsExpanded={onToggleLocationsExpanded}
+                  onSelectItem={onSelectItem}
+                  singleClickExpandTreeItems={singleClickExpandTreeItems}
+                  onClearSelection={onClearSelection}
+                  onNavigate={onNavigate}
+                  onNavigateFavorite={onNavigateFavorite}
+                  onOpenInNewTab={onOpenInNewTab}
+                  onSelectFavoritesRoot={onSelectFavoritesRoot}
+                  onItemContextMenu={onItemContextMenu}
+                  contextMenuTarget={contextMenuTarget}
+                  onItemDragEnter={onItemDragEnter}
+                  onItemDragOver={onItemDragOver}
+                  onItemDrop={onItemDrop}
+                  getItemDropIndicator={getItemDropIndicator}
+                  subview="tree"
+                  onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
+                  registerRowRef={registerTreeRowRef}
+                />
+              </div>
+            ) : (
+              renderIntegratedTree()
+            )}
+          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </FavoriteReorderContext.Provider>
   );
 }
 
@@ -902,6 +969,13 @@ function TreeItemRow({
   // A favorite points at a folder; only the folder's own row in the tree is marked.
   const clipboardMarks = useClipboardMarks("tree");
   const clipboardPath = isFileSystem ? itemPath : null;
+  // A favorite can be dragged before or after another to put the favorites in order.
+  const favoriteReorder = useContext(FavoriteReorderContext);
+  const reorderPath = favoriteReorder !== null && isFavorite ? itemPath : null;
+  const favoriteDropPosition =
+    reorderPath !== null && favoriteReorder?.dropTarget?.path === reorderPath
+      ? favoriteReorder.dropTarget.position
+      : null;
 
   // ⌘-click on a folder that is not on screen opens it in a new tab; the tab on screen and
   // its selection in the tree stay as they are.
@@ -1022,6 +1096,53 @@ function TreeItemRow({
         data-drop-target-state={dropIndicator ?? "none"}
         data-tree-path={itemPath ?? item.id}
         data-tree-kind={item.kind}
+        data-favorite-dragging={
+          reorderPath !== null && favoriteReorder?.draggedPath === reorderPath ? "true" : undefined
+        }
+        draggable={reorderPath !== null}
+        onDragStart={
+          reorderPath === null
+            ? undefined
+            : (event) => {
+                event.dataTransfer.setData(FAVORITE_DRAG_TYPE, reorderPath);
+                event.dataTransfer.effectAllowed = "move";
+                favoriteReorder?.start(reorderPath);
+              }
+        }
+        onDragOver={
+          reorderPath === null
+            ? undefined
+            : (event) => {
+                if (!favoriteReorder?.draggedPath) {
+                  return;
+                }
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                if (favoriteReorder.draggedPath === reorderPath) {
+                  favoriteReorder.over(null);
+                  return;
+                }
+                // The upper half of a row puts the favorite before it, the lower half after.
+                const rect = event.currentTarget.getBoundingClientRect();
+                favoriteReorder.over({
+                  path: reorderPath,
+                  position: event.clientY < rect.top + rect.height / 2 ? "before" : "after",
+                });
+              }
+        }
+        onDrop={
+          reorderPath === null
+            ? undefined
+            : (event) => {
+                if (!favoriteReorder?.draggedPath) {
+                  return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                favoriteReorder.drop();
+              }
+        }
+        onDragEnd={reorderPath === null ? undefined : () => favoriteReorder?.end()}
         style={{ paddingLeft: `calc(8px + ${item.depth} * var(--tree-indent))` }}
         tabIndex={-1}
         onPointerDown={(event) => {
@@ -1132,6 +1253,13 @@ function TreeItemRow({
           <ClipboardMarkIcon marks={clipboardMarks} path={clipboardPath} />
           {item.isSymlink ? <span className="tree-label-badge">Alias</span> : null}
         </button>
+        {favoriteDropPosition ? (
+          <span
+            className="favorite-drop-line"
+            data-position={favoriteDropPosition}
+            aria-hidden="true"
+          />
+        ) : null}
         {dropIndicator === "valid" ? (
           <span className="tree-drop-target-badge" aria-hidden="true">
             Drop here

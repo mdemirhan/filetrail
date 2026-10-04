@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 
 import { type ClipboardMarks, ClipboardMarksProvider } from "../lib/clipboardMarks";
@@ -91,6 +91,68 @@ function renderTreePane(
 }
 
 describe("TreePane", () => {
+  it.each(["integrated", "separate"] as const)(
+    "puts a favorite dragged onto another before or after it (%s layout)",
+    (favoritesPlacement) => {
+      const onReorderFavorites = vi.fn();
+      renderTreePane({ favoritesPlacement, onReorderFavorites });
+      const row = (path: string) => {
+        const element = document.querySelector<HTMLElement>(
+          `.tree-row[data-tree-item-id="favorite:${path}"]`,
+        );
+        if (!element) {
+          throw new Error(`Missing the row of ${path}`);
+        }
+        return element;
+      };
+      const desktop = row("/Users/demo/Desktop");
+      const documents = row("/Users/demo/Documents");
+      const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" };
+      // jsdom leaves the pointer out of drag events, and lays nothing out: every row's middle
+      // is at 0, so 1 is its lower half and -1 its upper half.
+      const dragAt = (kind: "dragOver" | "drop", element: HTMLElement, clientY: number) => {
+        const event = createEvent[kind](element, { dataTransfer });
+        Object.defineProperty(event, "clientY", { value: clientY });
+        fireEvent(element, event);
+      };
+      expect(desktop).toHaveAttribute("draggable", "true");
+
+      fireEvent.dragStart(desktop, { dataTransfer });
+      expect(dataTransfer.setData).toHaveBeenCalledWith(
+        "application/x-filetrail-favorite",
+        "/Users/demo/Desktop",
+      );
+      expect(desktop).toHaveAttribute("data-favorite-dragging", "true");
+
+      dragAt("dragOver", documents, 1);
+      expect(documents.querySelector(".favorite-drop-line")).toHaveAttribute(
+        "data-position",
+        "after",
+      );
+      dragAt("dragOver", documents, -1);
+      expect(documents.querySelector(".favorite-drop-line")).toHaveAttribute(
+        "data-position",
+        "before",
+      );
+      dragAt("drop", documents, -1);
+
+      expect(onReorderFavorites).toHaveBeenCalledWith(
+        "/Users/demo/Desktop",
+        "/Users/demo/Documents",
+        "before",
+      );
+      expect(document.querySelector(".favorite-drop-line")).toBeNull();
+      expect(desktop).not.toHaveAttribute("data-favorite-dragging");
+    },
+  );
+
+  it("doesn't make favorites draggable when they can't be put in order", () => {
+    renderTreePane();
+    expect(
+      document.querySelector('.tree-row[data-tree-item-id="favorite:/Users/demo/Desktop"]'),
+    ).toHaveAttribute("draggable", "false");
+  });
+
   it("marks the folder that is on the clipboard, and not a favorite that points at it", () => {
     renderTreePane(
       { favorites: [{ path: "/Users/demo/Documents", icon: "documents" }] },

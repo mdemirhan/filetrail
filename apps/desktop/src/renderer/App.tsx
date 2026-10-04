@@ -92,6 +92,7 @@ import {
   isFavoritePath,
   isFavoritesRootItemId,
   isTrashListingRefused,
+  reorderFavorites,
 } from "./lib/favorites";
 import { FileIcon, preloadGenericIcons } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
@@ -863,7 +864,7 @@ export function App() {
   const navigateFavoritePath = useCallback(
     (path: string, historyMode: "push" | "replace" | "skip") =>
       navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
-        sidebarJump: true,
+        fromSidebar: "favorite",
         treeSelectionMode: "favorite",
         favoritePath: path,
         persistOnError: true,
@@ -1919,7 +1920,7 @@ export function App() {
               },
               onNavigateFavorite: (path) =>
                 navigateTo(path, "push", undefined, undefined, undefined, undefined, {
-                  sidebarJump: true,
+                  fromSidebar: "favorite",
                   treeSelectionMode: "favorite",
                   favoritePath: path,
                   persistOnError: true,
@@ -1934,6 +1935,10 @@ export function App() {
               locationsExpanded,
               onToggleLocationsExpanded: () => setLocationsExpanded((value) => !value),
               // A disk under Locations, or the Locations row itself.
+              onReorderFavorites: (movedPath, targetPath, position) =>
+                setFavorites((current) =>
+                  reorderFavorites(current, movedPath, targetPath, position),
+                ),
               onSelectItem: async (itemId) => {
                 await selectTreeItem(itemId, itemId === getLocationsRootItemId() ? "skip" : "push");
                 return true;

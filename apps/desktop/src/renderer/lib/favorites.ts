@@ -37,17 +37,39 @@ export function buildSidebarLocations(
       : [];
   const trash: SidebarLocation[] =
     homePath.length > 0 ? [{ path: getTrashPath(homePath), label: "Trash", icon: "trash" }] : [];
+  // The places always there come first and keep their rows; disks come and go after them.
   return [
     ...home,
     { path: "/", label: "Macintosh HD", icon: "drive" },
+    ...trash,
     ...volumes.map((volume) => ({
       path: volume.path,
       label: volume.name,
       // A network share is drawn as one; a drive or a disk image as a drive.
       icon: volume.isLocal ? ("drive" as const) : ("server" as const),
     })),
-    ...trash,
   ];
+}
+
+// The favorites with one of them, dragged in the sidebar, put just before or after another.
+export function reorderFavorites(
+  favorites: FavoritePreference[],
+  movedPath: string,
+  targetPath: string,
+  position: "before" | "after",
+): FavoritePreference[] {
+  const moved = favorites.find((favorite) => favorite.path === movedPath);
+  if (!moved || movedPath === targetPath) {
+    return favorites;
+  }
+  const rest = favorites.filter((favorite) => favorite.path !== movedPath);
+  const targetIndex = rest.findIndex((favorite) => favorite.path === targetPath);
+  if (targetIndex < 0) {
+    return favorites;
+  }
+  const next = [...rest];
+  next.splice(position === "before" ? targetIndex : targetIndex + 1, 0, moved);
+  return next.every((favorite, index) => favorite === favorites[index]) ? favorites : next;
 }
 
 export type TreePresentationItem = {

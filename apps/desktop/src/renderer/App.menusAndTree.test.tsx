@@ -1606,24 +1606,17 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("takes the tree back to Home's top when a favorite in Home is clicked", async () => {
+  it("moves the tree for a favorite outside it, and roots it at a location", async () => {
     const harness = createAppHarness({
       preferences: {
         favorites: [
+          { path: "/Applications", icon: "applications" },
           { path: "/Users/demo/Documents", icon: "documents" },
           { path: "/Users/demo/.Trash", icon: "trash" },
         ],
         favoritesInitialized: true,
       },
       directorySnapshots: {
-        "/Users/demo": {
-          path: "/Users/demo",
-          parentPath: "/Users",
-          entries: [
-            createDirectoryEntry("/Users/demo/source.txt", "file"),
-            createDirectoryEntry("/Applications", "directory"),
-          ],
-        },
         "/Applications": { path: "/Applications", parentPath: "/", entries: [] },
         "/Users/demo/Documents": {
           path: "/Users/demo/Documents",
@@ -1641,6 +1634,7 @@ describe("App copy/paste integration", () => {
           createTreeChild("/Applications", "directory"),
           createTreeChild("/Users", "directory"),
         ],
+        "/Users": [createTreeChild("/Users/demo", "directory")],
         "/Users/demo": [createTreeChild("/Users/demo/Documents", "directory")],
       },
     });
@@ -1650,11 +1644,18 @@ describe("App copy/paste integration", () => {
         <App />
       </FiletrailClientProvider>,
     );
-
-    // Browsing outside Home roots the tree at Macintosh HD, which holds Home too.
-    await openDirectory("/Applications");
+    const treeRoot = () => screen.getByTestId("tree-root").textContent;
     await vi.waitFor(() => {
-      expect(screen.getByTestId("tree-root").textContent).toBe("/");
+      expect(treeRoot()).toBe("/Users/demo");
+    });
+
+    // Applications is outside Home: the tree moves to Macintosh HD.
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle("favorite:/Applications"));
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Applications");
+      expect(treeRoot()).toBe("/");
     });
 
     // The Trash opens without moving the tree.
@@ -1664,18 +1665,27 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/.Trash");
     });
-    expect(screen.getByTestId("tree-root").textContent).toBe("/");
+    expect(treeRoot()).toBe("/");
 
+    // Documents is inside Macintosh HD: the tree stays there and opens down to it.
     await act(async () => {
       fireEvent.click(await screen.findByTitle("favorite:/Users/demo/Documents"));
     });
-
     await vi.waitFor(() => {
-      expect(screen.getByTestId("tree-root").textContent).toBe("/Users/demo");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Documents");
       expect(screen.getByTestId("tree-selection")).toHaveTextContent(
         "favorite:/Users/demo/Documents",
       );
-      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Documents");
+    });
+    expect(treeRoot()).toBe("/");
+
+    // Home under Locations is a top: the tree is rooted there.
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle("location:/Users/demo"));
+    });
+    await vi.waitFor(() => {
+      expect(treeRoot()).toBe("/Users/demo");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("location:/Users/demo");
     });
   });
 

@@ -5,6 +5,7 @@ import {
   getDefaultFavorites,
   getShortcutItemPath,
   isTrashListingRefused,
+  reorderFavorites,
 } from "./favorites";
 
 describe("favorites", () => {
@@ -17,7 +18,7 @@ describe("favorites", () => {
     ]);
   });
 
-  it("lists Home, Macintosh HD, the disks mounted and the Trash under Locations, as Finder does", () => {
+  it("lists Home, Macintosh HD and the Trash under Locations, then the disks mounted", () => {
     expect(
       buildSidebarLocations(
         [
@@ -29,9 +30,9 @@ describe("favorites", () => {
     ).toEqual([
       { path: "/Users/demo", label: "demo", icon: "home" },
       { path: "/", label: "Macintosh HD", icon: "drive" },
+      { path: "/Users/demo/.Trash", label: "Trash", icon: "trash" },
       { path: "/Volumes/Backup", label: "Backup", icon: "drive" },
       { path: "/Volumes/Shared", label: "Shared", icon: "server" },
-      { path: "/Users/demo/.Trash", label: "Trash", icon: "trash" },
     ]);
     // Without a home folder there is no Home or Trash to list.
     expect(buildSidebarLocations([], "")).toEqual([
@@ -58,8 +59,8 @@ describe("favorites", () => {
       "locations-root",
       "location:/Users/demo",
       "location:/",
-      "location:/Volumes/Backup",
       "location:/Users/demo/.Trash",
+      "location:/Volumes/Backup",
     ]);
     expect(items["location:/Volumes/Backup"]).toMatchObject({
       kind: "location",
@@ -94,6 +95,44 @@ describe("favorites", () => {
         locations: buildSidebarLocations([], "/Users/demo"),
       }).visibleItemIds,
     ).toEqual([]);
+  });
+
+  it("puts a dragged favorite just before or after another", () => {
+    const favorites = [
+      { path: "/Applications", icon: "applications" as const },
+      { path: "/Users/demo/Desktop", icon: "desktop" as const },
+      { path: "/Users/demo/Documents", icon: "documents" as const },
+      { path: "/Users/demo/Downloads", icon: "downloads" as const },
+    ];
+    const order = (moved: string, target: string, position: "before" | "after") =>
+      reorderFavorites(favorites, moved, target, position).map((favorite) =>
+        favorite.path.split("/").at(-1),
+      );
+
+    expect(order("/Users/demo/Downloads", "/Applications", "before")).toEqual([
+      "Downloads",
+      "Applications",
+      "Desktop",
+      "Documents",
+    ]);
+    expect(order("/Applications", "/Users/demo/Documents", "after")).toEqual([
+      "Desktop",
+      "Documents",
+      "Applications",
+      "Downloads",
+    ]);
+    expect(order("/Users/demo/Desktop", "/Users/demo/Downloads", "before")).toEqual([
+      "Applications",
+      "Documents",
+      "Desktop",
+      "Downloads",
+    ]);
+    // Onto itself, or where it already is: the same list, so nothing is saved.
+    expect(reorderFavorites(favorites, "/Applications", "/Applications", "after")).toBe(favorites);
+    expect(reorderFavorites(favorites, "/Applications", "/Users/demo/Desktop", "before")).toBe(
+      favorites,
+    );
+    expect(reorderFavorites(favorites, "/Missing", "/Applications", "before")).toBe(favorites);
   });
 
   it("recognizes macOS refusing to list the Trash", () => {

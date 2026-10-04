@@ -936,9 +936,10 @@ export function useExplorerNavigationController(args: {
       persistOnError?: boolean;
       forceTreeReload?: boolean;
       rerootTree?: boolean;
-      /** Gone to from a favorite or a location: the tree goes back to the place's own top
-       *  (Home, the disk, or Macintosh HD) and opens down to it. */
-      sidebarJump?: boolean;
+      /** Gone to from the sidebar. A location (Home, Macintosh HD, a disk) is the tree's top:
+       *  the tree is rooted there. A favorite opens down within the tree, which moves to the
+       *  favorite's own top only when it is outside the tree, as any folder does. */
+      fromSidebar?: "location" | "favorite";
       /** The folder is read again where it stands: the selection is kept. */
       keepSelection?: boolean;
       /** Search results on screen stay there; only the folder underneath is read again. */
@@ -949,11 +950,11 @@ export function useExplorerNavigationController(args: {
       viaGoTo?: boolean;
     } = {},
   ): Promise<boolean> {
-    // The Trash, gone to from the sidebar, leaves the tree as it is: it is not a folder of
-    // anything the tree could show from its top.
+    // The Trash, gone to from the sidebar, leaves the tree as it is: it is not a folder the
+    // tree shows.
     const options =
-      requestedOptions.sidebarJump && isPathInsideTrash(path, homePath)
-        ? { ...requestedOptions, sidebarJump: false, syncTree: false }
+      requestedOptions.fromSidebar !== undefined && isPathInsideTrash(path, homePath)
+        ? { ...requestedOptions, fromSidebar: undefined, syncTree: false }
         : requestedOptions;
     const requestId = ++directoryRequestRef.current;
     pendingNavigationRef.current = { requestId, path };
@@ -993,9 +994,10 @@ export function useExplorerNavigationController(args: {
       if (options.rerootTree) {
         initializeTree(response.path);
       }
-      const treeRevealPath = options.sidebarJump
-        ? resetTreeForSidebarJump(response.path, includeHiddenOverride)
-        : response.path;
+      const treeRevealPath =
+        options.fromSidebar === "location"
+          ? resetTreeForSidebarJump(response.path, includeHiddenOverride)
+          : response.path;
       if (options.syncTree !== false) {
         await syncTreeToPath(treeRevealPath, includeHiddenOverride, {
           forceReload: options.forceTreeReload ?? false,
@@ -1030,7 +1032,7 @@ export function useExplorerNavigationController(args: {
         applyDirectorySnapshot(path, [], {}, options);
         // A folder that can't be listed (the Trash, without Full Disk Access) still takes
         // the tree back to its top.
-        if (options.sidebarJump) {
+        if (options.fromSidebar === "location") {
           const treeTopPath = resolveExplorerTreeRootPath(path, homePath);
           resetTreeForSidebarJump(path, includeHiddenOverride);
           void syncTreeToPath(treeTopPath, includeHiddenOverride, { isCurrent: isSameView });
@@ -1322,7 +1324,7 @@ export function useExplorerNavigationController(args: {
       applyEmptyDirectorySnapshot();
       return;
     }
-    // A disk: its row stays selected, and the folder tree shows the disk from its top.
+    // A location: its row stays selected, and the folder tree shows it from its top.
     const locationPath = getLocationItemPath(itemId);
     if (locationPath) {
       setTreeSelection(itemId);
@@ -1330,7 +1332,7 @@ export function useExplorerNavigationController(args: {
         setLeftPaneSubview("favorites");
       }
       await navigateTo(locationPath, historyMode, undefined, undefined, undefined, undefined, {
-        sidebarJump: true,
+        fromSidebar: "location",
         treeSelectionMode: "favorite",
         shortcutItemId: itemId,
         persistOnError: true,
@@ -1344,7 +1346,7 @@ export function useExplorerNavigationController(args: {
         setLeftPaneSubview("favorites");
       }
       await navigateTo(favoritePath, historyMode, undefined, undefined, undefined, undefined, {
-        sidebarJump: true,
+        fromSidebar: "favorite",
         treeSelectionMode: "favorite",
         favoritePath,
         persistOnError: true,
