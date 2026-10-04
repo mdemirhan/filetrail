@@ -492,11 +492,11 @@ export function useExplorerActions(args: {
     if (!targetPath) {
       return null;
     }
+    // The Trash is a permanent favorite: it can't be removed, wherever it is right-clicked.
+    if (targetPath === getTrashPath(homePath)) {
+      return null;
+    }
     if (contextMenuState.surface === "favorite") {
-      // Trash is a permanent favorite — cannot be removed.
-      if (targetPath === getTrashPath(homePath)) {
-        return null;
-      }
       return "Remove from Favorites";
     }
     if (contextMenuState.surface !== "content" && contextMenuState.surface !== "treeFolder") {
@@ -522,31 +522,45 @@ export function useExplorerActions(args: {
     [contextMenuFavoriteToggleLabel, contextMenuTargetEntries, defaultTextEditor.appName],
   );
 
+  // A right-click menu lists only what can be done to its items, there and then, as Apple
+  // asks of context menus and Finder does: anything else is left out rather than dimmed.
+  // Paste alone may be dimmed (Apple allows it for Cut, Copy and Paste), as in the menu bar.
   const contextMenuHiddenActionIds = useMemo(() => {
     if (!contextMenuState) {
       return [] as ContextMenuActionId[];
     }
     const hidden = new Set<ContextMenuActionId>();
+    const { surface } = contextMenuState;
+    const isItemListSurface = surface === "content" || surface === "search" || surface === "trash";
+    // Nothing in the Trash to empty.
+    if (args.derived.trashIsEmpty === true) {
+      hidden.add("emptyTrash");
+    }
+    // One file operation at a time: while one runs, the others are left out.
+    if (isWriteOperationLocked) {
+      for (const actionId of WRITE_LOCKED_CONTEXT_ACTION_IDS) {
+        if (actionId !== "paste") {
+          hidden.add(actionId);
+        }
+      }
+    }
     if (contextMenuFavoriteToggleLabel === null) {
       hidden.add("toggleFavorite");
     }
-    const isTreeSurface =
-      contextMenuState.surface === "treeFolder" || contextMenuState.surface === "favorite";
+    const isTreeSurface = surface === "treeFolder" || surface === "favorite";
     const isSingleFolder =
       contextMenuTargetEntries.length === 1 &&
       isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null);
     // In the file list and search results a new tab opens on one folder.
-    if (!isTreeSurface && (contextMenuState.surface === "trash" || !isSingleFolder)) {
+    if (!isTreeSurface && (surface === "trash" || !isSingleFolder)) {
       hidden.add("openInNewTab");
     }
     // An item's Paste goes into it, so it is there only for one folder; the folder on
     // screen has its own, in the menu of the background.
-    const isItemSurface =
-      contextMenuState.surface === "content" || contextMenuState.surface === "search";
-    if (isItemSurface && !isSingleFolder) {
+    if ((surface === "content" || surface === "search") && !isSingleFolder) {
       hidden.add("paste");
     }
-    // Edit is for text files: left out, not greyed, for anything else.
+    // Edit is for text files.
     if (
       contextMenuTargetEntries.length === 0 ||
       contextMenuTargetEntries.length !== contextMenuState.paths.length ||
@@ -554,15 +568,21 @@ export function useExplorerActions(args: {
     ) {
       hidden.add("edit");
     }
-    if (contextMenuState.surface === "trash") {
-      // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
-      const hasBundle = contextMenuTargetEntries.some((entry) => entry.kind === "bundle");
-      if (!hasBundle) {
+    if (isItemListSurface) {
+      // Rename is for one item at a time.
+      if (contextMenuState.paths.length !== 1) {
+        hidden.add("rename");
+      }
+      // "Show Package Contents" is for packages (.app, .framework and the like).
+      if (!contextMenuTargetEntries.some((entry) => entry.kind === "bundle")) {
         hidden.add("showPackageContents");
       }
+      // For folders and packages: one, or a selection with any among it (files have a size).
       if (!contextMenuTargetEntries.some((entry) => isFolderSizeEligibleKind(entry.kind))) {
         hidden.add("calculateSize");
       }
+    }
+    if (surface === "trash") {
       // In the Trash things are only taken out or deleted for good: nothing is pasted,
       // made or duplicated there, and what is there is in the Trash already.
       for (const actionId of TRASH_HIDDEN_ACTION_IDS) {
@@ -570,7 +590,7 @@ export function useExplorerActions(args: {
       }
       return Array.from(hidden);
     }
-    if (contextMenuState.surface === "favorite") {
+    if (surface === "favorite") {
       if (contextMenuState.targetPath !== getTrashPath(homePath)) {
         hidden.add("emptyTrash");
       } else {
@@ -579,7 +599,7 @@ export function useExplorerActions(args: {
       }
       return Array.from(hidden);
     }
-    if (contextMenuState.surface === "background") {
+    if (surface === "background") {
       // Nothing is pasted into or created in the Trash; it can be emptied from there.
       if (isPathInsideTrash(currentPath, homePath)) {
         hidden.add("paste");
@@ -589,7 +609,7 @@ export function useExplorerActions(args: {
       }
       return Array.from(hidden);
     }
-    if (contextMenuState.surface === "treeFolder") {
+    if (surface === "treeFolder") {
       // Everything goes to the Trash; only what is already in it can be deleted for good.
       const targetPath = contextMenuState.targetPath;
       if (!targetPath || !isPathInsideTrash(targetPath, homePath)) {
@@ -598,161 +618,62 @@ export function useExplorerActions(args: {
         for (const actionId of TRASH_HIDDEN_ACTION_IDS) {
           hidden.add(actionId);
         }
-        // The Trash itself is the home folder's: it isn't deleted, only emptied.
+        // The Trash itself is the home folder's: it isn't deleted, only emptied, and it
+        // stays where it is, under its name (the main process refuses too).
         if (targetPath === getTrashPath(homePath)) {
           hidden.add("deleteImmediately");
+          hidden.add("cut");
+          hidden.add("move");
+          hidden.add("rename");
         }
       }
       return Array.from(hidden);
     }
-    if (contextMenuState.surface === "search") {
+    if (surface === "search") {
       hidden.add("toggleFavorite");
       // New Folder goes into the folder on screen, and search results show none.
       hidden.add("newFolder");
+      // A duplicate goes next to its original: several results from different folders
+      // have no one folder for theirs.
+      if (resolveDuplicateFolder(contextMenuState.paths) === null) {
+        hidden.add("duplicate");
+      }
     }
     // An item's New Folder makes the folder inside it, as its Paste pastes there.
     if (!isSingleFolder) {
       hidden.add("newFolder");
     }
-    // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
-    const hasBundle = contextMenuTargetEntries.some((entry) => entry.kind === "bundle");
-    if (!hasBundle) {
-      hidden.add("showPackageContents");
-    }
-    // For folders and packages: one, or a selection with any among it (files have a size).
-    if (!contextMenuTargetEntries.some((entry) => isFolderSizeEligibleKind(entry.kind))) {
-      hidden.add("calculateSize");
-    }
     return Array.from(hidden);
   }, [
+    args.derived.trashIsEmpty,
     contextMenuFavoriteToggleLabel,
     contextMenuState,
     contextMenuTargetEntries,
     currentPath,
     homePath,
-  ]);
-
-  const contextMenuDisabledActionIds = useMemo(() => {
-    if (!contextMenuState) {
-      return [] as ContextMenuActionId[];
-    }
-    const disabled = new Set<ContextMenuActionId>();
-    // Search results take the same actions as the list (a duplicate goes next to its
-    // original), except that several results from different folders have no one folder
-    // for their duplicates.
-    const isContentContext =
-      contextMenuState.surface === "content" ||
-      contextMenuState.surface === "trash" ||
-      contextMenuState.surface === "search";
-    const isTreeFolderContext = contextMenuState.surface === "treeFolder";
-    const isFavoriteContext = contextMenuState.surface === "favorite";
-    const hasSingleContextItem = contextMenuState.paths.length === 1;
-    const hasSingleSelectedFolder =
-      contextMenuState.paths.length === 1 &&
-      isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null);
-    if (!canPasteAtResolvedDestination) {
-      disabled.add("paste");
-    }
-    // As in Finder: nothing to empty, nothing to ask about.
-    if (args.derived.trashIsEmpty === true) {
-      disabled.add("emptyTrash");
-    }
-    if (isWriteOperationLocked) {
-      for (const actionId of WRITE_LOCKED_CONTEXT_ACTION_IDS) {
-        disabled.add(actionId);
-      }
-    }
-    // The background menu lists only what applies to the folder on screen.
-    if (contextMenuState.surface === "background") {
-      return Array.from(disabled);
-    }
-    if (isTreeFolderContext) {
-      // The Trash itself stays where it is, under its name (the main process refuses too).
-      if (contextMenuState.targetPath === getTrashPath(homePath)) {
-        disabled.add("cut");
-        disabled.add("move");
-        disabled.add("rename");
-      }
-      if (!contextMenuState.targetPath) {
-        disabled.add("openInNewTab");
-        disabled.add("showInfo");
-        disabled.add("calculateSize");
-        disabled.add("toggleFavorite");
-        disabled.add("rootTreeHere");
-        disabled.add("terminal");
-        disabled.add("showInFinder");
-        disabled.add("copyPath");
-        disabled.add("copy");
-        disabled.add("cut");
-        disabled.add("move");
-        disabled.add("rename");
-        disabled.add("duplicate");
-        disabled.add("newFolder");
-        disabled.add("trash");
-      }
-      return Array.from(disabled);
-    }
-    if (isFavoriteContext) {
-      if (!contextMenuState.targetPath) {
-        disabled.add("openInNewTab");
-        disabled.add("revealInTree");
-        disabled.add("showInfo");
-        disabled.add("calculateSize");
-        disabled.add("toggleFavorite");
-        disabled.add("rootTreeHere");
-        disabled.add("terminal");
-        disabled.add("showInFinder");
-        disabled.add("copyPath");
-        disabled.add("newFolder");
-      }
-      return Array.from(disabled);
-    }
-    if (!isContentContext) {
-      disabled.add("move");
-      disabled.add("rename");
-      disabled.add("duplicate");
-      disabled.add("newFolder");
-      disabled.add("trash");
-    } else {
-      if (!hasSingleContextItem) {
-        disabled.add("rename");
-      }
-      if (contextMenuState.scope === "selection" && contextMenuState.paths.length === 0) {
-        disabled.add("move");
-        disabled.add("duplicate");
-        disabled.add("trash");
-      }
-      if (
-        contextMenuState.surface === "search" &&
-        resolveDuplicateFolder(contextMenuState.paths) === null
-      ) {
-        disabled.add("duplicate");
-      }
-      if (!hasSingleSelectedFolder) {
-        disabled.add("newFolder");
-      }
-    }
-    if (contextMenuTargetEntries.length > 0) {
-      return Array.from(disabled);
-    }
-    const items = getContextMenuItems({ surface: contextMenuState.surface });
-    for (const item of items) {
-      if (item.type === "separator" || item.id === "newFolder") {
-        continue;
-      }
-      if (item.id !== "paste") {
-        disabled.add(item.id);
-      }
-    }
-    return Array.from(disabled);
-  }, [
-    args.derived.trashIsEmpty,
-    canPasteAtResolvedDestination,
-    contextMenuState,
-    contextMenuTargetEntries,
-    homePath,
     isWriteOperationLocked,
   ]);
+
+  // Items removed while their menu is open (by another app): nothing in it applies any more,
+  // so it closes.
+  useEffect(() => {
+    const surface = contextMenuState?.surface;
+    if (
+      (surface === "content" || surface === "search" || surface === "trash") &&
+      contextMenuTargetEntries.length === 0
+    ) {
+      setContextMenuState(null);
+    }
+  }, [contextMenuState?.surface, contextMenuTargetEntries.length, setContextMenuState]);
+
+  // Only Paste is ever dimmed: with nothing to paste, or while a file operation runs.
+  const contextMenuDisabledActionIds = useMemo(
+    () =>
+      contextMenuState && (!canPasteAtResolvedDestination || isWriteOperationLocked)
+        ? (["paste"] as ContextMenuActionId[])
+        : ([] as ContextMenuActionId[]),
+    [canPasteAtResolvedDestination, contextMenuState, isWriteOperationLocked],
+  );
 
   const openWithMenuItems = useMemo(() => {
     const items: ContextMenuSubmenuItem[] = openWithApplications.map((application) => ({

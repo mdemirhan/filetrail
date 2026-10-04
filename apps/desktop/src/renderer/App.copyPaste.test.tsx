@@ -3543,6 +3543,8 @@ describe("App copy/paste integration", () => {
 
     it("is not offered for files alone, whose sizes are known", async () => {
       await rightClickSelection(["/Users/demo/source.txt", "/Users/demo/notes.txt"]);
+      // Rename is one item at a time: with two it isn't listed, as Calculate Size isn't.
+      expect(screen.queryByRole("button", { name: /^Rename/ })).toBeNull();
 
       expect(screen.getByRole("button", { name: /^Duplicate/ })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Calculate Size" })).toBeNull();
@@ -5627,11 +5629,15 @@ describe("App copy/paste integration", () => {
       fireEvent.contextMenu(folderButton);
     });
 
+    // Paste is dimmed (Apple allows it for Cut, Copy and Paste); the other file actions are
+    // left out of the menu until the operation ends.
     expect(await screen.findByRole("button", { name: /^Paste into Folder/ })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Rename" })).toHaveAttribute("aria-disabled", "true");
+    for (const name of [/^Rename/, /^Duplicate/, /^Move to…/, /^Move to Trash/]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
     for (const name of ["Copy", "Cut", "Copy Path"]) {
       expect(screen.getByRole("button", { name })).not.toHaveAttribute("aria-disabled", "true");
     }
@@ -12348,6 +12354,24 @@ describe("acting on search results", () => {
     }
     expect(screen.queryByRole("button", { name: /^Delete Immediately/ })).not.toBeInTheDocument();
   });
+
+  it("leaves Rename and Duplicate out of the menu of results from different folders", async () => {
+    const harness = createAppHarness({
+      searchResultItems: [result("/Users/demo/source.txt"), result("/Users/demo/Folder/deep.txt")],
+    });
+    renderApp(harness);
+    await openSearchResults();
+    await selectResult("/Users/demo/source.txt");
+    await selectResult("/Users/demo/Folder/deep.txt", { metaKey: true });
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("search:/Users/demo/source.txt"));
+    });
+
+    // One at a time, and next to one original: neither applies, so neither is listed.
+    expect(screen.getByRole("button", { name: /^Move to Trash/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Rename/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Duplicate/ })).toBeNull();
+  });
 });
 
 describe("Delete Immediately and Empty Trash", () => {
@@ -12493,7 +12517,7 @@ describe("Empty Trash and Delete Immediately while another operation runs", () =
     );
   });
 
-  it("greys out Empty Trash and Delete Immediately in the menus", async () => {
+  it("leaves Empty Trash and Delete Immediately out of the menus", async () => {
     const harness = createAppHarness(withTrash);
     renderApp(harness);
     await openDirectory("/Users/demo/.Trash");
@@ -12519,18 +12543,14 @@ describe("Empty Trash and Delete Immediately while another operation runs", () =
     await act(async () => {
       fireEvent.contextMenu(await screen.findByTitle("/Users/demo/.Trash/old.txt"));
     });
-    expect(screen.getByRole("button", { name: /^Delete Immediately/ })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: /^Show Info/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Delete Immediately/ })).toBeNull();
     await pressKey({ key: "Escape" });
     await act(async () => {
       fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
     });
-    expect(screen.getByRole("button", { name: /^Empty Trash/ })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: /^Show Info/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Empty Trash/ })).toBeNull();
   });
 });
 
@@ -13089,7 +13109,7 @@ describe("tabs on a folder that was renamed", () => {
 
 describe("Empty Trash with nothing in the Trash", () => {
   // As in Finder, there is nothing to empty, so nothing to ask about.
-  it("is greyed out in the menus and the menu bar", async () => {
+  it("is left out of the right-click menu, and greyed out in the menu bar", async () => {
     const harness = createAppHarness({ trashEmpty: true });
     renderApp(harness);
     await screen.findByTitle("/Users/demo/source.txt");
@@ -13098,10 +13118,8 @@ describe("Empty Trash with nothing in the Trash", () => {
       fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
     });
 
-    expect(screen.getByRole("button", { name: /^Empty Trash/ })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: /^Show Info/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Empty Trash/ })).toBeNull();
     await vi.waitFor(() => {
       expect(harness.menuStates.at(-1)?.disabledCommands).toContain("emptyTrash");
     });
