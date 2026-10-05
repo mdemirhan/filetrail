@@ -1234,6 +1234,7 @@ export function SettingsView({
   layoutMode = "wide",
   notificationsEnabled,
   markClipboardItems,
+  autoCalculateFolderSizes,
   restoreSessionOnStartup,
   homePath,
   terminalApp,
@@ -1263,6 +1264,7 @@ export function SettingsView({
   onSearchColumnOrderChange = () => undefined,
   onNotificationsEnabledChange,
   onMarkClipboardItemsChange,
+  onAutoCalculateFolderSizesChange,
   onRestoreSessionOnStartupChange,
   onBrowseTerminalApp,
   onClearTerminalApp,
@@ -1306,6 +1308,7 @@ export function SettingsView({
   layoutMode?: "wide" | "narrow" | "compact";
   notificationsEnabled: boolean;
   markClipboardItems: boolean;
+  autoCalculateFolderSizes: boolean;
   restoreSessionOnStartup: boolean;
   homePath: string;
   terminalApp: ApplicationSelection | null;
@@ -1336,6 +1339,7 @@ export function SettingsView({
   onSearchColumnOrderChange?: (value: SearchColumnOrder) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
   onMarkClipboardItemsChange: (value: boolean) => void;
+  onAutoCalculateFolderSizesChange: (value: boolean) => void;
   onRestoreSessionOnStartupChange: (value: boolean) => void;
   onBrowseTerminalApp: () => void;
   onClearTerminalApp: () => void;
@@ -1465,6 +1469,17 @@ export function SettingsView({
                   checked={markClipboardItems}
                   onToggle={() => onMarkClipboardItemsChange(!markClipboardItems)}
                   label="Mark copied and cut items"
+                />
+              }
+            />
+            <SettingRow
+              title="Calculate folder sizes automatically"
+              desc="In the Info panel, when you select a folder in your home folder."
+              right={
+                <Toggle
+                  checked={autoCalculateFolderSizes}
+                  onToggle={() => onAutoCalculateFolderSizesChange(!autoCalculateFolderSizes)}
+                  label="Calculate folder sizes automatically"
                 />
               }
             />

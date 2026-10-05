@@ -29,6 +29,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       layoutMode="wide"
       notificationsEnabled={true}
       markClipboardItems={true}
+      autoCalculateFolderSizes={true}
       restoreSessionOnStartup={true}
       homePath="/Users/demo"
       terminalApp={null}
@@ -83,6 +84,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onDetailColumnOrderChange={() => undefined}
       onNotificationsEnabledChange={() => undefined}
       onMarkClipboardItemsChange={() => undefined}
+      onAutoCalculateFolderSizesChange={() => undefined}
       onRestoreSessionOnStartupChange={() => undefined}
       onBrowseTerminalApp={() => undefined}
       onClearTerminalApp={() => undefined}
@@ -461,6 +463,19 @@ describe("SettingsView", () => {
 
     expect(onMarkClipboardItemsChange).toHaveBeenCalledWith(false);
     expect(screen.queryByText("Notify what was copied")).toBeNull();
+  });
+
+  it("turns the Info panel's folder sizes off with one switch", () => {
+    const onAutoCalculateFolderSizesChange = vi.fn();
+    renderSettingsView({ autoCalculateFolderSizes: true, onAutoCalculateFolderSizesChange });
+
+    const toggle = screen.getByRole("switch", {
+      name: "Calculate folder sizes automatically",
+    });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(toggle);
+
+    expect(onAutoCalculateFolderSizesChange).toHaveBeenCalledWith(false);
   });
 
   it("renders configured Open With applications", () => {

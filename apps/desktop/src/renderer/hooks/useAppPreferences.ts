@@ -72,6 +72,9 @@ export function useAppPreferences() {
   const [markClipboardItems, setMarkClipboardItems] = useState(
     DEFAULT_APP_PREFERENCES.markClipboardItems,
   );
+  const [autoCalculateFolderSizes, setAutoCalculateFolderSizes] = useState(
+    DEFAULT_APP_PREFERENCES.autoCalculateFolderSizes,
+  );
   const [topToolbarItems, setTopToolbarItems] = useState(DEFAULT_APP_PREFERENCES.topToolbarItems);
   const [restoreSessionOnStartup, setRestoreSessionOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreSessionOnStartup,
@@ -165,6 +168,8 @@ export function useAppPreferences() {
     setNotificationsEnabled,
     markClipboardItems,
     setMarkClipboardItems,
+    autoCalculateFolderSizes,
+    setAutoCalculateFolderSizes,
     topToolbarItems,
     setTopToolbarItems,
     restoreSessionOnStartup,
@@ -252,6 +257,7 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("searchColumnOrder", store.setSearchColumnOrder);
   set("notificationsEnabled", store.setNotificationsEnabled);
   set("markClipboardItems", store.setMarkClipboardItems);
+  set("autoCalculateFolderSizes", store.setAutoCalculateFolderSizes);
   set("topToolbarItems", store.setTopToolbarItems);
   set("restoreSessionOnStartup", store.setRestoreSessionOnStartup);
   set("favorites", store.setFavorites);

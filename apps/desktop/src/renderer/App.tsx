@@ -211,6 +211,8 @@ export function App() {
     setNotificationsEnabled,
     markClipboardItems,
     setMarkClipboardItems,
+    autoCalculateFolderSizes,
+    setAutoCalculateFolderSizes,
     topToolbarItems,
     setTopToolbarItems,
     restoreSessionOnStartup,
@@ -693,10 +695,15 @@ export function App() {
     selectedPathsInViewOrderRef.current = selectedPathsInViewOrder;
     selectedEntryRef.current = selectedEntry;
   }, [selectedEntry, selectedEntryRef, selectedPathsInViewOrder, selectedPathsInViewOrderRef]);
-  // With the Info panel showing it, the one folder selected is measured by itself.
+  // With the Info panel showing it, the one folder selected is measured by itself, unless
+  // that is turned off in Settings.
   useAutoFolderSize(
     getAutoFolderSizePath({
-      infoPanelOpen: infoPanelOpen && mainView === "explorer" && infoTargetPathOverride === null,
+      infoPanelOpen:
+        autoCalculateFolderSizes &&
+        infoPanelOpen &&
+        mainView === "explorer" &&
+        infoTargetPathOverride === null,
       selectedPaths: contentSelection.paths,
       selectedEntry,
       homePath,
@@ -1391,6 +1398,7 @@ export function App() {
     searchColumnWidths,
     notificationsEnabled,
     markClipboardItems,
+    autoCalculateFolderSizes,
     topToolbarItems,
     folderTreeOpen,
     propertiesOpen: infoPanelOpen,
@@ -1561,6 +1569,7 @@ export function App() {
         setSearchColumnWidths(preferences.searchColumnWidths);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setMarkClipboardItems(preferences.markClipboardItems);
+        setAutoCalculateFolderSizes(preferences.autoCalculateFolderSizes);
         setTopToolbarItems(preferences.topToolbarItems);
         setFolderTreeOpen(preferences.folderTreeOpen);
         setInfoPanelOpen(preferences.propertiesOpen);
