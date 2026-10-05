@@ -64,6 +64,8 @@ Copying a folder by mistake is easy to do and annoying to discover later, so Fil
 
 When a paste would overwrite something, you decide what happens: Skip, Keep Both, Replace, or for folders, Add Missing, which copies only what the folder there lacks. Anything replaced goes to the Trash.
 
+Changed your mind? Edit › Undo (⌘Z) takes back renames, moves, Move to Trash, New Folder, copies, duplicates and Replace, one at a time, and Redo (⇧⌘Z) does them again. Each item is checked before anything moves, and Undo asks first if you have changed something since. Nothing is overwritten or deleted: what Undo takes away goes to the Trash. Merging folders, moving to another disk and deleting for good can't be undone, and File Trail tells you before you merge.
+
 ## Three views, with real previews
 
 <p align="center">
