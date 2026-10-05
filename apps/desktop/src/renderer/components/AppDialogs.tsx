@@ -38,6 +38,7 @@ import {
 } from "./ItemContextMenu";
 import { TextPromptDialog } from "./TextPromptDialog";
 import { ToastViewport } from "./ToastViewport";
+import { UndoQuestionAlert } from "./UndoQuestionAlert";
 
 function resolveContextMenuShortcutContext(
   shortcutContext: ShortcutContext,
@@ -89,6 +90,7 @@ export function AppDialogs({
   onConfirmDeleteImmediatelyDialog,
   onConfirmEmptyTrashDialog,
   onConfirmDotNameDialog,
+  onAnswerUndoQuestion,
   showCopyPasteProgressCard,
   onCancelWriteOperation,
   showCopyPasteResultDialog,
@@ -136,6 +138,7 @@ export function AppDialogs({
   onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
   onConfirmEmptyTrashDialog: () => void;
   onConfirmDotNameDialog: () => void;
+  onAnswerUndoQuestion: (answer: "skip" | "keep_both" | "trash" | null) => void;
   showCopyPasteProgressCard: boolean;
   onCancelWriteOperation: () => void;
   showCopyPasteResultDialog: boolean;
@@ -372,6 +375,14 @@ export function AppDialogs({
           }}
         />
       ) : null}
+      {copyPasteDialogState?.type === "undoQuestion" ? (
+        <UndoQuestionAlert
+          question={copyPasteDialogState.question}
+          names={copyPasteDialogState.names}
+          direction={copyPasteDialogState.direction}
+          onAnswer={onAnswerUndoQuestion}
+        />
+      ) : null}
       {copyPasteDialogState?.type === "confirmEmptyTrash" ? (
         <CopyPasteDialog
           // Finder's question, word for word; Cancel is the default.
@@ -440,10 +451,16 @@ export function AppDialogs({
       ) : null}
       {showCopyPasteResultDialog && writeOperationProgressEvent ? (
         isCopyLikeAction(writeOperationProgressEvent.action) ||
-        writeOperationProgressEvent.action === "batch_rename" ? (
+        writeOperationProgressEvent.action === "batch_rename" ||
+        writeOperationProgressEvent.action === "undo" ||
+        writeOperationProgressEvent.action === "redo" ? (
           <CopyPasteResultDialog
             event={writeOperationProgressEvent}
-            canRetry
+            // An Undo is chosen again from the menu, with what it finds then.
+            canRetry={
+              writeOperationProgressEvent.action !== "undo" &&
+              writeOperationProgressEvent.action !== "redo"
+            }
             onRetry={() => onRetryFailedCopyPasteItems(writeOperationProgressEvent)}
             onClose={onCloseCopyPasteDialog}
           />
@@ -571,7 +588,11 @@ function getWriteOperationTitle(
                 ? ["Renaming…", "Rename"]
                 : action === "new_folder"
                   ? ["Creating Folder…", "New Folder"]
-                  : ["Pasting…", "Paste"];
+                  : action === "undo"
+                    ? ["Undoing…", "Undo"]
+                    : action === "redo"
+                      ? ["Redoing…", "Redo"]
+                      : ["Pasting…", "Paste"];
   return phase === "progress" ? progress : result;
 }
 

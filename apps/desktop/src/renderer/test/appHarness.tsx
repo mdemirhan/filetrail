@@ -245,6 +245,10 @@ export function createAppHarness(
     searchResultItems?: IpcResponse<"search:getUpdate">["items"];
     // What the Trash holds, as far as the main process can tell (null: it can't).
     trashEmpty?: boolean | null;
+    // What the next Undo (or Redo) requests find, one each; after them, one with nothing
+    // to ask about.
+    undoPrepareResponses?: Array<IpcResponse<"undo:prepare">>;
+    undoStartError?: Error;
   } = {},
 ): {
   client: FiletrailClient;
@@ -519,6 +523,21 @@ export function createAppHarness(
       }
       if (channel === "writeOperation:trash") {
         return { operationId: "write-op-trash", status: "queued" } as IpcResponse<C>;
+      }
+      if (channel === "undo:prepare") {
+        return (args.undoPrepareResponses?.shift() ?? {
+          ticket: `${(payload as IpcRequestInput<"undo:prepare">).direction}:1:1`,
+          refusal: null,
+          label: "Move of “source.txt”",
+          nameTaken: [],
+          changed: [],
+        }) as IpcResponse<C>;
+      }
+      if (channel === "undo:start") {
+        if (args.undoStartError) {
+          throw args.undoStartError;
+        }
+        return { operationId: "write-op-undo", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "system:getTrashState") {
         return { empty: args.trashEmpty ?? null } as IpcResponse<C>;
@@ -905,7 +924,7 @@ export async function openSearchResults(): Promise<void> {
 
 export function expectNativeEditActions(
   harness: ReturnType<typeof createAppHarness>,
-  actions: Array<"cut" | "copy" | "paste" | "selectAll">,
+  actions: Array<"undo" | "redo" | "cut" | "copy" | "paste" | "selectAll">,
 ): void {
   expect(
     harness.invocations

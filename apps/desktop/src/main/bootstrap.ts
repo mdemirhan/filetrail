@@ -87,6 +87,12 @@ export async function bootstrapMainProcess(
     showStartupNotices?: (notices: string[]) => void;
     // Items such a Replace left waiting for their disk, put in place later.
     showRecoveryNotices?: (notices: string[]) => void;
+    // What Undo and Redo would do now, for the Edit menu; told at start and on each change.
+    onUndoHistoryChanged?: (menu: {
+      undo: string | null;
+      redo: string | null;
+      cantUndo: boolean;
+    }) => void;
   } = {},
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
@@ -159,6 +165,8 @@ export async function bootstrapMainProcess(
   const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
   // What Undo and Redo work from, for as long as the app runs.
   const undoHistory = createUndoHistory();
+  undoHistory.onChange(() => windows.onUndoHistoryChanged?.(undoHistory.menu()));
+  windows.onUndoHistoryChanged?.(undoHistory.menu());
   const writeCoordinator = createWriteOperationCoordinator(
     writeService,
     createOriginalWriteOperationFs(trashItem),

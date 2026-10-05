@@ -4,6 +4,7 @@ import {
   collectFollowedMoves,
   getPathLeafName,
   isRenameOrMove,
+  removedByWrite,
   replacePathPrefix,
 } from "./explorerAppUtils";
 import type { DirectoryEntry, WriteOperationResult } from "./explorerTypes";
@@ -152,12 +153,7 @@ export function followClipboardThroughWrite(
     return clipboard;
   }
   const moves = isRenameOrMove(result.action) ? collectFollowedMoves(result) : [];
-  const removedPaths =
-    result.action === "trash" || result.action === "delete_immediately"
-      ? result.items.flatMap((item) =>
-          item.status === "completed" && item.sourcePath ? [item.sourcePath] : [],
-        )
-      : [];
+  const removedPaths = removedByWrite(result);
   if (clipboard.mode === "cut") {
     const changedPaths = [...moves.map(({ from }) => from), ...removedPaths];
     const changesAnItem = clipboard.sourcePaths.some((path) =>

@@ -10,6 +10,7 @@ import {
   applyApplicationMenuItemStates,
   createApplicationMenuTemplate,
   resolveApplicationMenuItemStates,
+  undoMenuLabels,
 } from "./appMenu";
 
 type Template = MenuItemConstructorOptions[];
@@ -102,8 +103,8 @@ describe("createApplicationMenuTemplate", () => {
       "Close Window",
     ]);
     expect(labels(submenuOf(template, "Edit"))).toEqual([
-      "(undo)",
-      "(redo)",
+      "Undo",
+      "Redo",
       "-",
       "Cut",
       "Copy",
@@ -318,6 +319,27 @@ describe("createApplicationMenuTemplate", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("undoes and redoes the typing of another focused window, never the files", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate(
+      { send },
+      { undoLabels: { undo: "Undo Move of “a.txt”", redo: "Redo" } },
+    );
+    const settingsContents = { undo: vi.fn(), redo: vi.fn() };
+    const undo = itemOf(submenuOf(template, "Edit"), "Undo Move of “a.txt”");
+
+    expect(undo.accelerator).toBe("Command+Z");
+    expect(itemOf(submenuOf(template, "Edit"), "Redo").accelerator).toBe("Command+Shift+Z");
+    choose(undo, { webContents: settingsContents });
+    choose(itemOf(submenuOf(template, "Edit"), "Redo"), { webContents: settingsContents });
+
+    expect(settingsContents.undo).toHaveBeenCalledTimes(1);
+    expect(settingsContents.redo).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+    choose(undo);
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "undo" });
+  });
+
   it("closes another focused window with ⌘W instead of a tab of the explorer", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send });
@@ -488,6 +510,22 @@ describe("resolveApplicationMenuItemStates", () => {
     expect(stateOf("toggleFolderTree:show", hidden).visible).toBe(true);
   });
 
+  it("turns the files' Undo and Redo on only when there is something to do", () => {
+    const window = { explorerFocused: true, undoAvailable: { undo: true, redo: false } };
+    expect(stateOf("undo", INITIAL_APPLICATION_MENU_STATE, window).enabled).toBe(true);
+    expect(stateOf("redo", INITIAL_APPLICATION_MENU_STATE, window).enabled).toBe(false);
+    // The window says no while an operation runs.
+    const locked = { ...INITIAL_APPLICATION_MENU_STATE, disabledCommands: ["undo" as const] };
+    expect(stateOf("undo", locked, window).enabled).toBe(false);
+  });
+
+  it("keeps a text field's Undo and Redo on, with nothing to undo in the files", () => {
+    const window = { explorerFocused: true, undoAvailable: { undo: false, redo: false } };
+    const typing = { ...INITIAL_APPLICATION_MENU_STATE, textEditing: true };
+    expect(stateOf("undo", typing, window).enabled).toBe(true);
+    expect(stateOf("redo", typing, window).enabled).toBe(true);
+  });
+
   it("keeps only the edit commands and ⌘W while another window has the keyboard", () => {
     const settingsFocused = { explorerFocused: false };
     const enabled = RENDERER_COMMAND_TYPES.filter(
@@ -497,7 +535,15 @@ describe("resolveApplicationMenuItemStates", () => {
         stateOf(type, INITIAL_APPLICATION_MENU_STATE, settingsFocused).enabled,
     );
 
-    expect(enabled).toEqual(["editCut", "editCopy", "editPaste", "editSelectAll", "closeTab"]);
+    expect(enabled).toEqual([
+      "undo",
+      "redo",
+      "editCut",
+      "editCopy",
+      "editPaste",
+      "editSelectAll",
+      "closeTab",
+    ]);
     expect(
       stateOf("toggleFavorite:add", INITIAL_APPLICATION_MENU_STATE, settingsFocused).enabled,
     ).toBe(false);
@@ -540,5 +586,30 @@ describe("applyApplicationMenuItemStates", () => {
     // Electron switches the rest of the group off when one is switched on.
     expect(list.checked).toBe(true);
     expect(details.checked).toBe(true);
+  });
+});
+
+describe("undoMenuLabels", () => {
+  const history = { undo: "Move of “a.txt”", redo: "Rename", cantUndo: false };
+
+  it("names what the files' Undo and Redo would do", () => {
+    expect(undoMenuLabels(history, false)).toEqual({
+      undo: "Undo Move of “a.txt”",
+      redo: "Redo Rename",
+    });
+    expect(undoMenuLabels({ undo: null, redo: null, cantUndo: false }, false)).toEqual({
+      undo: "Undo",
+      redo: "Redo",
+    });
+  });
+
+  it("says Can't Undo after an operation that can't be undone", () => {
+    expect(undoMenuLabels({ undo: null, redo: null, cantUndo: true }, false).undo).toBe(
+      "Can’t Undo",
+    );
+  });
+
+  it("says just Undo and Redo while a text field has the keyboard", () => {
+    expect(undoMenuLabels(history, true)).toEqual({ undo: "Undo", redo: "Redo" });
   });
 });

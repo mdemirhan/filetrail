@@ -83,6 +83,14 @@ type CopyPasteDialogState =
       type: "confirmDotName";
       request: DotNameRequest;
     }
+  | {
+      // Asked before an Undo (or Redo): items whose old names are taken now, or items that
+      // would go to the Trash though they changed since.
+      type: "undoQuestion";
+      question: "nameTaken" | "changed";
+      names: string[];
+      direction: "undo" | "redo";
+    }
   | null;
 
 // A rename or new folder waiting on the dot-name question, with all it needs to go ahead.

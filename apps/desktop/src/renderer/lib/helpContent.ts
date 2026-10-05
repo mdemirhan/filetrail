@@ -115,6 +115,12 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "files", command: "editSelection", description: "Edit in your text editor" },
   { group: "files", command: "quickLookSelection", description: "Quick Look" },
   { group: "files", command: "renameSelection", description: "Rename" },
+  {
+    group: "files",
+    command: "undo",
+    description: "Undo the last file operation (in a text field, its typing)",
+  },
+  { group: "files", command: "redo", description: "Redo what was undone" },
   { group: "files", command: "copy", description: "Copy" },
   { group: "files", command: "cut", description: "Cut" },
   { group: "files", command: "paste", description: "Paste" },

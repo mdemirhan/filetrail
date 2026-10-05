@@ -176,7 +176,7 @@ export const searchJobStatusSchema = z.enum([
   "error",
   "truncated",
 ]);
-export const nativeEditActionSchema = z.enum(["cut", "copy", "paste", "selectAll"]);
+export const nativeEditActionSchema = z.enum(["undo", "redo", "cut", "copy", "paste", "selectAll"]);
 export const copyPasteModeSchema = z.enum(["copy", "cut"]);
 export const copyPasteAnalysisJobStatusSchema = z.enum([
   "queued",
@@ -779,6 +779,7 @@ export const ipcContractSchemas = {
         infoPanelOpen: z.boolean(),
         infoRowOpen: z.boolean(),
         favoriteIsSet: z.boolean(),
+        textEditing: z.boolean(),
       }),
     }),
     response: z.object({
@@ -1119,6 +1120,8 @@ export const ipcContractSchemas = {
     response: z.object({
       ticket: z.string().min(1).nullable(),
       refusal: z.enum(["busy", "nothing", "cant_undo"]).nullable(),
+      // What the Edit menu calls it ("Move of “a.txt”"), for saying what was undone.
+      label: z.string().nullable(),
       // Items whose old name is now taken by another item.
       nameTaken: z.array(z.string()),
       // Items an operation made that have changed since, which Undo would move to the Trash.

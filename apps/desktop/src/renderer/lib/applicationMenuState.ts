@@ -10,7 +10,12 @@ export function buildApplicationMenuState(
 ): ApplicationMenuState {
   const { canRun, ...shown } = args;
   return {
-    disabledCommands: RENDERER_COMMAND_TYPES.filter((command) => !canRun(command)),
+    // A text field's Undo and Redo are always there, even in a dialog or while a file
+    // operation runs: they only change its text.
+    disabledCommands: RENDERER_COMMAND_TYPES.filter(
+      (command) =>
+        !(shown.textEditing && (command === "undo" || command === "redo")) && !canRun(command),
+    ),
     ...shown,
   };
 }

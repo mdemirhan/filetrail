@@ -46,6 +46,7 @@ import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
 import { useHiddenItemCount } from "./hooks/useHiddenItemCount";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
+import { useTextEditingFocus } from "./hooks/useTextEditingFocus";
 import { useTrashState } from "./hooks/useTrashState";
 import { useVolumes } from "./hooks/useVolumes";
 import { useWriteOperations } from "./hooks/useWriteOperations";
@@ -937,6 +938,8 @@ export function App() {
     startPasteFromClipboard,
     startTrashPaths,
     startDeleteImmediatelyPaths,
+    startUndo,
+    answerUndoQuestion,
     submitMoveDialog,
     submitNewFolderDialog,
     submitRenameDialog,
@@ -1211,6 +1214,7 @@ export function App() {
     isSearchMode,
     trashPath,
   });
+  const textEditing = useTextEditingFocus();
   const applicationMenuState = useMemo(
     () =>
       buildApplicationMenuState({
@@ -1223,6 +1227,7 @@ export function App() {
         infoPanelOpen,
         infoRowOpen,
         favoriteIsSet: favoriteTargetPath !== null && isFavoritePath(favorites, favoriteTargetPath),
+        textEditing,
       }),
     [
       canRunRendererCommand,
@@ -1235,6 +1240,7 @@ export function App() {
       infoRowOpen,
       favoriteTargetPath,
       favorites,
+      textEditing,
     ],
   );
   const sentApplicationMenuStateRef = useRef("");
@@ -1298,6 +1304,7 @@ export function App() {
       showClipboard: () => setClipboardMenuOpen(copyPasteClipboardRef.current.type === "ready"),
       clearClipboard,
       startPasteFromClipboard,
+      startUndo,
       resolveContentActionPaths,
       startDuplicateOfSelection,
       startTrashPaths,
@@ -2487,6 +2494,7 @@ export function App() {
           onConfirmDotNameDialog={() => {
             void confirmDotNameDialog();
           }}
+          onAnswerUndoQuestion={answerUndoQuestion}
           showCopyPasteProgressCard={showCopyPasteProgressCard}
           onCancelWriteOperation={() => {
             void cancelWriteOperation();

@@ -313,6 +313,13 @@ These go in a new `App.undo.test.tsx`, using `appHarness`:
 
 Menu tests go in `appMenu.test.ts`.
 
+### What changed while building Phase 4
+
+- ⌘Z only ever reaches the window through the menu (fixed keys aren't in the window's own key table). So the window tells the menu whether a text field has the keyboard (`textEditing` in the menu state, kept by `useTextEditingFocus`). While one does, Undo and Redo stay on and say just "Undo" and "Redo", and the window sends them to the field (`system:performEditAction`). Otherwise they name the operation, and are on only when the history has something and nothing runs.
+- The menu is built again only when the words of Undo or Redo change: after an operation, when a text field gains or loses the keyboard, and when another window (Settings, Help) takes it.
+- `undo:prepare` also returns the label, for the notification ("Undone", then "Move of “a.txt”").
+- The questions are one alert each (Cancel · Skip · Keep Both, and Cancel · Skip · Move to Trash), listing up to five names.
+
 ## Phase 5: Can't Undo, and the warnings
 
 Wording to settle when building:

@@ -11,9 +11,11 @@ import {
   toMenuAccelerator,
 } from "../shared/shortcuts";
 
-type NativeEditTarget = Pick<WebContents, "cut" | "copy" | "paste" | "selectAll">;
+type NativeEditTarget = Pick<WebContents, "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll">;
 
 const NATIVE_EDIT_COMMANDS: Partial<Record<RendererCommandType, keyof NativeEditTarget>> = {
+  undo: "undo",
+  redo: "redo",
   editCut: "cut",
   editCopy: "copy",
   editPaste: "paste",
@@ -27,6 +29,8 @@ export const APP_MENU_NAME = "File Trail";
 // The commands that still do something while a window other than the explorer (Settings)
 // has the keyboard: the edit commands act on its text field, and ⌘W closes it.
 const COMMANDS_FOR_ANY_WINDOW = new Set<RendererCommandType>([
+  "undo",
+  "redo",
   "editCut",
   "editCopy",
   "editPaste",
@@ -64,6 +68,8 @@ export function createApplicationMenuTemplate(
     shortcuts?: ShortcutBindings;
     // The text editor chosen in Settings → Files, which Edit names.
     textEditorName?: string | undefined;
+    // What Undo and Redo say ("Undo Move of “a.txt”"): see undoMenuLabels.
+    undoLabels?: { undo: string; redo: string };
   } = {},
 ): MenuItemConstructorOptions[] {
   const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
@@ -181,8 +187,14 @@ export function createApplicationMenuTemplate(
     {
       label: "Edit",
       submenu: [
-        { role: "undo" },
-        { role: "redo" },
+        // Not the "undo" and "redo" roles: the window decides whether a text field or the
+        // files are undone, and sends a text field's to it (see NATIVE_EDIT_COMMANDS).
+        command("undo", options.undoLabels?.undo ?? "Undo", {
+          accelerator: fixedAccelerator("undo"),
+        }),
+        command("redo", options.undoLabels?.redo ?? "Redo", {
+          accelerator: fixedAccelerator("redo"),
+        }),
         separator,
         command("editCut", "Cut", { accelerator: fixedAccelerator("cut") }),
         command("editCopy", "Copy", { accelerator: fixedAccelerator("copy") }),
@@ -288,17 +300,46 @@ export type ApplicationMenuItemState = {
   visible?: boolean;
 };
 
+// What Undo and Redo say. While a text field (or another window) has the keyboard they are
+// its own and say just "Undo" and "Redo", as Finder's do while a name is being edited;
+// otherwise they name the file operation, or say there is one that can't be undone.
+export function undoMenuLabels(
+  history: { undo: string | null; redo: string | null; cantUndo: boolean },
+  textEditing: boolean,
+): { undo: string; redo: string } {
+  if (textEditing) {
+    return { undo: "Undo", redo: "Redo" };
+  }
+  return {
+    undo: history.cantUndo ? "Can’t Undo" : history.undo ? `Undo ${history.undo}` : "Undo",
+    redo: history.redo ? `Redo ${history.redo}` : "Redo",
+  };
+}
+
 // What each menu item should show for the state the explorer window last reported.
 export function resolveApplicationMenuItemStates(
   state: ApplicationMenuState,
   window: {
     // Whether the explorer window is the one the menu acts on (false while Settings is).
     explorerFocused: boolean;
+    // Whether there is a file operation to undo and to redo (left out: there is).
+    undoAvailable?: { undo: boolean; redo: boolean };
   },
 ): ApplicationMenuItemState[] {
   const disabled = new Set<RendererCommandType>(state.disabledCommands);
-  const isEnabled = (type: RendererCommandType) =>
-    window.explorerFocused ? !disabled.has(type) : COMMANDS_FOR_ANY_WINDOW.has(type);
+  const isEnabled = (type: RendererCommandType) => {
+    if (!window.explorerFocused) {
+      return COMMANDS_FOR_ANY_WINDOW.has(type);
+    }
+    if (disabled.has(type)) {
+      return false;
+    }
+    // A text field's own Undo is always there; the files' only when there is one.
+    if ((type === "undo" || type === "redo") && !state.textEditing) {
+      return window.undoAvailable?.[type] ?? true;
+    }
+    return true;
+  };
   const checked: Partial<Record<RendererCommandType, boolean>> = {
     viewAsIcons: state.viewMode === "icons",
     viewAsList: state.viewMode === "list",

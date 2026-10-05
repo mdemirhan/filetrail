@@ -338,10 +338,10 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
         }
         const changedPaths = pathsChangedByWrite(event.result);
         // Where the Trash is, the folders holding it may have changed; the Trash itself too.
+        const intoTrash =
+          event.action === "trash" || event.action === "undo" || event.action === "redo";
         const trashPath =
-          event.action === "trash" && homePath.length > 0
-            ? `${homePath.replace(/\/+$/u, "")}/.Trash`
-            : null;
+          intoTrash && homePath.length > 0 ? `${homePath.replace(/\/+$/u, "")}/.Trash` : null;
         let forgotten = false;
         for (const [path, entry] of [...cacheRef.current]) {
           if (entry.status === "calculating") {

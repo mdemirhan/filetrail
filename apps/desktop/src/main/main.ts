@@ -26,6 +26,7 @@ import {
   applyApplicationMenuItemStates,
   createApplicationMenuTemplate,
   resolveApplicationMenuItemStates,
+  undoMenuLabels,
 } from "./appMenu";
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import {
@@ -61,6 +62,13 @@ let recordMainWindowState: (() => void) | null = null;
 let appLoggerRef: ReturnType<typeof createAppLogger> | null = null;
 // What the explorer window last said the application menu should show.
 let applicationMenuState: ApplicationMenuState = INITIAL_APPLICATION_MENU_STATE;
+// What the history says Undo and Redo would do, and the words the menu was last built with.
+let undoHistoryMenu: { undo: string | null; redo: string | null; cantUndo: boolean } = {
+  undo: null,
+  redo: null,
+  cantUndo: false,
+};
+let builtUndoLabels = "";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const WINDOW_STATE_SAVE_DELAY_MS = 160;
 let shutdownInProgress = false;
@@ -81,8 +89,9 @@ if (hasSingleInstanceLock) {
   // Electron installs a menu of its own (Reload, Force Reload, Speech…) unless one has been
   // set by the time the app is ready; ours is built with the window.
   Menu.setApplicationMenu(null);
-  // While Settings has the keyboard the explorer's commands do not apply.
-  app.on("browser-window-focus", () => syncApplicationMenuItems());
+  // While Settings has the keyboard the explorer's commands do not apply, and its Undo is
+  // its text fields'.
+  app.on("browser-window-focus", () => refreshUndoMenu());
 
   app
     .whenReady()
@@ -204,7 +213,11 @@ if (hasSingleInstanceLock) {
               return;
             }
             applicationMenuState = state;
-            syncApplicationMenuItems();
+            refreshUndoMenu();
+          },
+          onUndoHistoryChanged: (menu) => {
+            undoHistoryMenu = menu;
+            refreshUndoMenu();
           },
         },
       );
@@ -721,9 +734,30 @@ function buildApplicationMenu(mainWindow: BrowserWindow): void {
         onCommandSent: () => syncApplicationMenuItems(mainWindow),
         shortcuts: resolveShortcuts(appStateStoreRef?.getPreferences().shortcutOverrides).bindings,
         textEditorName: appStateStoreRef?.getPreferences().defaultTextEditor.appName,
+        undoLabels: currentUndoLabels(mainWindow),
       }),
     ),
   );
+  builtUndoLabels = JSON.stringify(currentUndoLabels(mainWindow));
+  syncApplicationMenuItems(mainWindow);
+}
+
+function currentUndoLabels(mainWindow: BrowserWindow): { undo: string; redo: string } {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  const explorerFocused = focusedWindow === null || focusedWindow === mainWindow;
+  return undoMenuLabels(undoHistoryMenu, applicationMenuState.textEditing || !explorerFocused);
+}
+
+// A menu item's label can't be changed in place: the menu is built again when Undo or Redo
+// should say something else. Otherwise only what is on and off changes.
+function refreshUndoMenu(mainWindow: BrowserWindow | null = mainWindowRef): void {
+  if (!mainWindow || mainWindow.isDestroyed() || !Menu.getApplicationMenu()) {
+    return;
+  }
+  if (JSON.stringify(currentUndoLabels(mainWindow)) !== builtUndoLabels) {
+    buildApplicationMenu(mainWindow);
+    return;
+  }
   syncApplicationMenuItems(mainWindow);
 }
 
@@ -739,6 +773,7 @@ function syncApplicationMenuItems(mainWindow: BrowserWindow | null = mainWindowR
     resolveApplicationMenuItemStates(applicationMenuState, {
       // With no window focused (the app is in the background) the explorer's state stays.
       explorerFocused: focusedWindow === null || focusedWindow === mainWindow,
+      undoAvailable: { undo: undoHistoryMenu.undo !== null, redo: undoHistoryMenu.redo !== null },
     }),
   );
 }

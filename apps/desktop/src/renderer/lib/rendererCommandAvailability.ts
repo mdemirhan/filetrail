@@ -16,6 +16,8 @@ import { canHandleRendererCommand } from "./shortcutPolicy";
 // What a running file operation blocks: anything that would start another one. Copy, Cut
 // and Copy Path only fill a clipboard, so they stay available.
 const WRITE_LOCKED_RENDERER_COMMANDS = new Set<RendererCommandType>([
+  "undo",
+  "redo",
   "pasteSelection",
   "moveSelection",
   "renameSelection",

@@ -662,6 +662,7 @@ describe("running an Undo", () => {
     expect(await t.prepare()).toEqual({
       ticket: null,
       refusal: "nothing",
+      label: null,
       nameTaken: [],
       changed: [],
     });

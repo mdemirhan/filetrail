@@ -1663,6 +1663,7 @@ export function createWriteOperationCoordinator(
         const refused = (refusal: "busy" | "nothing" | "cant_undo") => ({
           ticket: null,
           refusal,
+          label: null,
           nameTaken: [],
           changed: [],
         });
@@ -1676,7 +1677,12 @@ export function createWriteOperationCoordinator(
           );
         }
         const ticket = `${payload.direction}:${entry.id}:${history.generation()}`;
-        return { ticket, refusal: null, ...(await findQuestions(fs, entry.units)) };
+        return {
+          ticket,
+          refusal: null,
+          label: history.menu()[payload.direction],
+          ...(await findQuestions(fs, entry.units)),
+        };
       },
       "undo:start": (
         payload: IpcRequest<"undo:start">,
