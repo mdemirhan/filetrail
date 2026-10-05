@@ -401,7 +401,13 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           },
           {
             label: "Move to Trash",
-            description: "Items can be put back from the Trash in Finder.",
+            description:
+              "{undo} puts what you just moved to the Trash back. Items can also be put back from the Trash in Finder.",
+          },
+          {
+            label: "Undo",
+            description:
+              "{undo} undoes the last file operation and {redo} does it again, one at a time, back to when File Trail opened: renames, moves on the same disk, Move to Trash, New Folder, copies and duplicates (which go to the Trash), and Replace. Each item is checked first: one that has changed place since is left as it is, and listed. Merging folders, moving to another disk, Delete Immediately and Empty Trash can't be undone. While you type a name or a search, {undo} undoes the typing.",
           },
         ],
       },
