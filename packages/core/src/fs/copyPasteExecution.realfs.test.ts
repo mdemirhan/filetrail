@@ -292,6 +292,7 @@ describe("copyPasteExecution real filesystem", () => {
         },
         trash: async (path) => {
           await rename(path, join(trashDir, basename(path)));
+          return join(trashDir, basename(path));
         },
       };
 

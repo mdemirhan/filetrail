@@ -47,8 +47,9 @@ export type WriteOperationFs = {
   // ignores case: there the new name already "exists", because it is the item itself.
   rename: (oldPath: string, newPath: string) => Promise<void>;
   rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
-  // Moves an item to the Trash (Electron's shell.trashItem in the app).
-  trash: (path: string) => Promise<void>;
+  // Moves an item to the Trash and resolves with the path it has there (createTrashItem in
+  // the app).
+  trash: (path: string) => Promise<string>;
   // The item's BSD flags, to tell a locked item from a lack of permission.
   getFlags?: (path: string) => Promise<number>;
   // An item as a folder's measurement counts it (nativeItemSize), read just before a delete

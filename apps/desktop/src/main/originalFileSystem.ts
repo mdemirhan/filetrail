@@ -49,6 +49,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeIsPackage: (path: string) => Promise<boolean | null>;
   nativeDatesTaken: (paths: string[]) => Promise<Array<string | null>>;
   nativeListVolumes: () => Volume[];
+  nativeTrashItem: (path: string) => Promise<string>;
 };
 const {
   nativeCopyFile,
@@ -65,6 +66,7 @@ const {
   nativeSetFlags,
   nativeDatesTaken,
   nativeListVolumes,
+  nativeTrashItem,
 } = addon;
 
 // Stop takes effect part way through a large file.
@@ -162,14 +164,18 @@ export const originalExplorerFileSystem: ExplorerFileSystem = {
 export const originalRename = (oldPath: string, newPath: string): Promise<void> =>
   rename(oldPath, newPath);
 
+/** Moves an item to its disk's Trash and resolves with the path it has there (the Trash
+ *  may give it another name). Wrapped by createTrashItem, which says why one failed. */
+export const originalTrashItem = (path: string): Promise<string> => nativeTrashItem(path);
+
 /** Rename that fails with EEXIST instead of replacing an item at `newPath`. */
 export const originalRenameExclusive = (oldPath: string, newPath: string): Promise<void> =>
   nativeRenameExclusive(oldPath, newPath);
 
 /** What rename, New Folder, Trash and Delete Immediately work with, backed by original-fs.
- *  `trash` moves an item to the Trash (Electron's shell.trashItem, see createTrashItem). */
+ *  `trash` moves an item to the Trash and says where it went (see createTrashItem). */
 export function createOriginalWriteOperationFs(
-  trash: (path: string) => Promise<void>,
+  trash: (path: string) => Promise<string>,
 ): WriteOperationFs {
   return {
     lstat: originalFileSystem.lstat,

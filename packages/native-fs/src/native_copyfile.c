@@ -285,6 +285,9 @@ extern napi_value register_dates_taken(napi_env env, napi_value exports);
 /* Defined in native_volumes.c — registers nativeListVolumes. */
 extern napi_value register_volumes(napi_env env, napi_value exports);
 
+/* Defined in native_trash.m — registers nativeTrashItem. */
+extern napi_value register_trash(napi_env env, napi_value exports);
+
 static napi_value init(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
@@ -302,6 +305,7 @@ static napi_value init(napi_env env, napi_value exports) {
   register_package(env, exports);
   register_dates_taken(env, exports);
   register_volumes(env, exports);
+  register_trash(env, exports);
 
   return exports;
 }

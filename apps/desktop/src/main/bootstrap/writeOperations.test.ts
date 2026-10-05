@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import {
   type WriteOperationProgressEvent,
   writeOperationProgressEventSchema,
@@ -110,6 +110,7 @@ describe("createWriteOperationCoordinator", () => {
         // What createTrashItem reports on a disk that may have no Trash.
         throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
       }
+      return inTrash(path);
     });
     const sender = createSender();
     const fs = createWriteOperationFs({ trash });
@@ -1254,6 +1255,7 @@ describe("moving to the Trash and deleting", () => {
       if (path.endsWith("locked.txt")) {
         throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
       }
+      return inTrash(path);
     });
     const fs = createWriteOperationFs({
       lstat: vi.fn(async (path: string) => {
@@ -1299,6 +1301,7 @@ describe("moving to the Trash and deleting", () => {
           finishFirst = resolveTrash;
         });
       }
+      return inTrash(path);
     });
     const coordinator = createWriteOperationCoordinator(
       createWriteServiceStub(),
@@ -1615,6 +1618,7 @@ describe("quitting during an operation", () => {
             finishFirst = resolveTrash;
           });
         }
+        return inTrash(path);
       }),
     });
     const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
@@ -2114,12 +2118,17 @@ describe("questions during a paste", () => {
 // The app's own wiring (see bootstrap), with a Trash that does nothing.
 function createRealWriteOperationFs(overrides: Partial<WriteOperationFs> = {}): WriteOperationFs {
   return {
-    ...createOriginalWriteOperationFs(vi.fn(async () => undefined)),
+    ...createOriginalWriteOperationFs(vi.fn(async (path: string) => inTrash(path))),
     ...overrides,
   };
 }
 
 type Coordinator = ReturnType<typeof createWriteOperationCoordinator>;
+
+// Where a stand-in Trash says an item went.
+function inTrash(path: string): string {
+  return `/Users/demo/.Trash/${basename(path)}`;
+}
 
 const LIFECYCLE_EVENTS = [
   "render-process-gone",
@@ -2295,7 +2304,7 @@ function createWriteOperationFs(overrides: Partial<WriteOperationFs> = {}): Writ
     rename: overrides.rename ?? vi.fn(async () => undefined),
     renameExclusive: overrides.renameExclusive ?? vi.fn(async () => undefined),
     rm: overrides.rm ?? vi.fn(async () => undefined),
-    trash: overrides.trash ?? vi.fn(async () => undefined),
+    trash: overrides.trash ?? vi.fn(async (path: string) => inTrash(path)),
     ...(overrides.itemSize ? { itemSize: overrides.itemSize } : {}),
   };
 }
@@ -2432,6 +2441,7 @@ describe("the Trash", () => {
       if (path.startsWith("/Volumes/Share/")) {
         throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
       }
+      return inTrash(path);
     });
     const fs = createWriteOperationFs({ trash });
     const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
@@ -2543,7 +2553,7 @@ describe("New Folder and Trash, picked items and names", () => {
   });
 
   it("moves a folder and an item inside it to the Trash as one item", async () => {
-    const trash = vi.fn(async () => undefined);
+    const trash = vi.fn(async (path: string) => inTrash(path));
     const fs = createWriteOperationFs({ trash });
     const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
     const sender = createSender();

@@ -7,20 +7,21 @@ type TrashFs = {
   getFlags?: (path: string) => Promise<number>;
 };
 
-// Moves an item to the Trash (Electron's shell.trashItem), with a failure that says why.
+// Moves an item to the Trash and resolves with the path it has there (nativeTrashItem),
+// with a failure that says why.
 // The Trash gives its reason as a sentence with no error code, so the reason is told
 // apart here: a locked item says so; on the startup disk the Trash's own sentence is the
 // reason; on another disk the likely reason is that it has no Trash (a network share,
 // some USB drives), which is marked with NO_TRASH_ERROR_CODE so callers can offer to
 // delete instead. Nothing on the startup disk is ever offered for permanent deletion.
 export function createTrashItem(args: {
-  trash: (path: string) => Promise<void>;
+  trash: (path: string) => Promise<string>;
   fs: TrashFs;
   homePath: string;
-}): (path: string) => Promise<void> {
+}): (path: string) => Promise<string> {
   return async (path) => {
     try {
-      await args.trash(path);
+      return await args.trash(path);
     } catch (error) {
       if (await isLocked(args.fs, path)) {
         throw new Error(lockedMessage(path));

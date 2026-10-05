@@ -98,6 +98,7 @@ export async function bootstrapMainProcess(
   const {
     originalExplorerFileSystem,
     originalFileSystem,
+    originalTrashItem,
     createOriginalWriteOperationFs,
     createOriginalBatchRenameInspectDeps,
     getFolderSize,
@@ -138,7 +139,7 @@ export async function bootstrapMainProcess(
   });
   // Items replaced by a paste go to the Trash, so a replace can always be undone.
   const trashItem = createTrashItem({
-    trash: (path) => shell.trashItem(path),
+    trash: originalTrashItem,
     fs: originalFileSystem,
     homePath: app.getPath("home"),
   });

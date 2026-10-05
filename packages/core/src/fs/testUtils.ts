@@ -209,11 +209,12 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     return this.caseSensitive;
   }
 
-  /** Enables the `trash` method; trashed items are kept in `trashed`. */
+  /** Enables the `trash` method; trashed items are kept in `trashed`, and each is said to
+   *  be at "/.Trash/<n>-<name>" (nothing is kept there). */
   readonly trashed: string[] = [];
   trashImpl: NonNullable<WriteServiceFileSystem["trash"]> | null = null;
   enableTrash(): void {
-    const trashFn = async (path: string): Promise<void> => {
+    const trashFn = async (path: string): Promise<string> => {
       if (this.trashImpl) {
         return this.trashImpl(path);
       }
@@ -225,6 +226,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
         }
       }
       this.trashed.push(key);
+      return `/.Trash/${this.trashed.length}-${basename(key)}`;
     };
     Object.defineProperty(this, "trash", {
       value: trashFn,

@@ -130,7 +130,11 @@ describe("read-only folders", () => {
     await writeFile(join(testDir, "dst", "module", "old.txt"), "old");
     const fileSystem: WriteServiceFileSystem = {
       ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-      trash: async (path) => rm(path, { recursive: true, force: true }),
+      // A Trash that keeps nothing: only where things went matters here, not what they were.
+      trash: async (path) => {
+        await rm(path, { recursive: true, force: true });
+        return path;
+      },
     };
 
     const result = await paste({
@@ -230,7 +234,10 @@ describe("Replace journal", () => {
     const { live, history, journal } = recordingJournal();
     const fileSystem: WriteServiceFileSystem = {
       ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-      trash: async (path) => rm(path),
+      trash: async (path) => {
+        await rm(path);
+        return path;
+      },
     };
 
     const result = await paste({
@@ -260,7 +267,10 @@ describe("Replace journal", () => {
     const sourceSeenWhenRecorded: boolean[] = [];
     const fileSystem: WriteServiceFileSystem = {
       ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-      trash: async (path) => rm(path),
+      trash: async (path) => {
+        await rm(path);
+        return path;
+      },
     };
 
     await paste({

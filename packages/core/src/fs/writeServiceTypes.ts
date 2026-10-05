@@ -112,10 +112,11 @@ export type WriteServiceFileSystem = {
   /** Like `utimes` but operates on the symlink itself, not its target. Used to
    *  preserve timestamps on symlinks after creation. */
   lutimes?: (path: string, atimeMs: number, mtimeMs: number) => Promise<void>;
-  /** Moves a path to the Trash. Items replaced by a paste are trashed so a replace can be
-   *  undone. Without it (or when it fails), the person is asked before anything is
-   *  deleted permanently (a "trash_unavailable" runtime conflict). */
-  trash?: (path: string) => Promise<void>;
+  /** Moves a path to the Trash and resolves with the path it has there. Items replaced by
+   *  a paste are trashed so a replace can be undone. Without it (or when it fails), the
+   *  person is asked before anything is deleted permanently (a "trash_unavailable" runtime
+   *  conflict). */
+  trash?: (path: string) => Promise<string>;
   /** Whether items can be added to or removed from a folder (access(2) with W_OK; rejects
    *  when not). A move to another disk asks before copying anything, so it never copies
    *  what it then can't remove. Without it, that is found out when removing. */

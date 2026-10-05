@@ -78,7 +78,7 @@ Electron's `shell.trashItem` returns nothing, so the app can't find a trashed it
 
 - Add `packages/native-fs/src/native_trash.m`:
   - `nativeTrashItem(path) -> Promise<string>`: calls `-[NSFileManager trashItemAtURL:resultingItemURL:error:]` and returns the item's path inside the Trash. macOS may rename it there, for example "a 2.txt".
-  - `nativeTrashFolderFor(path) -> Promise<string | null>`: calls `URLForDirectory:NSTrashDirectory inDomain:NSUserDomainMask appropriateForURL:create:NO`, giving the item's disk's Trash, or null when the disk has none. Phase 5 uses it to decide "copy onto a disk with no Trash".
+  - (Dropped: asking macOS for a disk's Trash without creating it says "none" for a disk whose Trash hasn't been made yet. A network disk is treated as having no Trash instead; see Phase 2.)
   - Use napi async work, following the `native_package.m` pattern. The addon is built without ARC, so release objects by hand and wrap the work in `@autoreleasepool`.
   - Errors: use the POSIX error under the NSError when there is one; otherwise map the Cocoa codes (no permission to EACCES, feature unsupported to ENOTSUP).
 - Register it in five places: `binding.gyp`, an `extern` declaration and a call in `init()` in `native_copyfile.c`, `index.js`, `index.d.ts`, and the addon type in `apps/desktop/src/main/originalFileSystem.ts`.
@@ -147,7 +147,7 @@ type UndoLog =
   - If the item was removed with `rm` because there was no Trash (1213): `"deleted_for_good"`.
   - A Replace as part of a move to another disk: `"other_disk_move"`.
 - **Merge** (any node with action `merge`): `"merge"`.
-- **A copy onto a disk with no Trash:** `"no_trash"`. Ask `nativeTrashFolderFor(destinationFolder)` once per operation.
+- **A copy onto a disk with no Trash:** `"no_trash"`. A network disk (not local in the mount table) counts as having no Trash. If a local disk turns out to have none, Undo can't trash the copy and says so in a dialog; it never deletes it.
 
 The engine hands the log to the coordinator next to the result (`CopyPasteOperationResult.undoLog`). It is not added to the contract schema, so it never goes over IPC. The coordinator receives it in the copy terminal handler (`writeOperations.ts:205`) and in `emitLocalWriteOperationEvent` (479).
 

@@ -31,7 +31,10 @@ function createWriteServiceStub(): WriteService {
 }
 
 function realFs(overrides: Partial<WriteOperationFs> = {}): WriteOperationFs {
-  return { ...createOriginalWriteOperationFs(vi.fn(async () => undefined)), ...overrides };
+  return {
+    ...createOriginalWriteOperationFs(vi.fn(async (path: string) => `/.Trash/${path}`)),
+    ...overrides,
+  };
 }
 
 function createSender() {
