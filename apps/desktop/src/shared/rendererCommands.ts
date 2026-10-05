@@ -1,4 +1,6 @@
 export const RENDERER_COMMAND_TYPES = [
+  "undo",
+  "redo",
   "editCut",
   "editCopy",
   "editPaste",

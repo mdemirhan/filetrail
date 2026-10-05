@@ -93,6 +93,14 @@ export function shouldRenderCopyPasteResultDialog(
   if (event.action === "rename" || event.action === "new_folder") {
     return event.status === "failed";
   }
+  // An Undo that left anything as it was says what and why; a stopped one says how far.
+  if (isUndoOrRedo(event.action)) {
+    return (
+      event.status === "failed" ||
+      event.status === "partial" ||
+      (event.status === "cancelled" && event.result.summary.completedItemCount > 0)
+    );
+  }
   if (event.status === "failed") {
     return true;
   }
@@ -320,7 +328,8 @@ export function resolveWriteOperationSelectionDirectoryPath(
   if (
     result.action === "rename" ||
     result.action === "batch_rename" ||
-    result.action === "new_folder"
+    result.action === "new_folder" ||
+    isUndoOrRedo(result.action)
   ) {
     return parentDirectoryPath(firstSelectedPath) ?? null;
   }
@@ -337,6 +346,13 @@ export function resolveWriteOperationRefreshPath(
       return currentPath;
     }
     return parentDirectoryPath(impactedPath) ?? currentPath;
+  }
+  // An Undo may have moved the folder on screen to the Trash (a New Folder undone).
+  if (isUndoOrRedo(result.action)) {
+    const removedPath = findDeepestMatchingSourcePath(onlyRemoved(result), currentPath);
+    if (removedPath) {
+      return parentDirectoryPath(removedPath) ?? currentPath;
+    }
   }
 
   if (isRenameOrMove(result.action)) {
@@ -365,6 +381,12 @@ export function resolveWriteOperationTreeSelectionPath(
     }
     return parentDirectoryPath(impactedPath) ?? null;
   }
+  if (isUndoOrRedo(result.action)) {
+    const removedPath = findDeepestMatchingSourcePath(onlyRemoved(result), selectedTreePath);
+    if (removedPath) {
+      return parentDirectoryPath(removedPath) ?? null;
+    }
+  }
 
   if (isRenameOrMove(result.action)) {
     const impactedItem = findDeepestMatchingSourceItem(result, selectedTreePath);
@@ -382,9 +404,39 @@ export function resolveWriteOperationTreeSelectionPath(
 }
 
 /** A write that gives items new paths (a rename of one or several, or a move): what was at
- *  the old paths, and what is inside, is followed to the new ones. */
+ *  the old paths, and what is inside, is followed to the new ones. An Undo or Redo moves
+ *  items back too (and out of the Trash), as well as to the Trash. */
 export function isRenameOrMove(action: WriteOperationAction): boolean {
-  return action === "rename" || action === "batch_rename" || action === "move_to";
+  return (
+    action === "rename" || action === "batch_rename" || action === "move_to" || isUndoOrRedo(action)
+  );
+}
+
+export function isUndoOrRedo(action: WriteOperationAction): boolean {
+  return action === "undo" || action === "redo";
+}
+
+/** What a write took away from where it was: everything a Trash or delete was asked to
+ *  remove, or what an Undo moved to the Trash. */
+export function removedByWrite(result: WriteOperationResult): string[] {
+  if (result.action === "trash" || result.action === "delete_immediately") {
+    return result.items.flatMap((item) =>
+      item.status === "completed" && item.sourcePath ? [item.sourcePath] : [],
+    );
+  }
+  return isUndoOrRedo(result.action)
+    ? onlyRemoved(result).items.flatMap((item) => (item.sourcePath ? [item.sourcePath] : []))
+    : [];
+}
+
+// An Undo's items that went to the Trash: done, and with nowhere else to be.
+function onlyRemoved(result: WriteOperationResult): WriteOperationResult {
+  return {
+    ...result,
+    items: result.items.filter(
+      (item) => item.status === "completed" && item.destinationPath === null,
+    ),
+  };
 }
 
 /**

@@ -128,6 +128,7 @@ type ExplorerShortcutActions = {
   showClipboard: () => void;
   clearClipboard: () => void;
   startPasteFromClipboard: () => Promise<void>;
+  startUndo: (direction: "undo" | "redo") => Promise<void>;
   resolveContentActionPaths: () => string[];
   startDuplicateOfSelection: (paths: string[]) => void;
   startTrashPaths: (paths: string[]) => Promise<void>;
@@ -934,7 +935,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
 
   // The last key pressed in the window, to tell a menu command chosen by its key from one
   // chosen with the pointer.
-  const lastKeyDownRef = useRef<{ shortcut: string; time: number } | null>(null);
+  const lastKeyDownRef = useRef<{ shortcut: string; time: number; repeat: boolean } | null>(null);
 
   const rawShortcutCommands = useMemo(
     () => new Set(rawShortcutBindings.flatMap((binding) => binding.command ?? [])),
@@ -942,7 +943,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
   );
 
   const performNativeEditAction = useCallback(
-    (action: "cut" | "copy" | "paste" | "selectAll"): void => {
+    (action: "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll"): void => {
       void client.invoke("system:performEditAction", { action });
     },
     [client],
@@ -1006,8 +1007,24 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
   );
 
   const runRendererCommand = useCallback(
-    (commandType: RendererCommandType, options: { viaShortcut?: boolean } = {}) => {
+    (
+      commandType: RendererCommandType,
+      options: { viaShortcut?: boolean; repeated?: boolean } = {},
+    ) => {
       const current = latestArgsRef.current;
+      // Undo and Redo are a text field's own while one has the keyboard (the rename field,
+      // search); otherwise they undo the last file operation, once per press of ⌘Z.
+      if (commandType === "undo" || commandType === "redo") {
+        if (resolveFocusedEditTarget(document.activeElement) === "editable-text") {
+          performNativeEditAction(commandType);
+          return;
+        }
+        if (options.repeated || !canHandleRendererCommand(commandType, current.shortcutContext)) {
+          return;
+        }
+        void current.startUndo(commandType);
+        return;
+      }
       if (
         commandType === "editCut" ||
         commandType === "editCopy" ||
@@ -1365,7 +1382,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         latestArgsRef.current.focusFileSearch(true);
       });
     },
-    [focusContentPaneRef, focusTreePane, runGenericEditCommand],
+    [focusContentPaneRef, focusTreePane, performNativeEditAction, runGenericEditCommand],
   );
 
   useEffect(() => {
@@ -1375,11 +1392,14 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       const menuShortcut = isShortcutCommand(command.type)
         ? getMenuShortcut(latestArgsRef.current.shortcuts.bindings[command.type])
         : undefined;
+      const viaShortcut =
+        lastKeyDown !== null &&
+        lastKeyDown.shortcut === menuShortcut &&
+        performance.now() - lastKeyDown.time < MENU_SHORTCUT_WINDOW_MS;
       runRendererCommand(command.type, {
-        viaShortcut:
-          lastKeyDown !== null &&
-          lastKeyDown.shortcut === menuShortcut &&
-          performance.now() - lastKeyDown.time < MENU_SHORTCUT_WINDOW_MS,
+        viaShortcut,
+        // A key held down repeats the menu's command too.
+        repeated: viaShortcut && lastKeyDown?.repeat === true,
       });
     });
     return unsubscribe;
@@ -1394,7 +1414,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       const current = latestArgsRef.current;
       const pressedShortcut = shortcutFromKeyboardEvent(event);
       lastKeyDownRef.current = pressedShortcut
-        ? { shortcut: pressedShortcut, time: performance.now() }
+        ? { shortcut: pressedShortcut, time: performance.now(), repeat: event.repeat }
         : null;
       if (event.defaultPrevented) {
         return;

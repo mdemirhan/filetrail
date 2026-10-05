@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import {
   type IpcRequest,
+  type UndoDirection,
   type WriteOperationAction,
   type WriteOperationProgressEvent,
   type WriteOperationResult,
@@ -14,16 +15,27 @@ import {
 } from "@filetrail/contracts";
 import {
   type CopyPasteProgressEvent,
+  type ItemId,
+  type ItemKind,
   NO_TRASH_ERROR_CODE,
+  type UndoLog,
+  type UndoStep,
+  type UndoUnit,
   WRITE_OPERATION_BUSY_ERROR,
   type WriteService,
   describeCopyPasteError,
   fileIdOf,
   findLockedRefusal,
+  readItemId,
+  readItemRef,
+  readItemStamp,
 } from "@filetrail/core";
 import { runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import { clearResponseCaches } from "./responseCache";
+import { runUndo } from "./undoExecution";
+import type { UndoEntry, UndoHistory } from "./undoHistory";
+import { findQuestions } from "./undoPlan";
 
 type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
 
@@ -47,8 +59,9 @@ export type WriteOperationFs = {
   // ignores case: there the new name already "exists", because it is the item itself.
   rename: (oldPath: string, newPath: string) => Promise<void>;
   rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
-  // Moves an item to the Trash (Electron's shell.trashItem in the app).
-  trash: (path: string) => Promise<void>;
+  // Moves an item to the Trash and resolves with the path it has there (createTrashItem in
+  // the app).
+  trash: (path: string) => Promise<string>;
   // The item's BSD flags, to tell a locked item from a lack of permission.
   getFlags?: (path: string) => Promise<number>;
   // An item as a folder's measurement counts it (nativeItemSize), read just before a delete
@@ -56,8 +69,27 @@ export type WriteOperationFs = {
   itemSize?: (path: string) => Promise<ItemSize>;
 };
 
+// What a finished operation did, for Undo: its steps (or why it can't be undone), and its
+// items as the window hears of them, to name it in the Edit menu.
+export type FinishedWrite = {
+  action: WriteOperationAction | "empty_trash";
+  log: UndoLog;
+  items: ReadonlyArray<{
+    sourcePath: string | null;
+    destinationPath: string | null;
+    status: WriteOperationResult["items"][number]["status"];
+  }>;
+};
+
 // What kind of change the running operation is making, in the words a person would use.
-export type WriteOperationKind = "copy" | "move" | "trash" | "delete" | "rename" | "new_folder";
+export type WriteOperationKind =
+  | "copy"
+  | "move"
+  | "trash"
+  | "delete"
+  | "rename"
+  | "new_folder"
+  | "undo";
 
 type WriteOperationSender = {
   send: (channel: string, payload: unknown) => void;
@@ -107,8 +139,18 @@ type PreparedCreateFolderOperation = {
 export function createWriteOperationCoordinator(
   writeService: WriteService,
   fs: WriteOperationFs,
-  // Where the home folder and its Trash are (tests use their own).
-  options: { homePath?: string } = {},
+  options: {
+    // Where the home folder and its Trash are (tests use their own).
+    homePath?: string;
+    // Told what each operation did, before the next one can start, so they are kept in
+    // the order they happened. Operations that changed nothing aren't told.
+    recordUndo?: (finished: FinishedWrite) => void;
+    // Whether the disk holding `path` has a Trash. Copies onto one that hasn't can't be
+    // undone: that would mean deleting them for good.
+    diskHasTrash?: (path: string) => boolean;
+    // What Undo and Redo work from. Without it there is nothing to undo.
+    undoHistory?: UndoHistory;
+  } = {},
 ) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
   const senderDetachers = new Map<string, () => void>();
@@ -141,6 +183,37 @@ export function createWriteOperationCoordinator(
   // moved, or trashed.  Items *inside* Trash are fine; this only guards the
   // top-level Trash folder itself. The comparison ignores case, as the disk does.
   const homePath = options.homePath ?? homedir();
+
+  // A mistake in keeping the history must never keep the write slot from being freed.
+  function recordFinishedWrite(finished: FinishedWrite): void {
+    try {
+      options.recordUndo?.(finished);
+    } catch (error) {
+      console.error("[filetrail] couldn't record an operation for Undo", error);
+    }
+  }
+
+  // A paste's own log, except that copies onto a disk without a Trash can't be undone.
+  function pasteUndoLog(event: CopyPasteProgressEvent): UndoLog | null {
+    const log = event.result?.undoLog;
+    if (!log) {
+      return null;
+    }
+    if (!log.undoable) {
+      return log;
+    }
+    if (log.units.length === 0) {
+      return null;
+    }
+    const copiedOntoDiskWithoutTrash =
+      options.diskHasTrash !== undefined &&
+      log.units.some((unit) =>
+        unit.steps.some(
+          (step) => step.kind === "created" && !options.diskHasTrash?.(dirname(step.path)),
+        ),
+      );
+    return copiedOntoDiskWithoutTrash ? { undoable: false, reason: "no_trash" } : log;
+  }
   const trashPath = resolve(homePath, ".Trash").toLowerCase();
   function assertNotProtectedPath(paths: readonly string[]): void {
     for (const path of paths) {
@@ -207,6 +280,10 @@ export function createWriteOperationCoordinator(
       copyPasteModes.delete(event.operationId);
       // Folder listings read before the operation finished may show the old contents.
       clearResponseCaches(event.result ? pathsChangedByWrite(event.result) : []);
+      const undoLog = pasteUndoLog(event);
+      if (undoLog !== null) {
+        recordFinishedWrite({ action, log: undoLog, items: event.result?.items ?? [] });
+      }
       if (earlyTerminalEvents && !writeOperationSenders.has(event.operationId)) {
         earlyTerminalEvents.set(event.operationId, event);
       }
@@ -372,6 +449,18 @@ export function createWriteOperationCoordinator(
     }
   }
 
+  // Runs a write that isn't one of the person's operations (finishing a Replace a crash
+  // cut short) only when the slot is free, holding it meanwhile, so the two never write at
+  // the same time. When the slot is taken, or the app is quitting, it doesn't run at all.
+  async function runWriteAlone<T>(
+    write: () => Promise<T>,
+  ): Promise<{ ran: true; value: T } | { ran: false }> {
+    if (closing || activeWriteOperationId !== null) {
+      return { ran: false };
+    }
+    return { ran: true, value: await prepareWithReservedSlot(write) };
+  }
+
   // An operation whose page crashed, closed, or reloaded can never be answered or finished
   // from the UI, so it is cancelled instead of holding the write slot forever. Listeners
   // are added only now, after the start request arrived, so a reload that happened before
@@ -481,6 +570,8 @@ export function createWriteOperationCoordinator(
     // What a delete removed, read just before: taken off the sizes of measured folders
     // rather than having them measured again.
     removedItems: readonly RemovedItem[] = [],
+    // What the operation did, for Undo; left out when it changed nothing.
+    undoLog?: UndoLog,
   ): void {
     const sender = writeOperationSenders.get(event.operationId);
     // Release the operation before telling the window, so a failed send can't leave the
@@ -494,6 +585,13 @@ export function createWriteOperationCoordinator(
           : [],
         removedItems,
       );
+      if (undoLog !== undefined) {
+        recordFinishedWrite({
+          action: event.action,
+          log: undoLog,
+          items: event.result?.items ?? [],
+        });
+      }
       releaseLocalWriteOperation(event.operationId);
     }
     if (sender) {
@@ -562,6 +660,7 @@ export function createWriteOperationCoordinator(
     destinationPath: string;
     status: "completed" | "failed" | "cancelled";
     error: string | null;
+    undoLog?: UndoLog;
   }): void {
     const completedItemCount = args.status === "completed" ? 1 : 0;
     const result = createLocalWriteOperationResult({
@@ -584,18 +683,22 @@ export function createWriteOperationCoordinator(
       status: args.status,
       error: args.error,
     });
-    emitLocalWriteOperationEvent({
-      operationId: args.operationId,
-      action: args.action,
-      status: args.status,
-      completedItemCount,
-      totalItemCount: 1,
-      completedByteCount: 0,
-      totalBytes: null,
-      currentSourcePath: args.sourcePath,
-      currentDestinationPath: args.destinationPath,
-      result,
-    });
+    emitLocalWriteOperationEvent(
+      {
+        operationId: args.operationId,
+        action: args.action,
+        status: args.status,
+        completedItemCount,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: args.sourcePath,
+        currentDestinationPath: args.destinationPath,
+        result,
+      },
+      [],
+      args.undoLog,
+    );
   }
 
   async function executeRenameOperation(
@@ -650,7 +753,16 @@ export function createWriteOperationCoordinator(
       return;
     }
     // Outside the try: the item has been renamed, and nothing that goes wrong while
-    // reporting it may turn that into a failure.
+    // reporting it may turn that into a failure (reading its id never throws).
+    const renamedItem = await readItemRef(fs.lstat, destinationPath);
+    const renamed: UndoStep = {
+      kind: "moved",
+      from: sourcePath,
+      to: destinationPath,
+      id: renamedItem.id,
+      itemKind: renamedItem.kind,
+      parentId: await readItemId(fs.lstat, dirname(sourcePath)),
+    };
     emitSingleItemResult({
       operationId,
       action: "rename",
@@ -659,6 +771,7 @@ export function createWriteOperationCoordinator(
       destinationPath,
       status: "completed",
       error: null,
+      undoLog: { undoable: true, units: [{ steps: [renamed] }] },
     });
   }
 
@@ -793,18 +906,45 @@ export function createWriteOperationCoordinator(
           ? (run.items.find((item) => item.status === "failed")?.error ?? "Rename failed.")
           : null,
     });
-    emitLocalWriteOperationEvent({
-      operationId,
-      action: "batch_rename",
-      status,
-      completedItemCount: run.completedItemCount,
-      totalItemCount,
-      completedByteCount: 0,
-      totalBytes: null,
-      currentSourcePath: null,
-      currentDestinationPath: null,
-      result,
-    });
+    const renamedItems: Array<{
+      from: string;
+      to: string;
+      id: ItemId | null;
+      itemKind: ItemKind | null;
+    }> = [];
+    for (const item of run.items) {
+      if (
+        item.status === "completed" &&
+        item.sourcePath !== null &&
+        item.destinationPath !== null &&
+        item.destinationPath !== item.sourcePath
+      ) {
+        const renamedItem = await readItemRef(fs.lstat, item.destinationPath);
+        renamedItems.push({
+          from: item.sourcePath,
+          to: item.destinationPath,
+          id: renamedItem.id,
+          itemKind: renamedItem.kind,
+        });
+      }
+    }
+    const batchStep: UndoStep = { kind: "batchRenamed", items: renamedItems };
+    emitLocalWriteOperationEvent(
+      {
+        operationId,
+        action: "batch_rename",
+        status,
+        completedItemCount: run.completedItemCount,
+        totalItemCount,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result,
+      },
+      [],
+      renamedItems.length > 0 ? { undoable: true, units: [{ steps: [batchStep] }] } : undefined,
+    );
   }
 
   // Whether the folder holds an entry spelled exactly like `name` (another item, since the
@@ -859,6 +999,12 @@ export function createWriteOperationCoordinator(
       return;
     }
     // Outside the try, for the same reason as a rename's.
+    const created: UndoStep = {
+      kind: "created",
+      path: destinationPath,
+      id: await readItemId(fs.lstat, destinationPath),
+      stamp: await readItemStamp(fs, destinationPath),
+    };
     emitSingleItemResult({
       operationId,
       action: "new_folder",
@@ -867,6 +1013,7 @@ export function createWriteOperationCoordinator(
       destinationPath,
       status: "completed",
       error: null,
+      undoLog: { undoable: true, units: [{ steps: [created] }] },
     });
   }
 
@@ -924,6 +1071,8 @@ export function createWriteOperationCoordinator(
     // Only what this Trash finds without a Trash may be deleted next.
     itemsWithoutTrash.clear();
     const removedItems: RemovedItem[] = [];
+    // One unit per item, so an item put back from the Trash doesn't depend on the others.
+    const trashedUnits: UndoUnit[] = [];
     // What's on the home folder's disk goes to the home folder's Trash.
     const home = fs.itemSize ? await readItemSize(fs.itemSize, homePath) : null;
     const homeDev = home && home !== "missing" ? home.dev : null;
@@ -952,7 +1101,10 @@ export function createWriteOperationCoordinator(
         // An item that is already gone (deleted or moved since it was chosen) has
         // nothing left to move: that counts as done, not as a failure.
         if (!(await isMissing(path, fs.lstat))) {
-          await fs.trash(path);
+          const id = await readItemId(fs.lstat, path);
+          const parentId = await readItemId(fs.lstat, dirname(path));
+          const trashPath = await fs.trash(path);
+          trashedUnits.push({ steps: [{ kind: "trashed", from: path, trashPath, id, parentId }] });
         }
         if (before !== undefined) {
           removedItems.push(
@@ -1026,6 +1178,7 @@ export function createWriteOperationCoordinator(
         result,
       },
       removedItems,
+      trashedUnits.length > 0 ? { undoable: true, units: trashedUnits } : undefined,
     );
   }
 
@@ -1131,6 +1284,109 @@ export function createWriteOperationCoordinator(
         result,
       },
       removedItems,
+      // Anything it began to delete may be gone for good, even an item that then failed.
+      items.some((item) => item.status === "completed" || item.status === "failed")
+        ? { undoable: false, reason: "deleted_for_good" }
+        : undefined,
+    );
+  }
+
+  async function executeUndoOperation(
+    history: UndoHistory,
+    direction: UndoDirection,
+    entry: UndoEntry,
+    operationId: string,
+    controller: AbortController,
+  ): Promise<void> {
+    const startedAt = new Date().toISOString();
+    const totalItemCount = entry.units.length;
+    const home = fs.itemSize ? await readItemSize(fs.itemSize, homePath) : null;
+    let run: Awaited<ReturnType<typeof runUndo>>;
+    try {
+      run = await runUndo({
+        direction,
+        units: entry.units,
+        fs,
+        signal: controller.signal,
+        homeDev: home && home !== "missing" ? home.dev : null,
+        onStepStart: (path, completedItemCount) =>
+          emitLocalWriteOperationEvent({
+            operationId,
+            action: direction,
+            status: "running",
+            completedItemCount,
+            totalItemCount,
+            completedByteCount: 0,
+            totalBytes: null,
+            currentSourcePath: path,
+            currentDestinationPath: null,
+            result: null,
+          }),
+      });
+    } catch (error) {
+      // Nothing expected gets here. What it did is unknown, so it can't be redone, and is
+      // not tried again either.
+      console.error("[filetrail] an Undo stopped unexpectedly", error);
+      run = {
+        items: [],
+        done: [],
+        leftover: [],
+        removedItems: [],
+        completedItemCount: 0,
+        cancelled: false,
+      };
+      run.items.push({
+        sourcePath: null,
+        destinationPath: null,
+        status: "failed",
+        error: `The ${direction === "undo" ? "Undo" : "Redo"} stopped unexpectedly: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        skipReason: null,
+      });
+    }
+    // Before the write slot is freed, so the next operation is recorded after this one.
+    history.finish(direction, entry.id, { done: run.done, leftover: run.leftover });
+    const problems = run.items.filter(
+      (item) => item.status === "failed" || (item.status === "skipped" && item.error !== null),
+    );
+    const status = run.cancelled
+      ? run.completedItemCount > 0
+        ? "partial"
+        : "cancelled"
+      : problems.length > 0
+        ? run.completedItemCount > 0
+          ? "partial"
+          : "failed"
+        : "completed";
+    const result = createLocalWriteOperationResult({
+      operationId,
+      action: direction,
+      targetPath: null,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      totalItemCount: run.items.length,
+      completedItemCount: run.completedItemCount,
+      items: run.items,
+      status,
+      error: run.cancelled
+        ? stoppedMessage(run.completedItemCount, direction === "undo" ? "undone" : "redone")
+        : (problems[0]?.error ?? null),
+    });
+    emitLocalWriteOperationEvent(
+      {
+        operationId,
+        action: direction,
+        status,
+        completedItemCount: run.completedItemCount,
+        totalItemCount: run.items.length,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result,
+      },
+      run.removedItems,
     );
   }
 
@@ -1168,7 +1424,18 @@ export function createWriteOperationCoordinator(
       };
     }
     try {
-      return await prepareWithReservedSlot(empty);
+      return await prepareWithReservedSlot(async () => {
+        try {
+          return await empty();
+        } finally {
+          // Whatever it managed to empty is gone for good, even when it then failed.
+          recordFinishedWrite({
+            action: "empty_trash",
+            log: { undoable: false, reason: "deleted_for_good" },
+            items: [],
+          });
+        }
+      });
     } finally {
       // The Trash's listing (and anything shown from it) is out of date now.
       clearResponseCaches([resolve(homePath, ".Trash")]);
@@ -1388,6 +1655,61 @@ export function createWriteOperationCoordinator(
             executeDeleteImmediatelyOperation(payload, operationId, controller),
         });
       },
+      // What undoing (or redoing) the last operation would ask, without changing anything.
+      "undo:prepare": async (payload: IpcRequest<"undo:prepare">) => {
+        const history = options.undoHistory;
+        const refused = (refusal: "busy" | "nothing" | "cant_undo") => ({
+          ticket: null,
+          refusal,
+          label: null,
+          action: null,
+          nameTaken: [],
+          changed: [],
+        });
+        if (closing || activeWriteOperationId !== null) {
+          return refused("busy");
+        }
+        const entry = history?.top(payload.direction) ?? null;
+        if (!history || !entry) {
+          return refused(
+            payload.direction === "undo" && history?.menu().cantUndo ? "cant_undo" : "nothing",
+          );
+        }
+        const ticket = `${payload.direction}:${entry.id}:${history.generation()}`;
+        return {
+          ticket,
+          refusal: null,
+          label: history.menu()[payload.direction],
+          action: entry.action === "empty_trash" ? null : entry.action,
+          ...(await findQuestions(fs, entry.units)),
+        };
+      },
+      "undo:start": (
+        payload: IpcRequest<"undo:start">,
+        event: { sender: WriteOperationSender },
+      ) => {
+        const [direction, entryId, generation] = payload.ticket.split(":");
+        const history = options.undoHistory;
+        const entry =
+          direction === "undo" || direction === "redo" ? (history?.top(direction) ?? null) : null;
+        // Another operation, or another Undo, came in between: what was asked about may not
+        // be what would be done now.
+        if (
+          !history ||
+          !entry ||
+          (direction !== "undo" && direction !== "redo") ||
+          String(entry.id) !== entryId ||
+          String(history.generation()) !== generation
+        ) {
+          throw new Error("Something changed since Undo was chosen. Choose it again.");
+        }
+        return queueLocalWriteOperation({
+          action: direction,
+          sender: event.sender,
+          execute: (operationId, controller) =>
+            executeUndoOperation(history, direction, entry, operationId, controller),
+        });
+      },
       "writeOperation:cancel": (
         payload: IpcRequest<"writeOperation:cancel">,
         event: { sender: WriteOperationSender },
@@ -1398,6 +1720,7 @@ export function createWriteOperationCoordinator(
     },
     getActiveOperation,
     emptyTrash,
+    runWriteAlone,
     whenIdle,
     shutdown,
   };
@@ -1651,6 +1974,9 @@ function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind 
       return "rename";
     case "new_folder":
       return "new_folder";
+    case "undo":
+    case "redo":
+      return "undo";
     default:
       return "copy";
   }

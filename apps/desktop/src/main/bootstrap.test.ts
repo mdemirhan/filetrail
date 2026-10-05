@@ -429,17 +429,23 @@ describe("getFileThumbnailHandler", () => {
 describe("performEditAction", () => {
   it("dispatches native edit actions to webContents", () => {
     const webContents = {
+      undo: vi.fn(),
+      redo: vi.fn(),
       copy: vi.fn(),
       cut: vi.fn(),
       paste: vi.fn(),
       selectAll: vi.fn(),
     };
 
+    expect(performEditAction({ action: "undo" }, webContents)).toEqual({ ok: true });
+    expect(performEditAction({ action: "redo" }, webContents)).toEqual({ ok: true });
     expect(performEditAction({ action: "cut" }, webContents)).toEqual({ ok: true });
     expect(performEditAction({ action: "copy" }, webContents)).toEqual({ ok: true });
     expect(performEditAction({ action: "paste" }, webContents)).toEqual({ ok: true });
     expect(performEditAction({ action: "selectAll" }, webContents)).toEqual({ ok: true });
 
+    expect(webContents.undo).toHaveBeenCalledTimes(1);
+    expect(webContents.redo).toHaveBeenCalledTimes(1);
     expect(webContents.cut).toHaveBeenCalledTimes(1);
     expect(webContents.copy).toHaveBeenCalledTimes(1);
     expect(webContents.paste).toHaveBeenCalledTimes(1);

@@ -4,6 +4,7 @@ import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import { dirnameOf, formatCount, leafName, pluralize } from "../lib/copyPasteReview";
 import { collectRetrySourcePaths, selectTopLevelItems } from "../lib/explorerAppUtils";
+import { DEFAULT_SHORTCUT_DISPLAY } from "../lib/shortcutDisplay";
 import { PushButton } from "./PushButton";
 import { useDialogFocus } from "./useDialogFocus";
 
@@ -11,6 +12,8 @@ type OperationResult = NonNullable<WriteOperationProgressEvent["result"]>;
 type ResultItem = OperationResult["items"][number];
 
 const PAST_TENSE: Record<string, string> = {
+  undo: "Undid",
+  redo: "Redid",
   paste: "Pasted",
   copy_to: "Copied",
   move_to: "Moved",
@@ -19,6 +22,8 @@ const PAST_TENSE: Record<string, string> = {
 };
 
 const FAILED_TITLE: Record<string, string> = {
+  undo: "Couldn’t Undo",
+  redo: "Couldn’t Redo",
   paste: "Paste failed",
   copy_to: "Copy failed",
   move_to: "Move failed",
@@ -55,17 +60,32 @@ export function CopyPasteResultDialog({
   const messageId = useId();
   const result = event.result;
   const renaming = event.action === "batch_rename";
+  // An Undo's items are each on their own, each with what was found about it.
+  const undoing = event.action === "undo" || event.action === "redo";
   const destinationName = leafName(result?.targetPath ?? "");
   const pastTense = PAST_TENSE[event.action] ?? "Finished";
-  const presentVerb = renaming ? "renamed" : event.action === "move_to" ? "moved" : "copied";
+  const presentVerb = undoing
+    ? event.action === "undo"
+      ? "undone"
+      : "redone"
+    : renaming
+      ? "renamed"
+      : event.action === "move_to"
+        ? "moved"
+        : "copied";
   // Renamed items stay in their folder; copies and moves go into one.
   const place = destinationName ? ` ${renaming ? "in" : "into"} “${destinationName}”` : "";
 
   useDialogFocus(dialogRef, doneButtonRef);
 
   const outcome = useMemo(
-    () => summarizeResultItems(result?.items ?? [], { eachOnItsOwn: renaming }),
-    [result, renaming],
+    () =>
+      summarizeResultItems(result?.items ?? [], {
+        eachOnItsOwn: renaming || undoing,
+        // An item put back is named by where it went, not by its name in the Trash.
+        namedByDestination: undoing,
+      }),
+    [result, renaming, undoing],
   );
   const retryCount = canRetry ? outcome.retryCount : 0;
 
@@ -73,7 +93,7 @@ export function CopyPasteResultDialog({
   // is missing from it.
   const copiedTopLevel = outcome.completedTopLevel + outcome.partialTopLevel.length;
   const title =
-    outcome.topLevelCount === 0
+    outcome.topLevelCount === 0 || (undoing && copiedTopLevel === 0)
       ? (FAILED_TITLE[event.action] ?? "Failed")
       : `${pastTense} ${formatCount(copiedTopLevel)} of ${pluralize(outcome.topLevelCount, "item")}${place}`;
   const onlyPartial = outcome.partialTopLevel.length === 1 ? outcome.partialTopLevel[0] : null;
@@ -111,6 +131,24 @@ export function CopyPasteResultDialog({
       ? "Items that weren't moved are still in their original folder."
       : null,
   ].filter(Boolean);
+  // An Undo says what it left, and that the part it did can be taken back: what was left
+  // can't be undone (it is gone, or something else is in its place), but nothing is lost.
+  const leftCount = outcome.failed.length + skippedCount;
+  if (undoing) {
+    sentences.length = 0;
+    if (leftCount > 0) {
+      sentences.push(
+        `${pluralize(leftCount, "item")} ${leftCount === 1 ? "was left as it is" : "were left as they are"}.`,
+      );
+    }
+    if (leftCount > 0 && copiedTopLevel > 0) {
+      sentences.push(
+        event.action === "undo"
+          ? `${DEFAULT_SHORTCUT_DISPLAY.mention("redo")} redoes what was undone.`
+          : `${DEFAULT_SHORTCUT_DISPLAY.mention("undo")} undoes what was redone.`,
+      );
+    }
+  }
   const message =
     sentences.length > 0 ? sentences.join(" ") : (result?.error ?? "The operation has finished.");
 
@@ -138,7 +176,15 @@ export function CopyPasteResultDialog({
         </header>
         <div className="copy-paste-sheet-list copy-paste-result-list">
           <ResultSection
-            label={`Couldn’t ${renaming ? "rename" : event.action === "move_to" ? "move" : "copy"}`}
+            label={`Couldn’t ${
+              undoing
+                ? event.action
+                : renaming
+                  ? "rename"
+                  : event.action === "move_to"
+                    ? "move"
+                    : "copy"
+            }`}
             items={outcome.failed}
             displayPaths={outcome.displayPaths}
             describe={(item) =>
@@ -168,15 +214,17 @@ export function CopyPasteResultDialog({
             tone="muted"
           />
           <ResultSection
-            label="Skipped"
+            label={undoing ? "Left as it is" : "Skipped"}
             items={outcome.skipped}
             displayPaths={outcome.displayPaths}
             describe={(item) =>
-              renaming
-                ? (item.error ?? "Its new name was taken")
-                : item.skipReason === "runtime_conflict_resolution"
-                  ? "Skipped after it changed during the operation"
-                  : "Already existed · you chose Skip"
+              undoing
+                ? (item.error ?? "Left as it is")
+                : renaming
+                  ? (item.error ?? "Its new name was taken")
+                  : item.skipReason === "runtime_conflict_resolution"
+                    ? "Skipped after it changed during the operation"
+                    : "Already existed · you chose Skip"
             }
             tone="muted"
           />
@@ -265,7 +313,7 @@ type ResultOutcome = {
 // of several), every item is one of those asked for, even one inside a folder renamed too.
 function summarizeResultItems(
   items: ResultItem[],
-  options: { eachOnItsOwn: boolean },
+  options: { eachOnItsOwn: boolean; namedByDestination?: boolean },
 ): ResultOutcome {
   const topLevel = options.eachOnItsOwn ? items : selectTopLevelItems(items);
   const topLevelSet = new Set(topLevel);
@@ -325,7 +373,12 @@ function summarizeResultItems(
     outcome.displayPaths.set(
       item,
       options.eachOnItsOwn
-        ? leafName(path ?? item.destinationPath ?? "")
+        ? leafName(
+            (options.namedByDestination ? item.destinationPath : null) ??
+              path ??
+              item.destinationPath ??
+              "",
+          )
         : displayPath(item, topLevelSet.has(item), topLevelPaths),
     );
     if (item.status === "failed") {

@@ -24,10 +24,10 @@ const refusal = new Error("“a.txt” couldn’t be moved to the trash because 
 
 describe("createTrashItem", () => {
   it("moves the item to the Trash", async () => {
-    const trash = vi.fn(async () => undefined);
+    const trash = vi.fn(async () => "/Users/demo/.Trash/a 2.txt");
     const trashItem = createTrashItem({ trash, fs: createFs({}), homePath: HOME });
 
-    await trashItem("/Users/demo/a.txt");
+    await expect(trashItem("/Users/demo/a.txt")).resolves.toBe("/Users/demo/.Trash/a 2.txt");
 
     expect(trash).toHaveBeenCalledWith("/Users/demo/a.txt");
   });

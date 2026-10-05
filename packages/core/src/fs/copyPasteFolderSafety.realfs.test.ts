@@ -130,7 +130,11 @@ describe("read-only folders", () => {
     await writeFile(join(testDir, "dst", "module", "old.txt"), "old");
     const fileSystem: WriteServiceFileSystem = {
       ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-      trash: async (path) => rm(path, { recursive: true, force: true }),
+      // A Trash that keeps nothing: only where things went matters here, not what they were.
+      trash: async (path) => {
+        await rm(path, { recursive: true, force: true });
+        return path;
+      },
     };
 
     const result = await paste({
@@ -230,7 +234,10 @@ describe("Replace journal", () => {
     const { live, history, journal } = recordingJournal();
     const fileSystem: WriteServiceFileSystem = {
       ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-      trash: async (path) => rm(path),
+      trash: async (path) => {
+        await rm(path);
+        return path;
+      },
     };
 
     const result = await paste({
@@ -260,7 +267,10 @@ describe("Replace journal", () => {
     const sourceSeenWhenRecorded: boolean[] = [];
     const fileSystem: WriteServiceFileSystem = {
       ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-      trash: async (path) => rm(path),
+      trash: async (path) => {
+        await rm(path);
+        return path;
+      },
     };
 
     await paste({
@@ -315,6 +325,47 @@ describe("recovering interrupted Replaces", () => {
     expect(outcome?.outcome).toBe("finished");
     expect(await readFile(interrupted.finalPath, "utf8")).toBe("moved");
     expect(await exists(interrupted.stagingPath)).toBe(false);
+  });
+
+  it("touches nothing while another operation writes, and says the entry is put off", async () => {
+    const interrupted = entry({ moved: true, staged: true });
+    await writeFile(interrupted.stagingPath, "moved");
+
+    const [outcome] = await recoverInterruptedReplaces(
+      [interrupted],
+      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      { runWriteAlone: async () => ({ ran: false }) },
+    );
+
+    expect(outcome).toEqual({ entry: interrupted, outcome: "deferred" });
+    expect(await readFile(interrupted.stagingPath, "utf8")).toBe("moved");
+    expect(await exists(interrupted.finalPath)).toBe(false);
+  });
+
+  it("makes its changes inside runWriteAlone when it is given", async () => {
+    const interrupted = entry({ moved: true, staged: true });
+    await writeFile(interrupted.stagingPath, "moved");
+    let inside = false;
+    let stagingGoneInside = false;
+
+    const [outcome] = await recoverInterruptedReplaces(
+      [interrupted],
+      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      {
+        runWriteAlone: async (write) => {
+          inside = true;
+          const value = await write();
+          stagingGoneInside = !(await exists(interrupted.stagingPath));
+          inside = false;
+          return { ran: true, value };
+        },
+      },
+    );
+
+    expect(outcome?.outcome).toBe("finished");
+    expect(stagingGoneInside).toBe(true);
+    expect(inside).toBe(false);
+    expect(await readFile(interrupted.finalPath, "utf8")).toBe("moved");
   });
 
   it("puts a moved item back when the old item was never removed", async () => {

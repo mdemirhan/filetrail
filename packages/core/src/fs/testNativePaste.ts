@@ -50,7 +50,9 @@ export function nativeFileSystemWithTrash(trashDir: string): WriteServiceFileSys
     ...nativeFileSystem,
     trash: async (path) => {
       count += 1;
-      await rename(path, join(trashDir, `${count}-${basename(path)}`));
+      const inTrash = join(trashDir, `${count}-${basename(path)}`);
+      await rename(path, inTrash);
+      return inTrash;
     },
   };
 }

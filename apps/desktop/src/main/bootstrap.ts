@@ -27,6 +27,7 @@ import {
 // doesn't answer is tried again later instead of holding up the window.
 const RECOVERY_ANSWER_WITHIN_MS = 3_000;
 import { inspectBatchRename } from "./bootstrap/batchRenameInspect";
+import { createDiskHasTrash } from "./bootstrap/diskHasTrash";
 import {
   clearResponseCaches,
   createFolderSizeHandlers,
@@ -53,6 +54,7 @@ import {
   resolveTerminalApplicationName,
 } from "./bootstrap/systemHandlers";
 import { createTrashItem } from "./bootstrap/trashItem";
+import { createUndoHistory } from "./bootstrap/undoHistory";
 import {
   type WriteOperationKind,
   assertNotSystemLocation,
@@ -85,6 +87,12 @@ export async function bootstrapMainProcess(
     showStartupNotices?: (notices: string[]) => void;
     // Items such a Replace left waiting for their disk, put in place later.
     showRecoveryNotices?: (notices: string[]) => void;
+    // What Undo and Redo would do now, for the Edit menu; told at start and on each change.
+    onUndoHistoryChanged?: (menu: {
+      undo: string | null;
+      redo: string | null;
+      cantUndo: boolean;
+    }) => void;
   } = {},
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
@@ -98,6 +106,7 @@ export async function bootstrapMainProcess(
   const {
     originalExplorerFileSystem,
     originalFileSystem,
+    originalTrashItem,
     createOriginalWriteOperationFs,
     createOriginalBatchRenameInspectDeps,
     getFolderSize,
@@ -138,7 +147,7 @@ export async function bootstrapMainProcess(
   });
   // Items replaced by a paste go to the Trash, so a replace can always be undone.
   const trashItem = createTrashItem({
-    trash: (path) => shell.trashItem(path),
+    trash: originalTrashItem,
     fs: originalFileSystem,
     homePath: app.getPath("home"),
   });
@@ -154,9 +163,19 @@ export async function bootstrapMainProcess(
     windows.showStartupNotices?.(recovery.notices);
   }
   const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
+  // What Undo and Redo work from, for as long as the app runs.
+  const undoHistory = createUndoHistory();
+  undoHistory.onChange(() => windows.onUndoHistoryChanged?.(undoHistory.menu()));
+  windows.onUndoHistoryChanged?.(undoHistory.menu());
   const writeCoordinator = createWriteOperationCoordinator(
     writeService,
     createOriginalWriteOperationFs(trashItem),
+    {
+      // Read from the mount table each time: disks come and go.
+      diskHasTrash: createDiskHasTrash(listVolumes),
+      recordUndo: undoHistory.record,
+      undoHistory,
+    },
   );
   // What couldn't be reached at start (its disk wasn't connected, or didn't answer) is
   // tried again now and then, while nothing else is being written, until it is done.
@@ -167,6 +186,7 @@ export async function bootstrapMainProcess(
         entryIds,
         answerWithinMs: RECOVERY_ANSWER_WITHIN_MS,
         retry: true,
+        runWriteAlone: writeCoordinator.runWriteAlone,
       }),
     remainingIds: () => new Set(replaceJournal.entries().map((entry) => entry.id)),
     isBusy: () => writeCoordinator.getActiveOperation() !== null,

@@ -20,6 +20,7 @@ import {
 } from "../lib/copyPasteClipboard";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { ToastEntry } from "../lib/toasts";
+import type { UndoQuestion } from "../lib/undoQuestion";
 
 type ContextMenuState = {
   x: number;
@@ -82,6 +83,14 @@ type CopyPasteDialogState =
       // Asked before a rename or new folder whose name begins with a dot would hide it.
       type: "confirmDotName";
       request: DotNameRequest;
+    }
+  | {
+      // Asked before an Undo (or Redo): items whose old names are taken now, or items that
+      // would go to the Trash though they changed since.
+      type: "undoQuestion";
+      question: UndoQuestion;
+      direction: "undo" | "redo";
+      action: WriteOperationAction | null;
     }
   | null;
 

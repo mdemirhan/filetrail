@@ -178,7 +178,7 @@ export const searchJobStatusSchema = z.enum([
   "error",
   "truncated",
 ]);
-export const nativeEditActionSchema = z.enum(["cut", "copy", "paste", "selectAll"]);
+export const nativeEditActionSchema = z.enum(["undo", "redo", "cut", "copy", "paste", "selectAll"]);
 export const copyPasteModeSchema = z.enum(["copy", "cut"]);
 export const copyPasteAnalysisJobStatusSchema = z.enum([
   "queued",
@@ -237,6 +237,8 @@ export const copyPasteConflictClassSchema = z.enum([
   "type_mismatch",
 ]);
 export const copyPasteAnalysisNodeDispositionSchema = z.enum(["new", "conflict", "blocked"]);
+export const undoDirectionSchema = z.enum(["undo", "redo"]);
+
 export const writeOperationActionSchema = z.enum([
   "paste",
   // A copy made some other way than pasting: a drag that copies.
@@ -249,6 +251,9 @@ export const writeOperationActionSchema = z.enum([
   "new_folder",
   // Several items renamed at once, from the Rename sheet.
   "batch_rename",
+  // The last operation undone, or the last undone one done again.
+  "undo",
+  "redo",
 ]);
 
 // A date and time as the clock of this Mac reads it, without a zone: "2026-05-14T18:02:11".
@@ -778,6 +783,7 @@ export const ipcContractSchemas = {
         infoPanelOpen: z.boolean(),
         infoRowOpen: z.boolean(),
         favoriteIsSet: z.boolean(),
+        textEditing: z.boolean(),
       }),
     }),
     response: z.object({
@@ -1109,6 +1115,37 @@ export const ipcContractSchemas = {
       status: z.literal("queued"),
     }),
   },
+  // Looks at what undoing (or redoing) the last operation would do, changing nothing: what
+  // to ask first, or why it can't be done now. The ticket starts it with "undo:start".
+  "undo:prepare": {
+    request: z.object({
+      direction: undoDirectionSchema,
+    }),
+    response: z.object({
+      ticket: z.string().min(1).nullable(),
+      refusal: z.enum(["busy", "nothing", "cant_undo"]).nullable(),
+      // What the Edit menu calls it ("Move of “a.txt”"), for saying what was undone.
+      label: z.string().nullable(),
+      // The operation it undoes (or redoes), for asking in its words.
+      action: writeOperationActionSchema.nullable(),
+      // Items whose old name is taken by another item now: they go back with a number.
+      nameTaken: z.array(z.string()),
+      // Items that changed since and would go to the Trash: put back from the Trash, the
+      // new item of a Replace, or one the operation made.
+      changed: z.array(z.object({ name: z.string(), putBack: z.boolean(), replaced: z.boolean() })),
+    }),
+  },
+  // Starts what "undo:prepare" looked at, once anything it asked was agreed to: all of it,
+  // never part.
+  "undo:start": {
+    request: z.object({
+      ticket: z.string().min(1),
+    }),
+    response: z.object({
+      operationId: z.string().min(1),
+      status: z.literal("queued"),
+    }),
+  },
   "writeOperation:cancel": {
     request: z.object({
       operationId: z.string().min(1),
@@ -1313,6 +1350,7 @@ export type CopyPasteRuntimeResolutionAction = z.output<
   typeof copyPasteRuntimeResolutionActionSchema
 >;
 export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
+export type UndoDirection = z.output<typeof undoDirectionSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
 export type SettingsTab = z.output<typeof settingsTabSchema>;

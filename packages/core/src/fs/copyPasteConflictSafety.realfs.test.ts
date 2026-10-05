@@ -57,6 +57,7 @@ const fileSystemWithTrash: WriteServiceFileSystem = {
   ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
   trash: async (path) => {
     await rename(path, join(trashDir, basename(path)));
+    return join(trashDir, basename(path));
   },
 };
 
@@ -547,7 +548,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
         },
         trash: async (path) => {
           trashed.push(path);
-          await fileSystemWithTrash.trash?.(path);
+          return (await fileSystemWithTrash.trash?.(path)) ?? path;
         },
       },
     });

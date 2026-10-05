@@ -4,6 +4,7 @@ import { basename, dirname } from "node:path";
 import {
   type ReplaceJournal,
   type ReplaceJournalEntry,
+  type RunWriteAlone,
   type WriteServiceFileSystem,
   recoverInterruptedReplaces,
 } from "@filetrail/core";
@@ -53,12 +54,18 @@ export type ReplaceRecoveryReport = {
 // Finishes or undoes what an earlier run left half done. Entries that couldn't be dealt
 // with stay for later (see the retry in bootstrap). Never throws: nothing here may keep
 // the app from starting. `entryIds` limits it to those entries (a retry of what was left
-// at start, never a Replace running now).
+// at start, never a Replace running now). A retry passes `runWriteAlone`, so its changes
+// never happen alongside an operation the person started.
 export async function recoverReplaces(
   journal: FileReplaceJournal,
   fileSystem: WriteServiceFileSystem,
   logger: Pick<AppLogger, "info" | "error">,
-  options: { entryIds?: ReadonlySet<string>; answerWithinMs?: number; retry?: boolean } = {},
+  options: {
+    entryIds?: ReadonlySet<string>;
+    answerWithinMs?: number;
+    retry?: boolean;
+    runWriteAlone?: RunWriteAlone;
+  } = {},
 ): Promise<ReplaceRecoveryReport> {
   const report: ReplaceRecoveryReport = { notices: [], finished: [] };
   const entries = journal
@@ -69,11 +76,10 @@ export async function recoverReplaces(
   }
   let outcomes: Awaited<ReturnType<typeof recoverInterruptedReplaces>>;
   try {
-    outcomes = await recoverInterruptedReplaces(
-      entries,
-      fileSystem,
-      options.answerWithinMs === undefined ? {} : { answerWithinMs: options.answerWithinMs },
-    );
+    outcomes = await recoverInterruptedReplaces(entries, fileSystem, {
+      ...(options.answerWithinMs === undefined ? {} : { answerWithinMs: options.answerWithinMs }),
+      ...(options.runWriteAlone === undefined ? {} : { runWriteAlone: options.runWriteAlone }),
+    });
   } catch (error) {
     logger.error("[filetrail] couldn't recover interrupted replaces", error);
     return report;
@@ -90,6 +96,10 @@ export async function recoverReplaces(
           `“${name}” is still under the hidden name “${basename(outcome.entry.stagingPath)}” in “${dirname(outcome.entry.stagingPath)}”. ${outcome.error}`,
         );
       }
+      continue;
+    }
+    if (outcome.outcome === "deferred") {
+      // An operation was running; the entry stays for the next try.
       continue;
     }
     if (outcome.outcome === "unreachable") {

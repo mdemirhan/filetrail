@@ -71,6 +71,8 @@ const CONTEXT_MENU_SHORTCUT_COMMANDS = {
 } as const satisfies Partial<Record<ContextMenuActionId, ShortcutCommandId>>;
 
 export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
+  undo: "globalExplorer",
+  redo: "globalExplorer",
   editCut: "globalExplorer",
   editCopy: "globalExplorer",
   editPaste: "globalExplorer",

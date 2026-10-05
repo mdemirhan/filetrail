@@ -52,6 +52,11 @@ export function describeQuitWhileBusy(
         message: "Items are still being deleted.",
         detail: `${stops} Items already deleted can't be recovered.`,
       };
+    case "undo":
+      return {
+        message: "An Undo is still in progress.",
+        detail: `${stops} What was already undone stays undone.`,
+      };
     case "rename":
     case "new_folder":
       return null;

@@ -164,7 +164,9 @@ type WriteStartAction =
   | "empty_trash"
   | "rename"
   | "batch_rename"
-  | "new_folder";
+  | "new_folder"
+  | "undo"
+  | "redo";
 type CopyLikePreStartOutcome =
   | { status: "queued" }
   | { status: "review" }
@@ -192,7 +194,8 @@ function isConfirmationDialog(state: { type: string } | null): boolean {
     state?.type === "confirmDeleteImmediately" ||
     state?.type === "confirmEmptyTrash" ||
     state?.type === "confirmDeleteWithoutTrash" ||
-    state?.type === "confirmDotName"
+    state?.type === "confirmDotName" ||
+    state?.type === "undoQuestion"
   );
 }
 
@@ -252,6 +255,10 @@ function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
       return "Couldn’t Rename";
     case "new_folder":
       return "Couldn’t Make a New Folder";
+    case "undo":
+      return "Couldn’t Undo";
+    case "redo":
+      return "Couldn’t Redo";
     default:
       return "Couldn’t Paste";
   }
@@ -1380,6 +1387,25 @@ export function useExplorerActions(args: {
   function pushTerminalCopyPasteToast(event: WriteOperationProgressEvent) {
     const result = event.result;
     if (!result) {
+      return;
+    }
+    if (event.action === "undo" || event.action === "redo") {
+      const label = runningUndoLabelRef.current;
+      runningUndoLabelRef.current = null;
+      // Told only when it can't be seen: nothing it changed is in the folder on screen.
+      const shownFolder = currentPathRef.current;
+      const changedHere = result.items.some((item) =>
+        [item.sourcePath, item.destinationPath].some(
+          (path) => path !== null && parentDirectoryPath(path) === shownFolder,
+        ),
+      );
+      if (event.status === "completed" && !changedHere) {
+        pushToast({
+          kind: "success",
+          title: event.action === "undo" ? "Undone" : "Redone",
+          ...(label ? { message: label } : {}),
+        });
+      }
       return;
     }
     // What is made or renamed in the folder on screen is already in sight there, and a
@@ -3483,6 +3509,116 @@ export function useExplorerActions(args: {
     await startCreateFolder(request, refuse);
   }
 
+  // The question an Undo is waiting on: true to go ahead, false when it went without (Cancel,
+  // Escape). Either all of the Undo happens or none of it.
+  const undoQuestionResolverRef = useRef<((goAhead: boolean) => void) | null>(null);
+  // What the Undo running now undoes ("Move of “a.txt”"), to say so when it has finished.
+  const runningUndoLabelRef = useRef<string | null>(null);
+
+  function askUndoQuestion(
+    question: Omit<
+      Extract<NonNullable<typeof copyPasteDialogState>, { type: "undoQuestion" }>,
+      "type"
+    >,
+  ): Promise<boolean> {
+    undoQuestionResolverRef.current?.(false);
+    return new Promise((resolve) => {
+      undoQuestionResolverRef.current = resolve;
+      setCopyPasteDialogState({ type: "undoQuestion", ...question });
+    });
+  }
+
+  function answerUndoQuestion(goAhead: boolean) {
+    const resolve = undoQuestionResolverRef.current;
+    undoQuestionResolverRef.current = null;
+    setCopyPasteDialogState(null);
+    resolve?.(goAhead);
+  }
+
+  // A question closed some other way (Escape) goes without.
+  useEffect(() => {
+    if (copyPasteDialogState?.type !== "undoQuestion" && undoQuestionResolverRef.current) {
+      const resolve = undoQuestionResolverRef.current;
+      undoQuestionResolverRef.current = null;
+      resolve(false);
+    }
+  }, [copyPasteDialogState]);
+
+  // Undoes (or redoes) the last file operation: asks first about what the main process
+  // found it can't simply do, then runs all of it as any operation runs, or none of it.
+  async function startUndo(direction: "undo" | "redo") {
+    if (isWriteOperationInFlight()) {
+      return;
+    }
+    let prepared: IpcResponse<"undo:prepare">;
+    try {
+      prepared = await client.invoke("undo:prepare", { direction });
+    } catch (error) {
+      showModalNotice(
+        getCopyLikePreStartFailureTitle(direction),
+        error instanceof Error ? error.message : String(error),
+      );
+      return;
+    }
+    if (prepared.ticket === null) {
+      if (prepared.refusal === "busy") {
+        showWriteOperationBusyNotice(direction);
+      }
+      return;
+    }
+    if (
+      prepared.nameTaken.length > 0 &&
+      !(await askUndoQuestion({
+        question: { kind: "nameTaken", names: prepared.nameTaken },
+        direction,
+        action: prepared.action,
+      }))
+    ) {
+      return;
+    }
+    if (
+      prepared.changed.length > 0 &&
+      !(await askUndoQuestion({
+        question: { kind: "changed", items: prepared.changed },
+        direction,
+        action: prepared.action,
+      }))
+    ) {
+      return;
+    }
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyNotice(direction);
+      return;
+    }
+    const card = {
+      action: direction,
+      targetPath: null,
+      completedItemCount: 0,
+      totalItemCount: 0,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: null,
+    } as const;
+    applyWriteOperationCardState({ ...card, stage: "starting" });
+    runningUndoLabelRef.current = prepared.label;
+    try {
+      const response = await client.invoke("undo:start", { ticket: prepared.ticket });
+      adoptWriteOperation(response.operationId);
+      applyWriteOperationCardState({ ...card, stage: "queued" });
+    } catch (error) {
+      applyWriteOperationCardState(null);
+      runningUndoLabelRef.current = null;
+      if (isWriteOperationBusyError(error)) {
+        showWriteOperationBusyNotice(direction);
+        return;
+      }
+      showModalNotice(
+        getCopyLikePreStartFailureTitle(direction),
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   async function startRename(
     request: Extract<DotNameRequest, { kind: "rename" }>,
     onRefused: (message: string) => void,
@@ -3894,6 +4030,8 @@ export function useExplorerActions(args: {
     startPasteFromClipboard,
     startTrashPaths,
     startDeleteImmediatelyPaths,
+    startUndo,
+    answerUndoQuestion,
     submitMoveDialog,
     submitNewFolderDialog,
     submitRenameDialog,

@@ -34,6 +34,16 @@ import {
   collectDestinationPathKeys,
   resolveSingleNodeWithAction,
 } from "./copyPastePolicy";
+import {
+  type CantUndoReason,
+  type UndoLog,
+  type UndoStep,
+  type UndoUnit,
+  itemIdOf,
+  readItemId,
+  readItemRef,
+  readItemStamp,
+} from "./undoLog";
 import type {
   CopyPasteAnalysisNode,
   CopyPasteAnalysisReport,
@@ -88,6 +98,22 @@ type ExecutionContext = {
   // new item under a hidden name, progress and questions still show the final name.
   displayPath?: (path: string) => string;
   replaceJournal: ReplaceJournal | null;
+  // What this paste did, for Undo. Shared by every step, like `progress`.
+  undo: UndoRecorder;
+  // False while a Replace builds its new item under a hidden name: that isn't a step
+  // anyone could undo, only the swap that follows is.
+  recordsUndo: boolean;
+};
+
+// Steps are kept only for the items the person picked: undoing one undoes everything
+// inside it. A merge, a move to another disk or a permanent delete anywhere makes the
+// whole paste one that can't be undone.
+type UndoRecorder = {
+  topLevelNodeIds: ReadonlySet<string>;
+  // The steps of the picked item being worked on, or null between items.
+  unit: UndoStep[] | null;
+  units: UndoUnit[];
+  cantUndo: CantUndoReason | null;
 };
 
 // Something appeared at the destination while writing to it (EEXIST). Handled like a
@@ -154,6 +180,13 @@ export async function executeCopyPasteFromAnalysis(args: {
     totalBytes: args.report.summary.totalBytes,
     progress: { completedItemCount: 0, completedByteCount: 0 },
     replaceJournal: args.replaceJournal ?? null,
+    undo: {
+      topLevelNodeIds: new Set(args.resolvedNodes.map((node) => node.node.id)),
+      unit: null,
+      units: [],
+      cantUndo: null,
+    },
+    recordsUndo: true,
   };
   const itemResults: CopyPasteItemResult[] = [];
   let encounteredError: Error | null = null;
@@ -177,6 +210,7 @@ export async function executeCopyPasteFromAnalysis(args: {
       recordNotStarted(args.resolvedNodes.slice(nodeIndex));
       break;
     }
+    context.undo.unit = [];
     try {
       const outcome = await executeResolvedNode(context, node);
       itemResults.push(outcomeItemResult(node, outcome));
@@ -196,10 +230,17 @@ export async function executeCopyPasteFromAnalysis(args: {
       encounteredError ??= error instanceof Error ? error : new Error(message);
       itemResults.push(failedItemResult(node, error, message));
       // Keep going: one failed item must not stop the rest of the operation.
+    } finally {
+      // What was done for this item counts, even when it then failed or was stopped.
+      await closeUndoUnit(context);
     }
   }
 
   const status = resolveTerminalStatus({ cancelled, itemResults });
+  const undoLog: UndoLog =
+    context.undo.cantUndo !== null
+      ? { undoable: false, reason: context.undo.cantUndo }
+      : { undoable: true, units: context.undo.units };
   const result = createOperationResult({
     operationId: args.operationId,
     report: args.report,
@@ -229,7 +270,82 @@ export async function executeCopyPasteFromAnalysis(args: {
     currentSourcePath: null,
     currentDestinationPath: null,
     runtimeConflict: null,
-    result,
+    result: { ...result, undoLog },
+  });
+}
+
+// Ends the steps of the picked item just worked on. What it made is looked at now, once
+// all of it is in place (a folder's date is set last), for Undo to tell if it changes.
+async function closeUndoUnit(context: ExecutionContext): Promise<void> {
+  const steps = context.undo.unit;
+  context.undo.unit = null;
+  if (steps === null || steps.length === 0) {
+    return;
+  }
+  const stamped: UndoStep[] = [];
+  for (const step of steps) {
+    stamped.push(
+      step.kind === "created"
+        ? { ...step, stamp: await readItemStamp(context.fileSystem, step.path) }
+        : step,
+    );
+  }
+  context.undo.units.push({ steps: stamped });
+}
+
+function markCantUndo(context: ExecutionContext, reason: CantUndoReason): void {
+  context.undo.cantUndo ??= reason;
+}
+
+// Adds a step to the picked item's steps. Steps inside it (a file in a copied folder) are
+// left out: undoing the item undoes them.
+function recordUndoStep(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  step: UndoStep,
+): void {
+  if (
+    context.recordsUndo &&
+    context.undo.unit !== null &&
+    context.undo.topLevelNodeIds.has(node.node.id)
+  ) {
+    context.undo.unit.push(step);
+  }
+}
+
+async function recordCreated(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  path: string,
+): Promise<void> {
+  if (!context.recordsUndo || !context.undo.topLevelNodeIds.has(node.node.id)) {
+    return;
+  }
+  recordUndoStep(context, node, {
+    kind: "created",
+    path,
+    id: await readItemId(context.fileSystem.lstat, path),
+    stamp: null,
+  });
+}
+
+async function recordMoved(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  to: string,
+): Promise<void> {
+  if (!context.recordsUndo || !context.undo.topLevelNodeIds.has(node.node.id)) {
+    return;
+  }
+  const from = node.node.sourcePath;
+  const moved = await readItemRef(context.fileSystem.lstat, to);
+  recordUndoStep(context, node, {
+    kind: "moved",
+    from,
+    to,
+    id: moved.id,
+    itemKind: moved.kind,
+    parentId: await readItemId(context.fileSystem.lstat, dirname(from)),
   });
 }
 
@@ -596,6 +712,7 @@ async function performNode(
   // copied either: that would leave it in both places.
   if (context.mode === "cut") {
     await assertRemovableAfterCopy(context, currentNode, { deep: false });
+    markCantUndo(context, "other_disk_move");
   }
 
   if (currentNode.node.sourceKind === "directory") {
@@ -687,6 +804,9 @@ async function executeLeafNode(
   currentNode: ResolvedCopyPasteNode,
 ): Promise<ExecuteNodeResult> {
   await writeLeaf(context, currentNode, currentNode.destinationPath);
+  if (context.mode === "copy") {
+    await recordCreated(context, currentNode, currentNode.destinationPath);
+  }
   countLeafProgress(context, currentNode);
   let deleteError: string | null = null;
   if (context.mode === "cut") {
@@ -790,10 +910,16 @@ async function executeDirectoryNode(
         ? new DestinationTakenError(error)
         : await explainMissingFolder(context.fileSystem, currentNode.destinationPath, error);
     }
+    if (context.mode === "copy") {
+      await recordCreated(context, currentNode, currentNode.destinationPath);
+    }
     // The folder's own mode and flags come last (see below): a read-only or locked folder
     // couldn't be filled in otherwise.
     context.progress.completedItemCount += 1;
     emitProgress(context, "running", currentNode, null);
+  }
+  if (currentNode.action === "merge") {
+    markCantUndo(context, "merge");
   }
   let hasChildFailure = false;
   const bubbledChildItems: CopyPasteItemResult[] = [];
@@ -950,6 +1076,9 @@ async function executeReplace(
     }
   }
   if (!movedByRename) {
+    if (context.mode === "cut") {
+      markCantUndo(context, "other_disk_move");
+    }
     await journal?.add(journalEntry);
   }
   // Puts things back the way they were before this item started.
@@ -979,6 +1108,7 @@ async function executeReplace(
         {
           ...context,
           mode: "copy",
+          recordsUndo: false,
           displayPath: (path) =>
             (context.displayPath ?? ((value: string) => value))(
               rebasePath(path, temporaryPath, finalPath),
@@ -1063,6 +1193,7 @@ async function executeReplace(
       );
       await moveExclusive(fileSystem, temporaryPath, visiblePath);
       await restoreAfterMove(fileSystem, visiblePath, stagedMode, stagedFlags);
+      await recordReplacement(context, currentNode, visiblePath, movedByRename);
       await journal?.remove(journalEntry.id).catch(() => undefined);
       return {
         itemStatus: "failed",
@@ -1073,6 +1204,7 @@ async function executeReplace(
       };
     }
     await restoreAfterMove(fileSystem, finalPath, stagedMode, stagedFlags);
+    await recordReplacement(context, currentNode, finalPath, movedByRename);
   } catch (error) {
     if (oldItemRemoved && journal && errorCode(error) !== "EEXIST") {
       // Neither name could be used: the journal keeps the new item, and the next start
@@ -1102,6 +1234,20 @@ async function executeReplace(
     destinationPath: finalPath,
     childItems,
   };
+}
+
+// The new item a Replace put in place: moved there on its disk, or copied there.
+async function recordReplacement(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  path: string,
+  movedByRename: boolean,
+): Promise<void> {
+  if (movedByRename) {
+    await recordMoved(context, node, path);
+  } else if (context.mode === "copy") {
+    await recordCreated(context, node, path);
+  }
 }
 
 // After a replacing move was copied into place, removes the sources that were copied.
@@ -1170,7 +1316,25 @@ async function removeReplacedItem(
   const { fileSystem } = context;
   if (fileSystem.trash) {
     try {
-      await fileSystem.trash(node.destinationPath);
+      // On a disk that ignores case, "X.TXT" may have found "x.txt": Undo puts the old item
+      // back under the name it really had.
+      const from =
+        context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)
+          ? await spelledAsOnDisk(fileSystem, node.destinationPath, destination)
+          : node.destinationPath;
+      const trashPath = await fileSystem.trash(node.destinationPath);
+      if (context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)) {
+        recordUndoStep(context, node, {
+          kind: "trashed",
+          from,
+          trashPath,
+          id:
+            destination.dev !== null && destination.ino !== null
+              ? itemIdOf({ dev: destination.dev, ino: destination.ino })
+              : null,
+          parentId: await readItemId(fileSystem.lstat, dirname(node.destinationPath)),
+        });
+      }
       return "removed";
     } catch (error) {
       // Only a disk that may have no Trash (a network or FAT volume) is asked about below;
@@ -1210,11 +1374,43 @@ async function removeReplacedItem(
       throw new Error(lockedMessage(locked));
     }
   }
+  markCantUndo(context, "deleted_for_good");
   await fileSystem.rm(node.destinationPath, {
     recursive: destination.kind === "directory",
     force: true,
   });
   return "removed";
+}
+
+// `path` as its folder spells the item `fingerprint` describes ("x.txt" for "X.TXT" on a
+// disk that ignores case), or `path` itself when that can't be told.
+async function spelledAsOnDisk(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  fingerprint: NodeFingerprint,
+): Promise<string> {
+  const folder = dirname(path);
+  const wanted = basename(path).normalize("NFD").toLowerCase();
+  let names: string[];
+  try {
+    names = await fileSystem.readdir(folder);
+  } catch {
+    return path;
+  }
+  if (names.includes(basename(path))) {
+    return path;
+  }
+  for (const name of names) {
+    if (name.normalize("NFD").toLowerCase() !== wanted) {
+      continue;
+    }
+    const candidate = join(folder, name);
+    const found = await captureFingerprint(fileSystem, candidate);
+    if (found.ino !== null && found.ino === fingerprint.ino && found.dev === fingerprint.dev) {
+      return candidate;
+    }
+  }
+  return path;
 }
 
 // The first locked item inside a folder, at any depth, or null.
@@ -1502,6 +1698,7 @@ async function tryRenameForCut(
       ? new DestinationTakenError(error)
       : await explainMissingFolder(context.fileSystem, currentNode.destinationPath, error);
   }
+  await recordMoved(context, currentNode, currentNode.destinationPath);
   // Rename succeeded — count all items in the subtree as completed
   context.progress.completedItemCount += countExecutableSteps([currentNode]);
   context.progress.completedByteCount += sumSubtreeBytes([currentNode]);

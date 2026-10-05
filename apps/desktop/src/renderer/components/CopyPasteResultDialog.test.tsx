@@ -9,9 +9,11 @@ import { CopyPasteResultDialog } from "./CopyPasteResultDialog";
 type Items = NonNullable<WriteOperationProgressEvent["result"]>["items"];
 
 function event(
-  action: "paste" | "copy_to" | "move_to" | "batch_rename",
+  action: "paste" | "copy_to" | "move_to" | "batch_rename" | "undo" | "redo",
   items: Items,
 ): WriteOperationProgressEvent {
+  // An Undo's items go back where they each came from: it has no one folder.
+  const targetPath = action === "undo" || action === "redo" ? null : "/Users/demo/dest";
   return {
     operationId: "copy-op-1",
     action,
@@ -27,7 +29,7 @@ function event(
       operationId: "copy-op-1",
       action,
       status: "partial",
-      targetPath: "/Users/demo/dest",
+      targetPath,
       startedAt: "2026-09-29T00:00:00.000Z",
       finishedAt: "2026-09-29T00:00:01.000Z",
       summary: {
@@ -474,5 +476,46 @@ describe("CopyPasteResultDialog for renaming several items", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Renamed 1 of 2 items" })).toBeInTheDocument();
+  });
+
+  it("says after a Redo, too, that what was done can be taken back", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("redo", [
+          { ...item("/T/a.txt", "completed"), destinationPath: "/Docs/a.txt" },
+          {
+            ...item("/T/b.txt", "failed", "“b.txt” is no longer in “T”."),
+            destinationPath: "/Docs/b.txt",
+          },
+        ])}
+        canRetry={false}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Redid 1 of 2 items" });
+    expect(
+      within(dialog).getByText("1 item was left as it is. ⌘Z undoes what was redone."),
+    ).toBeInTheDocument();
+    // Named by where it would have gone back to.
+    expect(within(dialog).getByText("b.txt")).toBeInTheDocument();
+  });
+
+  it("doesn't mention Redo when nothing was undone", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("undo", [
+          item("/Docs/a.txt", "skipped", "“a.txt” is no longer in “Docs”."),
+          item("/Docs/b.txt", "skipped", "“b.txt” is no longer in “Docs”."),
+        ])}
+        canRetry={false}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Couldn’t Undo" });
+    expect(within(dialog).getByText("2 items were left as they are.")).toBeInTheDocument();
   });
 });

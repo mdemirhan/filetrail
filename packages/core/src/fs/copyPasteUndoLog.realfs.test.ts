@@ -1,0 +1,363 @@
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { canMountDiskImages, mountTestDiskImage } from "./testDiskImage";
+import {
+  KEEP_EXISTING,
+  REPLACE_ALL,
+  nativeFileSystem,
+  nativeFileSystemWithTrash,
+  runPaste,
+} from "./testNativePaste";
+import type { ItemId, UndoLog, UndoStep } from "./undoLog";
+import type { CopyPasteOperationResult } from "./writeServiceTypes";
+
+// What a paste records for Undo: one unit per item picked, with the steps it really took,
+// or why the paste can't be undone.
+
+let testDir: string;
+let src: string;
+let dst: string;
+let trashDir: string;
+
+beforeEach(async () => {
+  testDir = await mkdtemp(join(tmpdir(), "filetrail-undo-log-"));
+  src = join(testDir, "src");
+  dst = join(testDir, "dst");
+  trashDir = join(testDir, "Trash");
+  await mkdir(src);
+  await mkdir(dst);
+  await mkdir(trashDir);
+});
+
+afterEach(async () => {
+  await rm(testDir, { recursive: true, force: true });
+});
+
+async function idOf(path: string): Promise<ItemId> {
+  const stats = await lstat(path);
+  return { dev: stats.dev, ino: stats.ino };
+}
+
+function undoLogOf(result: CopyPasteOperationResult | null): UndoLog {
+  if (!result?.undoLog) {
+    throw new Error("The paste recorded nothing for Undo.");
+  }
+  return result.undoLog;
+}
+
+function stepsOf(log: UndoLog): UndoStep[][] {
+  if (!log.undoable) {
+    throw new Error(`The paste can't be undone: ${log.reason}`);
+  }
+  return log.units.map((unit) => unit.steps);
+}
+
+describe("what a copy records", () => {
+  it("records each item it made, not what is inside a copied folder", async () => {
+    await writeFile(join(src, "a.txt"), "a");
+    await mkdir(join(src, "Folder"));
+    await writeFile(join(src, "Folder", "inside.txt"), "inside");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt"), join(src, "Folder")],
+      destinationDirectoryPath: dst,
+    });
+
+    const units = stepsOf(undoLogOf(result));
+    expect(units).toEqual([
+      [
+        {
+          kind: "created",
+          path: join(dst, "a.txt"),
+          id: await idOf(join(dst, "a.txt")),
+          stamp: expect.objectContaining({ kind: "file", size: 1, entryCount: null }),
+        },
+      ],
+      [
+        {
+          kind: "created",
+          path: join(dst, "Folder"),
+          id: await idOf(join(dst, "Folder")),
+          stamp: expect.objectContaining({ kind: "directory", size: null, entryCount: 1 }),
+        },
+      ],
+    ]);
+    // Taken once the folder was complete, its date included.
+    const folder = await lstat(join(dst, "Folder"));
+    expect(units[1]?.[0]).toMatchObject({ stamp: { mtimeMs: folder.mtimeMs } });
+  });
+
+  it("records a duplicate under the name it was given", async () => {
+    await writeFile(join(src, "a.txt"), "a");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt")],
+      destinationDirectoryPath: src,
+    });
+
+    expect(stepsOf(undoLogOf(result))).toEqual([
+      [expect.objectContaining({ kind: "created", path: join(src, "a copy.txt") })],
+    ]);
+  });
+
+  it("records nothing for an item skipped as already there", async () => {
+    await writeFile(join(src, "a.txt"), "new");
+    await writeFile(join(src, "b.txt"), "b");
+    await writeFile(join(dst, "a.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt"), join(src, "b.txt")],
+      destinationDirectoryPath: dst,
+      policy: KEEP_EXISTING,
+    });
+
+    expect(stepsOf(undoLogOf(result))).toEqual([
+      [expect.objectContaining({ kind: "created", path: join(dst, "b.txt") })],
+    ]);
+  });
+
+  it("records the old item's place in the Trash, then the new item, for a Replace", async () => {
+    await writeFile(join(src, "a.txt"), "new");
+    await writeFile(join(dst, "a.txt"), "old");
+    const oldId = await idOf(join(dst, "a.txt"));
+    const dstId = await idOf(dst);
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(trashDir),
+    });
+
+    const [unit] = stepsOf(undoLogOf(result));
+    expect(unit).toEqual([
+      {
+        kind: "trashed",
+        from: join(dst, "a.txt"),
+        trashPath: join(trashDir, "1-a.txt"),
+        id: oldId,
+        parentId: dstId,
+      },
+      expect.objectContaining({
+        kind: "created",
+        path: join(dst, "a.txt"),
+        id: await idOf(join(dst, "a.txt")),
+      }),
+    ]);
+    expect(await readFile(join(trashDir, "1-a.txt"), "utf8")).toBe("old");
+    // Nothing about the hidden name the new item was built under.
+    expect(JSON.stringify(unit)).not.toContain(".filetrail");
+  });
+
+  // Found by the Undo fuzz test: "X.TXT" pasted over "x.txt" on a disk that ignores case
+  // put the old item back as "X.TXT".
+  it("records the old item of a Replace under the name it really had", async () => {
+    await writeFile(join(src, "X.TXT"), "new");
+    await writeFile(join(dst, "x.txt"), "old");
+    const ignoresCase =
+      (await readdir(dst)).length === 1 &&
+      (await lstat(join(dst, "X.TXT")).catch(() => null)) !== null;
+    if (!ignoresCase) {
+      return;
+    }
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "X.TXT")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(trashDir),
+    });
+
+    expect(stepsOf(undoLogOf(result))[0]?.[0]).toMatchObject({
+      kind: "trashed",
+      from: join(dst, "x.txt"),
+    });
+  });
+
+  it("records a folder whose copy failed part way, since the folder is there", async () => {
+    await mkdir(join(src, "Folder"));
+    await writeFile(join(src, "Folder", "a.txt"), "a");
+    await writeFile(join(src, "Folder", "b.txt"), "b");
+    let calls = 0;
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      fileSystem: {
+        ...nativeFileSystem,
+        copyFile: async (from, to, signal) => {
+          calls += 1;
+          if (calls === 2) {
+            throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+          }
+          await nativeFileSystem.copyFile?.(from, to, signal);
+        },
+      },
+    });
+
+    expect(result?.status).toBe("partial");
+    expect(stepsOf(undoLogOf(result))).toEqual([
+      [expect.objectContaining({ kind: "created", path: join(dst, "Folder") })],
+    ]);
+  });
+
+  it("records only what was done before a stop", async () => {
+    await writeFile(join(src, "a.txt"), "a");
+    await writeFile(join(src, "b.txt"), "b");
+    const controller = new AbortController();
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt"), join(src, "b.txt")],
+      destinationDirectoryPath: dst,
+      signal: controller.signal,
+      onEvent: (event) => {
+        if (event.status === "running" && event.completedItemCount === 1) {
+          controller.abort();
+        }
+      },
+    });
+
+    expect(result?.status).toBe("partial");
+    expect(await readdir(dst)).toEqual(["a.txt"]);
+    expect(stepsOf(undoLogOf(result))).toEqual([
+      [expect.objectContaining({ kind: "created", path: join(dst, "a.txt") })],
+    ]);
+  });
+
+  it("can't be undone once a folder is merged into one already there", async () => {
+    await mkdir(join(src, "Folder"));
+    await writeFile(join(src, "Folder", "new.txt"), "new");
+    await mkdir(join(dst, "Folder"));
+    await writeFile(join(dst, "Folder", "old.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      policy: KEEP_EXISTING,
+    });
+
+    expect(await readdir(join(dst, "Folder"))).toEqual(["new.txt", "old.txt"]);
+    expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
+  });
+
+  it("can't be undone once a Replace deletes the old item for good", async () => {
+    await writeFile(join(src, "a.txt"), "new");
+    await writeFile(join(dst, "a.txt"), "old");
+
+    const { result, conflicts } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem: {
+        ...nativeFileSystem,
+        trash: async () => {
+          throw Object.assign(new Error("no Trash"), { code: "ENOTRASH" });
+        },
+      },
+      // Asked whether to delete it for good, the person says yes.
+      resolve: () => "overwrite",
+    });
+
+    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
+    expect(await readFile(join(dst, "a.txt"), "utf8")).toBe("new");
+    expect(undoLogOf(result)).toEqual({ undoable: false, reason: "deleted_for_good" });
+  });
+});
+
+describe("what a move records", () => {
+  it("records where each item came from on its disk, and the folder it was in", async () => {
+    await writeFile(join(src, "a.txt"), "a");
+    await mkdir(join(src, "Folder"));
+    const fileId = await idOf(join(src, "a.txt"));
+    const folderId = await idOf(join(src, "Folder"));
+    const srcId = await idOf(src);
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "a.txt"), join(src, "Folder")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(stepsOf(undoLogOf(result))).toEqual([
+      [
+        {
+          kind: "moved",
+          from: join(src, "a.txt"),
+          to: join(dst, "a.txt"),
+          id: fileId,
+          itemKind: "file",
+          parentId: srcId,
+        },
+      ],
+      [
+        {
+          kind: "moved",
+          from: join(src, "Folder"),
+          to: join(dst, "Folder"),
+          id: folderId,
+          itemKind: "directory",
+          parentId: srcId,
+        },
+      ],
+    ]);
+  });
+
+  it("records the old item's place in the Trash, then the move, for a Replace", async () => {
+    await writeFile(join(src, "a.txt"), "new");
+    await writeFile(join(dst, "a.txt"), "old");
+    const movedId = await idOf(join(src, "a.txt"));
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "a.txt")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(trashDir),
+    });
+
+    expect(stepsOf(undoLogOf(result))).toEqual([
+      [
+        expect.objectContaining({ kind: "trashed", from: join(dst, "a.txt") }),
+        expect.objectContaining({
+          kind: "moved",
+          from: join(src, "a.txt"),
+          to: join(dst, "a.txt"),
+          id: movedId,
+        }),
+      ],
+    ]);
+  });
+
+  it.runIf(canMountDiskImages)(
+    "can't be undone when it went to another disk",
+    async () => {
+      const volume = mountTestDiskImage({ sizeMb: 20 });
+      try {
+        await writeFile(join(src, "a.txt"), "a");
+
+        const { result } = await runPaste({
+          mode: "cut",
+          sourcePaths: [join(src, "a.txt")],
+          destinationDirectoryPath: volume.mountPath,
+        });
+
+        expect(await readFile(join(volume.mountPath, "a.txt"), "utf8")).toBe("a");
+        expect(undoLogOf(result)).toEqual({ undoable: false, reason: "other_disk_move" });
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+});

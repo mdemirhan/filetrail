@@ -14,6 +14,8 @@ export type ApplicationMenuState = {
   infoRowOpen: boolean;
   /** Whether the folder the Favorites item acts on is a favorite already. */
   favoriteIsSet: boolean;
+  /** A text field has the keyboard: Undo and Redo are its own, and always on. */
+  textEditing: boolean;
 };
 
 // Before the window has reported: everything available, nothing checked.
@@ -27,6 +29,7 @@ export const INITIAL_APPLICATION_MENU_STATE: ApplicationMenuState = {
   infoPanelOpen: false,
   infoRowOpen: false,
   favoriteIsSet: false,
+  textEditing: false,
 };
 
 const KNOWN_COMMANDS = new Set<string>(RENDERER_COMMAND_TYPES);

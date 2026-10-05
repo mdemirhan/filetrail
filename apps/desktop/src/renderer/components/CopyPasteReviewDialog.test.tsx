@@ -216,7 +216,10 @@ describe("CopyPasteReviewDialog", () => {
     expect(
       screen.getByText("Folders merge. Files that exist are added with a “copy” name."),
     ).toBeInTheDocument();
-    expect(screen.getByText("1 item will be kept as a copy, 1 folder merged")).toBeInTheDocument();
+    // Keep All merges the folder too, which can't be undone.
+    expect(
+      screen.getByText("1 item will be kept as a copy, 1 folder merged. Merging can’t be undone"),
+    ).toBeInTheDocument();
 
     chooseForAll("Add Missing");
     expect(screen.getByLabelText("Choice for notes.txt")).toHaveValue("skip");
@@ -224,6 +227,11 @@ describe("CopyPasteReviewDialog", () => {
     expect(
       screen.getByText("Folders merge. Only files that aren’t there yet are added."),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Merging can’t be undone$/)).toBeInTheDocument();
+
+    // Nothing merges: nothing is said about Undo.
+    chooseForAll("Skip");
+    expect(screen.queryByText(/can’t be undone/)).not.toBeInTheDocument();
   });
 
   it("leaves Add Missing out of a move, and when no folder already exists", () => {
@@ -471,7 +479,10 @@ describe("CopyPasteReviewDialog", () => {
       screen.getByText(/Can't replace: It contains the item being pasted\./),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Replace 1 and Paste" })).toBeInTheDocument();
-    expect(screen.getByText("1 existing item will be moved to the Trash")).toBeInTheDocument();
+    // The folder that can't be replaced is merged instead, which can't be undone.
+    expect(
+      screen.getByText("1 existing item will be moved to the Trash. Merging can’t be undone"),
+    ).toBeInTheDocument();
   });
 
   it("uses singular and plural wording and local number formats", () => {

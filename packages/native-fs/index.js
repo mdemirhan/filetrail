@@ -48,4 +48,5 @@ module.exports = {
   nativeGetFlags: binding.nativeGetFlags,
   nativeSetFlags: binding.nativeSetFlags,
   nativeListVolumes: binding.nativeListVolumes,
+  nativeTrashItem: binding.nativeTrashItem,
 };

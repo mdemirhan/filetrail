@@ -706,3 +706,65 @@ describe("nativeDatesTaken", () => {
     });
   });
 });
+
+// Tried on a disk image only: its Trash goes away with it, and the person's own Trash is
+// never touched by a test.
+describe("nativeTrashItem", () => {
+  it.runIf(canMountDiskImages)(
+    "moves items to their disk's Trash and says where each went, even under a new name",
+    async () => {
+      const volume = mountTestDiskImage({ sizeMb: 20 });
+      try {
+        const file = join(volume.mountPath, "a.txt");
+        const folder = join(volume.mountPath, "Folder");
+        writeFileSync(file, "first");
+        mkdirSync(folder);
+        writeFileSync(join(folder, "inside.txt"), "inside");
+        const fileIno = statSync(file).ino;
+        const folderIno = statSync(folder).ino;
+
+        const fileInTrash = await wrapper.nativeTrashItem(file);
+        const folderInTrash = await addon.nativeTrashItem(folder);
+
+        expect(fileInTrash.startsWith(join(volume.mountPath, ".Trashes"))).toBe(true);
+        expect(existsSync(file)).toBe(false);
+        expect(statSync(fileInTrash).ino).toBe(fileIno);
+        expect(statSync(folderInTrash).ino).toBe(folderIno);
+        expect(readFileSync(join(folderInTrash, "inside.txt"), "utf8")).toBe("inside");
+
+        // A second "a.txt" can't take the first one's name in the Trash.
+        writeFileSync(file, "second");
+        const secondInTrash = await wrapper.nativeTrashItem(file);
+        expect(secondInTrash).not.toBe(fileInTrash);
+        expect(readFileSync(secondInTrash, "utf8")).toBe("second");
+        expect(readFileSync(fileInTrash, "utf8")).toBe("first");
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
+  it("fails with ENOENT and the Trash's own sentence for an item that isn't there", async () => {
+    const root = mkdtempSync(join(tmpdir(), "native-fs-trash-"));
+    try {
+      await expect(wrapper.nativeTrashItem(join(root, "missing.txt"))).rejects.toMatchObject({
+        code: "ENOENT",
+        syscall: "trash",
+        path: join(root, "missing.txt"),
+        message: expect.stringContaining("missing.txt"),
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a call without a path", () => {
+    expect(() => (addon.nativeTrashItem as unknown as () => Promise<string>)()).toThrow(
+      "path is required",
+    );
+    expect(() =>
+      (addon.nativeTrashItem as unknown as (path: number) => Promise<string>)(1),
+    ).toThrow("path must be a string");
+  });
+});

@@ -127,6 +127,12 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     description: "Calculate the size of the selected folders, or of the folder on screen",
   },
   { group: "files", command: "renameSelection", description: "Rename" },
+  {
+    group: "files",
+    command: "undo",
+    description: "Undo the last file operation (in a text field, its typing)",
+  },
+  { group: "files", command: "redo", description: "Redo what was undone" },
   { group: "files", command: "copy", description: "Copy" },
   { group: "files", command: "cut", description: "Cut" },
   { group: "files", command: "paste", description: "Paste" },
@@ -412,7 +418,82 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           },
           {
             label: "Move to Trash",
-            description: "Items can be put back from the Trash in Finder.",
+            description:
+              "{undo} puts what you just moved to the Trash back. Items can also be put back from the Trash in Finder.",
+          },
+        ],
+      },
+      {
+        title: "Undo and Redo",
+        rows: [
+          {
+            label: "Undo",
+            description:
+              "{undo} takes back the last thing you did to your files. Press it again to take back the one before, and so on, back to when you opened File Trail. Edit › Undo shows what it will take back, such as “Undo Rename”.",
+          },
+          {
+            label: "Redo",
+            description:
+              "{redo} does again what you just took back. Once you do something new, there is nothing left to redo.",
+          },
+          {
+            label: "What you can undo",
+            description:
+              "Renaming (one item or several at once), moving items to another folder on the same disk, Move to Trash, New Folder, Copy, Duplicate, and replacing an item when you paste.",
+          },
+          {
+            label: "Nothing is deleted",
+            description:
+              "When Undo takes away something that was made, such as a copy or a new folder, it moves it to the Trash. So Redo, or the Trash, can always bring it back.",
+          },
+          {
+            label: "While typing",
+            description:
+              "While you type a name or a search, {undo} and {redo} work on your typing, not on your files.",
+          },
+          {
+            label: "What can’t be undone",
+            description:
+              "Merging folders, moving items to another disk, copying onto a network share, Delete Immediately, and Empty Trash. File Trail tells you before you merge folders, and afterwards Edit › Undo shows “Can’t Undo”.",
+          },
+        ],
+      },
+      {
+        title: "Undo and Redo: if something has changed since",
+        rows: [
+          {
+            label: "It checks first",
+            description:
+              "Before Undo changes anything, it checks that each item is still where you left it. It never puts anything in place of another item, and never deletes anything.",
+          },
+          {
+            label: "You edited an item",
+            description:
+              "If you changed something since, such as a copy you edited or a new folder you put files in, Undo tells you and asks before moving it to the Trash. Choose Cancel and everything stays as it is.",
+          },
+          {
+            label: "The name is taken",
+            description:
+              "If another item now has the old name, Undo asks, then puts the item back with a number added, such as “Report 2.pdf”. Choose Cancel and everything stays as it is.",
+          },
+          {
+            label: "An item is gone",
+            description:
+              "If an item was deleted, emptied from the Trash, renamed or moved in another app, or its folder is gone, Undo can’t take it back. It does everything else and tells you what it left and why. If you’d rather have it all as it was, {redo} brings back what Undo did.",
+          },
+          {
+            label: "A disk was ejected",
+            description: "Items on a disk that isn’t connected are left as they are.",
+          },
+          {
+            label: "Stopping",
+            description:
+              "A long Undo shows its progress, and you can stop it. What it has done stays done, and pressing {undo} again carries on from there.",
+          },
+          {
+            label: "When you quit",
+            description:
+              "File Trail remembers what you did only while it’s open. After you quit and open it again, there is nothing to undo.",
           },
         ],
       },

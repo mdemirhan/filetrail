@@ -205,9 +205,13 @@ export async function openInTerminal(
 
 export function performEditAction(
   payload: IpcRequest<"system:performEditAction">,
-  webContents: Pick<WebContents, "copy" | "cut" | "paste" | "selectAll">,
+  webContents: Pick<WebContents, "undo" | "redo" | "copy" | "cut" | "paste" | "selectAll">,
 ): IpcResponse<"system:performEditAction"> {
-  if (payload.action === "cut") {
+  if (payload.action === "undo") {
+    webContents.undo();
+  } else if (payload.action === "redo") {
+    webContents.redo();
+  } else if (payload.action === "cut") {
     webContents.cut();
   } else if (payload.action === "copy") {
     webContents.copy();
