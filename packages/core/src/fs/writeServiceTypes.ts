@@ -19,6 +19,8 @@ import {
 import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
 
+import type { UndoLog } from "./undoLog";
+
 export type CopyPasteMode = "copy" | "cut";
 export type CopyPasteOperationStatus =
   | "queued"
@@ -313,6 +315,8 @@ export type CopyPasteOperationResult = {
   };
   items: CopyPasteItemResult[];
   error: string | null;
+  // What the paste did, for Undo (main process only: the window's copy leaves it out).
+  undoLog?: UndoLog;
 };
 
 export type CopyPasteProgressEvent = {

@@ -149,7 +149,7 @@ type UndoLog =
 - **Merge** (any node with action `merge`): `"merge"`.
 - **A copy onto a disk with no Trash:** `"no_trash"`. A network disk (not local in the mount table) counts as having no Trash. If a local disk turns out to have none, Undo can't trash the copy and says so in a dialog; it never deletes it.
 
-The engine hands the log to the coordinator next to the result (`CopyPasteOperationResult.undoLog`). It is not added to the contract schema, so it never goes over IPC. The coordinator receives it in the copy terminal handler (`writeOperations.ts:205`) and in `emitLocalWriteOperationEvent` (479).
+The engine hands the log to the coordinator next to the result (`CopyPasteOperationResult.undoLog`). The coordinator passes every finished operation's log to its `recordUndo(finished)` option, before it frees the write slot; Phase 3 plugs the history into it. Whether a disk has a Trash comes from `createDiskHasTrash` (`bootstrap/diskHasTrash.ts`), which reads the mount table. It is not added to the contract schema, so it never goes over IPC. The coordinator receives it in the copy terminal handler (`writeOperations.ts:205`) and in `emitLocalWriteOperationEvent` (479).
 
 **Not recorded:**
 - An operation that finished nothing (all items skipped or failed). It leaves the history as it was.

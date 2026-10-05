@@ -15,5 +15,17 @@ export {
   recoverInterruptedReplaces,
 } from "./fs/copyPasteRecovery";
 export { createStoppableCopyFile, type NativeCopyFile } from "./fs/stoppableCopy";
+export {
+  type CantUndoReason,
+  type ItemId,
+  type ItemStamp,
+  type UndoLog,
+  type UndoStep,
+  type UndoUnit,
+  itemIdOf,
+  readItemId,
+  readItemStamp,
+  sameItemId,
+} from "./fs/undoLog";
 export * from "./search/fdSearch";
 export * from "./worker/explorerWorkerClient";

@@ -27,6 +27,7 @@ import {
 // doesn't answer is tried again later instead of holding up the window.
 const RECOVERY_ANSWER_WITHIN_MS = 3_000;
 import { inspectBatchRename } from "./bootstrap/batchRenameInspect";
+import { createDiskHasTrash } from "./bootstrap/diskHasTrash";
 import {
   clearResponseCaches,
   createFolderSizeHandlers,
@@ -158,6 +159,8 @@ export async function bootstrapMainProcess(
   const writeCoordinator = createWriteOperationCoordinator(
     writeService,
     createOriginalWriteOperationFs(trashItem),
+    // Read from the mount table each time: disks come and go.
+    { diskHasTrash: createDiskHasTrash(listVolumes) },
   );
   // What couldn't be reached at start (its disk wasn't connected, or didn't answer) is
   // tried again now and then, while nothing else is being written, until it is done.
