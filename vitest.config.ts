@@ -37,9 +37,9 @@ export default defineConfig({
         "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds,diskHasTrash,batchRenameExecution,batchRenameInspect,undoHistory,undoPlan,undoExecution}.ts",
         "apps/desktop/src/shared/batchRename.ts",
         "apps/desktop/src/main/ipc.ts",
-        "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename}.ts",
+        "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename,useTextEditingFocus}.ts",
         "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,internalDragAndDrop}.ts",
-        "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField,BatchRenameSheet}.tsx",
+        "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField,BatchRenameSheet,UndoQuestionAlert}.tsx",
       ],
       thresholds: {
         // The copy engine and the contracts: where a gap can lose data.
@@ -47,6 +47,26 @@ export default defineConfig({
         "packages/contracts/src/**": { statements: 92, branches: 94, functions: 100, lines: 92 },
         // The main process's file operations.
         "apps/desktop/src/main/**": { statements: 95, branches: 88, functions: 90, lines: 95 },
+        // Undo and Redo, a floor for each file: a pattern's floor is for all it matches
+        // together, so one file well below it could hide among the others.
+        "apps/desktop/src/main/bootstrap/undoHistory.ts": {
+          statements: 97,
+          branches: 90,
+          functions: 100,
+          lines: 97,
+        },
+        "apps/desktop/src/main/bootstrap/undoPlan.ts": {
+          statements: 97,
+          branches: 90,
+          functions: 100,
+          lines: 97,
+        },
+        "apps/desktop/src/main/bootstrap/undoExecution.ts": {
+          statements: 97,
+          branches: 90,
+          functions: 100,
+          lines: 97,
+        },
         // The names a rename of several items gives: what the preview shows is what is done.
         "apps/desktop/src/shared/batchRename.ts": {
           statements: 97,

@@ -829,3 +829,258 @@ describe("running an Undo", () => {
     await t.coordinator.shutdown();
   });
 });
+
+describe("the rarer paths", () => {
+  it("numbers the name when another item takes it just as the item goes back", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    let raced = false;
+    const t = setUp({
+      renameExclusive: async (from, to) => {
+        // Another app takes the name between the check and the move, once.
+        if (!raced && to === join(root, "a.txt")) {
+          raced = true;
+          writeFileSync(to, "someone else's");
+          throw Object.assign(new Error("EEXIST: file exists"), { code: "EEXIST" });
+        }
+        renameSync(from, to);
+      },
+    });
+    await t.trash(join(root, "a.txt"));
+
+    await t.undo("undo", { nameTaken: "keep_both", changed: "trash" });
+
+    expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("someone else's");
+    expect(readFileSync(join(root, "a 2.txt"), "utf8")).toBe("a");
+    await t.coordinator.shutdown();
+  });
+
+  it("leaves the item when another item takes its name just then and the answer is Skip", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    const t = setUp({
+      renameExclusive: async (from, to) => {
+        if (to === join(root, "a.txt")) {
+          writeFileSync(to, "someone else's");
+          throw Object.assign(new Error("EEXIST: file exists"), { code: "EEXIST" });
+        }
+        renameSync(from, to);
+      },
+    });
+    await t.trash(join(root, "a.txt"));
+
+    const undone = await t.undo("undo", { nameTaken: "skip", changed: "trash" });
+
+    expect(undone.result?.items).toEqual([
+      expect.objectContaining({
+        status: "skipped",
+        error: `An item named “a.txt” is already in “${basename(root)}”.`,
+      }),
+    ]);
+    expect(inTrash()).toEqual(["1-a.txt"]);
+    await t.coordinator.shutdown();
+  });
+
+  it("reports a copy the Trash refused, and leaves it", async () => {
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src", "a.txt"), "a");
+    const t = setUp({
+      trash: async () => {
+        throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+      },
+    });
+    await paste(
+      t.history,
+      {
+        mode: "copy",
+        sourcePaths: [join(root, "src", "a.txt")],
+        destinationDirectoryPath: join(root, "src"),
+      },
+      "duplicate",
+    );
+
+    const undone = await t.undo();
+
+    expect(undone.status).toBe("failed");
+    expect(undone.result?.items).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        error: "You don't have permission to access this item.",
+      }),
+    ]);
+    expect(existsSync(join(root, "src", "a copy.txt"))).toBe(true);
+    await t.coordinator.shutdown();
+  });
+
+  it("renames back the items of a batch it can, leaving one whose old name is taken", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    const t = setUp();
+    await t.batchRename([
+      [join(root, "a.txt"), "x.txt"],
+      [join(root, "b.txt"), "y.txt"],
+    ]);
+    writeFileSync(join(root, "a.txt"), "someone else's");
+
+    expect((await t.prepare()).nameTaken).toEqual(["a.txt"]);
+    const undone = await t.undo("undo", { nameTaken: "skip", changed: "trash" });
+
+    expect(undone.status).toBe("partial");
+    expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("b");
+    expect(readFileSync(join(root, "x.txt"), "utf8")).toBe("a");
+    expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("someone else's");
+    await t.coordinator.shutdown();
+  });
+
+  it("does nothing to a batch none of whose items are where they were", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    const t = setUp();
+    await t.batchRename([[join(root, "a.txt"), "x.txt"]]);
+    rmSync(join(root, "x.txt"));
+
+    const undone = await t.undo();
+
+    expect(undone.status).toBe("failed");
+    expect(t.history.menu()).toEqual({ undo: null, redo: null, cantUndo: false });
+    await t.coordinator.shutdown();
+  });
+
+  it("stops a batch part way when told to, and goes on from there next time", async () => {
+    for (const name of ["a", "b", "c"]) {
+      writeFileSync(join(root, `${name}.txt`), name);
+    }
+    const before = snapshot();
+    const t = setUp();
+    await t.batchRename([
+      [join(root, "a.txt"), "x.txt"],
+      [join(root, "b.txt"), "y.txt"],
+      [join(root, "c.txt"), "z.txt"],
+    ]);
+    let renames = 0;
+    let operationId = "";
+    const stopping = setUp({
+      renameExclusive: async (from, to) => {
+        renames += 1;
+        renameSync(from, to);
+        if (renames === 1) {
+          stopping.coordinator.handlers["writeOperation:cancel"](
+            { operationId },
+            { sender: stopping.sender },
+          );
+        }
+      },
+    });
+    stopping.history.record({
+      action: "batch_rename",
+      log: { undoable: true, units: t.history.top("undo")?.units ?? [] },
+      items: [],
+    });
+    const prepared = await stopping.prepare();
+    ({ operationId } = stopping.coordinator.handlers["undo:start"](
+      { ticket: prepared.ticket ?? "", nameTaken: "skip", changed: "trash" },
+      { sender: stopping.sender },
+    ));
+
+    const stopped = await stopping.finish({ operationId });
+
+    expect(stopped.status).toBe("partial");
+    expect(renames).toBe(1);
+    expect(stopping.history.menu()).toEqual({
+      undo: "Rename of 2 Items",
+      redo: "Rename",
+      cantUndo: false,
+    });
+    await stopping.undo();
+    expect(snapshot()).toEqual(before);
+    await t.coordinator.shutdown();
+    await stopping.coordinator.shutdown();
+  });
+
+  it.each([
+    ["the item put back", "copy", "“a.txt” was left in the Trash"],
+    [
+      "the item moved back",
+      "cut",
+      "“a.txt” was left as it is, because the step before it couldn't be redone.",
+    ],
+  ] as const)(
+    "doesn't redo a Replace's second step when its first can't be: %s",
+    async (_label, mode, message) => {
+      mkdirSync(join(root, "src"));
+      mkdirSync(join(root, "dst"));
+      writeFileSync(join(root, "src", "a.txt"), "new");
+      writeFileSync(join(root, "dst", "a.txt"), "old");
+      const pasteTrash = join(root, "paste-trash");
+      mkdirSync(pasteTrash);
+      const t = setUp();
+      await paste(t.history, {
+        mode,
+        sourcePaths: [join(root, "src", "a.txt")],
+        destinationDirectoryPath: join(root, "dst"),
+        policy: REPLACE_ALL,
+        fileSystem: nativeFileSystemWithTrash(pasteTrash),
+      });
+      await t.undo();
+      // The old item, back in its place, is replaced by another one before Redo.
+      rmSync(join(root, "dst", "a.txt"));
+      mkdirSync(join(root, "dst", "a.txt"));
+
+      const redone = await t.undo("redo");
+
+      expect(redone.result?.items).toEqual([
+        expect.objectContaining({
+          status: "skipped",
+          error: "The “a.txt” in “dst” is another item now.",
+        }),
+        expect.objectContaining({ status: "skipped", error: expect.stringContaining(message) }),
+      ]);
+      await t.coordinator.shutdown();
+    },
+  );
+
+  it("doesn't move a later step's item to the Trash once an earlier one couldn't be undone", async () => {
+    writeFileSync(join(root, "made.txt"), "made");
+    writeFileSync(join(root, "b.txt"), "b");
+    const t = setUp();
+    const made = lstatSync(join(root, "made.txt"));
+    const moved = lstatSync(join(root, "b.txt"));
+    t.history.record({
+      action: "paste",
+      log: {
+        undoable: true,
+        units: [
+          {
+            steps: [
+              {
+                kind: "created",
+                path: join(root, "made.txt"),
+                id: { dev: made.dev, ino: made.ino },
+                stamp: null,
+              },
+              {
+                kind: "moved",
+                from: join(root, "a.txt"),
+                to: join(root, "b.txt"),
+                // Another item than the one moved: a file where a folder was.
+                id: { dev: moved.dev, ino: moved.ino + 1_000_000 },
+                itemKind: "directory",
+                parentId: null,
+              },
+            ],
+          },
+        ],
+      },
+      items: [],
+    });
+
+    const undone = await t.undo();
+
+    expect(undone.result?.items).toEqual([
+      expect.objectContaining({ status: "skipped" }),
+      expect.objectContaining({
+        status: "skipped",
+        error: "“made.txt” was left as it is, because the step before it couldn't be undone.",
+      }),
+    ]);
+    expect(existsSync(join(root, "made.txt"))).toBe(true);
+    await t.coordinator.shutdown();
+  });
+});

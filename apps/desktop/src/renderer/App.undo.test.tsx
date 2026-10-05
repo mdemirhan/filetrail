@@ -291,7 +291,7 @@ describe("questions before an Undo", () => {
     await act(async () => {
       fireEvent.click(within(names).getByRole("button", { name: "Keep Both" }));
     });
-    const changed = await screen.findByRole("dialog", { name: "2 items have changed since." });
+    const changed = await screen.findByRole("dialog", { name: "2 items have been modified." });
     expect(within(changed).getByText("b.txt")).toBeInTheDocument();
     expect(
       within(changed).getByText(
@@ -324,7 +324,7 @@ describe("questions before an Undo", () => {
     await act(async () => {
       harness.emitCommand({ type: "undo" });
     });
-    const first = await screen.findByRole("dialog", { name: "“b.txt” has changed since." });
+    const first = await screen.findByRole("dialog", { name: "“b.txt” has been modified." });
     await act(async () => {
       fireEvent.click(within(first).getByRole("button", { name: "Cancel" }));
     });
@@ -335,7 +335,7 @@ describe("questions before an Undo", () => {
     await act(async () => {
       harness.emitCommand({ type: "undo" });
     });
-    await screen.findByRole("dialog", { name: "“b.txt” has changed since." });
+    await screen.findByRole("dialog", { name: "“b.txt” has been modified." });
     await act(async () => {
       fireEvent.keyDown(window, { key: "Escape" });
     });

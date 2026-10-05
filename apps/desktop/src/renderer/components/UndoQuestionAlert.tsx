@@ -29,8 +29,8 @@ export function UndoQuestionAlert({
         ? `An item named “${one}” is already where it would go back.`
         : `${names.length} items have names that other items have taken where they would go back.`
       : one !== null
-        ? `“${one}” has changed since.`
-        : `${names.length} items have changed since.`;
+        ? `“${one}” has been modified.`
+        : `${names.length} items have been modified.`;
   const message =
     question === "nameTaken"
       ? one !== null
@@ -49,12 +49,11 @@ export function UndoQuestionAlert({
       initialFocusRef={defaultButtonRef}
       onReturn={() => onAnswer(defaultAnswer)}
       onEscape={() => onAnswer(null)}
+      // Three buttons don't fit side by side in an alert: stacked as macOS stacks them, the
+      // default on top and Cancel at the bottom.
+      stackedButtons
       buttons={
         <>
-          <PushButton className="alert-button-aside" onClick={() => onAnswer(null)}>
-            Cancel
-          </PushButton>
-          <PushButton onClick={() => onAnswer("skip")}>Skip</PushButton>
           <PushButton
             ref={defaultButtonRef}
             variant="default"
@@ -62,6 +61,8 @@ export function UndoQuestionAlert({
           >
             {question === "nameTaken" ? "Keep Both" : "Move to Trash"}
           </PushButton>
+          <PushButton onClick={() => onAnswer("skip")}>Skip</PushButton>
+          <PushButton onClick={() => onAnswer(null)}>Cancel</PushButton>
         </>
       }
     >
