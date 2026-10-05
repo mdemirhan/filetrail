@@ -236,4 +236,37 @@ describe("explorerNavigation", () => {
       "/Users/demo/Downloads",
     ]);
   });
+
+  it("carries on from where the selected item left the list", () => {
+    const next = (
+      key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight",
+      viewMode: "icons" | "list" | "details",
+      gapIndex: number,
+    ) =>
+      getNextSelectionIndex({
+        itemCount: 10,
+        currentIndex: -1,
+        key,
+        columns: viewMode === "details" ? 1 : 4,
+        viewMode,
+        gapIndex,
+      });
+    // Details: Down is the item that took the gone item's place, Up the one before it.
+    expect(next("ArrowDown", "details", 5)).toBe(5);
+    expect(next("ArrowUp", "details", 5)).toBe(4);
+    expect(next("ArrowUp", "details", 0)).toBe(0);
+    // The last item gone: both go to the new last item.
+    expect(next("ArrowDown", "details", 10)).toBe(9);
+    expect(next("ArrowUp", "details", 10)).toBe(9);
+    // Icons: Left and Right step through the items, Up and Down by rows from the place.
+    expect(next("ArrowRight", "icons", 5)).toBe(5);
+    expect(next("ArrowLeft", "icons", 5)).toBe(4);
+    expect(next("ArrowDown", "icons", 5)).toBe(9);
+    expect(next("ArrowUp", "icons", 5)).toBe(1);
+    // List: Up and Down step through the items, Left and Right by columns.
+    expect(next("ArrowDown", "list", 5)).toBe(5);
+    expect(next("ArrowUp", "list", 5)).toBe(4);
+    expect(next("ArrowRight", "list", 5)).toBe(9);
+    expect(next("ArrowLeft", "list", 5)).toBe(1);
+  });
 });

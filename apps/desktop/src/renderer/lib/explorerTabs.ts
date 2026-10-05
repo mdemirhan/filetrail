@@ -17,6 +17,7 @@ import type {
   SearchResultItem,
 } from "./explorerTypes";
 import type { TreeItemId } from "./favorites";
+import type { FolderViewMemories } from "./folderViewMemory";
 import { getVolumeRootPath } from "./volumes";
 
 type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -72,6 +73,8 @@ export type TabViewState = {
   treeScrollTop: number;
   // The Favorites and Locations list above the tree, when Favorites are shown on their own.
   sidebarSectionsScrollTop: number;
+  // How the folders in the tab's history were left, for Back and Forward.
+  folderViewMemories: FolderViewMemories;
 };
 
 export type TabSnapshot = {

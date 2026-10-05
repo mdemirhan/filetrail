@@ -35,6 +35,37 @@ describe("contentSelection", () => {
     });
   });
 
+  it("keeps the place of a selection whose items all left the list", () => {
+    const remaining = ENTRIES.filter((entry) => entry.path !== "/demo/gamma");
+    const gone = sanitizeContentSelection(
+      setSingleContentSelection("/demo/gamma"),
+      remaining,
+      ENTRIES,
+    );
+    expect(gone).toEqual({ ...EMPTY_CONTENT_SELECTION, gapIndex: 2 });
+    // The folder read again keeps the place, within the list.
+    expect(sanitizeContentSelection(gone, remaining.slice(0, 1), remaining)).toEqual({
+      ...EMPTY_CONTENT_SELECTION,
+      gapIndex: 1,
+    });
+    // Several items: the place is the lead's.
+    expect(
+      sanitizeContentSelection(
+        {
+          paths: ["/demo/alpha", "/demo/gamma"],
+          anchorPath: "/demo/alpha",
+          leadPath: "/demo/gamma",
+        },
+        [{ path: "/demo/beta" }, { path: "/demo/delta" }],
+        ENTRIES,
+      ),
+    ).toEqual({ ...EMPTY_CONTENT_SELECTION, gapIndex: 1 });
+    // Without the list it was made in there is no place to keep.
+    expect(sanitizeContentSelection(setSingleContentSelection("/demo/gamma"), remaining)).toEqual(
+      EMPTY_CONTENT_SELECTION,
+    );
+  });
+
   it("computes range paths in entry order", () => {
     expect(getSelectionRangePaths(ENTRIES, "/demo/delta", "/demo/beta")).toEqual([
       "/demo/beta",

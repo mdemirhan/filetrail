@@ -13,6 +13,7 @@ import type { TreeNodeState } from "../components/TreePane";
 import {
   EMPTY_CONTENT_SELECTION,
   setSingleContentSelection as createSingleContentSelection,
+  sanitizeContentSelection,
 } from "../lib/contentSelection";
 import { getDetailsRowHeight } from "../lib/detailsLayout";
 import {
@@ -58,6 +59,11 @@ import {
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
 import { resolveFocusedEditTarget } from "../lib/focusedEditTarget";
+import {
+  CONTENT_SCROLL_SELECTOR,
+  type FolderViewMemory,
+  rememberFolderView,
+} from "../lib/folderViewMemory";
 import { type FolderVisitTracker, createFolderVisitTracker } from "../lib/folderVisitTracker";
 import { getIconGridLayout } from "../lib/iconGridLayout";
 import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
@@ -177,6 +183,7 @@ export function useExplorerNavigationController(args: {
     leftPaneSubviewRef,
     lastLeftPaneSubviewRef,
     viewEpochRef,
+    folderViewMemoriesRef,
   } = navigation;
 
   // Resolves to whether the view that was on screen when it was made still is. Anything
@@ -711,7 +718,9 @@ export function useExplorerNavigationController(args: {
       return;
     }
     setHistoryIndex(historyIndex - 1);
-    void navigateTo(nextPath, "skip");
+    void navigateTo(nextPath, "skip", undefined, undefined, undefined, undefined, {
+      restoreView: true,
+    });
   }
 
   function goForward() {
@@ -720,7 +729,9 @@ export function useExplorerNavigationController(args: {
       return;
     }
     setHistoryIndex(historyIndex + 1);
-    void navigateTo(nextPath, "skip");
+    void navigateTo(nextPath, "skip", undefined, undefined, undefined, undefined, {
+      restoreView: true,
+    });
   }
 
   // Jumps straight to a folder in the history (from the Back or Forward hold menu). Like
@@ -731,7 +742,9 @@ export function useExplorerNavigationController(args: {
       return;
     }
     setHistoryIndex(index);
-    void navigateTo(nextPath, "skip");
+    void navigateTo(nextPath, "skip", undefined, undefined, undefined, undefined, {
+      restoreView: true,
+    });
   }
 
   // Opens `path` and makes it the top of the folder tree. The tree keeps that root until a
@@ -920,6 +933,44 @@ export function useExplorerNavigationController(args: {
       : path;
   }
 
+  // Notes how the folder on screen is left (see FolderViewMemory). Search results are not
+  // the folder, so leaving them notes nothing.
+  function rememberFolderViewOnLeaving() {
+    const path = currentPathRef.current;
+    if (path.length === 0 || searchResultsVisibleRef.current) {
+      return;
+    }
+    const contentScroller =
+      contentPaneRef.current?.querySelector<HTMLElement>(CONTENT_SCROLL_SELECTOR) ?? null;
+    folderViewMemoriesRef.current = rememberFolderView(
+      folderViewMemoriesRef.current,
+      path,
+      {
+        selection: contentSelection,
+        contentScroll: {
+          top: contentScroller?.scrollTop ?? 0,
+          left: contentScroller?.scrollLeft ?? 0,
+        },
+      },
+      historyPaths,
+    );
+  }
+
+  // The list's scroll position to put back once the window has drawn the folder.
+  const pendingContentScrollRef = useRef<FolderViewMemory["contentScroll"] | null>(null);
+  const [scrollRestoreCount, setScrollRestoreCount] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per restore asked for.
+  useLayoutEffect(() => {
+    const contentScroll = pendingContentScrollRef.current;
+    pendingContentScrollRef.current = null;
+    const contentScroller =
+      contentPaneRef.current?.querySelector<HTMLElement>(CONTENT_SCROLL_SELECTOR) ?? null;
+    if (contentScroll && contentScroller) {
+      contentScroller.scrollTop = contentScroll.top;
+      contentScroller.scrollLeft = contentScroll.left;
+    }
+  }, [scrollRestoreCount]);
+
   async function navigateTo(
     path: string,
     historyMode: "push" | "replace" | "skip",
@@ -948,8 +999,13 @@ export function useExplorerNavigationController(args: {
       quiet?: boolean;
       /** The folder was picked in the Go To box, which counts most for it there. */
       viaGoTo?: boolean;
+      /** Back or Forward: the folder comes back as it was left (see FolderViewMemory). */
+      restoreView?: boolean;
     } = {},
   ): Promise<boolean> {
+    if (path !== currentPathRef.current) {
+      rememberFolderViewOnLeaving();
+    }
     // The Trash, gone to from the sidebar, leaves the tree as it is: it is not a folder the
     // tree shows.
     const options =
@@ -983,6 +1039,15 @@ export function useExplorerNavigationController(args: {
         }),
       );
       applyDirectorySnapshot(response.path, response.entries, cachedMetadata, options);
+      const memory = options.restoreView ? folderViewMemoriesRef.current[response.path] : undefined;
+      if (memory) {
+        applyContentSelection(
+          sanitizeContentSelection(memory.selection, response.entries),
+          response.entries,
+        );
+        pendingContentScrollRef.current = memory.contentScroll;
+        setScrollRestoreCount((count) => count + 1);
+      }
       // The folder is on screen from here on, so it is in the history from here on: what
       // follows waits for the tree, and the tab may be left before the tree has answered.
       applyHistoryUpdate(response.path, historyMode);

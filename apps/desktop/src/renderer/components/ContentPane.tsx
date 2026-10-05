@@ -1189,12 +1189,15 @@ function FlowListView({
   }, [onLayoutColumnsChange, rowsPerColumn]);
 
   // Selection reveal is horizontal in list view because vertical movement stays within
-  // the current column while additional columns live off-screen to the right.
+  // the current column while additional columns live off-screen to the right. Not before
+  // the list's height is measured: until then every item stands in a column of its own,
+  // and the reveal would scroll far past the item (and past a scroll position put back by
+  // Back or a tab coming back).
   useEffect(() => {
     const container = containerRef.current;
     const effectiveViewportWidth =
       viewportWidth > 0 ? viewportWidth : (container?.clientWidth ?? 0);
-    if (!container || !selectionLeadPath || effectiveViewportWidth <= 0) {
+    if (!container || !selectionLeadPath || effectiveViewportWidth <= 0 || containerHeight <= 0) {
       return;
     }
 
@@ -1217,7 +1220,7 @@ function FlowListView({
     }
 
     container.scrollLeft = nextScrollLeft;
-  }, [compactListView, entries, rowsPerColumn, selectionLeadPath, viewportWidth]);
+  }, [compactListView, containerHeight, entries, rowsPerColumn, selectionLeadPath, viewportWidth]);
 
   return (
     <div
