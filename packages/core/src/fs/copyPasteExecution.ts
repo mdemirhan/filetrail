@@ -41,6 +41,7 @@ import {
   type UndoUnit,
   itemIdOf,
   readItemId,
+  readItemRef,
   readItemStamp,
 } from "./undoLog";
 import type {
@@ -337,11 +338,13 @@ async function recordMoved(
     return;
   }
   const from = node.node.sourcePath;
+  const moved = await readItemRef(context.fileSystem.lstat, to);
   recordUndoStep(context, node, {
     kind: "moved",
     from,
     to,
-    id: await readItemId(context.fileSystem.lstat, to),
+    id: moved.id,
+    itemKind: moved.kind,
     parentId: await readItemId(context.fileSystem.lstat, dirname(from)),
   });
 }
@@ -1313,11 +1316,17 @@ async function removeReplacedItem(
   const { fileSystem } = context;
   if (fileSystem.trash) {
     try {
+      // On a disk that ignores case, "X.TXT" may have found "x.txt": Undo puts the old item
+      // back under the name it really had.
+      const from =
+        context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)
+          ? await spelledAsOnDisk(fileSystem, node.destinationPath, destination)
+          : node.destinationPath;
       const trashPath = await fileSystem.trash(node.destinationPath);
       if (context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)) {
         recordUndoStep(context, node, {
           kind: "trashed",
-          from: node.destinationPath,
+          from,
           trashPath,
           id:
             destination.dev !== null && destination.ino !== null
@@ -1371,6 +1380,37 @@ async function removeReplacedItem(
     force: true,
   });
   return "removed";
+}
+
+// `path` as its folder spells the item `fingerprint` describes ("x.txt" for "X.TXT" on a
+// disk that ignores case), or `path` itself when that can't be told.
+async function spelledAsOnDisk(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  fingerprint: NodeFingerprint,
+): Promise<string> {
+  const folder = dirname(path);
+  const wanted = basename(path).normalize("NFD").toLowerCase();
+  let names: string[];
+  try {
+    names = await fileSystem.readdir(folder);
+  } catch {
+    return path;
+  }
+  if (names.includes(basename(path))) {
+    return path;
+  }
+  for (const name of names) {
+    if (name.normalize("NFD").toLowerCase() !== wanted) {
+      continue;
+    }
+    const candidate = join(folder, name);
+    const found = await captureFingerprint(fileSystem, candidate);
+    if (found.ino !== null && found.ino === fingerprint.ino && found.dev === fingerprint.dev) {
+      return candidate;
+    }
+  }
+  return path;
 }
 
 // The first locked item inside a folder, at any depth, or null.

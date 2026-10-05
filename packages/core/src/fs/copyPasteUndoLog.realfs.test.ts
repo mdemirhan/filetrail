@@ -155,6 +155,32 @@ describe("what a copy records", () => {
     expect(JSON.stringify(unit)).not.toContain(".filetrail");
   });
 
+  // Found by the Undo fuzz test: "X.TXT" pasted over "x.txt" on a disk that ignores case
+  // put the old item back as "X.TXT".
+  it("records the old item of a Replace under the name it really had", async () => {
+    await writeFile(join(src, "X.TXT"), "new");
+    await writeFile(join(dst, "x.txt"), "old");
+    const ignoresCase =
+      (await readdir(dst)).length === 1 &&
+      (await lstat(join(dst, "X.TXT")).catch(() => null)) !== null;
+    if (!ignoresCase) {
+      return;
+    }
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "X.TXT")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(trashDir),
+    });
+
+    expect(stepsOf(undoLogOf(result))[0]?.[0]).toMatchObject({
+      kind: "trashed",
+      from: join(dst, "x.txt"),
+    });
+  });
+
   it("records a folder whose copy failed part way, since the folder is there", async () => {
     await mkdir(join(src, "Folder"));
     await writeFile(join(src, "Folder", "a.txt"), "a");
@@ -270,6 +296,7 @@ describe("what a move records", () => {
           from: join(src, "a.txt"),
           to: join(dst, "a.txt"),
           id: fileId,
+          itemKind: "file",
           parentId: srcId,
         },
       ],
@@ -279,6 +306,7 @@ describe("what a move records", () => {
           from: join(src, "Folder"),
           to: join(dst, "Folder"),
           id: folderId,
+          itemKind: "directory",
           parentId: srcId,
         },
       ],

@@ -34,7 +34,7 @@ export default defineConfig({
         "packages/core/src/fs/stoppableCopy.ts",
         "packages/core/src/fs/undoLog.ts",
         "packages/contracts/src/{copyPasteChoices,itemName,paths,trash,writeEffects}.ts",
-        "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds,diskHasTrash,batchRenameExecution,batchRenameInspect}.ts",
+        "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds,diskHasTrash,batchRenameExecution,batchRenameInspect,undoHistory,undoPlan,undoExecution}.ts",
         "apps/desktop/src/shared/batchRename.ts",
         "apps/desktop/src/main/ipc.ts",
         "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename}.ts",

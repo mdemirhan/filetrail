@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import {
   type IpcRequest,
+  type UndoDirection,
   type WriteOperationAction,
   type WriteOperationProgressEvent,
   type WriteOperationResult,
@@ -15,6 +16,7 @@ import {
 import {
   type CopyPasteProgressEvent,
   type ItemId,
+  type ItemKind,
   NO_TRASH_ERROR_CODE,
   type UndoLog,
   type UndoStep,
@@ -25,11 +27,15 @@ import {
   fileIdOf,
   findLockedRefusal,
   readItemId,
+  readItemRef,
   readItemStamp,
 } from "@filetrail/core";
 import { runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import { clearResponseCaches } from "./responseCache";
+import { type UndoAnswers, runUndo } from "./undoExecution";
+import type { UndoEntry, UndoHistory } from "./undoHistory";
+import { findQuestions } from "./undoPlan";
 
 type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
 
@@ -76,7 +82,14 @@ export type FinishedWrite = {
 };
 
 // What kind of change the running operation is making, in the words a person would use.
-export type WriteOperationKind = "copy" | "move" | "trash" | "delete" | "rename" | "new_folder";
+export type WriteOperationKind =
+  | "copy"
+  | "move"
+  | "trash"
+  | "delete"
+  | "rename"
+  | "new_folder"
+  | "undo";
 
 type WriteOperationSender = {
   send: (channel: string, payload: unknown) => void;
@@ -135,6 +148,8 @@ export function createWriteOperationCoordinator(
     // Whether the disk holding `path` has a Trash. Copies onto one that hasn't can't be
     // undone: that would mean deleting them for good.
     diskHasTrash?: (path: string) => boolean;
+    // What Undo and Redo work from. Without it there is nothing to undo.
+    undoHistory?: UndoHistory;
   } = {},
 ) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
@@ -739,11 +754,13 @@ export function createWriteOperationCoordinator(
     }
     // Outside the try: the item has been renamed, and nothing that goes wrong while
     // reporting it may turn that into a failure (reading its id never throws).
+    const renamedItem = await readItemRef(fs.lstat, destinationPath);
     const renamed: UndoStep = {
       kind: "moved",
       from: sourcePath,
       to: destinationPath,
-      id: await readItemId(fs.lstat, destinationPath),
+      id: renamedItem.id,
+      itemKind: renamedItem.kind,
       parentId: await readItemId(fs.lstat, dirname(sourcePath)),
     };
     emitSingleItemResult({
@@ -889,7 +906,12 @@ export function createWriteOperationCoordinator(
           ? (run.items.find((item) => item.status === "failed")?.error ?? "Rename failed.")
           : null,
     });
-    const renamedItems: Array<{ from: string; to: string; id: ItemId | null }> = [];
+    const renamedItems: Array<{
+      from: string;
+      to: string;
+      id: ItemId | null;
+      itemKind: ItemKind | null;
+    }> = [];
     for (const item of run.items) {
       if (
         item.status === "completed" &&
@@ -897,10 +919,12 @@ export function createWriteOperationCoordinator(
         item.destinationPath !== null &&
         item.destinationPath !== item.sourcePath
       ) {
+        const renamedItem = await readItemRef(fs.lstat, item.destinationPath);
         renamedItems.push({
           from: item.sourcePath,
           to: item.destinationPath,
-          id: await readItemId(fs.lstat, item.destinationPath),
+          id: renamedItem.id,
+          itemKind: renamedItem.kind,
         });
       }
     }
@@ -1267,6 +1291,107 @@ export function createWriteOperationCoordinator(
     );
   }
 
+  async function executeUndoOperation(
+    history: UndoHistory,
+    direction: UndoDirection,
+    entry: UndoEntry,
+    answers: UndoAnswers,
+    operationId: string,
+    controller: AbortController,
+  ): Promise<void> {
+    const startedAt = new Date().toISOString();
+    const totalItemCount = entry.units.length;
+    const home = fs.itemSize ? await readItemSize(fs.itemSize, homePath) : null;
+    let run: Awaited<ReturnType<typeof runUndo>>;
+    try {
+      run = await runUndo({
+        direction,
+        units: entry.units,
+        answers,
+        fs,
+        signal: controller.signal,
+        homeDev: home && home !== "missing" ? home.dev : null,
+        onStepStart: (path, completedItemCount) =>
+          emitLocalWriteOperationEvent({
+            operationId,
+            action: direction,
+            status: "running",
+            completedItemCount,
+            totalItemCount,
+            completedByteCount: 0,
+            totalBytes: null,
+            currentSourcePath: path,
+            currentDestinationPath: null,
+            result: null,
+          }),
+      });
+    } catch (error) {
+      // Nothing expected gets here. What it did is unknown, so it can't be redone, and is
+      // not tried again either.
+      console.error("[filetrail] an Undo stopped unexpectedly", error);
+      run = {
+        items: [],
+        done: [],
+        leftover: [],
+        removedItems: [],
+        completedItemCount: 0,
+        cancelled: false,
+      };
+      run.items.push({
+        sourcePath: null,
+        destinationPath: null,
+        status: "failed",
+        error: `The ${direction === "undo" ? "Undo" : "Redo"} stopped unexpectedly: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        skipReason: null,
+      });
+    }
+    // Before the write slot is freed, so the next operation is recorded after this one.
+    history.finish(direction, entry.id, { done: run.done, leftover: run.leftover });
+    const problems = run.items.filter(
+      (item) => item.status === "failed" || (item.status === "skipped" && item.error !== null),
+    );
+    const status = run.cancelled
+      ? run.completedItemCount > 0
+        ? "partial"
+        : "cancelled"
+      : problems.length > 0
+        ? run.completedItemCount > 0
+          ? "partial"
+          : "failed"
+        : "completed";
+    const result = createLocalWriteOperationResult({
+      operationId,
+      action: direction,
+      targetPath: null,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      totalItemCount: run.items.length,
+      completedItemCount: run.completedItemCount,
+      items: run.items,
+      status,
+      error: run.cancelled
+        ? stoppedMessage(run.completedItemCount, direction === "undo" ? "undone" : "redone")
+        : (problems[0]?.error ?? null),
+    });
+    emitLocalWriteOperationEvent(
+      {
+        operationId,
+        action: direction,
+        status,
+        completedItemCount: run.completedItemCount,
+        totalItemCount: run.items.length,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result,
+      },
+      run.removedItems,
+    );
+  }
+
   function cancelWriteOperation(operationId: string): { ok: boolean } {
     const localController = localWriteOperationControllers.get(operationId);
     if (localController) {
@@ -1530,6 +1655,54 @@ export function createWriteOperationCoordinator(
           sender: event.sender,
           execute: (operationId, controller) =>
             executeDeleteImmediatelyOperation(payload, operationId, controller),
+        });
+      },
+      // What undoing (or redoing) the last operation would ask, without changing anything.
+      "undo:prepare": async (payload: IpcRequest<"undo:prepare">) => {
+        const history = options.undoHistory;
+        const refused = (refusal: "busy" | "nothing" | "cant_undo") => ({
+          ticket: null,
+          refusal,
+          nameTaken: [],
+          changed: [],
+        });
+        if (closing || activeWriteOperationId !== null) {
+          return refused("busy");
+        }
+        const entry = history?.top(payload.direction) ?? null;
+        if (!history || !entry) {
+          return refused(
+            payload.direction === "undo" && history?.menu().cantUndo ? "cant_undo" : "nothing",
+          );
+        }
+        const ticket = `${payload.direction}:${entry.id}:${history.generation()}`;
+        return { ticket, refusal: null, ...(await findQuestions(fs, entry.units)) };
+      },
+      "undo:start": (
+        payload: IpcRequest<"undo:start">,
+        event: { sender: WriteOperationSender },
+      ) => {
+        const [direction, entryId, generation] = payload.ticket.split(":");
+        const history = options.undoHistory;
+        const entry =
+          direction === "undo" || direction === "redo" ? (history?.top(direction) ?? null) : null;
+        // Another operation, or another Undo, came in between: what was asked about may not
+        // be what would be done now.
+        if (
+          !history ||
+          !entry ||
+          (direction !== "undo" && direction !== "redo") ||
+          String(entry.id) !== entryId ||
+          String(history.generation()) !== generation
+        ) {
+          throw new Error("Something changed since Undo was chosen. Choose it again.");
+        }
+        const answers = { nameTaken: payload.nameTaken, changed: payload.changed };
+        return queueLocalWriteOperation({
+          action: direction,
+          sender: event.sender,
+          execute: (operationId, controller) =>
+            executeUndoOperation(history, direction, entry, answers, operationId, controller),
         });
       },
       "writeOperation:cancel": (
@@ -1796,6 +1969,9 @@ function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind 
       return "rename";
     case "new_folder":
       return "new_folder";
+    case "undo":
+    case "redo":
+      return "undo";
     default:
       return "copy";
   }

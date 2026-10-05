@@ -54,6 +54,7 @@ import {
   resolveTerminalApplicationName,
 } from "./bootstrap/systemHandlers";
 import { createTrashItem } from "./bootstrap/trashItem";
+import { createUndoHistory } from "./bootstrap/undoHistory";
 import {
   type WriteOperationKind,
   assertNotSystemLocation,
@@ -156,11 +157,17 @@ export async function bootstrapMainProcess(
     windows.showStartupNotices?.(recovery.notices);
   }
   const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
+  // What Undo and Redo work from, for as long as the app runs.
+  const undoHistory = createUndoHistory();
   const writeCoordinator = createWriteOperationCoordinator(
     writeService,
     createOriginalWriteOperationFs(trashItem),
-    // Read from the mount table each time: disks come and go.
-    { diskHasTrash: createDiskHasTrash(listVolumes) },
+    {
+      // Read from the mount table each time: disks come and go.
+      diskHasTrash: createDiskHasTrash(listVolumes),
+      recordUndo: undoHistory.record,
+      undoHistory,
+    },
   );
   // What couldn't be reached at start (its disk wasn't connected, or didn't answer) is
   // tried again now and then, while nothing else is being written, until it is done.

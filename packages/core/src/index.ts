@@ -18,12 +18,15 @@ export { createStoppableCopyFile, type NativeCopyFile } from "./fs/stoppableCopy
 export {
   type CantUndoReason,
   type ItemId,
+  type ItemKind,
   type ItemStamp,
   type UndoLog,
   type UndoStep,
   type UndoUnit,
   itemIdOf,
+  kindOfStats,
   readItemId,
+  readItemRef,
   readItemStamp,
   sameItemId,
 } from "./fs/undoLog";

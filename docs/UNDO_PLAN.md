@@ -206,7 +206,7 @@ Units are reversed in reverse order, and so are the steps inside each unit.
 - **The item is where expected:** something exists at the path, and its dev and ino match. Before moving or renaming back, one relaxed case is allowed: the same kind of item at the exact path but with a new ino (an app saved it by replacing the file). That can't lose anything. Trashing a copy and putting back from the Trash always need an exact match.
 - **The folder is the same folder:** the place it goes back to has the recorded `parentId`. If the folder is gone, the item is skipped; the folder is never recreated.
 - **The name is free:** if not, the answer to "name taken" decides (Skip, or Keep Both with "name 2").
-- **Changed since (only before trashing a copy or new folder):** a file whose size or modified time differs, a folder whose own modified time or entry count differs, or a New Folder that is no longer empty. Only the folder's own date is checked, not items deep inside it, so walking big copies isn't needed (agreed: the copy goes to the Trash anyway).
+- **Changed since (only before trashing a copy or new folder):** a file whose size or modified time differs, a folder whose entry count differs (not its date: that changes with every item added or taken out, so moving a file into a new folder and undoing that would make the folder look changed), or a New Folder that is no longer empty. Only the folder's own date is checked, not items deep inside it, so walking big copies isn't needed (agreed: the copy goes to the Trash anyway).
 - **Disk:** a dev change shows up as "the item isn't where it was". After ejecting and reconnecting a disk, the device number usually changes, so that disk's items are skipped with "its disk was disconnected". Disk-image clones share a volume UUID, so the UUID can't be used to recognize a disk.
 
 ### `undoExecution.ts`: running it
@@ -242,7 +242,7 @@ Units are reversed in reverse order, and so are the steps inside each unit.
   - stopping halfway, then ⌘Z again;
   - a ticket refused after the history moved;
   - Keep Both numbering.
-- **`undo.fuzz.test.ts`**, following `batchRenameExecution.fuzz.test.ts` (seeded, about 400 cases, a reproduce command on failure). It uses the in-memory test disk, extended with a Trash folder that hands out unique names.
+- **`undo.fuzz.test.ts`**, following `batchRenameExecution.fuzz.test.ts` (seeded, a reproduce command on failure). Built on a real temp folder rather than the in-memory test disk, through the coordinator and the real copy engine; 60 cases by default (about 2 seconds), `UNDO_FUZZ_CASES` for more. 3,000 cases were run while building it; they found a Replace on a disk that ignores case putting the old item back under the new item's spelling (fixed, with its own test).
   - **Round trip:** random runs of rename, move, copy, new folder, trash and Replace, then undo everything. Every path, kind and ino must be as at the start, ignoring what is in the Trash. Redo everything must give the end state.
   - **Outside changes:** between steps, randomly delete, rename, move or edit items, add items under taken names, remove folders, and empty the Trash. Three invariants must hold:
     1. No item is ever lost: every ino that existed is still somewhere, in its place or in the Trash, unless an outside change removed it.
@@ -254,6 +254,13 @@ Units are reversed in reverse order, and so are the steps inside each unit.
   - a case-only rename back on case-insensitive APFS;
   - Keep Both on a case-sensitive disk;
   - a locked item.
+
+### What changed while building Phase 3
+
+- Menu labels are worked out from what an entry holds, not stored: after a stopped Undo of 3 items the menu says "of 2 Items".
+- Move and rename steps also record the item's kind (file or folder), for the rule that a file an app saved under a new id can still be renamed or moved back.
+- "Changed since" compares a folder by how many items it holds only, not its date.
+- The old item of a Replace is recorded under the name it really has on disk.
 
 ## Phase 4: Menu, keyboard and window
 

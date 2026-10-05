@@ -8,10 +8,12 @@ import { fileIdOf } from "./copyPasteFingerprint";
 export type ItemId = { dev: number; ino: number };
 
 // How an item that an operation made looked just after: Undo asks before moving one to
-// the Trash that has changed since. For a folder only the folder itself is looked at (its
-// date and how many items it holds), not what is deeper inside.
+// the Trash that has changed since. For a folder only how many items it holds counts, not
+// what is deeper inside, nor its date (which changes with every item in or out).
+export type ItemKind = "file" | "directory" | "symlink" | "other";
+
 export type ItemStamp = {
-  kind: "file" | "directory" | "symlink" | "other";
+  kind: ItemKind;
   size: number | null;
   mtimeMs: number | null;
   entryCount: number | null;
@@ -19,15 +21,19 @@ export type ItemStamp = {
 
 export type UndoStep =
   // A rename, or a move on one disk. `parentId` is the folder `from` was in, so Undo moves
-  // the item back only into that same folder. `fromTrash` marks putting an item back from
-  // the Trash, whose reverse is a fresh move to the Trash, not a rename into it.
+  // the item back only into that same folder. `itemKind` lets Undo still move back a file
+  // that an app saved under a new id. `fromTrash` marks putting an item back from the
+  // Trash, whose reverse is a fresh move to the Trash (not a rename into it), and `stamp`
+  // how the item looked once back, for asking before trashing it again if it changed.
   | {
       kind: "moved";
       from: string;
       to: string;
       id: ItemId | null;
+      itemKind: ItemKind | null;
       parentId: ItemId | null;
       fromTrash?: boolean;
+      stamp?: ItemStamp | null;
     }
   // An item the operation made: a copy, a duplicate, a new folder.
   | { kind: "created"; path: string; id: ItemId | null; stamp: ItemStamp | null }
@@ -40,7 +46,10 @@ export type UndoStep =
       parentId: ItemId | null;
     }
   // Several items renamed at once, undone as one batch.
-  | { kind: "batchRenamed"; items: Array<{ from: string; to: string; id: ItemId | null }> };
+  | {
+      kind: "batchRenamed";
+      items: Array<{ from: string; to: string; id: ItemId | null; itemKind: ItemKind | null }>;
+    };
 
 // The steps for one item the person picked, in the order they happened. They are undone
 // together, in reverse; when one can't be, the ones before it in the unit aren't either.
@@ -82,6 +91,35 @@ export async function readItemId(
   }
 }
 
+// The id and kind of the item at `path` now; both null when it can't be read.
+export async function readItemRef(
+  lstat: (path: string) => Promise<KindStats>,
+  path: string,
+): Promise<{ id: ItemId | null; kind: ItemKind | null }> {
+  try {
+    const stats = await lstat(path);
+    return { id: itemIdOf(stats), kind: kindOfStats(stats) };
+  } catch {
+    return { id: null, kind: null };
+  }
+}
+
+type KindStats = IdStats & {
+  isFile?: () => boolean;
+  isDirectory: () => boolean;
+  isSymbolicLink?: () => boolean;
+};
+
+export function kindOfStats(stats: KindStats): ItemKind {
+  if (stats.isSymbolicLink?.()) {
+    return "symlink";
+  }
+  if (stats.isDirectory()) {
+    return "directory";
+  }
+  return (stats.isFile?.() ?? true) ? "file" : "other";
+}
+
 type StampStats = IdStats & {
   size?: number;
   mtimeMs?: number;
@@ -104,13 +142,7 @@ export async function readItemStamp(
   } catch {
     return null;
   }
-  const kind = stats.isSymbolicLink?.()
-    ? "symlink"
-    : stats.isDirectory()
-      ? "directory"
-      : (stats.isFile?.() ?? true)
-        ? "file"
-        : "other";
+  const kind = kindOfStats(stats);
   const entryCount =
     kind === "directory" && fileSystem.readdir
       ? await fileSystem.readdir(path).then(
