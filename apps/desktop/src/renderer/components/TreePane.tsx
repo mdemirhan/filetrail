@@ -84,6 +84,7 @@ export function TreePane({
   favoritesPlacement,
   activeLeftPaneSubview,
   favoritesExpanded,
+  holdScrollPosition = false,
   onFocusChange,
   onLeftPaneSubviewChange,
   onClearSelection,
@@ -120,6 +121,9 @@ export function TreePane({
   favoritesPlacement: FavoritesPlacement;
   activeLeftPaneSubview: "favorites" | "tree";
   favoritesExpanded: boolean;
+  /** While set, the sidebar stays where it is scrolled instead of bringing the selected row
+   *  into view: a tab that came back has put its own scroll position back. */
+  holdScrollPosition?: boolean;
   onFocusChange: (focused: boolean) => void;
   onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
   onClearSelection: () => void;
@@ -281,6 +285,9 @@ export function TreePane({
   const lastCommittedSelectedItemIdRef = useRef(selectedTreeItemId);
   const [optimisticSelectedItemId, setOptimisticSelectedItemId] = useState<TreeItemId | null>(null);
   const [selectedRowRegistrationVersion, setSelectedRowRegistrationVersion] = useState(0);
+  // Read when the rows change, not watched: letting go of the hold scrolls nothing by itself.
+  const holdScrollPositionRef = useRef(holdScrollPosition);
+  holdScrollPositionRef.current = holdScrollPosition;
   const treeVisibilityVersion = useMemo(
     () =>
       [
@@ -323,7 +330,7 @@ export function TreePane({
   useEffect(() => {
     void selectedRowRegistrationVersion;
     void treeVisibilityVersion;
-    if (!selectedTreeItemId) {
+    if (!selectedTreeItemId || holdScrollPositionRef.current) {
       return;
     }
     const currentRow = rowRefs.current[selectedTreeItemId];

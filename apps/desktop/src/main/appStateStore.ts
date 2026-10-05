@@ -396,10 +396,14 @@ function sanitizeViewMode(
 }
 
 // Tabs from a damaged file are kept as far as they make sense; a tab that does not is
-// dropped rather than failing the whole list.
+// dropped rather than failing the whole list. A tab saved before it kept Favorites and
+// Locations open or closed takes the window's setting for them.
 function sanitizeOpenTabs(
   value: unknown,
-  fallback: Pick<OpenTabPreference, "includeHidden" | "foldersFirst">,
+  fallback: Pick<
+    OpenTabPreference,
+    "includeHidden" | "foldersFirst" | "favoritesExpanded" | "locationsExpanded"
+  >,
 ): OpenTabPreference[] {
   if (!Array.isArray(value)) {
     return [];
@@ -435,6 +439,14 @@ function sanitizeOpenTabs(
         typeof candidate.foldersFirst === "boolean"
           ? candidate.foldersFirst
           : fallback.foldersFirst,
+      favoritesExpanded:
+        typeof candidate.favoritesExpanded === "boolean"
+          ? candidate.favoritesExpanded
+          : fallback.favoritesExpanded,
+      locationsExpanded:
+        typeof candidate.locationsExpanded === "boolean"
+          ? candidate.locationsExpanded
+          : fallback.locationsExpanded,
     });
     if (tabs.length === OPEN_TABS_LIMIT) {
       break;
@@ -608,7 +620,18 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       typeof record.restoreSessionOnStartup === "boolean"
         ? record.restoreSessionOnStartup
         : currentDefaults.restoreSessionOnStartup,
-    openTabs: sanitizeOpenTabs(record.openTabs, currentDefaults),
+    openTabs: sanitizeOpenTabs(record.openTabs, {
+      includeHidden: currentDefaults.includeHidden,
+      foldersFirst: currentDefaults.foldersFirst,
+      favoritesExpanded:
+        typeof record.favoritesExpanded === "boolean"
+          ? record.favoritesExpanded
+          : currentDefaults.favoritesExpanded,
+      locationsExpanded:
+        typeof record.locationsExpanded === "boolean"
+          ? record.locationsExpanded
+          : currentDefaults.locationsExpanded,
+    }),
     activeTabIndex:
       typeof record.activeTabIndex === "number" &&
       Number.isInteger(record.activeTabIndex) &&

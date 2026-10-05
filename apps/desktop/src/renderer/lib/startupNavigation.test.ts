@@ -176,6 +176,8 @@ describe("startup navigation", () => {
       sortDirection: "asc" as const,
       includeHidden: false,
       foldersFirst: true,
+      favoritesExpanded: true,
+      locationsExpanded: true,
       ...overrides,
     });
     const preferences = {
@@ -187,6 +189,8 @@ describe("startup navigation", () => {
           sortDirection: "desc",
           includeHidden: true,
           foldersFirst: false,
+          favoritesExpanded: false,
+          locationsExpanded: false,
         }),
         tab("/Users/demo/Documents", { favoritePath: "/Users/demo/Documents" }),
         tab("/Volumes/Backup", { treeRootPath: "/" }),
@@ -201,6 +205,8 @@ describe("startup navigation", () => {
       sortDirection: "asc" as const,
       includeHidden: false,
       foldersFirst: true,
+      favoritesExpanded: true,
+      locationsExpanded: false,
     };
 
     it("brings every tab back at its own folder, with its own view", () => {
@@ -217,6 +223,8 @@ describe("startup navigation", () => {
             sortDirection: "desc",
             includeHidden: true,
             foldersFirst: false,
+            favoritesExpanded: false,
+            locationsExpanded: false,
           },
           {
             path: "/Users/demo/Documents",
@@ -228,6 +236,8 @@ describe("startup navigation", () => {
             sortDirection: "asc",
             includeHidden: false,
             foldersFirst: true,
+            favoritesExpanded: true,
+            locationsExpanded: true,
           },
           // Saved with the tree at Macintosh HD: another disk is shown from its own top.
           {
@@ -240,6 +250,8 @@ describe("startup navigation", () => {
             sortDirection: "asc",
             includeHidden: false,
             foldersFirst: true,
+            favoritesExpanded: true,
+            locationsExpanded: true,
           },
         ],
       });
@@ -259,6 +271,9 @@ describe("startup navigation", () => {
           sortDirection: "asc",
           includeHidden: false,
           foldersFirst: true,
+          // Not reopening the session: the window's sidebar.
+          favoritesExpanded: true,
+          locationsExpanded: false,
         },
       ]);
       // No tabs were saved yet (the first launch with tabs): the last folder, in one view.

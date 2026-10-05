@@ -90,6 +90,9 @@ export type OpenTabPreference = {
   // Each tab shows hidden files, and folders before files, or not, on its own.
   includeHidden: boolean;
   foldersFirst: boolean;
+  // Whether the sidebar's Favorites and Locations were open in the tab.
+  favoritesExpanded: boolean;
+  locationsExpanded: boolean;
 };
 export const OPEN_TABS_LIMIT = 100;
 

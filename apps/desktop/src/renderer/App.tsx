@@ -1022,6 +1022,7 @@ export function App() {
     openTabs,
     activeTabIndex,
     restoreTabs,
+    sidebarScrollHeld,
     activeTabId,
     tabItems,
     tabCount,
@@ -1580,13 +1581,15 @@ export function App() {
           homeResponse.path,
           launchContextResponse.startupFolderPath,
         );
-        // A favorite that was removed since is opened as the plain folder it is.
+        // A favorite that was removed since is opened as the plain folder it is. Favorites
+        // set up just now are shown open.
         const startupTabs = startup.tabs.map((tab) => ({
           ...tab,
           favoritePath:
             tab.favoritePath && isFavoritePath(preferences.favorites, tab.favoritePath)
               ? tab.favoritePath
               : null,
+          favoritesExpanded: preferences.favoritesInitialized ? tab.favoritesExpanded : true,
         }));
         const startupTab = startupTabs[startup.activeIndex];
         if (!startupTab) {
@@ -1602,6 +1605,8 @@ export function App() {
         setSearchViewMode(startupTab.searchViewMode);
         setIncludeHidden(startupTab.includeHidden);
         setFoldersFirst(startupTab.foldersFirst);
+        setFavoritesExpanded(startupTab.favoritesExpanded);
+        setLocationsExpanded(startupTab.locationsExpanded);
         setSortBy(startupTab.sortBy);
         setSortDirection(startupTab.sortDirection);
         initializeTree(startupRootPath);
@@ -1914,6 +1919,7 @@ export function App() {
               favoritesPlacement,
               activeLeftPaneSubview: leftPaneSubview,
               favoritesExpanded,
+              holdScrollPosition: sidebarScrollHeld,
               rootPath: treeRootPath,
               onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
               onLeftPaneSubviewChange: setLeftPaneSubview,
