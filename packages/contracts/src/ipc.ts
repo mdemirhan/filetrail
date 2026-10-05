@@ -164,6 +164,8 @@ export const toolbarItemIdSchema = z.enum([
   "pasteSelection",
   "openInTerminal",
   "showInFinder",
+  "revealInFolder",
+  "calculateSize",
   "copyPath",
   "theme",
   "settings",

@@ -53,6 +53,8 @@ const ICON_NAMES = [
   "newTab",
   "quickLook",
   "showInFinder",
+  "revealInFolder",
+  "calculateSize",
 ] as const;
 
 describe("ToolbarIcon", () => {

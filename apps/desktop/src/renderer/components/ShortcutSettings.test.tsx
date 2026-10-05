@@ -249,7 +249,9 @@ describe("ShortcutSettings", () => {
     fireEvent.change(search, { target: { value: "trash" } });
     expect(screen.getByText("Move to Trash")).toBeInTheDocument();
     expect(screen.queryByText("Duplicate")).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Navigation" })).toBeNull();
+    // Go > Trash is the one Navigation command that matches.
+    expect(screen.getByText("Trash")).toBeInTheDocument();
+    expect(screen.queryByText("Back")).toBeNull();
 
     fireEvent.change(search, { target: { value: "cmd+shift+n" } });
     expect(screen.getByText("New Folder")).toBeInTheDocument();

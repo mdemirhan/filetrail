@@ -70,6 +70,13 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     command: "goHomeRootTree",
     description: "Go Home and root the folder tree there",
   },
+  { group: "navigation", command: "goDocuments", description: "Go to Documents" },
+  { group: "navigation", command: "goDesktop", description: "Go to Desktop" },
+  { group: "navigation", command: "goDownloads", description: "Go to Downloads" },
+  { group: "navigation", command: "goLibrary", description: "Go to your Library folder" },
+  { group: "navigation", command: "goMacintoshHD", description: "Go to Macintosh HD" },
+  { group: "navigation", command: "goApplications", description: "Go to Applications" },
+  { group: "navigation", command: "goTrash", description: "Go to the Trash" },
   {
     group: "navigation",
     command: "rootTreeAtSelection",
@@ -114,6 +121,11 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "files", command: "openSelection", description: "Open" },
   { group: "files", command: "editSelection", description: "Edit in your text editor" },
   { group: "files", command: "quickLookSelection", description: "Quick Look" },
+  {
+    group: "files",
+    command: "calculateSize",
+    description: "Calculate the size of the selected folders, or of the folder on screen",
+  },
   { group: "files", command: "renameSelection", description: "Rename" },
   { group: "files", command: "copy", description: "Copy" },
   { group: "files", command: "cut", description: "Cut" },
@@ -142,6 +154,11 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     group: "search",
     command: "showLastSearchResults",
     description: "Show the last results again",
+  },
+  {
+    group: "search",
+    command: "revealInFolder",
+    description: "Show the selected result in its folder",
   },
   { group: "search", command: "refreshOrApplySearchSort", description: "Run the search again" },
   { group: "search", shortcut: "Esc", description: "Close the results" },
@@ -596,7 +613,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Folder sizes",
             description:
-              "Folders show no size until you ask: click Calculate in the Info panel, or choose Calculate Size from the right-click menu. Right-click empty space to size the folder on screen. With several items selected it sizes the folders among them. The path bar's right end shows the size of the selection, or of the folder on screen when nothing is selected, once every size in it is known. Sizing a folder also sizes every folder inside it.",
+              "Folders show no size until you ask: click Calculate in the Info panel, or choose Calculate Size from the right-click menu or {calculateSize}. Right-click empty space to size the folder on screen. With several items selected it sizes the folders among them. The path bar's right end shows the size of the selection, or of the folder on screen when nothing is selected, once every size in it is known. Sizing a folder also sizes every folder inside it.",
           },
           {
             label: "What takes the space",

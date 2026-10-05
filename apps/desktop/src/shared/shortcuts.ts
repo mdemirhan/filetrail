@@ -67,6 +67,56 @@ export const SHORTCUT_COMMANDS = [
     defaults: ["Cmd+Shift+H"],
     menuPath: "Go > Home",
   },
+  // Finder's places in the Go menu. No keys until one is chosen in Settings.
+  {
+    id: "goDocuments",
+    label: "Documents",
+    group: "navigation",
+    defaults: [],
+    menuPath: "Go > Documents",
+  },
+  {
+    id: "goDesktop",
+    label: "Desktop",
+    group: "navigation",
+    defaults: [],
+    menuPath: "Go > Desktop",
+  },
+  {
+    id: "goDownloads",
+    label: "Downloads",
+    group: "navigation",
+    defaults: [],
+    menuPath: "Go > Downloads",
+  },
+  {
+    id: "goLibrary",
+    label: "Library",
+    group: "navigation",
+    defaults: [],
+    menuPath: "Go > Library",
+  },
+  {
+    id: "goMacintoshHD",
+    label: "Macintosh HD",
+    group: "navigation",
+    defaults: [],
+    menuPath: "Go > Macintosh HD",
+  },
+  {
+    id: "goApplications",
+    label: "Applications",
+    group: "navigation",
+    defaults: [],
+    menuPath: "Go > Applications",
+  },
+  {
+    id: "goTrash",
+    label: "Trash",
+    group: "navigation",
+    defaults: [],
+    menuPath: "Go > Trash",
+  },
   {
     id: "openLocationSheet",
     label: "Go to Folder…",
@@ -160,6 +210,13 @@ export const SHORTCUT_COMMANDS = [
     group: "files",
     defaults: ["Space"],
     menuPath: "File > Quick Look",
+  },
+  {
+    id: "calculateSize",
+    label: "Calculate Size",
+    group: "files",
+    defaults: [],
+    menuPath: "File > Calculate Size",
   },
   // Return renames as well while Settings → Files says so.
   {
@@ -260,6 +317,13 @@ export const SHORTCUT_COMMANDS = [
     group: "search",
     defaults: ["Cmd+Shift+F"],
     menuPath: "Edit > Show Last Search Results",
+  },
+  {
+    id: "revealInFolder",
+    label: "Reveal in Folder",
+    group: "search",
+    defaults: [],
+    menuPath: "File > Reveal in Folder",
   },
 
   // The views in Finder's order and on Finder's keys. "List" is the table with columns, as
