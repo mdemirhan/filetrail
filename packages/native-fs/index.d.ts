@@ -122,16 +122,35 @@ export function nativeDatesTaken(paths: string[]): Promise<Array<string | null>>
  * leaves it), and `dirs` maps each sub-directory path it walked to an array of
  * `[sizeBytes, diskBytes, fileCount, folderCount]`.
  *
+ * Each sub-directory is finished as soon as everything inside it has been walked. With
+ * `onFinished`, the ones finished so far are handed to it while the walk runs, about
+ * five times a second, as `{"dev":N,"dirs":{...}}`; `dirs` in the result then holds only
+ * those finished since the last hand-over. Every sub-directory is in exactly one of them.
+ * When the walk is cancelled, the ones it finished before stopping are whole and are
+ * handed to `onFinished` before the promise rejects; a cancelled walk never finishes a
+ * directory it was still listing.
+ *
  * Runs on a libuv thread pool thread — non-blocking. At most one calculation
  * runs at a time; concurrent calls are queued and start after the active one
  * settles. To start a new calculation immediately, cancel the active one
  * first via `nativeFolderSizeCancel()`.
  *
  * @param folderPath - Absolute path to the folder to size.
+ * @param onFinished - Called with the sub-directories finished since the last call.
  * @returns A promise that resolves with a JSON string.
  * @throws An error with `code: "ECANCELLED"` if cancelled via `nativeFolderSizeCancel()`.
  */
-export function nativeFolderSize(folderPath: string): Promise<string>;
+export function nativeFolderSize(
+  folderPath: string,
+  onFinished?: (finishedJson: string) => void,
+): Promise<string>;
+
+/**
+ * The sub-directories the active `nativeFolderSize` walk has finished since this was last
+ * called, as `{"dev":N,"dirs":{...}}`, or null when there are none or no walk is active.
+ * The JS wrapper calls this itself while a walk with `onFinished` runs.
+ */
+export function nativeFolderSizeTakeFinished(): string | null;
 
 /**
  * Cancels the currently active folder size calculation, if any.

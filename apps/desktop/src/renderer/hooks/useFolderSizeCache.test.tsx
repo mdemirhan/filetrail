@@ -18,6 +18,7 @@ function createHandlers(overrides: Record<string, unknown> = {}) {
     diskBytes: 1200,
     fileCount: 42,
     folderCount: 3,
+    measuredFolderCount: 0,
     error: null,
   }));
   const cancelHandler = vi.fn(async () => ({ ok: true }));
@@ -122,6 +123,7 @@ describe("useFolderSizeCache", () => {
       diskBytes: null,
       fileCount: null,
       folderCount: null,
+      measuredFolderCount: 0,
       error: null,
     }));
     const client = createMockFiletrailClient({
@@ -180,6 +182,7 @@ describe("useFolderSizeCache", () => {
       diskBytes: null,
       fileCount: null,
       folderCount: null,
+      measuredFolderCount: 0,
       error: null,
     }));
     const cancelHandler = vi.fn(async () => ({ ok: true }));
@@ -220,6 +223,7 @@ describe("useFolderSizeCache", () => {
       diskBytes: 6000,
       fileCount: 10,
       folderCount: 3,
+      measuredFolderCount: 0,
       error: null,
     }));
     const cancelHandler = vi.fn(async () => ({ ok: true }));
@@ -285,6 +289,7 @@ describe("useFolderSizeCache", () => {
       diskBytes: 0,
       fileCount: 1,
       folderCount: 3,
+      measuredFolderCount: 0,
       error: null,
     }));
     const client = createMockFiletrailClient({
@@ -321,6 +326,238 @@ describe("useFolderSizeCache", () => {
     });
   });
 
+  // A main process measuring "/out", where the test finishes the folders inside one by one.
+  function createMeasuringClient() {
+    const measured = new Map<string, number>();
+    const state = { done: false, cancelled: false };
+    const probes: string[] = [];
+    const client = createMockFiletrailClient({
+      "folderSize:start": vi.fn(
+        async (payload: { path: string; probeOnly?: boolean | undefined }) => {
+          if (!payload.probeOnly) {
+            return { jobId: `walk:${payload.path}`, status: "running" as const };
+          }
+          probes.push(payload.path);
+          return measured.has(payload.path)
+            ? { jobId: `probe:${payload.path}`, status: "ready" as const }
+            : { jobId: `probe:${payload.path}`, status: "deferred" as const };
+        },
+      ),
+      "folderSize:getStatus": vi.fn(async ({ jobId }: { jobId: string }) => {
+        const path = jobId.replace(/^(walk|probe):/u, "");
+        const walk = jobId.startsWith("walk:");
+        const status = walk
+          ? state.cancelled
+            ? ("cancelled" as const)
+            : state.done
+              ? ("ready" as const)
+              : ("running" as const)
+          : ("ready" as const);
+        const size = walk ? (state.done ? 9_000 : null) : (measured.get(path) ?? null);
+        return {
+          jobId,
+          status,
+          sizeBytes: size,
+          diskBytes: size,
+          fileCount: size === null ? null : 1,
+          folderCount: size === null ? null : 0,
+          measuredFolderCount: walk ? measured.size : 0,
+          error: null,
+        };
+      }),
+      "folderSize:cancel": vi.fn(async () => {
+        state.cancelled = true;
+        return { ok: true };
+      }),
+    });
+    const poll = async () => {
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+    // What a row on screen does on each render.
+    const show = async (getEntry: (path: string) => unknown, path: string) => {
+      act(() => {
+        getEntry(path);
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+    return { client, measured, state, probes, poll, show };
+  }
+
+  it("shows each folder inside, at any depth, as soon as it is measured", async () => {
+    const { client, measured, probes, poll, show } = createMeasuringClient();
+    const { result } = renderHook(() => useFolderSizeCache(client));
+    await show(result.current.getEntry, "/out/a");
+    await show(result.current.getEntry, "/out/a/deep");
+    await show(result.current.getEntry, "/out/b");
+    await act(async () => {
+      await result.current.calculateFolderSize("/out");
+    });
+
+    measured.set("/out/a/deep", 100);
+    measured.set("/out/a", 400);
+    const versionBefore = result.current.version;
+    await poll();
+    expect(result.current.version).toBeGreaterThan(versionBefore);
+    for (const path of ["/out/a", "/out/a/deep", "/out/b"]) {
+      await show(result.current.getEntry, path);
+    }
+
+    expect(result.current.getEntry("/out")).toMatchObject({ status: "calculating" });
+    expect(result.current.getEntry("/out/a")).toMatchObject({ status: "ready", sizeBytes: 400 });
+    expect(result.current.getEntry("/out/a/deep")).toMatchObject({
+      status: "ready",
+      sizeBytes: 100,
+    });
+    expect(result.current.getEntry("/out/b").status).toBe("idle");
+
+    // Nothing new measured: the folder still waiting isn't asked about again.
+    const asked = probes.filter((path) => path === "/out/b").length;
+    await poll();
+    await show(result.current.getEntry, "/out/b");
+    expect(probes.filter((path) => path === "/out/b")).toHaveLength(asked);
+
+    measured.set("/out/b", 700);
+    await poll();
+    await show(result.current.getEntry, "/out/b");
+    expect(result.current.getEntry("/out/b")).toMatchObject({ status: "ready", sizeBytes: 700 });
+  });
+
+  it("doesn't repaint for folders measured elsewhere", async () => {
+    const { client, measured, poll, show } = createMeasuringClient();
+    const { result } = renderHook(() => useFolderSizeCache(client));
+    await show(result.current.getEntry, "/elsewhere/x");
+    await act(async () => {
+      await result.current.calculateFolderSize("/out");
+    });
+    const versionBefore = result.current.version;
+
+    measured.set("/out/a", 400);
+    await poll();
+
+    expect(result.current.version).toBe(versionBefore);
+  });
+
+  it("keeps the sizes of the folders inside measured before Stop", async () => {
+    const { client, measured, show } = createMeasuringClient();
+    const { result } = renderHook(() => useFolderSizeCache(client));
+    await show(result.current.getEntry, "/out/a");
+    await act(async () => {
+      await result.current.calculateFolderSize("/out");
+    });
+
+    measured.set("/out/a", 400);
+    await act(async () => {
+      await result.current.cancelFolderSize("/out");
+    });
+    await show(result.current.getEntry, "/out/a");
+
+    expect(result.current.getEntry("/out").status).toBe("idle");
+    expect(result.current.getEntry("/out/a")).toMatchObject({ status: "ready", sizeBytes: 400 });
+  });
+
+  it("gives a folder whose own calculation was stopped the size its parent measured", async () => {
+    const { client, measured, state, poll } = createMeasuringClient();
+    const { result } = renderHook(() => useFolderSizeCache(client));
+    await act(async () => {
+      await result.current.calculateFolderSize("/out/a");
+    });
+    await act(async () => {
+      await result.current.cancelFolderSize("/out/a");
+    });
+    expect(result.current.getEntry("/out/a").status).toBe("idle");
+
+    state.cancelled = false;
+    await act(async () => {
+      await result.current.calculateFolderSize("/out");
+    });
+    measured.set("/out/a", 400);
+    await poll();
+
+    expect(result.current.getEntry("/out/a")).toMatchObject({ status: "ready", sizeBytes: 400 });
+  });
+
+  it("leaves a calculation started meanwhile alone when an earlier answer comes in", async () => {
+    const { client, measured, show } = createMeasuringClient();
+    const { result } = renderHook(() => useFolderSizeCache(client));
+    measured.set("/out/a", 400);
+    // The row asks; before the answer arrives, the folder's own calculation starts.
+    act(() => {
+      result.current.getEntry("/out/a");
+    });
+    await act(async () => {
+      await result.current.calculateFolderSize("/out/a");
+    });
+    await show(result.current.getEntry, "/out/a");
+
+    expect(result.current.getEntry("/out/a").status).toBe("calculating");
+  });
+
+  it("ignores a late answer about a calculation that was started again", async () => {
+    let jobCount = 0;
+    let answerFirst: (() => void) | null = null;
+    const status = (jobId: string, ready: boolean) => ({
+      jobId,
+      status: ready ? ("ready" as const) : ("cancelled" as const),
+      sizeBytes: ready ? 500 : null,
+      diskBytes: ready ? 500 : null,
+      fileCount: ready ? 1 : null,
+      folderCount: ready ? 0 : null,
+      measuredFolderCount: 0,
+      error: null,
+    });
+    const client = createMockFiletrailClient({
+      "folderSize:start": vi.fn(async (payload: { probeOnly?: boolean | undefined }) => {
+        if (payload.probeOnly) {
+          return { jobId: "probe", status: "deferred" as const };
+        }
+        jobCount += 1;
+        return { jobId: `job-${jobCount}`, status: "running" as const };
+      }),
+      "folderSize:getStatus": vi.fn(({ jobId }: { jobId: string }) =>
+        jobId === "job-1"
+          ? // The first job's answer is slow, and by then it was replaced.
+            new Promise<ReturnType<typeof status>>((resolve) => {
+              answerFirst = () => resolve(status(jobId, false));
+            })
+          : Promise.resolve(status(jobId, true)),
+      ),
+      "folderSize:cancel": vi.fn(async () => ({ ok: true })),
+    });
+    const { result } = renderHook(() => useFolderSizeCache(client));
+    await act(async () => {
+      await result.current.calculateFolderSize("/x");
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    await act(async () => {
+      result.current.recalculateFolderSize("/x");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      answerFirst?.();
+      await Promise.resolve();
+    });
+    expect(result.current.getEntry("/x").status).toBe("calculating");
+
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.getEntry("/x")).toMatchObject({ status: "ready", sizeBytes: 500 });
+  });
+
   it("polling stops on error status", async () => {
     const { startHandler, cancelHandler } = createHandlers();
     let callCount = 0;
@@ -334,6 +571,7 @@ describe("useFolderSizeCache", () => {
           diskBytes: null,
           fileCount: null,
           folderCount: null,
+          measuredFolderCount: 0,
           error: "Disk error",
         };
       }
@@ -344,6 +582,7 @@ describe("useFolderSizeCache", () => {
         diskBytes: null,
         fileCount: null,
         folderCount: null,
+        measuredFolderCount: 0,
         error: null,
       };
     });
@@ -444,6 +683,7 @@ describe("useFolderSizeCache", () => {
           diskBytes: sizes.get(payload.jobId) ?? null,
           fileCount: 1,
           folderCount: 0,
+          measuredFolderCount: 0,
           error: null,
         })),
         "folderSize:cancel": vi.fn(async () => ({ ok: true })),
@@ -564,6 +804,7 @@ describe("useFolderSizeCache", () => {
         diskBytes: finished.has(payload.jobId) ? 100 : null,
         fileCount: finished.has(payload.jobId) ? 1 : null,
         folderCount: finished.has(payload.jobId) ? 0 : null,
+        measuredFolderCount: 0,
         error: null,
       })),
       "folderSize:cancel": vi.fn(async () => ({ ok: true })),

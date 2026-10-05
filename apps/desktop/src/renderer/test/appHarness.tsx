@@ -705,6 +705,7 @@ export function createAppHarness(
           diskBytes: sizeBytes,
           fileCount: 0,
           folderCount: 0,
+          measuredFolderCount: 0,
           error: null,
         } as IpcResponse<C>;
       }

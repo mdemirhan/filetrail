@@ -47,8 +47,10 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
   const folderRunRef = useRef(0);
   const probedPaths = useRef(new Set<string>());
   const probeMissedAt = useRef(new Map<string, number>());
-  // Set below, once probeCache exists: re-asks for the folders inside `path`.
+  // Set below, once probeCache exists: re-asks for the folders inside `path`, all of them
+  // (refreshInside) or only those without a size (askAgainInside).
   const refreshInsideRef = useRef<(path: string) => void>(() => undefined);
+  const askAgainInsideRef = useRef<(path: string) => void>(() => undefined);
 
   useEffect(() => {
     const timers = pollTimers.current;
@@ -99,9 +101,15 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
   const startPolling = useCallback(
     (path: string, jobId: string) => {
       stopPolling(path);
+      // The folders inside measured so far, as last seen: more are asked about as they come.
+      let measuredFolderCount = 0;
       const timer = setInterval(async () => {
         try {
           const result = await client.invoke("folderSize:getStatus", { jobId });
+          // Another calculation of this folder took over meanwhile.
+          if (pollTimers.current.get(path) !== timer) {
+            return;
+          }
           if (result.status === "ready" && result.sizeBytes !== null) {
             stopPolling(path);
             updateEntry(path, {
@@ -115,11 +123,19 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
           } else if (result.status === "error") {
             stopPolling(path);
             updateEntry(path, { status: "error", message: result.error ?? "Unknown error" });
+            askAgainInsideRef.current(path);
           } else if (result.status === "cancelled") {
             stopPolling(path);
             updateEntry(path, { status: "idle" });
+            askAgainInsideRef.current(path);
+          } else if (result.measuredFolderCount > measuredFolderCount) {
+            measuredFolderCount = result.measuredFolderCount;
+            askAgainInsideRef.current(path);
           }
         } catch {
+          if (pollTimers.current.get(path) !== timer) {
+            return;
+          }
           stopPolling(path);
           updateEntry(path, { status: "error", message: "Failed to poll folder size status" });
         }
@@ -205,6 +221,8 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
         }
       }
       updateEntry(path, { status: "idle" });
+      // The folders inside it measured before it stopped keep their sizes.
+      askAgainInsideRef.current(path);
     },
     [client, stopPolling, updateEntry],
   );
@@ -245,7 +263,12 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
             probeMissedAt.current.delete(path);
             probedPaths.current.add(path);
             const status = await client.invoke("folderSize:getStatus", { jobId: result.jobId });
-            if (status.status === "ready" && status.sizeBytes !== null) {
+            // A calculation of the folder started meanwhile is left to report its own size.
+            if (
+              status.status === "ready" &&
+              status.sizeBytes !== null &&
+              cacheRef.current.get(path)?.status !== "calculating"
+            ) {
               updateEntry(path, {
                 status: "ready",
                 sizeBytes: status.sizeBytes,
@@ -282,6 +305,34 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     }
     // Repaint so folders on screen without a size ask again now.
     bumpVersion();
+  };
+
+  // While a calculation runs, each folder inside it is measured as soon as everything
+  // inside that folder is: the folders inside without a size are asked about again. Those
+  // on screen waiting out their retry cooldown ask again on the repaint; the rest wait
+  // until they are shown.
+  askAgainInsideRef.current = (path: string) => {
+    const prefix = path.endsWith("/") ? path : `${path}/`;
+    let waiting = false;
+    for (const missedPath of [...probeMissedAt.current.keys()]) {
+      if (missedPath.startsWith(prefix)) {
+        probeMissedAt.current.delete(missedPath);
+        waiting = true;
+      }
+    }
+    // A folder whose own calculation was stopped or failed shows no size either.
+    for (const [cachedPath, cachedEntry] of cacheRef.current) {
+      if (
+        cachedPath.startsWith(prefix) &&
+        (cachedEntry.status === "idle" || cachedEntry.status === "error")
+      ) {
+        probedPaths.current.delete(cachedPath);
+        probeCache(cachedPath);
+      }
+    }
+    if (waiting) {
+      bumpVersion();
+    }
   };
 
   // Asks the main process again for a size it may have changed: the size shown stays until

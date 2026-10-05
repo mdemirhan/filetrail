@@ -32,7 +32,7 @@ import {
 } from "@filetrail/core";
 import { runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
-import { clearResponseCaches } from "./responseCache";
+import { clearResponseCaches, noteWriteStarting } from "./responseCache";
 import { runUndo } from "./undoExecution";
 import type { UndoEntry, UndoHistory } from "./undoHistory";
 import { findQuestions } from "./undoPlan";
@@ -527,6 +527,7 @@ export function createWriteOperationCoordinator(
     const operationId = createLocalWriteOperationId();
     const controller = new AbortController();
     activeWriteOperationId = operationId;
+    noteWriteStarting();
     localWriteOperationControllers.set(operationId, controller);
     localWriteOperationActions.set(operationId, args.action);
     attachSender(operationId, args.sender);
@@ -1538,6 +1539,7 @@ export function createWriteOperationCoordinator(
         // The write service can finish an operation before startCopyPaste returns (an
         // analysis that is no longer usable fails at once). Its end is caught here, so the
         // write slot isn't claimed for an operation that is already over.
+        noteWriteStarting();
         earlyTerminalEvents = new Map();
         let handle: ReturnType<WriteService["startCopyPaste"]>;
         let finishedEarly: CopyPasteProgressEvent | undefined;
