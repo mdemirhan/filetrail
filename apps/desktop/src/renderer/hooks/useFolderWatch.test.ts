@@ -65,7 +65,7 @@ describe("useFolderWatch", () => {
 
     await act(async () => rerender({ held: false }));
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(reload).toHaveBeenCalledWith(["/a/one", "/a/two"]);
+    expect(reload).toHaveBeenCalledWith("/a", ["/a/one", "/a/two"]);
   });
 
   it("asks again shortly when the folder can't be read yet", async () => {
@@ -79,7 +79,7 @@ describe("useFolderWatch", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
     expect(reload).toHaveBeenCalledTimes(2);
-    expect(reload).toHaveBeenLastCalledWith(null);
+    expect(reload).toHaveBeenLastCalledWith("/a", null);
   });
 
   it("reads once more for changes that arrive while it reads", async () => {
@@ -98,7 +98,7 @@ describe("useFolderWatch", () => {
 
     await act(async () => finishRead(true));
     expect(reload).toHaveBeenCalledTimes(2);
-    expect(reload).toHaveBeenLastCalledWith(["/a/two"]);
+    expect(reload).toHaveBeenLastCalledWith("/a", ["/a/two"]);
   });
 
   it("ignores changes to another folder", async () => {

@@ -865,6 +865,9 @@ export function useExplorerNavigationController(args: {
     }
     metadataCacheRef.current = new Map(Object.entries(cachedMetadata));
     metadataInflightRef.current.clear();
+    // At once, not when the window next draws: what asks about the folder on screen in
+    // between (a change made outside the app to the folder just left) must hear of this one.
+    currentPathRef.current = path;
     setCurrentPath(path);
     setCurrentEntries(entries);
     // The same folder read again keeps the rows on screen: the list tells of them again only
@@ -1919,15 +1922,17 @@ export function useExplorerNavigationController(args: {
 
   // Reads the folder on screen again after a change made outside the app, as quietly as can
   // be: the selection, the search results, the tree and what the Info panel shows all stay.
-  // `changedPaths` are the items that changed (null when that isn't known): their details
-  // are read again. If the folder is gone, the nearest folder above it is opened instead.
-  // Resolves to false when it has to wait: the folder is being read already, and that read
-  // may have started before the change.
+  // `changedPaths` are the items in `folderPath` that changed (null when that isn't known):
+  // their details are read again. If the folder is gone, the nearest folder above it is
+  // opened instead. Resolves to false when it has to wait: the folder is being read already,
+  // and that read may have started before the change.
   async function reloadFolderAfterOutsideChange(
+    folderPath: string,
     changedPaths: readonly string[] | null,
   ): Promise<boolean> {
     const targetPath = currentPathRef.current;
-    if (!targetPath) {
+    // A folder left behind, even just now, is not read again: that would go back to it.
+    if (!targetPath || targetPath !== folderPath) {
       return true;
     }
     const pendingNavigation = pendingNavigationRef.current;

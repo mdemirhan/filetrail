@@ -23,7 +23,7 @@ export function useFolderWatch({
   client: FiletrailClient;
   path: string | null;
   held: boolean;
-  reload: (changedPaths: readonly string[] | null) => Promise<boolean>;
+  reload: (path: string, changedPaths: readonly string[] | null) => Promise<boolean>;
 }): void {
   const latestRef = useRef({ path, held, reload });
   latestRef.current = { path, held, reload };
@@ -63,7 +63,10 @@ export function useFolderWatch({
     runningRef.current = true;
     let done = true;
     try {
-      done = await latest.reload(pending.changedPaths === null ? null : [...pending.changedPaths]);
+      done = await latest.reload(
+        pending.path,
+        pending.changedPaths === null ? null : [...pending.changedPaths],
+      );
     } catch {
       // A folder that can't be read shows its error the way any read does.
     } finally {
