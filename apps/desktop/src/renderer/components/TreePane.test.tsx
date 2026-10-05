@@ -936,4 +936,69 @@ describe("TreePane", () => {
     scrollIntoViewSpy.mockRestore();
     vi.useRealTimers();
   });
+
+  it("stays where it is scrolled while held, until another row is selected", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    const rect = (top: number, height: number) =>
+      ({
+        top,
+        bottom: top + height,
+        left: 0,
+        right: 240,
+        width: 240,
+        height,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    // Both folders are below the part of the tree on screen.
+    const getBoundingClientRectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function mockRect(this: HTMLElement) {
+        if (this.classList.contains("tree-scroll")) {
+          return rect(0, 160);
+        }
+        const path = this.getAttribute("data-tree-path");
+        if (path === "/Users/demo/Documents") {
+          return rect(220, 32);
+        }
+        if (path === "/Users/demo") {
+          return rect(260, 32);
+        }
+        return rect(0, 0);
+      });
+    const settle = () =>
+      act(() => {
+        vi.runAllTimers();
+      });
+
+    const props = {
+      ...treePaneDefaults(),
+      selectedTreeItemId: "fs:/Users/demo/Documents" as const,
+    };
+    const { rerender } = renderTreePane({ ...props, holdScrollPosition: true });
+    settle();
+    // The rows change while the tab's tree is read again.
+    rerender(<TreePane {...props} holdScrollPosition includeHidden />);
+    settle();
+    // Letting go scrolls nothing by itself.
+    rerender(<TreePane {...props} includeHidden />);
+    settle();
+    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    rerender(<TreePane {...props} includeHidden selectedTreeItemId="fs:/Users/demo" />);
+    settle();
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith({ block: "nearest" });
+
+    getBoundingClientRectSpy.mockRestore();
+    scrollIntoViewSpy.mockRestore();
+    vi.useRealTimers();
+  });
 });

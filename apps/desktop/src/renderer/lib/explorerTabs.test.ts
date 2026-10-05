@@ -101,6 +101,8 @@ describe("explorerTabs", () => {
       focusedPane: "tree",
       includeHidden: false,
       foldersFirst: true,
+      favoritesExpanded: false,
+      locationsExpanded: true,
       view: {
         treeNodes: {},
         currentEntries: [],
@@ -110,6 +112,7 @@ describe("explorerTabs", () => {
         listFilterQuery: "a",
         contentScroll: { top: 40, left: 0 },
         treeScrollTop: 0,
+        sidebarSectionsScrollTop: 0,
       },
       search: null,
     };

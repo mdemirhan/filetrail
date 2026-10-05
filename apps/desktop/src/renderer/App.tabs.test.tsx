@@ -272,6 +272,45 @@ describe("App tabs", () => {
     );
   });
 
+  it("keeps the sidebar of each tab: where it was scrolled and which sections were open", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    const scrollTop = (testId: string) => screen.getByTestId(testId).scrollTop;
+
+    // The second tab closes Locations and scrolls its sidebar.
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Locations Section" }));
+    expect(screen.getByTestId("locations-expanded")).toHaveTextContent("false");
+    screen.getByTestId("tree-scroll").scrollTop = 300;
+    screen.getByTestId("sidebar-sections").scrollTop = 120;
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+    expect(screen.getByTestId("locations-expanded")).toHaveTextContent("true");
+    expect(screen.getByTestId("favorites-expanded")).toHaveTextContent("true");
+    expect(scrollTop("tree-scroll")).toBe(0);
+    expect(scrollTop("sidebar-sections")).toBe(0);
+    await waitFor(() =>
+      expect(screen.getByTestId("sidebar-scroll-held")).toHaveTextContent("false"),
+    );
+    // The first tab closes Favorites, which the second tab keeps open.
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Favorites Section" }));
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+    expect(screen.getByTestId("locations-expanded")).toHaveTextContent("false");
+    expect(screen.getByTestId("favorites-expanded")).toHaveTextContent("true");
+    expect(scrollTop("tree-scroll")).toBe(300);
+    expect(scrollTop("sidebar-sections")).toBe(120);
+    // The tree is let go once the tab has been read again, and stays where it was.
+    await waitFor(() =>
+      expect(screen.getByTestId("sidebar-scroll-held")).toHaveTextContent("false"),
+    );
+    expect(scrollTop("tree-scroll")).toBe(300);
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+    expect(screen.getByTestId("favorites-expanded")).toHaveTextContent("false");
+  });
+
   it("starts a new tab with the hidden files and Folders First of the tab it came from", async () => {
     const harness = createAppHarness();
     await renderApp(harness);

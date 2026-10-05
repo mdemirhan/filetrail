@@ -1022,6 +1022,7 @@ export function App() {
     openTabs,
     activeTabIndex,
     restoreTabs,
+    sidebarScrollHeld,
     activeTabId,
     tabItems,
     tabCount,
@@ -1590,7 +1591,13 @@ export function App() {
           return;
         }
         // The tab on screen is loaded here; the other tabs are read when they are shown.
-        restoreTabs(startupTabs, startup.activeIndex, preferences.favoritesPlacement);
+        restoreTabs(startupTabs, startup.activeIndex, {
+          favoritesPlacement: preferences.favoritesPlacement,
+          favoritesExpanded: preferences.favoritesInitialized
+            ? preferences.favoritesExpanded
+            : true,
+          locationsExpanded: preferences.locationsExpanded,
+        });
         const startupPath = startupTab.path;
         const startupRootPath = startupTab.rootPath;
         const restoredFavoritePath = startupTab.favoritePath;
@@ -1910,6 +1917,7 @@ export function App() {
               favoritesPlacement,
               activeLeftPaneSubview: leftPaneSubview,
               favoritesExpanded,
+              holdScrollPosition: sidebarScrollHeld,
               rootPath: treeRootPath,
               onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
               onLeftPaneSubviewChange: setLeftPaneSubview,
