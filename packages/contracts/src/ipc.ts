@@ -1176,6 +1176,8 @@ export const ipcContractSchemas = {
       diskBytes: z.number().int().nonnegative().nullable(),
       fileCount: z.number().int().nonnegative().nullable(),
       folderCount: z.number().int().nonnegative().nullable(),
+      // The folders inside it whose sizes are known so far: goes up while it runs.
+      measuredFolderCount: z.number().int().nonnegative(),
       error: z.string().nullable(),
     }),
   },

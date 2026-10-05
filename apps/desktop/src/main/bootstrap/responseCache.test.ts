@@ -8,22 +8,29 @@ import {
   getCachedMetadataBatch,
   getCachedResponse,
   getResponseCacheSizes,
+  noteWriteStarting,
   resetResponseCacheState,
 } from "./responseCache";
 
 function createMockNative() {
   let resolveActive: ((value: string) => void) | null = null;
   let rejectActive: ((reason: unknown) => void) | null = null;
+  let finishedActive: ((finishedJson: string) => void) | null = null;
 
   return {
     getFolderSize: vi.fn(
-      () =>
+      (_path: string, onFinished?: (finishedJson: string) => void) =>
         new Promise<string>((resolve, reject) => {
           resolveActive = resolve;
           rejectActive = reject;
+          finishedActive = onFinished ?? null;
         }),
     ),
     cancelFolderSize: vi.fn(),
+    // Folders the active walk has finished, handed over while it runs.
+    finish(dirs: Record<string, [number, number, number, number]>, dev = 16) {
+      finishedActive?.(JSON.stringify({ dev, dirs }));
+    },
     resolveActive(json: string) {
       resolveActive?.(json);
       resolveActive = null;
@@ -225,6 +232,172 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.getCachedSize("/Users/demo/Project")).toBe(1000);
   });
 
+  describe("folders finished while measuring", () => {
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+
+    it("keeps each folder as it is finished, and counts them for the window", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+      const { jobId } = handlers.start({ path: "/test" });
+
+      native.finish({ "/test/a/deep": [100, 200, 1, 0], "/test/a": [150, 300, 2, 1] });
+
+      expect(handlers.getStatus({ jobId })).toMatchObject({
+        status: "running",
+        measuredFolderCount: 2,
+      });
+      expect(handlers.getCachedSize("/test/a")).toBe(150);
+      const probe = handlers.start({ path: "/test/a/deep", probeOnly: true });
+      expect(handlers.getStatus({ jobId: probe.jobId })).toMatchObject({
+        status: "ready",
+        sizeBytes: 100,
+      });
+
+      // The rest come with the result.
+      native.resolveActive(
+        JSON.stringify({
+          total: 500,
+          diskTotal: 900,
+          fileCount: 5,
+          folderCount: 3,
+          dev: 16,
+          dirs: { "/test/b": [300, 500, 2, 0] },
+        }),
+      );
+      await tick();
+      expect(handlers.getStatus({ jobId })).toMatchObject({
+        status: "ready",
+        sizeBytes: 500,
+        measuredFolderCount: 3,
+      });
+      expect(handlers.getCachedSize("/test/b")).toBe(300);
+      expect(handlers.getCachedSize("/test/a")).toBe(150);
+    });
+
+    it("keeps the folders finished before a cancel", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+      const { jobId } = handlers.start({ path: "/test" });
+      native.finish({ "/test/a": [150, 300, 2, 1] });
+
+      handlers.cancel({ jobId });
+      // Finished before the walk stopped: handed over as it rejects.
+      native.finish({ "/test/b": [70, 80, 1, 0] });
+      native.rejectActive(Object.assign(new Error("cancelled"), { code: "ECANCELLED" }));
+      await tick();
+
+      expect(handlers.getStatus({ jobId }).status).toBe("cancelled");
+      expect(handlers.getCachedSize("/test")).toBeUndefined();
+      expect(handlers.getCachedSize("/test/a")).toBe(150);
+      expect(handlers.getCachedSize("/test/b")).toBe(70);
+    });
+
+    it("stops keeping folders once a write has outdated the measurement, until it runs again", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+      const { jobId } = handlers.start({ path: "/test" });
+      native.finish({ "/test/a": [150, 300, 2, 1] });
+
+      clearResponseCaches(["/test/b/new.txt"]);
+      // May have been counted before or after the change.
+      native.finish({ "/test/b": [70, 80, 1, 0] });
+      expect(handlers.getCachedSize("/test/b")).toBeUndefined();
+      // Untouched by the write.
+      expect(handlers.getCachedSize("/test/a")).toBe(150);
+
+      native.resolveActive(sampleJson);
+      await tick();
+      expect(native.getFolderSize).toHaveBeenCalledTimes(2);
+      expect(handlers.getCachedSize("/test")).toBeUndefined();
+
+      // Measured again: what it finishes is kept, and the count only goes up.
+      native.finish({ "/test/b": [90, 100, 2, 0] });
+      expect(handlers.getCachedSize("/test/b")).toBe(90);
+      expect(handlers.getStatus({ jobId }).measuredFolderCount).toBe(2);
+    });
+
+    // A folder finished after a delete removed something from it already leaves it out:
+    // taking it off again when the delete ends would count it twice.
+    it("measures again, rather than adjusts, a folder stored while a delete was running", async () => {
+      resetResponseCacheState();
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers({ ...native, homePath: "/Users/demo" });
+      handlers.start({ path: "/Users/demo/Work" });
+      native.finish({ "/Users/demo/Work/old": [1_000, 2_000, 4, 0] });
+      native.resolveActive(
+        JSON.stringify({
+          total: 5_000,
+          diskTotal: 10_000,
+          fileCount: 20,
+          folderCount: 2,
+          dev: 16,
+          dirs: {},
+        }),
+      );
+      await tick();
+
+      noteWriteStarting();
+      handlers.start({ path: "/Users/demo/Projects" });
+      // Finished after the delete below had already taken a.txt out of it.
+      native.finish({ "/Users/demo/Projects/app": [300, 600, 3, 0] });
+      native.resolveActive(
+        JSON.stringify({
+          total: 800,
+          diskTotal: 1_600,
+          fileCount: 6,
+          folderCount: 1,
+          dev: 16,
+          dirs: {},
+        }),
+      );
+      await tick();
+      const removedFile = (path: string) => ({
+        path,
+        item: { kind: "file" as const, sizeBytes: 100, diskBytes: 200, dev: 16 },
+        intoHomeTrash: false,
+      });
+      clearResponseCaches(
+        [],
+        [removedFile("/Users/demo/Projects/app/a.txt"), removedFile("/Users/demo/Work/old/b.txt")],
+      );
+
+      expect(handlers.getCachedSize("/Users/demo/Projects/app")).toBeUndefined();
+      expect(handlers.getCachedSize("/Users/demo/Projects")).toBeUndefined();
+      // Stored before the delete started: adjusted as before.
+      expect(handlers.getCachedSize("/Users/demo/Work/old")).toBe(900);
+      expect(handlers.getCachedSize("/Users/demo/Work")).toBe(4_900);
+      resetResponseCacheState();
+    });
+
+    it("learns whether the Trash was read from the folders as they are finished", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers({ ...native, homePath: "/Users/demo" });
+      handlers.start({ path: "/Users" });
+      native.finish({
+        "/Users/demo/Downloads": [600, 1_200, 6, 0],
+        "/Users/demo/.Trash": [50, 100, 1, 0],
+      });
+      native.finish({ "/Users/demo": [1_000, 2_000, 10, 3] });
+      native.resolveActive(
+        JSON.stringify({
+          total: 1_000,
+          diskTotal: 2_000,
+          fileCount: 10,
+          folderCount: 4,
+          dev: 16,
+          dirs: {},
+        }),
+      );
+      await tick();
+
+      clearResponseCaches([], [trashedZip]);
+
+      // The Trash was counted, so the zip is still in the home folder.
+      expect(handlers.getCachedSize("/Users/demo")).toBe(1_000);
+      expect(handlers.getCachedSize("/Users/demo/.Trash")).toBe(250);
+    });
+  });
+
   it("start with recalculate clears cache", async () => {
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);
@@ -316,7 +489,7 @@ describe("createFolderSizeHandlers", () => {
 
     // Second job should now be running
     expect(native.getFolderSize).toHaveBeenCalledTimes(2);
-    expect(native.getFolderSize).toHaveBeenLastCalledWith("/test/b");
+    expect(native.getFolderSize).toHaveBeenLastCalledWith("/test/b", expect.any(Function));
   });
 
   it("error job has null diskBytes and counts", async () => {

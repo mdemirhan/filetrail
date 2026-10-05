@@ -13,8 +13,15 @@
  *   - folder count (subfolders at any depth, packages included; a package's
  *     contents count too, as they are walked like any folder)
  *
- * Exposes three functions:
- *   nativeFolderSize(path) -> Promise<string>  -- JSON with totals + per-dir stats
+ * Each folder is finished as soon as everything inside it has been walked: it
+ * counts its own listing and each sub-folder not finished yet, and whichever
+ * thread brings that count to zero adds the folder's totals into its parent's
+ * and puts the folder on the finished list. JS takes from that list while the
+ * walk runs; whatever is left on it when the walk ends comes with the result.
+ *
+ * Exposes four functions:
+ *   nativeFolderSize(path) -> Promise<string>  -- JSON with totals + finished dirs not yet taken
+ *   nativeFolderSizeTakeFinished() -> string | null -- JSON of dirs finished since the last take
  *   nativeFolderSizeCancel() -> void           -- cancels active walk
  *   nativeItemSize(path) -> Promise<object>    -- one item, counted as the walk counts it
  *
@@ -51,7 +58,7 @@ typedef struct {
   int64_t folder_count;
 } dir_stats_t;
 
-/* ── Output linked list (for JSON building) ──────────────────────── */
+/* ── Finished directories (for JSON building) ────────────────────── */
 
 typedef struct dir_entry {
   char *path;
@@ -59,129 +66,92 @@ typedef struct dir_entry {
   struct dir_entry *next;
 } dir_entry_t;
 
-/* ── Per-directory record (thread-local collection) ──────────────── */
-
+/* Folders finished and not yet handed to JS: workers add, the JS thread takes. */
 typedef struct {
-  char *path;
-  int64_t direct_bytes;      /* logical bytes of files directly in this directory */
-  int64_t direct_disk_bytes; /* allocated bytes of files directly in this directory */
-  int64_t direct_file_count; /* number of files directly in this directory */
-  int64_t direct_folder_count; /* number of folders directly in this directory */
-} dir_record_t;
+  pthread_mutex_t lock;
+  dir_entry_t *head;
+} finished_list_t;
 
-typedef struct {
-  dir_record_t *items;
-  int count;
-  int capacity;
-} dir_record_list_t;
-
-static void drl_init(dir_record_list_t *l) {
-  l->items = NULL;
-  l->count = 0;
-  l->capacity = 0;
-}
-
-/* Returns 1 on success, 0 on allocation failure (list left unchanged). */
-static int drl_push(dir_record_list_t *l, const char *path,
-                    int64_t bytes, int64_t disk_bytes, int64_t file_count,
-                    int64_t folder_count) {
-  if (l->count == l->capacity) {
-    int new_capacity = l->capacity ? l->capacity * 2 : 256;
-    dir_record_t *new_items =
-        realloc(l->items, (size_t)new_capacity * sizeof(dir_record_t));
-    if (!new_items) return 0;
-    l->items = new_items;
-    l->capacity = new_capacity;
-  }
-  char *path_copy = strdup(path);
-  if (!path_copy) return 0;
-  l->items[l->count].path = path_copy;
-  l->items[l->count].direct_bytes = bytes;
-  l->items[l->count].direct_disk_bytes = disk_bytes;
-  l->items[l->count].direct_file_count = file_count;
-  l->items[l->count].direct_folder_count = folder_count;
-  l->count++;
+/* Takes ownership of `path`. Returns 1 on success, 0 on allocation failure. */
+static int finished_push(finished_list_t *list, char *path, dir_stats_t stats) {
+  dir_entry_t *entry = malloc(sizeof(dir_entry_t));
+  if (!entry) return 0;
+  entry->path = path;
+  entry->stats = stats;
+  pthread_mutex_lock(&list->lock);
+  entry->next = list->head;
+  list->head = entry;
+  pthread_mutex_unlock(&list->lock);
   return 1;
 }
 
-static void drl_free_contents(dir_record_list_t *l) {
-  for (int i = 0; i < l->count; i++) free(l->items[i].path);
-  free(l->items);
+/* Everything on the list, which is left empty; the caller frees it. */
+static dir_entry_t *finished_take(finished_list_t *list) {
+  pthread_mutex_lock(&list->lock);
+  dir_entry_t *head = list->head;
+  list->head = NULL;
+  pthread_mutex_unlock(&list->lock);
+  return head;
 }
 
-/* ── Hash map for bottom-up aggregation ──────────────────────────── */
-
-typedef struct hm_node {
-  char *key;
-  dir_stats_t value;
-  struct hm_node *next;
-} hm_node_t;
-
-typedef struct {
-  hm_node_t **buckets;
-  int num_buckets;
-} hash_map_t;
-
-static uint64_t fnv1a(const char *s) {
-  uint64_t h = 0xcbf29ce484222325ULL;
-  while (*s) {
-    h ^= (uint8_t)*s++;
-    h *= 0x100000001b3ULL;
+static void free_dir_entries(dir_entry_t *head) {
+  while (head) {
+    dir_entry_t *next = head->next;
+    free(head->path);
+    free(head);
+    head = next;
   }
-  return h;
 }
 
-static void hm_init(hash_map_t *hm, int num_buckets) {
-  hm->num_buckets = num_buckets;
-  hm->buckets = calloc((size_t)num_buckets, sizeof(hm_node_t *));
-}
+/* ── A folder being walked ───────────────────────────────────────── */
 
-static dir_stats_t *hm_get_or_insert(hash_map_t *hm, const char *key) {
-  int idx = (int)(fnv1a(key) % (uint64_t)hm->num_buckets);
-  hm_node_t *n = hm->buckets[idx];
-  while (n) {
-    if (strcmp(n->key, key) == 0) return &n->value;
-    n = n->next;
+typedef struct walk_dir {
+  char *path;              /* owned until the folder is finished, then the finished list's */
+  struct walk_dir *parent; /* NULL for the root */
+  /* Its own listing, plus each sub-folder not finished yet: zero once all is counted. */
+  atomic_int pending;
+  /* Its own files and folders, plus the totals of each finished sub-folder. */
+  _Atomic int64_t size_bytes;
+  _Atomic int64_t disk_bytes;
+  _Atomic int64_t file_count;
+  _Atomic int64_t folder_count;
+  /* The list of folders the creating thread made, all freed when the walk ends: one
+     that never finishes (the walk stopped) has no one else to free it. */
+  struct walk_dir *next_allocated;
+} walk_dir_t;
+
+/* Takes ownership of `path` (freed here on failure). NULL on allocation failure. */
+static walk_dir_t *walk_dir_new(char *path, walk_dir_t *parent) {
+  walk_dir_t *dir = malloc(sizeof(walk_dir_t));
+  if (!dir) {
+    free(path);
+    return NULL;
   }
-  n = malloc(sizeof(hm_node_t));
-  n->key = strdup(key);
-  n->value.size_bytes = 0;
-  n->value.disk_bytes = 0;
-  n->value.file_count = 0;
-  n->value.folder_count = 0;
-  n->next = hm->buckets[idx];
-  hm->buckets[idx] = n;
-  return &n->value;
+  dir->path = path;
+  dir->parent = parent;
+  atomic_init(&dir->pending, 1);
+  atomic_init(&dir->size_bytes, 0);
+  atomic_init(&dir->disk_bytes, 0);
+  atomic_init(&dir->file_count, 0);
+  atomic_init(&dir->folder_count, 0);
+  dir->next_allocated = NULL;
+  return dir;
 }
 
-static dir_stats_t *hm_get(hash_map_t *hm, const char *key) {
-  int idx = (int)(fnv1a(key) % (uint64_t)hm->num_buckets);
-  hm_node_t *n = hm->buckets[idx];
-  while (n) {
-    if (strcmp(n->key, key) == 0) return &n->value;
-    n = n->next;
+static void walk_dirs_free(walk_dir_t *head) {
+  while (head) {
+    walk_dir_t *next = head->next_allocated;
+    free(head->path);
+    free(head);
+    head = next;
   }
-  return NULL;
-}
-
-static void hm_free(hash_map_t *hm) {
-  for (int i = 0; i < hm->num_buckets; i++) {
-    hm_node_t *n = hm->buckets[i];
-    while (n) {
-      hm_node_t *next = n->next;
-      free(n->key);
-      free(n);
-      n = next;
-    }
-  }
-  free(hm->buckets);
 }
 
 /* ── Concurrent work queue ───────────────────────────────────────── */
 
 typedef struct dir_node {
   int fd;
-  char *path;
+  walk_dir_t *dir; /* not owned: freed with its thread's allocations */
   struct dir_node *next;
 } dir_node_t;
 
@@ -215,16 +185,17 @@ static void wq_fail(work_queue_t *wq) {
   pthread_mutex_unlock(&wq->lock);
 }
 
+/* Whether the walk was cancelled or failed: what it has counted since may be partial. */
+static int wq_stopped(work_queue_t *wq) {
+  return atomic_load(wq->cancelled) || atomic_load(&wq->failed);
+}
+
 /* Returns 1 on success (queue owns fd), 0 on allocation failure. */
-static int wq_push(work_queue_t *wq, int fd, const char *path) {
+static int wq_push(work_queue_t *wq, int fd, walk_dir_t *dir) {
   dir_node_t *node = malloc(sizeof(dir_node_t));
   if (!node) return 0;
   node->fd = fd;
-  node->path = strdup(path);
-  if (!node->path) {
-    free(node);
-    return 0;
-  }
+  node->dir = dir;
   pthread_mutex_lock(&wq->lock);
   node->next = wq->head;
   wq->head = node;
@@ -233,11 +204,11 @@ static int wq_push(work_queue_t *wq, int fd, const char *path) {
   return 1;
 }
 
-/* Returns 1 and fills fd_out/path_out on success, 0 when all work is done. */
-static int wq_pop(work_queue_t *wq, int *fd_out, char **path_out) {
+/* Returns 1 and fills fd_out/dir_out on success, 0 when all work is done. */
+static int wq_pop(work_queue_t *wq, int *fd_out, walk_dir_t **dir_out) {
   pthread_mutex_lock(&wq->lock);
   for (;;) {
-    if (atomic_load(wq->cancelled) || atomic_load(&wq->failed) || wq->finished) {
+    if (wq_stopped(wq) || wq->finished) {
       pthread_mutex_unlock(&wq->lock);
       return 0;
     }
@@ -245,7 +216,7 @@ static int wq_pop(work_queue_t *wq, int *fd_out, char **path_out) {
       dir_node_t *node = wq->head;
       wq->head = node->next;
       *fd_out = node->fd;
-      *path_out = node->path; /* caller owns this allocation */
+      *dir_out = node->dir;
       free(node);
       atomic_fetch_add(&wq->active, 1);
       pthread_mutex_unlock(&wq->lock);
@@ -274,7 +245,6 @@ static void wq_destroy(work_queue_t *wq) {
   while (n) {
     dir_node_t *next = n->next;
     close(n->fd);
-    free(n->path);
     free(n);
     n = next;
   }
@@ -298,6 +268,18 @@ static void init_attrlist(void) {
   g_attrlist.fileattr = ATTR_FILE_ALLOCSIZE | ATTR_FILE_DATALENGTH;
 }
 
+/* ── Worker thread state ─────────────────────────────────────────── */
+
+typedef struct {
+  work_queue_t *wq;
+  finished_list_t *finished;
+  int64_t total_bytes;
+  int64_t total_disk_bytes;
+  int64_t total_file_count;
+  int64_t total_folder_count;
+  walk_dir_t *allocated; /* the folders this thread made */
+} thread_arg_t;
+
 /* ── Process one directory with getattrlistbulk ──────────────────── */
 
 typedef struct {
@@ -307,16 +289,19 @@ typedef struct {
   int64_t direct_folder_count;
 } process_dir_result_t;
 
-static process_dir_result_t process_dir(int dirfd, const char *dir_path,
-                                        work_queue_t *wq, dir_record_list_t *local_dirs,
+/* Lists `dir` and queues its sub-folders on the same disk; adds what is directly in it
+   to its totals. */
+static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t *ta,
                                         char *buf) {
+  work_queue_t *wq = ta->wq;
+  const char *dir_path = dir->path;
   int64_t direct_bytes = 0;
   int64_t direct_disk_bytes = 0;
   int64_t direct_file_count = 0;
   int64_t direct_folder_count = 0;
 
   for (;;) {
-    if (atomic_load(wq->cancelled) || atomic_load(&wq->failed)) break;
+    if (wq_stopped(wq)) break;
 
     int count = getattrlistbulk(dirfd, &g_attrlist, buf, BULK_BUF_SIZE, 0);
     if (count <= 0) break;
@@ -383,18 +368,25 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
             size_t dir_len = strlen(dir_path);
             size_t name_len = strlen(name);
             char *child_path = malloc(dir_len + 1 + name_len + 1);
-            if (!child_path) {
-              close(subfd);
-              wq_fail(wq);
-            } else {
+            walk_dir_t *child = NULL;
+            if (child_path) {
               memcpy(child_path, dir_path, dir_len);
               child_path[dir_len] = '/';
               memcpy(child_path + dir_len + 1, name, name_len + 1);
-              if (!wq_push(wq, subfd, child_path)) {
+              child = walk_dir_new(child_path, dir);
+            }
+            if (!child) {
+              close(subfd);
+              wq_fail(wq);
+            } else {
+              child->next_allocated = ta->allocated;
+              ta->allocated = child;
+              /* Counted before it is queued, so it can't finish before it is waited for. */
+              atomic_fetch_add(&dir->pending, 1);
+              if (!wq_push(wq, subfd, child)) {
                 close(subfd);
                 wq_fail(wq);
               }
-              free(child_path);
             }
           } else {
             close(subfd);
@@ -407,10 +399,10 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
   }
 
   close(dirfd);
-  if (!drl_push(local_dirs, dir_path, direct_bytes, direct_disk_bytes, direct_file_count,
-                direct_folder_count)) {
-    wq_fail(wq);
-  }
+  atomic_fetch_add(&dir->size_bytes, direct_bytes);
+  atomic_fetch_add(&dir->disk_bytes, direct_disk_bytes);
+  atomic_fetch_add(&dir->file_count, direct_file_count);
+  atomic_fetch_add(&dir->folder_count, direct_folder_count);
 
   process_dir_result_t result;
   result.direct_bytes = direct_bytes;
@@ -420,16 +412,36 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
   return result;
 }
 
-/* ── Worker thread ───────────────────────────────────────────────── */
+/* Marks one part of `dir` done: its own listing, or a sub-folder. The part that finishes
+   the folder puts it on the finished list and adds its totals into its parent's, which
+   is one part of the parent done in turn. Once the walk has stopped nothing more is
+   finished, as a listing cut short may have counted only part of a folder. */
+static void finish_part(thread_arg_t *ta, walk_dir_t *dir) {
+  while (atomic_fetch_sub(&dir->pending, 1) == 1) {
+    walk_dir_t *parent = dir->parent;
+    /* The root's totals are the result. */
+    if (!parent || wq_stopped(ta->wq)) {
+      return;
+    }
+    dir_stats_t stats;
+    stats.size_bytes = atomic_load(&dir->size_bytes);
+    stats.disk_bytes = atomic_load(&dir->disk_bytes);
+    stats.file_count = atomic_load(&dir->file_count);
+    stats.folder_count = atomic_load(&dir->folder_count);
+    if (!finished_push(ta->finished, dir->path, stats)) {
+      wq_fail(ta->wq);
+      return;
+    }
+    dir->path = NULL;
+    atomic_fetch_add(&parent->size_bytes, stats.size_bytes);
+    atomic_fetch_add(&parent->disk_bytes, stats.disk_bytes);
+    atomic_fetch_add(&parent->file_count, stats.file_count);
+    atomic_fetch_add(&parent->folder_count, stats.folder_count);
+    dir = parent;
+  }
+}
 
-typedef struct {
-  work_queue_t *wq;
-  int64_t total_bytes;
-  int64_t total_disk_bytes;
-  int64_t total_file_count;
-  int64_t total_folder_count;
-  dir_record_list_t dirs;
-} thread_arg_t;
+/* ── Worker thread ───────────────────────────────────────────────── */
 
 static void *worker_fn(void *arg) {
   thread_arg_t *ta = (thread_arg_t *)arg;
@@ -443,141 +455,19 @@ static void *worker_fn(void *arg) {
   }
 
   int fd;
-  char *path;
-  while (wq_pop(ta->wq, &fd, &path)) {
-    process_dir_result_t r = process_dir(fd, path, ta->wq, &ta->dirs, buf);
+  walk_dir_t *dir;
+  while (wq_pop(ta->wq, &fd, &dir)) {
+    process_dir_result_t r = process_dir(fd, dir, ta, buf);
     ta->total_bytes += r.direct_bytes;
     ta->total_disk_bytes += r.direct_disk_bytes;
     ta->total_file_count += r.direct_file_count;
     ta->total_folder_count += r.direct_folder_count;
-    free(path);
+    finish_part(ta, dir);
     wq_done(ta->wq);
   }
 
   free(buf);
   return NULL;
-}
-
-/* ── Bottom-up aggregation of per-directory sizes ────────────────── */
-
-static int cmp_record_path_len_desc(const void *a, const void *b) {
-  size_t la = strlen(((const dir_record_t *)a)->path);
-  size_t lb = strlen(((const dir_record_t *)b)->path);
-  return (lb > la) - (lb < la);
-}
-
-/**
- * Merge thread-local dir records, aggregate recursive stats bottom-up,
- * and build the output linked list (excluding the root path).
- */
-static void aggregate_dir_sizes(thread_arg_t *args, int num_threads,
-                                const char *root_path,
-                                dir_entry_t **out_dirs, int *out_count) {
-  /* Count total records across all threads. */
-  int total = 0;
-  for (int i = 0; i < num_threads; i++) total += args[i].dirs.count;
-
-  if (total == 0) {
-    *out_dirs = NULL;
-    *out_count = 0;
-    return;
-  }
-
-  /* Merge into one flat array. */
-  dir_record_t *all = malloc((size_t)total * sizeof(dir_record_t));
-  int idx = 0;
-  for (int i = 0; i < num_threads; i++) {
-    for (int j = 0; j < args[i].dirs.count; j++) {
-      all[idx].path = args[i].dirs.items[j].path;  /* borrow pointer */
-      all[idx].direct_bytes = args[i].dirs.items[j].direct_bytes;
-      all[idx].direct_disk_bytes = args[i].dirs.items[j].direct_disk_bytes;
-      all[idx].direct_file_count = args[i].dirs.items[j].direct_file_count;
-      all[idx].direct_folder_count = args[i].dirs.items[j].direct_folder_count;
-      idx++;
-    }
-  }
-
-  /* Sort deepest paths first for bottom-up propagation. */
-  qsort(all, (size_t)total, sizeof(dir_record_t), cmp_record_path_len_desc);
-
-  /* Build hash map: path -> recursive stats (initialized to direct stats). */
-  int hm_size = 1;
-  while (hm_size < total * 2) hm_size <<= 1;
-  hash_map_t hm;
-  hm_init(&hm, hm_size);
-
-  for (int i = 0; i < total; i++) {
-    dir_stats_t *s = hm_get_or_insert(&hm, all[i].path);
-    s->size_bytes = all[i].direct_bytes;
-    s->disk_bytes = all[i].direct_disk_bytes;
-    s->file_count = all[i].direct_file_count;
-    s->folder_count = all[i].direct_folder_count;
-  }
-
-  /* Propagate: for each directory (deepest first), add its recursive
-     stats to its parent directory's accumulator. */
-  size_t root_len = strlen(root_path);
-  char *parent_buf = NULL;
-  size_t parent_buf_cap = 0;
-
-  for (int i = 0; i < total; i++) {
-    const char *path = all[i].path;
-    size_t path_len = strlen(path);
-
-    /* Root has no parent to propagate to. */
-    if (path_len == root_len && memcmp(path, root_path, root_len) == 0) {
-      continue;
-    }
-
-    /* Find parent: strip last path component. */
-    if (path_len + 1 > parent_buf_cap) {
-      parent_buf_cap = path_len + 1;
-      parent_buf = realloc(parent_buf, parent_buf_cap);
-    }
-    memcpy(parent_buf, path, path_len + 1);
-    char *last_slash = strrchr(parent_buf, '/');
-    if (last_slash && last_slash != parent_buf) {
-      *last_slash = '\0';
-    } else if (last_slash == parent_buf) {
-      parent_buf[1] = '\0'; /* parent is "/" */
-    }
-
-    dir_stats_t *self_val = hm_get(&hm, path);
-    dir_stats_t *parent_val = hm_get(&hm, parent_buf);
-    if (self_val && parent_val) {
-      parent_val->size_bytes += self_val->size_bytes;
-      parent_val->disk_bytes += self_val->disk_bytes;
-      parent_val->file_count += self_val->file_count;
-      parent_val->folder_count += self_val->folder_count;
-    }
-  }
-
-  free(parent_buf);
-
-  /* Build output linked list (excluding root). */
-  dir_entry_t *dirs = NULL;
-  int dir_count = 0;
-  for (int i = 0; i < total; i++) {
-    size_t path_len = strlen(all[i].path);
-    if (path_len == root_len && memcmp(all[i].path, root_path, root_len) == 0) {
-      continue;
-    }
-    dir_stats_t *recursive = hm_get(&hm, all[i].path);
-    if (!recursive) continue;
-
-    dir_entry_t *e = malloc(sizeof(dir_entry_t));
-    e->path = strdup(all[i].path);
-    e->stats = *recursive;
-    e->next = dirs;
-    dirs = e;
-    dir_count++;
-  }
-
-  hm_free(&hm);
-  free(all);
-
-  *out_dirs = dirs;
-  *out_count = dir_count;
 }
 
 /* ── Async work data ─────────────────────────────────────────────── */
@@ -592,9 +482,10 @@ typedef struct {
   int64_t disk_total;
   int64_t total_file_count;
   int64_t total_folder_count;
-  int64_t dev; /* the disk walked: the walk never leaves it */
-  dir_entry_t *dirs;
-  int dir_count;
+  /* The disk walked: the walk never leaves it. Set before any worker starts, so a
+     folder on the finished list was put there after it was set. */
+  int64_t dev;
+  finished_list_t finished;
 } folder_size_work_t;
 
 static folder_size_work_t *active_work = NULL;
@@ -621,12 +512,20 @@ static void execute_folder_size(napi_env env, void *data) {
   }
 
   w->dev = (int64_t)root_stat.st_dev;
+  char *root_path = strdup(w->root_path);
+  walk_dir_t *root = root_path ? walk_dir_new(root_path, NULL) : NULL;
+  if (!root) {
+    w->errnum = ENOMEM;
+    close(root_fd);
+    return;
+  }
   work_queue_t wq;
   wq_init(&wq, root_stat.st_dev, &w->cancelled);
-  if (!wq_push(&wq, root_fd, w->root_path)) {
+  if (!wq_push(&wq, root_fd, root)) {
     w->errnum = ENOMEM;
     close(root_fd);
     wq_destroy(&wq);
+    walk_dirs_free(root);
     return;
   }
 
@@ -635,11 +534,12 @@ static void execute_folder_size(napi_env env, void *data) {
   pthread_t threads[NUM_THREADS];
   for (int i = 0; i < NUM_THREADS; i++) {
     args[i].wq = &wq;
+    args[i].finished = &w->finished;
     args[i].total_bytes = 0;
     args[i].total_disk_bytes = 0;
     args[i].total_file_count = 0;
     args[i].total_folder_count = 0;
-    drl_init(&args[i].dirs);
+    args[i].allocated = NULL;
     pthread_create(&threads[i], NULL, worker_fn, &args[i]);
   }
 
@@ -660,93 +560,103 @@ static void execute_folder_size(napi_env env, void *data) {
     w->total_folder_count += args[i].total_folder_count;
   }
 
-  /* Aggregate per-directory recursive sizes and build output list. */
   if (atomic_load(&wq.failed)) {
     w->errnum = ENOMEM;
-  } else if (!atomic_load(&w->cancelled)) {
-    aggregate_dir_sizes(args, NUM_THREADS, w->root_path, &w->dirs, &w->dir_count);
   }
 
-  /* Clean up thread-local dir records. */
   for (int i = 0; i < NUM_THREADS; i++) {
-    drl_free_contents(&args[i].dirs);
+    walk_dirs_free(args[i].allocated);
   }
+  walk_dirs_free(root);
   wq_destroy(&wq);
 }
 
-/* ── Build JSON result string ────────────────────────────────────── */
+/* ── Build JSON ──────────────────────────────────────────────────── */
 
-static char *build_json_result(folder_size_work_t *w) {
-  size_t buf_cap = 512 + (size_t)w->dir_count * 300;
-  char *buf = (char *)malloc(buf_cap);
-  if (!buf) return NULL;
+typedef struct {
+  char *data;
+  size_t length;
+  size_t capacity;
+} json_buf_t;
 
-  int written = snprintf(buf, buf_cap,
-    "{\"total\":%lld,\"diskTotal\":%lld,\"fileCount\":%lld,\"folderCount\":%lld,\"dev\":%lld,\"dirs\":{",
+/* Returns 1 on success, 0 on allocation failure (the buffer is then freed). */
+static int jb_reserve(json_buf_t *b, size_t extra) {
+  if (b->length + extra < b->capacity) return 1;
+  size_t capacity = (b->length + extra) * 2;
+  char *data = realloc(b->data, capacity);
+  if (!data) {
+    free(b->data);
+    b->data = NULL;
+    return 0;
+  }
+  b->data = data;
+  b->capacity = capacity;
+  return 1;
+}
+
+/* Appends `"dirs":{"path":[N,N,N,N],...}` and the closing brace of the object. */
+static int jb_append_dirs_and_close(json_buf_t *b, const dir_entry_t *entry) {
+  static const char hex[] = "0123456789abcdef";
+  if (!jb_reserve(b, 16)) return 0;
+  b->length += (size_t)snprintf(b->data + b->length, b->capacity - b->length, "\"dirs\":{");
+  int first = 1;
+  for (; entry; entry = entry->next) {
+    size_t path_len = strlen(entry->path);
+    /* Every byte may need a 6-byte \u00XX escape; then 4 numbers. */
+    if (!jb_reserve(b, path_len * 6 + 120)) return 0;
+    if (!first) b->data[b->length++] = ',';
+    first = 0;
+    b->data[b->length++] = '"';
+    for (size_t i = 0; i < path_len; i++) {
+      unsigned char c = (unsigned char)entry->path[i];
+      if (c == '"' || c == '\\') {
+        b->data[b->length++] = '\\';
+        b->data[b->length++] = (char)c;
+      } else if (c < 0x20) {
+        /* A newline or other control character in a name. */
+        memcpy(b->data + b->length, "\\u00", 4);
+        b->data[b->length + 4] = hex[c >> 4];
+        b->data[b->length + 5] = hex[c & 0xf];
+        b->length += 6;
+      } else {
+        b->data[b->length++] = (char)c;
+      }
+    }
+    b->length += (size_t)snprintf(b->data + b->length, b->capacity - b->length,
+                                  "\":[%lld,%lld,%lld,%lld]",
+                                  (long long)entry->stats.size_bytes,
+                                  (long long)entry->stats.disk_bytes,
+                                  (long long)entry->stats.file_count,
+                                  (long long)entry->stats.folder_count);
+  }
+  if (!jb_reserve(b, 3)) return 0;
+  b->data[b->length++] = '}';
+  b->data[b->length++] = '}';
+  b->data[b->length] = '\0';
+  return 1;
+}
+
+/* `{"total":N,"diskTotal":N,"fileCount":N,"folderCount":N,"dev":N,"dirs":{...}}`, with
+   the finished folders not yet taken. NULL on allocation failure. */
+static char *build_result_json(folder_size_work_t *w, const dir_entry_t *dirs) {
+  json_buf_t b = {NULL, 0, 0};
+  if (!jb_reserve(&b, 512)) return NULL;
+  b.length = (size_t)snprintf(b.data, b.capacity,
+    "{\"total\":%lld,\"diskTotal\":%lld,\"fileCount\":%lld,\"folderCount\":%lld,\"dev\":%lld,",
     (long long)w->total_bytes,
     (long long)w->disk_total,
     (long long)w->total_file_count,
     (long long)w->total_folder_count,
     (long long)w->dev);
-  size_t pos = (size_t)written;
-
-  int first = 1;
-  dir_entry_t *entry = w->dirs;
-  while (entry) {
-    size_t path_len = strlen(entry->path);
-    /* Each dir entry: "path":[N,N,N,N] -- need space for path escaping + 4 numbers */
-    size_t needed = pos + path_len * 2 + 120;
-    if (needed >= buf_cap) {
-      buf_cap = needed * 2;
-      char *new_buf = (char *)realloc(buf, buf_cap);
-      if (!new_buf) { free(buf); return NULL; }
-      buf = new_buf;
-    }
-
-    if (!first) buf[pos++] = ',';
-    first = 0;
-
-    buf[pos++] = '"';
-    for (size_t i = 0; i < path_len; i++) {
-      char c = entry->path[i];
-      if (c == '"' || c == '\\') buf[pos++] = '\\';
-      buf[pos++] = c;
-    }
-    buf[pos++] = '"';
-    buf[pos++] = ':';
-
-    int num_written = snprintf(buf + pos, buf_cap - pos, "[%lld,%lld,%lld,%lld]",
-      (long long)entry->stats.size_bytes,
-      (long long)entry->stats.disk_bytes,
-      (long long)entry->stats.file_count,
-      (long long)entry->stats.folder_count);
-    pos += (size_t)num_written;
-
-    entry = entry->next;
-  }
-
-  if (pos + 3 >= buf_cap) {
-    buf_cap = pos + 16;
-    char *new_buf = (char *)realloc(buf, buf_cap);
-    if (!new_buf) { free(buf); return NULL; }
-    buf = new_buf;
-  }
-  buf[pos++] = '}';
-  buf[pos++] = '}';
-  buf[pos] = '\0';
-
-  return buf;
+  return jb_append_dirs_and_close(&b, dirs) ? b.data : NULL;
 }
 
-/* ── Free directory entries ──────────────────────────────────────── */
-
-static void free_dir_entries(dir_entry_t *head) {
-  while (head) {
-    dir_entry_t *next = head->next;
-    free(head->path);
-    free(head);
-    head = next;
-  }
+/* `{"dev":N,"dirs":{...}}`. NULL on allocation failure. */
+static char *build_finished_json(int64_t dev, const dir_entry_t *dirs) {
+  json_buf_t b = {NULL, 0, 0};
+  if (!jb_reserve(&b, 64)) return NULL;
+  b.length = (size_t)snprintf(b.data, b.capacity, "{\"dev\":%lld,", (long long)dev);
+  return jb_append_dirs_and_close(&b, dirs) ? b.data : NULL;
 }
 
 /* ── Completion callback on main thread ──────────────────────────── */
@@ -758,6 +668,10 @@ static void complete_folder_size(napi_env env, napi_status status, void *data) {
     active_work = NULL;
   }
 
+  /* Folders finished and not taken yet: every one was finished before the walk stopped,
+     so each is whole even when the walk was cancelled. */
+  dir_entry_t *leftover = finished_take(&w->finished);
+
   if (status == napi_cancelled || atomic_load(&w->cancelled)) {
     napi_value err_msg;
     napi_create_string_utf8(env, "Folder size calculation cancelled", NAPI_AUTO_LENGTH, &err_msg);
@@ -768,13 +682,23 @@ static void complete_folder_size(napi_env env, napi_status status, void *data) {
     napi_create_string_utf8(env, "ECANCELLED", NAPI_AUTO_LENGTH, &code_val);
     napi_set_named_property(env, error, "code", code_val);
 
+    if (leftover && w->errnum == 0) {
+      char *json = build_finished_json(w->dev, leftover);
+      if (json) {
+        napi_value dirs_val;
+        napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &dirs_val);
+        napi_set_named_property(env, error, "finished", dirs_val);
+        free(json);
+      }
+    }
+
     napi_reject_deferred(env, w->deferred, error);
   } else if (w->errnum != 0) {
     napi_value error = native_errno_error(env, w->errnum, "folder size", w->root_path, NULL);
 
     napi_reject_deferred(env, w->deferred, error);
   } else {
-    char *json = build_json_result(w);
+    char *json = build_result_json(w, leftover);
     if (json) {
       napi_value result;
       napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &result);
@@ -790,7 +714,8 @@ static void complete_folder_size(napi_env env, napi_status status, void *data) {
   }
 
   napi_delete_async_work(env, w->work);
-  free_dir_entries(w->dirs);
+  free_dir_entries(leftover);
+  pthread_mutex_destroy(&w->finished.lock);
   free(w->root_path);
   free(w);
 }
@@ -824,6 +749,8 @@ static napi_value native_folder_size(napi_env env, napi_callback_info info) {
   }
   w->root_path = root_path;
   atomic_init(&w->cancelled, 0);
+  pthread_mutex_init(&w->finished.lock, NULL);
+  w->finished.head = NULL;
 
   napi_value promise;
   napi_create_promise(env, &w->deferred, &promise);
@@ -837,6 +764,32 @@ static napi_value native_folder_size(napi_env env, napi_callback_info info) {
   napi_queue_async_work(env, w->work);
 
   return promise;
+}
+
+/* ── JS entry: nativeFolderSizeTakeFinished() -> string | null ────── */
+
+/* The folders the active walk has finished since the last take, as
+   `{"dev":N,"dirs":{...}}`, or null when there are none (or no walk is active). */
+static napi_value native_folder_size_take_finished(napi_env env, napi_callback_info info) {
+  (void)info;
+  napi_value result;
+  napi_get_null(env, &result);
+  if (!active_work) {
+    return result;
+  }
+  dir_entry_t *dirs = finished_take(&active_work->finished);
+  if (!dirs) {
+    return result;
+  }
+  char *json = build_finished_json(active_work->dev, dirs);
+  free_dir_entries(dirs);
+  if (!json) {
+    napi_throw_error(env, NULL, "Out of memory");
+    return NULL;
+  }
+  napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &result);
+  free(json);
+  return result;
 }
 
 /* ── JS entry: nativeFolderSizeCancel() -> void ───────────────────── */
@@ -985,6 +938,10 @@ napi_value register_folder_size(napi_env env, napi_value exports) {
   napi_create_function(env, "nativeFolderSizeCancel", NAPI_AUTO_LENGTH,
                        native_folder_size_cancel, NULL, &fn);
   napi_set_named_property(env, exports, "nativeFolderSizeCancel", fn);
+
+  napi_create_function(env, "nativeFolderSizeTakeFinished", NAPI_AUTO_LENGTH,
+                       native_folder_size_take_finished, NULL, &fn);
+  napi_set_named_property(env, exports, "nativeFolderSizeTakeFinished", fn);
 
   napi_create_function(env, "nativeItemSize", NAPI_AUTO_LENGTH, native_item_size, NULL, &fn);
   napi_set_named_property(env, exports, "nativeItemSize", fn);

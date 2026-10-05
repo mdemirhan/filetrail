@@ -314,6 +314,7 @@ describe("ipc contracts", () => {
         diskBytes: 1200,
         fileCount: 42,
         folderCount: 3,
+        measuredFolderCount: 0,
         error: null,
       }),
     ).toEqual({
@@ -323,6 +324,7 @@ describe("ipc contracts", () => {
       diskBytes: 1200,
       fileCount: 42,
       folderCount: 3,
+      measuredFolderCount: 0,
       error: null,
     });
 
@@ -334,6 +336,7 @@ describe("ipc contracts", () => {
         diskBytes: null,
         fileCount: null,
         folderCount: null,
+        measuredFolderCount: 0,
         error: null,
       }),
     ).toThrow();

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -157,6 +158,196 @@ describe("nativeFolderSize", () => {
     } finally {
       rmSync(emptyDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("nativeFolderSize finished folders", () => {
+  type Stats = [number, number, number, number];
+  type Finished = { dev: number; dirs: Record<string, Stats> };
+  type Result = Finished & {
+    total: number;
+    diskTotal: number;
+    fileCount: number;
+    folderCount: number;
+  };
+
+  let root: string;
+
+  // A tree of 5 + 25 + 125 = 155 folders, each with a few small files: enough folders that
+  // a walk is usually taken from more than once before it ends.
+  function makeTree(dir: string, depth: number): void {
+    for (let i = 0; i < 5; i++) {
+      const child = join(dir, `d${i}`);
+      mkdirSync(child);
+      for (let f = 0; f <= i; f++) {
+        writeFileSync(join(child, `f${f}.txt`), "x".repeat(10 * (f + 1) + depth));
+      }
+      if (depth > 1) {
+        makeTree(child, depth - 1);
+      }
+    }
+  }
+
+  // What measuring each folder should give, read with lstat: [size, files, folders].
+  function expectedSizes(dir: string, out: Map<string, [number, number, number]>) {
+    let size = 0;
+    let files = 0;
+    let folders = 0;
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      const info = lstatSync(path);
+      if (info.isDirectory()) {
+        const [childSize, childFiles, childFolders] = expectedSizes(path, out);
+        size += childSize;
+        files += childFiles;
+        folders += childFolders + 1;
+      } else {
+        size += info.size;
+        files += 1;
+      }
+    }
+    const sizes: [number, number, number] = [size, files, folders];
+    out.set(dir, sizes);
+    return sizes;
+  }
+
+  // Each reported folder once, with the sizes it should have.
+  function expectReportedOnce(
+    batches: Finished[],
+    expected: Map<string, [number, number, number]>,
+  ) {
+    const seen = new Set<string>();
+    for (const batch of batches) {
+      for (const [path, stats] of Object.entries(batch.dirs)) {
+        expect(seen.has(path)).toBe(false);
+        seen.add(path);
+        expect([stats[0], stats[2], stats[3]]).toEqual(expected.get(path));
+      }
+    }
+    return seen;
+  }
+
+  // Takes from the walk as often as the event loop allows until it ends.
+  async function takeUntilSettled(promise: Promise<string>, onTaken?: () => void) {
+    const batches: Finished[] = [];
+    let settled = false;
+    void promise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    while (!settled) {
+      const json = addon.nativeFolderSizeTakeFinished();
+      if (json !== null) {
+        batches.push(JSON.parse(json) as Finished);
+        onTaken?.();
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    return batches;
+  }
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-finished-"));
+    makeTree(root, 3);
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("reports every folder once, after the folders inside it, and leaves the rest for the result", async () => {
+    const expected = new Map<string, [number, number, number]>();
+    expectedSizes(root, expected);
+    const promise = addon.nativeFolderSize(root);
+    const batches = await takeUntilSettled(promise);
+    const result = JSON.parse(await promise) as Result;
+
+    const seen = expectReportedOnce([...batches, result], expected);
+    expect(seen.size).toBe(expected.size - 1);
+    expect(seen.has(root)).toBe(false);
+    expect([result.total, result.fileCount, result.folderCount]).toEqual(expected.get(root));
+    for (const batch of batches) {
+      expect(batch.dev).toBe(result.dev);
+    }
+    // A folder is finished only once everything inside it is: never in a batch before one
+    // of its sub-folders.
+    const batchOf = new Map<string, number>();
+    [...batches, result].forEach((batch, index) => {
+      for (const path of Object.keys(batch.dirs)) {
+        batchOf.set(path, index);
+      }
+    });
+    for (const [path, index] of batchOf) {
+      const parent = join(path, "..");
+      if (parent !== root) {
+        expect(expectDefined(batchOf.get(parent))).toBeGreaterThanOrEqual(index);
+      }
+    }
+  });
+
+  it("is null with no walk under way", () => {
+    expect(addon.nativeFolderSizeTakeFinished()).toBeNull();
+  });
+
+  it("keeps only whole folders when cancelled part way", async () => {
+    const expected = new Map<string, [number, number, number]>();
+    expectedSizes(root, expected);
+    const promise = addon.nativeFolderSize(root);
+    const batches = await takeUntilSettled(promise, () => addon.nativeFolderSizeCancel());
+    const outcome = await promise.then(
+      (json) => ({ result: JSON.parse(json) as Result }),
+      (error: { code?: string; finished?: string }) => ({ error }),
+    );
+    if ("error" in outcome) {
+      expect(outcome.error.code).toBe("ECANCELLED");
+      if (outcome.error.finished !== undefined) {
+        batches.push(JSON.parse(outcome.error.finished) as Finished);
+      }
+    } else {
+      // The walk ended before the first take could cancel it.
+      batches.push(outcome.result);
+    }
+    expectReportedOnce(batches, expected);
+  });
+
+  it("names a folder with a newline or quote in its name", async () => {
+    const odd = join(root, 'line\nbreak "quoted" \\ tab\t');
+    mkdirSync(odd);
+    writeFileSync(join(odd, "f.txt"), "x".repeat(7));
+    const result = JSON.parse(await addon.nativeFolderSize(root)) as Result;
+    expect(expectDefined(result.dirs[odd])[0]).toBe(7);
+  });
+
+  it("hands finished folders to the wrapper's callback, and the rest with the result", async () => {
+    const expected = new Map<string, [number, number, number]>();
+    expectedSizes(root, expected);
+    const batches: Finished[] = [];
+    const json = await wrapper.nativeFolderSize(root, (finished) => {
+      batches.push(JSON.parse(finished) as Finished);
+    });
+    const seen = expectReportedOnce([...batches, JSON.parse(json) as Result], expected);
+    expect(seen.size).toBe(expected.size - 1);
+  });
+
+  it("hands what a cancelled walk finished to the wrapper's callback before rejecting", async () => {
+    const expected = new Map<string, [number, number, number]>();
+    expectedSizes(root, expected);
+    const batches: Finished[] = [];
+    const promise = wrapper.nativeFolderSize(root, (finished) => {
+      batches.push(JSON.parse(finished) as Finished);
+    });
+    wrapper.nativeFolderSizeCancel();
+    const error = await promise.then(
+      () => null,
+      (rejected: { code?: string; finished?: unknown }) => rejected,
+    );
+    expect(error?.code).toBe("ECANCELLED");
+    expect(error?.finished).toBeUndefined();
+    expectReportedOnce(batches, expected);
   });
 });
 

@@ -37,6 +37,9 @@ type FolderSizeJob = {
   diskBytes: number | null;
   fileCount: number | null;
   folderCount: number | null;
+  // The folders inside it whose sizes it has stored so far: the window asks again for the
+  // sizes it is waiting on when this goes up.
+  measuredFolderCount: number;
   error: string | null;
 };
 const folderSizeJobs = new Map<string, FolderSizeJob>();
@@ -46,6 +49,16 @@ const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 // before a write changed it: its answer is still returned to whoever asked, but it is only
 // kept if no clear happened while it was loading.
 let cacheGeneration = 0;
+
+// Counts the writes started. A size stored after the latest one started may have been
+// measured after it had already removed something, so taking the removal off it when the
+// write ends could count the removal twice.
+let writesStarted = 0;
+
+// Called as a write starts changing what is on disk.
+export function noteWriteStarting(): void {
+  writesStarted += 1;
+}
 
 // Each folder-size cache, told what a write changed.
 const folderSizeForgetters = new Set<
@@ -137,15 +150,24 @@ function pruneFinishedFolderSizeJobs(): void {
 export function resetResponseCacheState(): void {
   clearResponseCaches();
   folderSizeJobs.clear();
+  writesStarted = 0;
 }
 
+type MeasuredFolders = {
+  dev?: number;
+  dirs: Record<string, [number, number, number, number]>;
+};
+
 export function createFolderSizeHandlers(native: {
-  getFolderSize: (path: string) => Promise<string>;
+  // `onFinished` is handed the folders inside `path` measured so far, as they finish.
+  getFolderSize: (path: string, onFinished?: (finishedJson: string) => void) => Promise<string>;
   cancelFolderSize: () => void;
   // Where the home folder is (tests use their own): its Trash is where deleted items go.
   homePath?: string;
 }) {
   const folderSizeCache = new Map<string, FolderSizeStats>();
+  // The folders whose sizes were stored since the latest write started.
+  let storedDuringWrite = { write: 0, paths: new Set<string>() };
   const homePath = native.homePath ?? homedir();
   const homeTrashPath = join(homePath, ".Trash");
   // Whether a measurement that reached the home folder's Trash could read it, and so
@@ -162,6 +184,7 @@ export function createFolderSizeHandlers(native: {
         folderSizeCache.delete(path);
       }
     }
+    forgetStoredDuringWrite(removedItems);
     adjustForRemovals(folderSizeCache, removedItems, {
       path: homeTrashPath,
       counted: homeTrashCounted,
@@ -180,11 +203,33 @@ export function createFolderSizeHandlers(native: {
   let activeJobId: string | null = null;
   let queuedJobId: string | null = null;
 
-  function recordHomeTrashCounted(path: string, walkedPaths: Record<string, unknown>): void {
-    if (path === homeTrashPath) {
-      homeTrashCounted = true;
-    } else if (path === homePath || homePath in walkedPaths) {
-      homeTrashCounted = homeTrashPath in walkedPaths;
+  function storeSize(path: string, stats: FolderSizeStats): void {
+    folderSizeCache.set(path, stats);
+    if (writesStarted === 0) {
+      return;
+    }
+    if (storedDuringWrite.write !== writesStarted) {
+      storedDuringWrite = { write: writesStarted, paths: new Set() };
+    }
+    storedDuringWrite.paths.add(path);
+  }
+
+  // The sizes stored since the write started of the folders whose totals its removals
+  // change (those that held a removed item, and the Trash and those holding it when it went
+  // there): they may already leave the item out, so they are measured again instead.
+  function forgetStoredDuringWrite(removedItems: readonly RemovedItem[]): void {
+    if (removedItems.length === 0 || storedDuringWrite.write !== writesStarted) {
+      return;
+    }
+    const removedPaths = removedItems.map((removed) => removed.path);
+    const intoTrash = removedItems.some((removed) => removed.intoHomeTrash !== false);
+    for (const path of storedDuringWrite.paths) {
+      if (
+        holdsAny(path, removedPaths) ||
+        (intoTrash && (path === homeTrashPath || holdsAny(path, [homeTrashPath])))
+      ) {
+        folderSizeCache.delete(path);
+      }
     }
   }
 
@@ -212,44 +257,85 @@ export function createFolderSizeHandlers(native: {
       diskBytes: null,
       fileCount: null,
       folderCount: null,
+      // Kept when measured again, so the window never sees it go down.
+      measuredFolderCount: folderSizeJobs.get(jobId)?.measuredFolderCount ?? 0,
       error: null,
     });
 
+    // Whether this measurement walked the home folder's Trash: a folder is finished only
+    // after the folders inside it, so the Trash comes before the home folder.
+    let homeTrashWalked = false;
+    const noteWalked = (dirs: MeasuredFolders["dirs"]) => {
+      if (homeTrashPath in dirs) {
+        homeTrashWalked = true;
+      }
+      if (homePath in dirs) {
+        homeTrashCounted = homeTrashWalked;
+      }
+    };
+    // Every folder a measurement walks is on the disk it started on.
+    const storeMeasured = (measured: MeasuredFolders): number => {
+      const dev = measured.dev ?? null;
+      let count = 0;
+      for (const [dirPath, dirStats] of Object.entries(measured.dirs)) {
+        storeSize(dirPath, {
+          sizeBytes: dirStats[0],
+          diskBytes: dirStats[1],
+          fileCount: dirStats[2],
+          folderCount: dirStats[3],
+          dev,
+        });
+        count += 1;
+      }
+      return count;
+    };
+    // The folders inside `path` are stored as each is finished, even once the measurement
+    // is cancelled (each was finished whole), but not once a write has made it outdated:
+    // they may have seen part of the change, and it is run again.
+    const onFinished = (finishedJson: string) => {
+      const measured = JSON.parse(finishedJson) as MeasuredFolders;
+      noteWalked(measured.dirs);
+      if (outdatedJobIds.has(jobId)) {
+        return;
+      }
+      const stored = storeMeasured(measured);
+      const job = folderSizeJobs.get(jobId);
+      if (job) {
+        setFolderSizeJob(jobId, {
+          ...job,
+          measuredFolderCount: job.measuredFolderCount + stored,
+        });
+      }
+    };
+
     let runAgain = false;
     native
-      .getFolderSize(path)
+      .getFolderSize(path, onFinished)
       .then((jsonString) => {
-        const result = JSON.parse(jsonString) as {
+        const result = JSON.parse(jsonString) as MeasuredFolders & {
           total: number;
           diskTotal: number;
           fileCount: number;
           folderCount: number;
-          dev?: number;
-          dirs: Record<string, [number, number, number, number]>;
         };
-        recordHomeTrashCounted(path, result.dirs);
+        noteWalked(result.dirs);
+        if (path === homeTrashPath) {
+          homeTrashCounted = true;
+        } else if (path === homePath) {
+          homeTrashCounted = homeTrashWalked;
+        }
         if (outdatedJobIds.delete(jobId)) {
           runAgain = true;
           return;
         }
-        // Every folder a measurement walks is on the disk it started on.
-        const dev = result.dev ?? null;
-        folderSizeCache.set(path, {
+        storeSize(path, {
           sizeBytes: result.total,
           diskBytes: result.diskTotal,
           fileCount: result.fileCount,
           folderCount: result.folderCount,
-          dev,
+          dev: result.dev ?? null,
         });
-        for (const [dirPath, dirStats] of Object.entries(result.dirs)) {
-          folderSizeCache.set(dirPath, {
-            sizeBytes: dirStats[0],
-            diskBytes: dirStats[1],
-            fileCount: dirStats[2],
-            folderCount: dirStats[3],
-            dev,
-          });
-        }
+        const stored = storeMeasured(result);
         setFolderSizeJob(jobId, {
           jobId,
           path,
@@ -258,6 +344,7 @@ export function createFolderSizeHandlers(native: {
           diskBytes: result.diskTotal,
           fileCount: result.fileCount,
           folderCount: result.folderCount,
+          measuredFolderCount: (folderSizeJobs.get(jobId)?.measuredFolderCount ?? 0) + stored,
           error: null,
         });
       })
@@ -280,6 +367,7 @@ export function createFolderSizeHandlers(native: {
             diskBytes: null,
             fileCount: null,
             folderCount: null,
+            measuredFolderCount: job?.measuredFolderCount ?? 0,
             error: message,
           });
         }
@@ -316,6 +404,7 @@ export function createFolderSizeHandlers(native: {
           diskBytes: cached.diskBytes,
           fileCount: cached.fileCount,
           folderCount: cached.folderCount,
+          measuredFolderCount: 0,
           error: null,
         });
         pruneFinishedFolderSizeJobs();
@@ -334,6 +423,7 @@ export function createFolderSizeHandlers(native: {
           diskBytes: null,
           fileCount: null,
           folderCount: null,
+          measuredFolderCount: 0,
           error: null,
         });
         pruneFinishedFolderSizeJobs();
@@ -368,6 +458,7 @@ export function createFolderSizeHandlers(native: {
           diskBytes: null,
           fileCount: null,
           folderCount: null,
+          measuredFolderCount: 0,
           error: null,
         });
         return { jobId, status: "queued" };
@@ -386,6 +477,7 @@ export function createFolderSizeHandlers(native: {
         diskBytes: job?.diskBytes ?? null,
         fileCount: job?.fileCount ?? null,
         folderCount: job?.folderCount ?? null,
+        measuredFolderCount: job?.measuredFolderCount ?? 0,
         error: job ? job.error : "Unknown folder size job.",
       };
     },
@@ -505,4 +597,10 @@ async function withCachedResponse<TPayload extends object, TResponse>(
     storeCacheEntry(cache, cacheKey, value, now);
   }
   return value;
+}
+
+// Whether the folder at `path` holds any of `paths` (somewhere inside it).
+function holdsAny(path: string, paths: readonly string[]): boolean {
+  const prefix = path.endsWith("/") ? path : `${path}/`;
+  return paths.some((candidate) => candidate.startsWith(prefix));
 }
