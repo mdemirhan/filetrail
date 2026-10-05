@@ -471,16 +471,19 @@ describe("after an Undo", () => {
           sourcePath: "/Users/demo/.Trash/b.txt",
           destinationPath: "/Users/demo/b.txt",
           status: "skipped",
-          error: "An item named “b.txt” is already in “demo”.",
+          error: "“b.txt” is no longer in “.Trash”.",
         },
       ]),
     );
 
     const dialog = await screen.findByRole("dialog", { name: "Undid 1 of 2 items" });
-    expect(within(dialog).getByText("b.txt")).toBeInTheDocument();
+    // What was done can be taken back.
     expect(
-      within(dialog).getByText("An item named “b.txt” is already in “demo”."),
+      within(dialog).getByText("1 item was left as it is. ⇧⌘Z redoes what was undone."),
     ).toBeInTheDocument();
+    expect(within(dialog).getByText("Left as it is")).toBeInTheDocument();
+    expect(within(dialog).getByText("b.txt")).toBeInTheDocument();
+    expect(within(dialog).getByText("“b.txt” is no longer in “.Trash”.")).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /Retry|Try Again/ })).toBeNull();
   });
 

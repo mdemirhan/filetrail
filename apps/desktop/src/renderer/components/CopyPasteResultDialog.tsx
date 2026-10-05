@@ -4,6 +4,7 @@ import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import { dirnameOf, formatCount, leafName, pluralize } from "../lib/copyPasteReview";
 import { collectRetrySourcePaths, selectTopLevelItems } from "../lib/explorerAppUtils";
+import { DEFAULT_SHORTCUT_DISPLAY } from "../lib/shortcutDisplay";
 import { PushButton } from "./PushButton";
 import { useDialogFocus } from "./useDialogFocus";
 
@@ -92,7 +93,7 @@ export function CopyPasteResultDialog({
   // is missing from it.
   const copiedTopLevel = outcome.completedTopLevel + outcome.partialTopLevel.length;
   const title =
-    outcome.topLevelCount === 0
+    outcome.topLevelCount === 0 || (undoing && copiedTopLevel === 0)
       ? (FAILED_TITLE[event.action] ?? "Failed")
       : `${pastTense} ${formatCount(copiedTopLevel)} of ${pluralize(outcome.topLevelCount, "item")}${place}`;
   const onlyPartial = outcome.partialTopLevel.length === 1 ? outcome.partialTopLevel[0] : null;
@@ -130,6 +131,24 @@ export function CopyPasteResultDialog({
       ? "Items that weren't moved are still in their original folder."
       : null,
   ].filter(Boolean);
+  // An Undo says what it left, and that the part it did can be taken back: what was left
+  // can't be undone (it is gone, or something else is in its place), but nothing is lost.
+  const leftCount = outcome.failed.length + skippedCount;
+  if (undoing) {
+    sentences.length = 0;
+    if (leftCount > 0) {
+      sentences.push(
+        `${pluralize(leftCount, "item")} ${leftCount === 1 ? "was left as it is" : "were left as they are"}.`,
+      );
+    }
+    if (leftCount > 0 && copiedTopLevel > 0) {
+      sentences.push(
+        event.action === "undo"
+          ? `${DEFAULT_SHORTCUT_DISPLAY.mention("redo")} redoes what was undone.`
+          : `${DEFAULT_SHORTCUT_DISPLAY.mention("undo")} undoes what was redone.`,
+      );
+    }
+  }
   const message =
     sentences.length > 0 ? sentences.join(" ") : (result?.error ?? "The operation has finished.");
 
@@ -195,7 +214,7 @@ export function CopyPasteResultDialog({
             tone="muted"
           />
           <ResultSection
-            label="Skipped"
+            label={undoing ? "Left as it is" : "Skipped"}
             items={outcome.skipped}
             displayPaths={outcome.displayPaths}
             describe={(item) =>
