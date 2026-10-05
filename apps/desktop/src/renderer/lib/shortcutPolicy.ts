@@ -54,6 +54,8 @@ const CONTEXT_MENU_SHORTCUT_COMMANDS = {
   open: "openSelection",
   quickLook: "quickLookSelection",
   showInfo: "toggleInfoPanel",
+  calculateSize: "calculateSize",
+  revealInFolder: "revealInFolder",
   edit: "editSelection",
   cut: "cut",
   copy: "copy",
@@ -102,6 +104,13 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   toggleInfoRow: "globalExplorer",
   customizeToolbar: "globalExplorer",
   goHomeRootTree: "globalExplorer",
+  goDocuments: "globalExplorer",
+  goDesktop: "globalExplorer",
+  goDownloads: "globalExplorer",
+  goLibrary: "globalExplorer",
+  goMacintoshHD: "globalExplorer",
+  goApplications: "globalExplorer",
+  goTrash: "globalExplorer",
   rootTreeAtSelection: "globalExplorer",
   newTab: "globalExplorer",
   reopenClosedTab: "globalExplorer",
@@ -110,6 +119,9 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   selectPreviousTab: "globalExplorer",
   openSelectionInNewTab: "contentOnly",
   quickLookSelection: "contentOnly",
+  // From the tree it sizes the tree's folder.
+  calculateSize: "globalExplorer",
+  revealInFolder: "contentOnly",
   toggleFavorite: "globalExplorer",
   showInFinder: "globalExplorer",
   showLastSearchResults: "globalExplorer",
@@ -338,6 +350,12 @@ function isContextMenuShortcutLive(
       return canHandleRendererCommand("quickLookSelection", context);
     case "showInfo":
       return canHandleRendererCommand("toggleInfoPanel", context);
+    case "calculateSize":
+      // As with Paste: a tree or favorite menu sizes the right-clicked folder, the key the
+      // selected one.
+      return context.focusedPane !== "tree" && canHandleRendererCommand("calculateSize", context);
+    case "revealInFolder":
+      return canHandleRendererCommand("revealInFolder", context);
     case "edit":
       return canHandleRendererCommand("editSelection", context);
     case "cut":

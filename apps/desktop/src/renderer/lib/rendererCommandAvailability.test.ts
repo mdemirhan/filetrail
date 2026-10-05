@@ -4,6 +4,7 @@ import { EMPTY_COPY_PASTE_CLIPBOARD, setCopyPasteClipboard } from "./copyPasteCl
 import {
   type RendererCommandAvailabilityContext,
   canRunToolbarRendererCommand,
+  resolveCalculateSizePaths,
   resolveFavoriteTargetPath,
   resolveNewTabTargetPath,
   resolveShowInFinderPaths,
@@ -461,6 +462,30 @@ describe("menu commands", () => {
     expect(canRunToolbarRendererCommand("showInFinder", { ...select(), currentPath: "" })).toBe(
       false,
     );
+  });
+
+  it("sizes the selected folders, or the folder on screen with nothing selected", () => {
+    const paths = (context: RendererCommandAvailabilityContext) =>
+      resolveCalculateSizePaths({ ...context, focusedPane: context.shortcutContext.focusedPane });
+
+    expect(paths(select(folder, note))).toEqual(["/Users/demo/Projects"]);
+    expect(paths(select())).toEqual(["/Users/demo"]);
+    expect(paths(treeFocused("/Users"))).toEqual(["/Users"]);
+    // Files alone have their size already; search results are no folder on screen.
+    expect(paths(select(note))).toEqual([]);
+    expect(paths({ ...select(), isSearchMode: true })).toEqual([]);
+    expect(canRunToolbarRendererCommand("calculateSize", select(folder))).toBe(true);
+    expect(canRunToolbarRendererCommand("calculateSize", select(note))).toBe(false);
+  });
+
+  it("reveals a selected search result in its folder, and only a search result", () => {
+    expect(
+      canRunToolbarRendererCommand("revealInFolder", { ...select(note), isSearchMode: true }),
+    ).toBe(true);
+    expect(
+      canRunToolbarRendererCommand("revealInFolder", { ...select(), isSearchMode: true }),
+    ).toBe(false);
+    expect(canRunToolbarRendererCommand("revealInFolder", select(note))).toBe(false);
   });
 
   it("follows the history for Back and Forward", () => {

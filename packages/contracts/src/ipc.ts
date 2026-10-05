@@ -164,6 +164,8 @@ export const toolbarItemIdSchema = z.enum([
   "pasteSelection",
   "openInTerminal",
   "showInFinder",
+  "revealInFolder",
+  "calculateSize",
   "copyPath",
   "theme",
   "settings",
@@ -590,6 +592,8 @@ export const openTabPreferenceSchema = z.object({
   sortDirection: sortDirectionSchema,
   includeHidden: z.boolean(),
   foldersFirst: z.boolean(),
+  favoritesExpanded: z.boolean(),
+  locationsExpanded: z.boolean(),
 });
 
 // The Rename sheet's settings for several items (see apps/desktop/src/shared/batchRename.ts,

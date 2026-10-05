@@ -117,6 +117,25 @@ export function ToolbarIcon({
       </svg>
     );
   }
+  if (name === "revealInFolder") {
+    // A folder with an arrow into it, as in the right-click menu.
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        <path d="M12 10h6" />
+        <path d="M15 7l3 3-3 3" />
+      </svg>
+    );
+  }
+  if (name === "calculateSize") {
+    // A pie chart, as in the right-click menu: how much the folder takes up.
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+        <path d="M22 12A10 10 0 0 0 12 2v10z" />
+      </svg>
+    );
+  }
   if (name === "title") {
     // A name over a shorter line of details, as the toolbar's title is drawn.
     return (

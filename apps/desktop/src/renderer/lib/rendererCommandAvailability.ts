@@ -6,10 +6,12 @@ import { hasClipboardItems } from "./copyPasteClipboard";
 import {
   isDirectoryLikeEntry,
   isEditableFileEntry,
+  isFolderSizeEligibleKind,
   resolveNewFolderTargetPath,
 } from "./explorerAppUtils";
 import { parentDirectoryPath } from "./explorerNavigation";
 import type { DirectoryEntry } from "./explorerTypes";
+import { resolveGoMenuPlace } from "./goMenuPlaces";
 import type { ShortcutContext } from "./shortcutPolicy";
 import { canHandleRendererCommand } from "./shortcutPolicy";
 
@@ -107,6 +109,20 @@ export function resolveShowInFinderPaths(context: CommandTargetContext): string[
     return context.selectedPathsInViewOrder;
   }
   return context.currentPath ? [context.currentPath] : [];
+}
+
+// The folders File > Calculate Size measures: the tree's folder when the tree has the
+// keyboard, the folders among the selection, or with nothing selected the folder on screen.
+export function resolveCalculateSizePaths(context: CommandTargetContext): string[] {
+  if (context.focusedPane === "tree") {
+    return context.selectedTreeTargetPath ? [context.selectedTreeTargetPath] : [];
+  }
+  if (context.selectedPathsInViewOrder.length > 0) {
+    return resolveSelectedEntries(context.selectedPathsInViewOrder, context.activeContentEntries)
+      .filter((entry) => isFolderSizeEligibleKind(entry.kind))
+      .map((entry) => entry.path);
+  }
+  return context.isSearchMode || context.currentPath.length === 0 ? [] : [context.currentPath];
 }
 
 function selectionIsInTrash(context: RendererCommandAvailabilityContext): boolean {
@@ -210,6 +226,19 @@ export function canRunToolbarRendererCommand(
       return resolveNewTabTargetPath({ ...context, focusedPane }) !== null;
     case "quickLookSelection":
       return context.selectedEntry !== null;
+    case "goDocuments":
+    case "goDesktop":
+    case "goDownloads":
+    case "goLibrary":
+    case "goMacintoshHD":
+    case "goApplications":
+    case "goTrash":
+      return resolveGoMenuPlace(command, context.homePath ?? "") !== null;
+    case "calculateSize":
+      return resolveCalculateSizePaths({ ...context, focusedPane }).length > 0;
+    case "revealInFolder":
+      // A search result, in the folder it is in.
+      return context.isSearchMode && selectedCount > 0;
     case "toggleFavorite":
       return resolveFavoriteTargetPath({ ...context, focusedPane }) !== null;
     case "showInFinder":

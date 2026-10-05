@@ -274,6 +274,11 @@ export const treePaneMock = () => ({
     activeLeftPaneSubview,
     selectedTreeItemId,
     rootPath,
+    favoritesExpanded,
+    locationsExpanded,
+    onToggleFavoritesExpanded,
+    onToggleLocationsExpanded,
+    holdScrollPosition,
   }: {
     paneRef?: RefObject<HTMLDivElement | null>;
     isFocused?: boolean;
@@ -388,8 +393,24 @@ export const treePaneMock = () => ({
     activeLeftPaneSubview: "favorites" | "tree";
     selectedTreeItemId: string | null;
     rootPath: string;
+    favoritesExpanded?: boolean;
+    locationsExpanded?: boolean;
+    onToggleFavoritesExpanded?: () => void;
+    onToggleLocationsExpanded?: () => void;
+    holdScrollPosition?: boolean;
   }) => (
     <div ref={paneRef} data-testid="tree-pane-shell">
+      <div className="sidebar-sections" data-testid="sidebar-sections" />
+      <div className="tree-scroll" data-testid="tree-scroll" />
+      <output data-testid="favorites-expanded">{String(favoritesExpanded ?? true)}</output>
+      <output data-testid="locations-expanded">{String(locationsExpanded ?? true)}</output>
+      <output data-testid="sidebar-scroll-held">{String(holdScrollPosition ?? false)}</output>
+      <button type="button" onClick={() => onToggleFavoritesExpanded?.()}>
+        Toggle Favorites Section
+      </button>
+      <button type="button" onClick={() => onToggleLocationsExpanded?.()}>
+        Toggle Locations Section
+      </button>
       <output data-testid="tree-focused">{String(isFocused ?? false)}</output>
       <button
         type="button"

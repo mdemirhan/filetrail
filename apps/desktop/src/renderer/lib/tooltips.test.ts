@@ -49,6 +49,8 @@ describe("tooltips", () => {
       openInTerminal: "Open in Terminal (⌥⌘T)",
       // No key until one is chosen in Settings.
       showInFinder: "Show in Finder",
+      revealInFolder: "Reveal in Folder",
+      calculateSize: "Calculate Size",
       copyPath: "Copy Path (⌥⌘C)",
       settings: "Settings (⌘,)",
       help: "File Trail Help (?)",

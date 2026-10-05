@@ -45,7 +45,9 @@ export type ToolbarIconName =
   | "title"
   | "newTab"
   | "quickLook"
-  | "showInFinder";
+  | "showInFinder"
+  | "revealInFolder"
+  | "calculateSize";
 
 export type ToolbarItemKind = "button" | "toggle" | "menu" | "composite" | "separator";
 
@@ -81,6 +83,8 @@ export type ToolbarItemId =
   | "pasteSelection"
   | "openInTerminal"
   | "showInFinder"
+  | "revealInFolder"
+  | "calculateSize"
   | "copyPath"
   | "theme"
   | "settings"
@@ -341,6 +345,22 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     shortcutCommand: "showInFinder",
   },
   {
+    id: "revealInFolder",
+    label: "Reveal in Folder",
+    icon: "revealInFolder",
+    kind: "button",
+    commandType: "revealInFolder",
+    shortcutCommand: "revealInFolder",
+  },
+  {
+    id: "calculateSize",
+    label: "Calculate Size",
+    icon: "calculateSize",
+    kind: "button",
+    commandType: "calculateSize",
+    shortcutCommand: "calculateSize",
+  },
+  {
     id: "copyPath",
     label: "Copy Path",
     icon: "copyPath",
@@ -461,6 +481,7 @@ const TOP_TOOLBAR_PALETTE_ORDER: readonly ToolbarItemId[] = [
   "forward",
   "up",
   "goToFolder",
+  "revealInFolder",
   "refresh",
   "newTab",
   "view",
@@ -470,6 +491,7 @@ const TOP_TOOLBAR_PALETTE_ORDER: readonly ToolbarItemId[] = [
   "folderTree",
   "infoPanel",
   "infoRow",
+  "calculateSize",
   "openSelection",
   "quickLook",
   "editSelection",

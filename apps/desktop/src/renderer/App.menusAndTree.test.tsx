@@ -441,6 +441,30 @@ describe("App copy/paste integration", () => {
 
       await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
     });
+
+    // File > Calculate Size, a key chosen for it in Settings, or its toolbar button.
+    it("sizes the folder on screen, then the selected folder, from the menu bar", async () => {
+      const harness = await renderApp({ viewMode: "icons" });
+      await act(async () => {
+        harness.emitCommand({ type: "calculateSize" });
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId("content-status")).toHaveTextContent(/items · 9\.0 MB$/),
+      );
+
+      await selectItem("/Users/demo/Folder");
+      await act(async () => {
+        harness.emitCommand({ type: "calculateSize" });
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId("content-status")).toHaveTextContent(/selected · 4\.0 KB$/),
+      );
+      expect(calculated(harness)).toEqual([
+        { path: "/Users/demo", recalculate: true },
+        { path: "/Users/demo/Folder", recalculate: true },
+      ]);
+      expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
   });
 
   describe("Calculate Size for several items", () => {
@@ -1687,6 +1711,79 @@ describe("App copy/paste integration", () => {
       expect(treeRoot()).toBe("/Users/demo");
       expect(screen.getByTestId("tree-selection")).toHaveTextContent("location:/Users/demo");
     });
+  });
+
+  // Go > Documents, Desktop, Downloads, Library and Applications open as Go to Folder does;
+  // Go > Macintosh HD and Go > Trash as a click on their row under Locations.
+  it("goes to Finder's places from the Go menu", async () => {
+    const folder = (path: string) => ({
+      path,
+      parentPath: path.slice(0, path.lastIndexOf("/")) || "/",
+      entries: [],
+    });
+    const harness = createAppHarness({
+      directorySnapshots: Object.fromEntries(
+        [
+          "/",
+          "/Applications",
+          "/Users/demo/Documents",
+          "/Users/demo/Desktop",
+          "/Users/demo/Downloads",
+          "/Users/demo/Library",
+          "/Users/demo/.Trash",
+        ].map((path) => [path, folder(path)]),
+      ),
+      treeChildrenByPath: {
+        "/": [
+          createTreeChild("/Applications", "directory"),
+          createTreeChild("/Users", "directory"),
+        ],
+        "/Users": [createTreeChild("/Users/demo", "directory")],
+      },
+    });
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    const treeRoot = () => screen.getByTestId("tree-root").textContent;
+    const go = async (
+      type:
+        | "goDocuments"
+        | "goDesktop"
+        | "goDownloads"
+        | "goLibrary"
+        | "goMacintoshHD"
+        | "goApplications"
+        | "goTrash",
+      path: string,
+    ) => {
+      await act(async () => {
+        harness.emitCommand({ type });
+      });
+      await vi.waitFor(() =>
+        expect(screen.getByTestId("content-current-path")).toHaveTextContent(path),
+      );
+    };
+    await vi.waitFor(() => expect(treeRoot()).toBe("/Users/demo"));
+
+    await go("goDocuments", "/Users/demo/Documents");
+    await go("goDesktop", "/Users/demo/Desktop");
+    await go("goDownloads", "/Users/demo/Downloads");
+    await go("goLibrary", "/Users/demo/Library");
+    expect(treeRoot()).toBe("/Users/demo");
+
+    await go("goMacintoshHD", "/");
+    await vi.waitFor(() => {
+      expect(treeRoot()).toBe("/");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("location:/");
+    });
+
+    await go("goApplications", "/Applications");
+    // The Trash leaves the tree where it is.
+    await go("goTrash", "/Users/demo/.Trash");
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent("location:/Users/demo/.Trash");
+    expect(treeRoot()).toBe("/");
   });
 
   it("roots the tree at the folder on screen, then falls back once a folder outside it opens", async () => {
