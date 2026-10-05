@@ -87,6 +87,7 @@ describe("appPreferences helpers", () => {
       restoreSessionOnStartup: true,
       notificationsEnabled: true,
       markClipboardItems: true,
+      autoCalculateFolderSizes: true,
       propertiesOpen: false,
       topToolbarItems: DEFAULT_TOP_TOOLBAR_ITEMS,
       defaultTextEditor: {

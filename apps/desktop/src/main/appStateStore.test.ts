@@ -379,6 +379,7 @@ describe("appStateStore", () => {
       },
       notificationsEnabled: true,
       markClipboardItems: true,
+      autoCalculateFolderSizes: true,
       folderTreeOpen: true,
       propertiesOpen: false,
       detailRowOpen: false,
@@ -503,6 +504,7 @@ describe("appStateStore", () => {
       },
       notificationsEnabled: true,
       markClipboardItems: false,
+      autoCalculateFolderSizes: false,
       topToolbarItems: ["search", "back", "title", "copyPath", "clipboard", "viewOptions"],
       terminalApp: {
         appPath: "/Applications/iTerm.app",
@@ -641,6 +643,7 @@ describe("appStateStore", () => {
       },
       notificationsEnabled: true,
       markClipboardItems: false,
+      autoCalculateFolderSizes: false,
       topToolbarItems: ["search", "back", "title", "copyPath", "clipboard", "viewOptions"],
       terminalApp: {
         appPath: "/Applications/iTerm.app",

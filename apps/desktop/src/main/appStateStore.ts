@@ -530,6 +530,10 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       typeof record.markClipboardItems === "boolean"
         ? record.markClipboardItems
         : currentDefaults.markClipboardItems,
+    autoCalculateFolderSizes:
+      typeof record.autoCalculateFolderSizes === "boolean"
+        ? record.autoCalculateFolderSizes
+        : currentDefaults.autoCalculateFolderSizes,
     folderTreeOpen:
       typeof record.folderTreeOpen === "boolean"
         ? record.folderTreeOpen

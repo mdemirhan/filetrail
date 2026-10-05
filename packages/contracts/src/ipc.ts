@@ -645,6 +645,7 @@ export const appPreferencesSchema = z.object({
   searchColumnWidths: searchColumnWidthsSchema,
   notificationsEnabled: z.boolean(),
   markClipboardItems: z.boolean(),
+  autoCalculateFolderSizes: z.boolean(),
   folderTreeOpen: z.boolean(),
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
