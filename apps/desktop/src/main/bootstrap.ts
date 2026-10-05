@@ -1,6 +1,7 @@
 import { watch } from "node:fs";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { BrowserWindow, app, clipboard, ipcMain, shell } from "electron";
+import { BrowserWindow, type WebContents, app, clipboard, ipcMain, shell } from "electron";
 
 import type { AppLogEntry, HelpTopic, SettingsTab } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
@@ -61,12 +62,14 @@ import {
   createWriteOperationCoordinator,
 } from "./bootstrap/writeOperations";
 import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
+import { type FolderWatches, createFolderWatches } from "./folderWatch";
 import { registerIpcHandlers } from "./ipc";
 import { type VolumeWatcher, createVolumeWatcher } from "./volumes";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
 let activeWriteCoordinator: ReturnType<typeof createWriteOperationCoordinator> | null = null;
 let activeVolumeWatcher: VolumeWatcher | null = null;
+let activeFolderWatches: FolderWatches | null = null;
 
 export async function bootstrapMainProcess(
   appStateStore: AppStateStore,
@@ -138,6 +141,39 @@ export async function bootstrapMainProcess(
   // A disk mounted while the watch was not looking (it can miss one while the Mac sleeps)
   // shows up when the window comes back to the front.
   app.on("browser-window-focus", () => volumeWatcher.refresh());
+  // The folder each window has on screen: a change made to it outside the app is sent to
+  // the window, which reads the folder again.
+  const folderWatches = createFolderWatches({
+    watchFolder: (path, onChange) => {
+      try {
+        const watcher = watch(path, (_eventType, name) => onChange(name ?? null));
+        // A watch that fails (the folder gone, say) has the window look again.
+        watcher.on("error", () => onChange(null));
+        return () => watcher.close();
+      } catch {
+        return () => undefined;
+      }
+    },
+    readModifiedTime: (path) =>
+      stat(path).then(
+        (stats) => stats.mtimeMs,
+        () => null,
+      ),
+    forgetCachedListings: () => clearResponseCaches(),
+    onFolderChanged: (windowId, change) => {
+      const window = BrowserWindow.getAllWindows().find(
+        (candidate) => !candidate.isDestroyed() && candidate.webContents.id === windowId,
+      );
+      window?.webContents.send("filetrail:folderChanged", change);
+    },
+  });
+  activeFolderWatches?.stopAll();
+  activeFolderWatches = folderWatches;
+  // The windows that have asked for a watch, so each is let go of when it closes.
+  const watchedSenders = new WeakSet<WebContents>();
+  app.on("browser-window-focus", (_event, window) =>
+    folderWatches.checkForMissedChanges(window.webContents.id),
+  );
   // What the Rename sheet checks for several items: the same folders are refused as for a
   // rename of one.
   const batchRenameInspectDeps = createOriginalBatchRenameInspectDeps({
@@ -264,6 +300,22 @@ export async function bootstrapMainProcess(
         clearResponseCaches();
         return { ok: true };
       },
+      "folder:watch": (payload, event) => {
+        const sender = event.sender;
+        if (!watchedSenders.has(sender)) {
+          // A window closed, or loading its page again, stops watching with it.
+          watchedSenders.add(sender);
+          const stop = () => folderWatches.watch(sender.id, null);
+          sender.once("destroyed", stop);
+          sender.on("did-start-navigation", (details) => {
+            if (details.isMainFrame && !details.isSameDocument) {
+              stop();
+            }
+          });
+        }
+        folderWatches.watch(sender.id, payload.path);
+        return { ok: true };
+      },
       "app:writeLog": (payload) => {
         writeStructuredAppLogEntry(logger, payload as AppLogEntry);
         return { ok: true };
@@ -366,6 +418,8 @@ export async function bootstrapMainProcess(
 export async function shutdownMainProcess(): Promise<void> {
   activeVolumeWatcher?.stop();
   activeVolumeWatcher = null;
+  activeFolderWatches?.stopAll();
+  activeFolderWatches = null;
   if (!activeWorkerClient) {
     return;
   }

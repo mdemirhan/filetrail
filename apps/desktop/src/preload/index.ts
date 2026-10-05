@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import type {
   AppLogEntry,
+  FolderChange,
   HelpTopic,
   IpcChannel,
   IpcRequestInput,
@@ -34,6 +35,7 @@ type InvokeApi = {
   onShowSettingsTab(listener: (tab: SettingsTab) => void): () => void;
   onShowHelpTopic(listener: (topic: HelpTopic) => void): () => void;
   onVolumesChanged(listener: (volumes: Volume[]) => void): () => void;
+  onFolderChanged(listener: (change: FolderChange) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -91,6 +93,15 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:volumesChanged", handleChange);
     return () => {
       ipcRenderer.removeListener("filetrail:volumesChanged", handleChange);
+    };
+  },
+  onFolderChanged: (listener) => {
+    const handleChange = (_event: unknown, change: FolderChange) => {
+      listener(change);
+    };
+    ipcRenderer.on("filetrail:folderChanged", handleChange);
+    return () => {
+      ipcRenderer.removeListener("filetrail:folderChanged", handleChange);
     };
   },
   onShowSettingsTab: (listener) => {
