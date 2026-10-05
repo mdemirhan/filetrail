@@ -73,6 +73,9 @@ export function toPreferencePatch(
   if (value.markClipboardItems !== undefined) {
     patch.markClipboardItems = value.markClipboardItems;
   }
+  if (value.autoCalculateFolderSizes !== undefined) {
+    patch.autoCalculateFolderSizes = value.autoCalculateFolderSizes;
+  }
   if (value.folderTreeOpen !== undefined) {
     patch.folderTreeOpen = value.folderTreeOpen;
   }

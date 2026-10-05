@@ -2,6 +2,7 @@
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
+import { FLOW_LIST_LAYOUT } from "../lib/flowListLayout";
 import { ContentPane } from "./ContentPane";
 
 describe("ContentPane", () => {
@@ -1755,6 +1756,12 @@ describe("ContentPane", () => {
   });
 
   it("keeps the selected list item horizontally visible when the lead selection changes", () => {
+    // One row high: each item stands in a column of its own.
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, "clientHeight", "get")
+      .mockReturnValue(
+        FLOW_LIST_LAYOUT.paddingTop + FLOW_LIST_LAYOUT.rowHeight + FLOW_LIST_LAYOUT.paddingBottom,
+      );
     const entries = Array.from({ length: 6 }, (_, index) => ({
       path: `/Users/demo/item-${index}.txt`,
       name: `item-${index}.txt`,
@@ -1837,6 +1844,7 @@ describe("ContentPane", () => {
     );
 
     expect(list.scrollLeft).toBe(282);
+    clientHeight.mockRestore();
   });
 
   it.each(["list", "details"] as const)(

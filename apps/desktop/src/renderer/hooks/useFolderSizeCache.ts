@@ -430,10 +430,22 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     [probeCache],
   );
 
+  // Whether any folder is being measured. The main process measures one at a time and a
+  // new calculation stops the one under way.
+  const isCalculating = useCallback(() => {
+    for (const entry of cacheRef.current.values()) {
+      if (entry.status === "calculating") {
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
   // `version` changes whenever a cached entry does, for views that derive from the cache
   // (sorting by size).
   return {
     getEntry,
+    isCalculating,
     calculateFolderSize,
     recalculateFolderSize,
     cancelFolderSize,

@@ -32,6 +32,7 @@ import type { SettingsTab } from "./components/SettingsView";
 import { TabStrip } from "./components/TabStrip";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
+import { getAutoFolderSizePath, useAutoFolderSize } from "./hooks/useAutoFolderSize";
 import { useBatchRename } from "./hooks/useBatchRename";
 import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerActions } from "./hooks/useExplorerActions";
@@ -211,6 +212,8 @@ export function App() {
     setNotificationsEnabled,
     markClipboardItems,
     setMarkClipboardItems,
+    autoCalculateFolderSizes,
+    setAutoCalculateFolderSizes,
     topToolbarItems,
     setTopToolbarItems,
     restoreSessionOnStartup,
@@ -693,6 +696,21 @@ export function App() {
     selectedPathsInViewOrderRef.current = selectedPathsInViewOrder;
     selectedEntryRef.current = selectedEntry;
   }, [selectedEntry, selectedEntryRef, selectedPathsInViewOrder, selectedPathsInViewOrderRef]);
+  // With the Info panel showing it, the one folder selected is measured by itself, unless
+  // that is turned off in Settings.
+  useAutoFolderSize(
+    getAutoFolderSizePath({
+      infoPanelOpen:
+        autoCalculateFolderSizes &&
+        infoPanelOpen &&
+        mainView === "explorer" &&
+        infoTargetPathOverride === null,
+      selectedPaths: contentSelection.paths,
+      selectedEntry,
+      homePath,
+    }),
+    folderSizeCache,
+  );
   const contextMenuTargetEntries = useMemo(
     // Content-menu target entries are resolved from the visible content listing only.
     // Tree and favorite menus intentionally do not rely on this memo.
@@ -1398,6 +1416,7 @@ export function App() {
     searchColumnWidths,
     notificationsEnabled,
     markClipboardItems,
+    autoCalculateFolderSizes,
     topToolbarItems,
     folderTreeOpen,
     propertiesOpen: infoPanelOpen,
@@ -1568,6 +1587,7 @@ export function App() {
         setSearchColumnWidths(preferences.searchColumnWidths);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setMarkClipboardItems(preferences.markClipboardItems);
+        setAutoCalculateFolderSizes(preferences.autoCalculateFolderSizes);
         setTopToolbarItems(preferences.topToolbarItems);
         setFolderTreeOpen(preferences.folderTreeOpen);
         setInfoPanelOpen(preferences.propertiesOpen);

@@ -109,6 +109,7 @@ export function SettingsWindowApp() {
     searchColumnOrder: preferences.searchColumnOrder,
     notificationsEnabled: preferences.notificationsEnabled,
     markClipboardItems: preferences.markClipboardItems,
+    autoCalculateFolderSizes: preferences.autoCalculateFolderSizes,
     restoreSessionOnStartup: preferences.restoreSessionOnStartup,
     favorites: preferences.favorites,
     favoritesPlacement: preferences.favoritesPlacement,
@@ -344,6 +345,7 @@ export function SettingsWindowApp() {
               layoutMode="wide"
               notificationsEnabled={preferences.notificationsEnabled}
               markClipboardItems={preferences.markClipboardItems}
+              autoCalculateFolderSizes={preferences.autoCalculateFolderSizes}
               restoreSessionOnStartup={preferences.restoreSessionOnStartup}
               homePath={homePath}
               terminalApp={preferences.terminalApp}
@@ -373,6 +375,7 @@ export function SettingsWindowApp() {
               onSearchColumnOrderChange={preferences.setSearchColumnOrder}
               onNotificationsEnabledChange={preferences.setNotificationsEnabled}
               onMarkClipboardItemsChange={preferences.setMarkClipboardItems}
+              onAutoCalculateFolderSizesChange={preferences.setAutoCalculateFolderSizes}
               onRestoreSessionOnStartupChange={preferences.setRestoreSessionOnStartup}
               onBrowseTerminalApp={() => {
                 void pickApplication("Couldn’t choose the terminal app.").then(

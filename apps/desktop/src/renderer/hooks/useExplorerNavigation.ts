@@ -6,6 +6,7 @@ import { DEFAULT_APP_PREFERENCES } from "../../shared/appPreferences";
 import type { TreeNodeState } from "../components/TreePane";
 import { type ContentSelectionState, EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
 import type { TreeItemId } from "../lib/favorites";
+import type { FolderViewMemories } from "../lib/folderViewMemory";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -74,6 +75,8 @@ export function useExplorerNavigation() {
   // Counts the times another tab's state was put into this store. Work that waits for the
   // disk compares it before and after, so it does not carry on in a tab it was not started in.
   const viewEpochRef = useRef(0);
+  // How the folders in this tab's history were left, for Back and Forward.
+  const folderViewMemoriesRef = useRef<FolderViewMemories>({});
 
   return {
     mainView,
@@ -158,5 +161,6 @@ export function useExplorerNavigation() {
     lastLeftPaneSubviewRef,
     activeTabIdRef,
     viewEpochRef,
+    folderViewMemoriesRef,
   };
 }

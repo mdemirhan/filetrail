@@ -27,6 +27,7 @@ import {
   createFileSystemItemId,
   getFavoriteItemPath,
 } from "../lib/favorites";
+import { CONTENT_SCROLL_SELECTOR, TREE_SCROLL_SELECTOR } from "../lib/folderViewMemory";
 import type { StartupTab } from "../lib/startupNavigation";
 import type {
   ExplorerServices,
@@ -40,8 +41,6 @@ import type {
 // How often a search running in a background tab is asked how it is doing. Nothing is asked
 // while no background tab has a search running.
 const BACKGROUND_SEARCH_POLL_MS = 1000;
-const CONTENT_SCROLL_SELECTOR = ".details-scroll, .flow-list";
-const TREE_SCROLL_SELECTOR = ".tree-scroll";
 const SIDEBAR_SECTIONS_SCROLL_SELECTOR = ".sidebar-sections";
 
 // What is still owed to a tab after its state has been put on screen. It is done once the
@@ -268,6 +267,7 @@ export function useExplorerTabs(args: {
         },
         treeScrollTop: treeScroller?.scrollTop ?? 0,
         sidebarSectionsScrollTop: sidebarSectionsScroller?.scrollTop ?? 0,
+        folderViewMemories: navigation.folderViewMemoriesRef.current,
       },
       search: searchSession.detach(),
     };
@@ -312,6 +312,7 @@ export function useExplorerTabs(args: {
     navigation.setSortDirection(snapshot.sortDirection);
     navigation.setHistoryPaths(snapshot.historyPaths);
     navigation.setHistoryIndex(snapshot.historyIndex);
+    navigation.folderViewMemoriesRef.current = view?.folderViewMemories ?? {};
     navigation.leftPaneSubviewRef.current = snapshot.leftPaneSubview;
     navigation.setLeftPaneSubview(snapshot.leftPaneSubview);
     navigation.treeRootPathRef.current = snapshot.treeRootPath;
@@ -446,6 +447,7 @@ export function useExplorerTabs(args: {
               contentSelection: EMPTY_CONTENT_SELECTION,
               listFilterQuery: "",
               contentScroll: { top: 0, left: 0 },
+              folderViewMemories: {},
             }
           : null,
         search: null,
