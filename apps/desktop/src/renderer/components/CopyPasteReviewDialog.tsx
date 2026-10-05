@@ -105,6 +105,9 @@ export function CopyPasteReviewDialog({
     [report, policy, overrides],
   );
   const replacing = summary.replaced > 0;
+  // A folder merged into one already there (Add Missing, Keep All, or Merge on a row) can't
+  // be undone, so that is said before the button is pressed; nothing else here warns.
+  const merging = summary.merged > 0;
 
   useEffect(() => {
     if (!starting && refocusAfterStartRef.current) {
@@ -317,10 +320,17 @@ export function CopyPasteReviewDialog({
         ) : null}
 
         <footer className="copy-paste-sheet-footer">
-          {replacing ? (
+          {replacing || merging ? (
             <p className="copy-paste-sheet-footer-note is-warning">
               <WarningGlyph />
-              {`${pluralize(summary.replaced, "existing item")} will be moved to the Trash`}
+              {[
+                replacing
+                  ? `${pluralize(summary.replaced, "existing item")} will be moved to the Trash`
+                  : formatReviewSummary(summary, verb),
+                merging ? "Merging can’t be undone" : null,
+              ]
+                .filter(Boolean)
+                .join(". ")}
             </p>
           ) : (
             <p className="copy-paste-sheet-footer-note">{formatReviewSummary(summary, verb)}</p>

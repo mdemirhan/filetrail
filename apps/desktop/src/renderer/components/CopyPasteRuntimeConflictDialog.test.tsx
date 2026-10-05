@@ -199,9 +199,24 @@ describe("CopyPasteRuntimeConflictDialog", () => {
       />,
     );
 
+    // Said before Merge is chosen: it can't be undone.
+    expect(screen.getByText(/Merging can’t be undone\.$/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Merge" }));
     expect(onResolve).toHaveBeenCalledWith("merge", false);
     expect(screen.getByRole("button", { name: "Stop Moving" })).toBeInTheDocument();
+  });
+
+  it("says nothing about Undo where Merge isn't an answer", () => {
+    render(
+      <CopyPasteRuntimeConflictDialog
+        verb="Copy"
+        conflict={conflict({})}
+        onResolve={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/Merging can’t be undone/)).not.toBeInTheDocument();
   });
 
   it("can only skip an item that disappeared", () => {

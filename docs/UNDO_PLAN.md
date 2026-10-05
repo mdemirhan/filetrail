@@ -334,6 +334,11 @@ Wording to settle when building:
 
 **Tests:** the review sheet footer for each choice, the runtime dialog text, and the history emptied after each Can't Undo case (main-process tests).
 
+### What changed while building Phase 5
+
+- Keep All merges folders too (it adds a folder's files into the existing one under "copy" names), and it is offered for moves. So the review sheet warns whenever its choices merge any folder (Add Missing, Keep All, or Merge on a row): the footer adds "Merging can’t be undone". It says nothing when nothing merges.
+- The dialog shown during a paste adds "Merging can’t be undone." wherever Merge is one of its answers. The no-Trash Replace question already said "This can’t be undone."
+
 ## Phase 6: Checking in the real app, and docs
 
 - Run the app on a test folder.

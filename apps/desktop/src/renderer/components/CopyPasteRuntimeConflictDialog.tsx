@@ -72,7 +72,12 @@ export function CopyPasteRuntimeConflictDialog({
         : (choices[0] ?? "skip");
   const secondary = choices.filter((choice) => choice !== primary);
 
-  const { title, message } = describeConflict(conflict, name, folder, verbing);
+  const described = describeConflict(conflict, name, folder, verbing);
+  const title = described.title;
+  // Merging can't be undone: said wherever Merge is one of the answers.
+  const message = choices.includes("merge")
+    ? `${described.message} Merging can’t be undone.`
+    : described.message;
 
   const labelFor = (choice: CopyPasteChoice) => {
     if (choice !== "overwrite") {
