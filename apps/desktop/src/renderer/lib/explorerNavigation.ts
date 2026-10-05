@@ -134,8 +134,10 @@ export function getNextSelectionIndex(args: {
   key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End";
   columns: number;
   viewMode: "icons" | "list" | "details";
+  /** With nothing selected: where the selected items were before they left the list. */
+  gapIndex?: number | undefined;
 }): number {
-  const { itemCount, currentIndex, key, columns, viewMode } = args;
+  const { itemCount, currentIndex, key, columns, viewMode, gapIndex } = args;
   if (itemCount === 0) {
     return -1;
   }
@@ -148,7 +150,23 @@ export function getNextSelectionIndex(args: {
   }
 
   if (currentIndex < 0) {
-    return 0;
+    if (gapIndex === undefined) {
+      return 0;
+    }
+    // A step to the next item goes to the one that took the gone item's place, a step back
+    // to the one before it. A step by a row (icons) or a column (list) goes from that place.
+    const movesByStep =
+      viewMode === "icons"
+        ? key === "ArrowUp" || key === "ArrowDown"
+        : viewMode === "list" && (key === "ArrowLeft" || key === "ArrowRight");
+    if (!movesByStep) {
+      const forward = key === "ArrowDown" || key === "ArrowRight";
+      return clampIndex(forward ? gapIndex : gapIndex - 1, itemCount);
+    }
+    return clampIndex(
+      getNextSelectionIndex({ itemCount, currentIndex: gapIndex, key, columns, viewMode }),
+      itemCount,
+    );
   }
 
   const safeIndex = currentIndex;

@@ -856,6 +856,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
               | "End",
             columns: current.viewMode === "details" ? 1 : current.contentColumns,
             viewMode: current.viewMode,
+            gapIndex: current.contentSelection.gapIndex,
           });
           const nextEntry = current.activeContentEntries[nextIndex];
           if (!nextEntry) {

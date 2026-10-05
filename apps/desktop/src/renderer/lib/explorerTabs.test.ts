@@ -113,6 +113,7 @@ describe("explorerTabs", () => {
         contentScroll: { top: 40, left: 0 },
         treeScrollTop: 0,
         sidebarSectionsScrollTop: 0,
+        folderViewMemories: {},
       },
       search: null,
     };

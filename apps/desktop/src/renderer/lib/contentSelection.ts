@@ -2,6 +2,10 @@ export type ContentSelectionState = {
   paths: string[];
   anchorPath: string | null;
   leadPath: string | null;
+  // Set only when nothing is selected because the selected items left the list (moved to
+  // the Trash, say): how many of the items still shown came before them. The arrow keys
+  // carry on from there instead of from the top.
+  gapIndex?: number;
 };
 
 // `anchorPath` is the fixed origin for shift-range extension.
@@ -18,14 +22,23 @@ type PathEntry = {
 
 // Selection is stored independently from directory contents, so it must be sanitized each
 // time the visible entry set changes due to navigation, sorting, filtering, or search.
+// `previousEntries`, the list the selection was made in, lets a selection whose items have
+// all gone keep their place (see `gapIndex`).
 export function sanitizeContentSelection<T extends PathEntry>(
   selection: ContentSelectionState,
   entries: T[],
+  previousEntries?: T[],
 ): ContentSelectionState {
   const availablePaths = new Set(entries.map((entry) => entry.path));
   const nextPaths = selection.paths.filter((path) => availablePaths.has(path));
   if (nextPaths.length === 0) {
-    return EMPTY_CONTENT_SELECTION;
+    const gapIndex =
+      selection.paths.length > 0
+        ? findSelectionGapIndex(selection, availablePaths, previousEntries ?? [])
+        : selection.gapIndex;
+    return gapIndex === undefined
+      ? EMPTY_CONTENT_SELECTION
+      : { ...EMPTY_CONTENT_SELECTION, gapIndex: Math.min(gapIndex, entries.length) };
   }
   const leadPath =
     selection.leadPath && availablePaths.has(selection.leadPath)
@@ -40,6 +53,21 @@ export function sanitizeContentSelection<T extends PathEntry>(
     anchorPath,
     leadPath,
   };
+}
+
+// Where the lead item stood among the items that are still there.
+function findSelectionGapIndex<T extends PathEntry>(
+  selection: ContentSelectionState,
+  availablePaths: Set<string>,
+  previousEntries: T[],
+): number | undefined {
+  const leadPath = selection.leadPath ?? selection.paths[0];
+  const leadIndex = previousEntries.findIndex((entry) => entry.path === leadPath);
+  if (leadIndex < 0) {
+    return undefined;
+  }
+  return previousEntries.slice(0, leadIndex).filter((entry) => availablePaths.has(entry.path))
+    .length;
 }
 
 // Shift-range selection is based on visual order, not lexical path ordering.

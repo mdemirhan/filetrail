@@ -720,7 +720,12 @@ export function useExplorerActions(args: {
     return items;
   }, [openWithApplications]);
 
+  // The list the selection was last checked against, so a selection whose items all leave
+  // keeps their place for the arrow keys.
+  const previousActiveContentEntriesRef = useRef(activeContentEntries);
   useEffect(() => {
+    const previousEntries = previousActiveContentEntriesRef.current;
+    previousActiveContentEntriesRef.current = activeContentEntries;
     setContentSelection((current) => {
       // A renamed, pasted or new item outside the filter is selected on purpose: the
       // filter is cleared to show it (useExplorerNavigationController), so it is kept here.
@@ -731,7 +736,11 @@ export function useExplorerActions(args: {
       if (leadHiddenByFilter) {
         return current;
       }
-      const nextSelection = sanitizeContentSelection(current, activeContentEntries);
+      const nextSelection = sanitizeContentSelection(
+        current,
+        activeContentEntries,
+        previousEntries,
+      );
       syncContentSelectionRefs(nextSelection, activeContentEntries);
       return nextSelection;
     });
