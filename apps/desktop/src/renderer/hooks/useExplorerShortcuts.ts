@@ -16,8 +16,10 @@ import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { getNextSelectionIndex } from "../lib/explorerNavigation";
 import type { DirectoryEntry } from "../lib/explorerTypes";
 import { isKeyboardOwnedFormControl, resolveFocusedEditTarget } from "../lib/focusedEditTarget";
+import { isGoMenuPlaceCommand, resolveGoMenuPlace } from "../lib/goMenuPlaces";
 import type { HelpTopicId } from "../lib/helpContent";
 import {
+  resolveCalculateSizePaths,
   resolveFavoriteTargetPath,
   resolveNewTabTargetPath,
   resolveShowInFinderPaths,
@@ -102,6 +104,8 @@ type ExplorerShortcutActions = {
   goBack: () => void;
   goForward: () => void;
   goHomeAndRootTree: () => void;
+  // Opens a row of the sidebar's Locations, as a click on it does.
+  openSidebarLocation: (path: string) => void;
   rootTreeAtPath: (path: string) => void;
   navigateTo: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
   navigateTreeFileSystemPath: (
@@ -156,6 +160,10 @@ type ExplorerShortcutActions = {
   openFolderInNewTab: (path: string) => Promise<void>;
   toggleFavoritePath: (path: string) => void;
   showPathsInFinder: (paths: string[]) => Promise<void>;
+  revealPathInFolder: (path: string) => Promise<void>;
+  // One folder is measured again; of several, those not measured yet.
+  calculateFolderSize: (path: string) => void;
+  calculateFolderSizes: (paths: string[]) => void;
   handleSortChange: (sortBy: "name" | "modified" | "size" | "kind") => void;
   toggleFoldersFirst: () => void;
   openHelp: (topic?: HelpTopicId) => void;
@@ -1199,6 +1207,15 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         current.goHomeAndRootTree();
         return;
       }
+      if (isGoMenuPlaceCommand(commandType)) {
+        const place = resolveGoMenuPlace(commandType, current.homePath);
+        if (place?.asLocation) {
+          current.openSidebarLocation(place.path);
+        } else if (place) {
+          void current.navigateTo(place.path, "push");
+        }
+        return;
+      }
       if (commandType === "rootTreeAtSelection") {
         current.rootTreeAtSelection();
         return;
@@ -1248,6 +1265,22 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         const paths = resolveShowInFinderPaths(current);
         if (paths.length > 0) {
           void current.showPathsInFinder(paths);
+        }
+        return;
+      }
+      if (commandType === "calculateSize") {
+        const paths = resolveCalculateSizePaths(current);
+        if (paths.length === 1 && paths[0]) {
+          current.calculateFolderSize(paths[0]);
+        } else if (paths.length > 1) {
+          current.calculateFolderSizes(paths);
+        }
+        return;
+      }
+      if (commandType === "revealInFolder") {
+        const path = current.isSearchMode ? current.selectionLeadOrSelectedPath() : null;
+        if (path) {
+          void current.revealPathInFolder(path);
         }
         return;
       }

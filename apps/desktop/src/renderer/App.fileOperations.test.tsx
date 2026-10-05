@@ -2063,6 +2063,22 @@ describe("acting on search results", () => {
     expect(screen.queryByRole("dialog", { name: /Rename/ })).not.toBeInTheDocument();
   });
 
+  // File > Reveal in Folder, a key chosen for it in Settings, or its toolbar button.
+  it("reveals the selected result in its folder from the menu bar", async () => {
+    const harness = createAppHarness({
+      searchResultItems: [result("/Users/demo/source.txt")],
+    });
+    renderApp(harness);
+    await openSearchResults();
+    await selectResult("/Users/demo/source.txt");
+    await act(async () => {
+      harness.emitCommand({ type: "revealInFolder" });
+    });
+
+    await waitFor(() => expect(screen.queryByTestId("search-results-pane")).toBeNull());
+    expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
+  });
+
   it("offers Move to Trash, Rename and Duplicate in a result's menu", async () => {
     const harness = createAppHarness({
       searchResultItems: [result("/Users/demo/Folder/deep.txt")],
