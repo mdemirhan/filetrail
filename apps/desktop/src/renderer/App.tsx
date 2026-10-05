@@ -1577,13 +1577,15 @@ export function App() {
           homeResponse.path,
           launchContextResponse.startupFolderPath,
         );
-        // A favorite that was removed since is opened as the plain folder it is.
+        // A favorite that was removed since is opened as the plain folder it is. Favorites
+        // set up just now are shown open.
         const startupTabs = startup.tabs.map((tab) => ({
           ...tab,
           favoritePath:
             tab.favoritePath && isFavoritePath(preferences.favorites, tab.favoritePath)
               ? tab.favoritePath
               : null,
+          favoritesExpanded: preferences.favoritesInitialized ? tab.favoritesExpanded : true,
         }));
         const startupTab = startupTabs[startup.activeIndex];
         if (!startupTab) {
@@ -1591,13 +1593,7 @@ export function App() {
           return;
         }
         // The tab on screen is loaded here; the other tabs are read when they are shown.
-        restoreTabs(startupTabs, startup.activeIndex, {
-          favoritesPlacement: preferences.favoritesPlacement,
-          favoritesExpanded: preferences.favoritesInitialized
-            ? preferences.favoritesExpanded
-            : true,
-          locationsExpanded: preferences.locationsExpanded,
-        });
+        restoreTabs(startupTabs, startup.activeIndex, preferences.favoritesPlacement);
         const startupPath = startupTab.path;
         const startupRootPath = startupTab.rootPath;
         const restoredFavoritePath = startupTab.favoritePath;
@@ -1605,6 +1601,8 @@ export function App() {
         setSearchViewMode(startupTab.searchViewMode);
         setIncludeHidden(startupTab.includeHidden);
         setFoldersFirst(startupTab.foldersFirst);
+        setFavoritesExpanded(startupTab.favoritesExpanded);
+        setLocationsExpanded(startupTab.locationsExpanded);
         setSortBy(startupTab.sortBy);
         setSortDirection(startupTab.sortDirection);
         initializeTree(startupRootPath);

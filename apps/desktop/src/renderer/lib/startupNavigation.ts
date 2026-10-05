@@ -82,6 +82,8 @@ export type StartupTab = {
   sortDirection: AppPreferences["sortDirection"];
   includeHidden: boolean;
   foldersFirst: boolean;
+  favoritesExpanded: boolean;
+  locationsExpanded: boolean;
 };
 
 // The tabs the window opens with and the one that is on screen. "Reopen the last folder and
@@ -103,6 +105,8 @@ export function resolveStartupTabs(
     | "sortDirection"
     | "includeHidden"
     | "foldersFirst"
+    | "favoritesExpanded"
+    | "locationsExpanded"
   >,
   homePath: string,
   startupFolderPath: string | null = null,
@@ -114,6 +118,8 @@ export function resolveStartupTabs(
     sortDirection: preferences.sortDirection,
     includeHidden: preferences.includeHidden,
     foldersFirst: preferences.foldersFirst,
+    favoritesExpanded: preferences.favoritesExpanded,
+    locationsExpanded: preferences.locationsExpanded,
   };
   if (!preferences.restoreSessionOnStartup || preferences.openTabs.length === 0) {
     const { startupPath, startupRootPath, startupFavoritePath } = resolveStartupNavigation(
@@ -142,6 +148,8 @@ export function resolveStartupTabs(
       sortDirection: tab.sortDirection,
       includeHidden: tab.includeHidden,
       foldersFirst: tab.foldersFirst,
+      favoritesExpanded: tab.favoritesExpanded,
+      locationsExpanded: tab.locationsExpanded,
     };
     if (!tab.path) {
       return { path: homePath, rootPath: homePath, favoritePath: null, ...tabView };

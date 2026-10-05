@@ -581,6 +581,8 @@ describe("App tabs", () => {
     sortDirection: "asc" as const,
     includeHidden: false,
     foldersFirst: true,
+    favoritesExpanded: true,
+    locationsExpanded: true,
   });
 
   it("reopens the tabs that were open, reading each folder when its tab is shown", async () => {
@@ -612,6 +614,41 @@ describe("App tabs", () => {
     expect(
       harness.invocations.filter((call) => call.channel === "places:recordVisit"),
     ).toHaveLength(0);
+  });
+
+  it("reopens each tab with its sidebar sections open or closed, and saves them", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreSessionOnStartup: true,
+        openTabs: [
+          { ...savedTab("/Users/demo"), locationsExpanded: false },
+          { ...savedTab("/Users/demo/Folder"), favoritesExpanded: false },
+        ],
+        activeTabIndex: 0,
+        // Favorites being set up for the first time are shown open in every tab.
+        favoritesInitialized: true,
+      },
+    });
+    await renderApp(harness);
+    expect(screen.getByTestId("favorites-expanded")).toHaveTextContent("true");
+    expect(screen.getByTestId("locations-expanded")).toHaveTextContent("false");
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+    expect(screen.getByTestId("favorites-expanded")).toHaveTextContent("false");
+    expect(screen.getByTestId("locations-expanded")).toHaveTextContent("true");
+
+    // Opened again in the second tab, Favorites is saved open for it alone.
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Favorites Section" }));
+    await waitFor(() => {
+      const openTabs = harness.invocations
+        .filter((call) => call.channel === "app:updatePreferences")
+        .map((call) => (call.payload as { preferences: { openTabs?: unknown } }).preferences)
+        .findLast((preferences) => preferences.openTabs !== undefined)?.openTabs;
+      expect(openTabs).toEqual([
+        expect.objectContaining({ favoritesExpanded: true, locationsExpanded: false }),
+        expect.objectContaining({ favoritesExpanded: true, locationsExpanded: true }),
+      ]);
+    });
   });
 
   it("keeps the tab on screen until the window has read its first folder", async () => {
