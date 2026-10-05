@@ -42,10 +42,13 @@ import type {
 const BACKGROUND_SEARCH_POLL_MS = 1000;
 const CONTENT_SCROLL_SELECTOR = ".details-scroll, .flow-list";
 const TREE_SCROLL_SELECTOR = ".tree-scroll";
+const SIDEBAR_SECTIONS_SCROLL_SELECTOR = ".sidebar-sections";
 
 // What is still owed to a tab after its state has been put on screen. It is done once the
 // window has rendered that state, so it works with the tab's own values.
 type PendingActivation = {
+  // Which showing of a tab this is: a later one takes over what is still owed.
+  id: number;
   // "reload": the folder is on screen from when the tab was left and is read again in case
   // it changed. "load": nothing is on screen yet. "open": a folder is opened for the first
   // time, which counts as a visit. "none": the tab shows what was already on screen.
@@ -54,6 +57,7 @@ type PendingActivation = {
   favoritePath: string | null;
   contentScroll: { top: number; left: number };
   treeScrollTop: number | null;
+  sidebarSectionsScrollTop: number | null;
   focusedPane: "tree" | "content";
   treeRootPath: string;
   refreshExpandedTree: boolean;
@@ -140,6 +144,10 @@ export function useExplorerTabs(args: {
 
   const pendingActivationRef = useRef<PendingActivation | null>(null);
   const [activationCount, setActivationCount] = useState(0);
+  const lastActivationIdRef = useRef(0);
+  // A tab that comes back puts its sidebar back where it was scrolled. Until its folder and
+  // tree have been read again, the sidebar does not scroll to the selected folder on its own.
+  const [sidebarScrollHeld, setSidebarScrollHeld] = useState(false);
   // The tabs that were closed, most recent last, for Reopen Closed Tab. They are not kept
   // between launches.
   const closedTabsRef = useRef<TabSnapshot[]>([]);
@@ -228,6 +236,8 @@ export function useExplorerTabs(args: {
       contentPaneRef.current?.querySelector<HTMLElement>(CONTENT_SCROLL_SELECTOR) ?? null;
     const treeScroller =
       treePaneRef.current?.querySelector<HTMLElement>(TREE_SCROLL_SELECTOR) ?? null;
+    const sidebarSectionsScroller =
+      treePaneRef.current?.querySelector<HTMLElement>(SIDEBAR_SECTIONS_SCROLL_SELECTOR) ?? null;
     return {
       currentPath: navigation.currentPath,
       historyPaths: navigation.historyPaths,
@@ -243,6 +253,8 @@ export function useExplorerTabs(args: {
         navigation.focusedPane ?? navigation.lastExplorerFocusPaneRef.current ?? "content",
       includeHidden: preferences.includeHidden,
       foldersFirst: preferences.foldersFirst,
+      favoritesExpanded: preferences.favoritesExpanded,
+      locationsExpanded: preferences.locationsExpanded,
       view: {
         treeNodes: navigation.treeNodesRef.current,
         currentEntries: navigation.currentEntries,
@@ -255,6 +267,7 @@ export function useExplorerTabs(args: {
           left: contentScroller?.scrollLeft ?? 0,
         },
         treeScrollTop: treeScroller?.scrollTop ?? 0,
+        sidebarSectionsScrollTop: sidebarSectionsScroller?.scrollTop ?? 0,
       },
       search: searchSession.detach(),
     };
@@ -293,6 +306,8 @@ export function useExplorerTabs(args: {
     preferences.setSearchViewMode(snapshot.searchViewMode);
     preferences.setIncludeHidden(snapshot.includeHidden);
     preferences.setFoldersFirst(snapshot.foldersFirst);
+    preferences.setFavoritesExpanded(snapshot.favoritesExpanded);
+    preferences.setLocationsExpanded(snapshot.locationsExpanded);
     navigation.setSortBy(snapshot.sortBy);
     navigation.setSortDirection(snapshot.sortDirection);
     navigation.setHistoryPaths(snapshot.historyPaths);
@@ -334,17 +349,23 @@ export function useExplorerTabs(args: {
       searchCommittedQuery: tabSearch.committedQuery,
     });
 
+    lastActivationIdRef.current += 1;
     pendingActivationRef.current = {
+      id: lastActivationIdRef.current,
       mode,
       path: snapshot.currentPath,
       favoritePath: getFavoriteItemPath(snapshot.selectedTreeItemId),
       contentScroll: view?.contentScroll ?? { top: 0, left: 0 },
       treeScrollTop: view?.treeScrollTop ?? null,
+      sidebarSectionsScrollTop: view?.sidebarSectionsScrollTop ?? null,
       focusedPane: snapshot.focusedPane,
       treeRootPath: snapshot.treeRootPath,
       refreshExpandedTree: options.refreshExpandedTree ?? false,
       rerunSearch,
     };
+    // A tab with nothing on screen yet has no place to go back to: its sidebar scrolls to
+    // its folder as it is read.
+    setSidebarScrollHeld(view !== null);
     setActivationCount((count) => count + 1);
   }
 
@@ -581,7 +602,11 @@ export function useExplorerTabs(args: {
   function restoreTabs(
     startupTabs: readonly StartupTab[],
     activeIndex: number,
-    favoritesPlacement: "integrated" | "separate",
+    sidebar: {
+      favoritesPlacement: "integrated" | "separate";
+      favoritesExpanded: boolean;
+      locationsExpanded: boolean;
+    },
   ) {
     const tabs = startupTabs.map((startupTab, index): ExplorerTab => {
       const id = createTabId();
@@ -604,10 +629,14 @@ export function useExplorerTabs(args: {
             ? createFavoriteItemId(startupTab.favoritePath)
             : createFileSystemItemId(startupTab.path),
           leftPaneSubview:
-            startupTab.favoritePath && favoritesPlacement === "separate" ? "favorites" : "tree",
+            startupTab.favoritePath && sidebar.favoritesPlacement === "separate"
+              ? "favorites"
+              : "tree",
           focusedPane: "content",
           includeHidden: startupTab.includeHidden,
           foldersFirst: startupTab.foldersFirst,
+          favoritesExpanded: sidebar.favoritesExpanded,
+          locationsExpanded: sidebar.locationsExpanded,
           view: null,
           search: null,
         },
@@ -662,6 +691,11 @@ export function useExplorerTabs(args: {
     if (treeScroller && pending.treeScrollTop !== null) {
       treeScroller.scrollTop = pending.treeScrollTop;
     }
+    const sidebarSectionsScroller =
+      treePaneRef.current?.querySelector<HTMLElement>(SIDEBAR_SECTIONS_SCROLL_SELECTOR) ?? null;
+    if (sidebarSectionsScroller && pending.sidebarSectionsScrollTop !== null) {
+      sidebarSectionsScroller.scrollTop = pending.sidebarSectionsScrollTop;
+    }
   }, [activationCount]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per tab shown, with the actions of the render that shows it.
@@ -671,6 +705,13 @@ export function useExplorerTabs(args: {
       return;
     }
     pendingActivationRef.current = null;
+    // Let go of the sidebar once this showing is done, unless another tab has been shown
+    // since. Not before the window has drawn the tab: the tree's rows are still settling.
+    const releaseSidebarScroll = () => {
+      if (lastActivationIdRef.current === pending.id) {
+        setSidebarScrollHeld(false);
+      }
+    };
     if (navigation.mainView === "explorer") {
       // The keyboard goes back to the pane the tab had it in, the tree or the list.
       if (pending.focusedPane === "tree") {
@@ -683,10 +724,13 @@ export function useExplorerTabs(args: {
       searchSession.rerun();
     }
     if (pending.path.length === 0 || pending.mode === "none") {
+      window.requestAnimationFrame(releaseSidebarScroll);
       return;
     }
     if (pending.mode === "reload") {
-      void navActions.reloadFolderInPlace({ refreshExpandedTree: pending.refreshExpandedTree });
+      void navActions
+        .reloadFolderInPlace({ refreshExpandedTree: pending.refreshExpandedTree })
+        .finally(releaseSidebarScroll);
       return;
     }
     const favoritePath = pending.favoritePath === pending.path ? pending.favoritePath : null;
@@ -873,6 +917,7 @@ export function useExplorerTabs(args: {
       ),
     ),
     restoreTabs,
+    sidebarScrollHeld,
     tabItems,
     activeTabId: state.activeTabId,
     tabCount: state.tabs.length,

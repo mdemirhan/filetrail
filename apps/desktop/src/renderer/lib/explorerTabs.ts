@@ -70,6 +70,8 @@ export type TabViewState = {
   listFilterQuery: string;
   contentScroll: { top: number; left: number };
   treeScrollTop: number;
+  // The Favorites and Locations list above the tree, when Favorites are shown on their own.
+  sidebarSectionsScrollTop: number;
 };
 
 export type TabSnapshot = {
@@ -90,6 +92,10 @@ export type TabSnapshot = {
   // a new tab starts with the one it was opened from.
   includeHidden: boolean;
   foldersFirst: boolean;
+  // Whether the sidebar's Favorites and Locations are open, which each tab keeps for itself
+  // in the same way.
+  favoritesExpanded: boolean;
+  locationsExpanded: boolean;
   // null for a tab that has not been shown yet (one restored at launch): its folder and
   // tree are read when it is first opened.
   view: TabViewState | null;
