@@ -20,7 +20,15 @@ export type ReplaceRecoveryOutcome =
   // The hidden item couldn't be reached (its disk isn't connected, or it can't be read):
   // it may still be there, so the entry is kept for the next start.
   | { entry: ReplaceJournalEntry; outcome: "unreachable"; error: string }
+  // Another operation was writing, so nothing was touched; the entry is tried again later.
+  | { entry: ReplaceJournalEntry; outcome: "deferred" }
   | { entry: ReplaceJournalEntry; outcome: "failed"; error: string };
+
+// Runs `write` only if nothing else is writing to the disk, holding everything else off
+// until it is done; `ran: false` means it didn't run at all.
+export type RunWriteAlone = <T>(
+  write: () => Promise<T>,
+) => Promise<{ ran: true; value: T } | { ran: false }>;
 
 // Finishes or undoes Replaces that were cut short (a crash, a power cut), so no item stays
 // under the hidden name it was built under. Run once at start, before any paste.
@@ -29,7 +37,10 @@ export async function recoverInterruptedReplaces(
   fileSystem: WriteServiceFileSystem,
   // A network disk that doesn't answer mustn't hold up the start: after this long its
   // entry is left for later, as for a disk that isn't connected.
-  options: { answerWithinMs?: number } = {},
+  // Once the app is running, each entry's changes go through `runWriteAlone`, so they
+  // never happen alongside a paste or any other operation. Whether the disk answers is
+  // found out first, outside it: that can take seconds and changes nothing.
+  options: { answerWithinMs?: number; runWriteAlone?: RunWriteAlone } = {},
 ): Promise<ReplaceRecoveryOutcome[]> {
   const outcomes: ReplaceRecoveryOutcome[] = [];
   for (const entry of entries) {
@@ -41,7 +52,12 @@ export async function recoverInterruptedReplaces(
         outcomes.push({ entry, outcome: "unreachable", error: "The disk didn't answer." });
         continue;
       }
-      outcomes.push(await recoverEntry(entry, fileSystem));
+      if (options.runWriteAlone === undefined) {
+        outcomes.push(await recoverEntry(entry, fileSystem));
+        continue;
+      }
+      const run = await options.runWriteAlone(() => recoverEntry(entry, fileSystem));
+      outcomes.push(run.ran ? run.value : { entry, outcome: "deferred" });
     } catch (error) {
       outcomes.push({ entry, outcome: "failed", error: describeCopyPasteError(error) });
     }

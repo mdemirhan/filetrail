@@ -167,6 +167,7 @@ export async function bootstrapMainProcess(
         entryIds,
         answerWithinMs: RECOVERY_ANSWER_WITHIN_MS,
         retry: true,
+        runWriteAlone: writeCoordinator.runWriteAlone,
       }),
     remainingIds: () => new Set(replaceJournal.entries().map((entry) => entry.id)),
     isBusy: () => writeCoordinator.getActiveOperation() !== null,

@@ -372,6 +372,18 @@ export function createWriteOperationCoordinator(
     }
   }
 
+  // Runs a write that isn't one of the person's operations (finishing a Replace a crash
+  // cut short) only when the slot is free, holding it meanwhile, so the two never write at
+  // the same time. When the slot is taken, or the app is quitting, it doesn't run at all.
+  async function runWriteAlone<T>(
+    write: () => Promise<T>,
+  ): Promise<{ ran: true; value: T } | { ran: false }> {
+    if (closing || activeWriteOperationId !== null) {
+      return { ran: false };
+    }
+    return { ran: true, value: await prepareWithReservedSlot(write) };
+  }
+
   // An operation whose page crashed, closed, or reloaded can never be answered or finished
   // from the UI, so it is cancelled instead of holding the write slot forever. Listeners
   // are added only now, after the start request arrived, so a reload that happened before
@@ -1398,6 +1410,7 @@ export function createWriteOperationCoordinator(
     },
     getActiveOperation,
     emptyTrash,
+    runWriteAlone,
     whenIdle,
     shutdown,
   };

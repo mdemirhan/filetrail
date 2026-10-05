@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ReplaceJournalEntry } from "@filetrail/core";
+import type { ReplaceJournalEntry, RunWriteAlone } from "@filetrail/core";
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
 import { openReplaceJournal, recoverReplaces, retryReplaceRecovery } from "./replaceJournal";
@@ -203,6 +203,60 @@ describe("recoverReplaces", () => {
     expect(report.finished).toEqual([`“waiting.txt” is in place now, in “${testDir}”.`]);
     expect(await readFile(waiting.finalPath, "utf8")).toBe("moved contents");
     expect(journal.entries()).toEqual([]);
+  });
+
+  // A retry runs while the app is in use: it waits for a moment when nothing else writes,
+  // and touches nothing while an operation runs.
+  it("leaves a waiting entry alone while another operation writes, and finishes it after", async () => {
+    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const waiting = createEntry("waiting", { moved: true });
+    await writeFile(waiting.stagingPath, "moved contents");
+    await journal.add(waiting);
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const busy = vi.fn(async () => ({ ran: false as const }));
+
+    const report = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger, {
+      entryIds: new Set([waiting.id]),
+      retry: true,
+      runWriteAlone: busy,
+    });
+
+    expect(busy).toHaveBeenCalledTimes(1);
+    expect(report).toEqual({ notices: [], finished: [] });
+    expect(await readFile(waiting.stagingPath, "utf8")).toBe("moved contents");
+    expect(journal.entries()).toEqual([waiting]);
+    expect(logger.error).not.toHaveBeenCalled();
+
+    let writing = false;
+    const free: RunWriteAlone = async (write) => {
+      writing = true;
+      try {
+        return { ran: true, value: await write() };
+      } finally {
+        writing = false;
+      }
+    };
+    const lstat = DEFAULT_WRITE_SERVICE_FILE_SYSTEM.lstat;
+    const seenWhileWriting: boolean[] = [];
+    const watchingFileSystem = {
+      ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      // Whether the disk answers is checked before the slot is taken.
+      lstat: (path: string) => {
+        seenWhileWriting.push(writing);
+        return lstat(path);
+      },
+    };
+    const retried = await recoverReplaces(journal, watchingFileSystem, logger, {
+      entryIds: new Set([waiting.id]),
+      retry: true,
+      answerWithinMs: 1_000,
+      runWriteAlone: free,
+    });
+
+    expect(retried.finished).toEqual([`“waiting.txt” is in place now, in “${testDir}”.`]);
+    expect(await readFile(waiting.finalPath, "utf8")).toBe("moved contents");
+    expect(journal.entries()).toEqual([]);
+    expect(seenWhileWriting[0]).toBe(false);
   });
 
   it("retries every so often while nothing runs, until nothing is left", async () => {

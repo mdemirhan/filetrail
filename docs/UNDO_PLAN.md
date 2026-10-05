@@ -65,7 +65,7 @@ Rule: the app never makes two changes to the user's files at once. The app's own
 This fixes an existing gap and is separate from Undo.
 
 - `retryReplaceRecovery` first checks whether each entry's disk answers (`answersWithin`), without holding the slot, because it can wait on a network disk.
-- It then runs the write part through a new coordinator method, `runExclusive(fn)`, built on `prepareWithReservedSlot`. If the slot is busy, it waits for the next minute.
+- It then runs the write part through a new coordinator method, `runWriteAlone(write)`, built on `prepareWithReservedSlot`. If the slot is busy, that entry is put off (`deferred`) until the next minute.
 - An operation the user starts during that short write is refused like any busy case. That should be very rare.
 
 **Tests:**

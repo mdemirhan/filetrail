@@ -1910,6 +1910,142 @@ describe("emptying the Trash", () => {
   });
 });
 
+// Finishing a Replace that a crash cut short happens in the background, while the app is in
+// use: it must never write at the same time as an operation the person started.
+describe("writing alone (crash recovery retries)", () => {
+  it("doesn't run while an operation holds the write slot", async () => {
+    let finishDelete: (() => void) | null = null;
+    const fs = createWriteOperationFs({
+      rm: vi.fn(
+        () =>
+          new Promise<void>((resolveRm) => {
+            finishDelete = resolveRm;
+          }),
+      ),
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
+    const sender = createSender();
+    await coordinator.handlers["writeOperation:deleteImmediately"](
+      { paths: ["/Users/demo/.Trash/a.txt"] },
+      { sender },
+    );
+    await waitFor(() => (finishDelete ? true : null));
+    const write = vi.fn(async () => "done");
+
+    await expect(coordinator.runWriteAlone(write)).resolves.toEqual({ ran: false });
+    expect(write).not.toHaveBeenCalled();
+
+    (finishDelete as (() => void) | null)?.();
+    await waitForTerminalEvent(sender, "write-op-1");
+    await expect(coordinator.runWriteAlone(write)).resolves.toEqual({ ran: true, value: "done" });
+    coordinator.shutdown();
+  });
+
+  it("doesn't run while a rename is still being checked", async () => {
+    let finishLookup: (() => void) | null = null;
+    let lookups = 0;
+    const fs = createWriteOperationFs({
+      lstat: vi.fn(async (path: string) => {
+        if (path === "/Users/demo/source.txt") {
+          // Only the first look is held, which is enough to keep the check going.
+          lookups += 1;
+          if (lookups === 1) {
+            await new Promise<void>((resolveLookup) => {
+              finishLookup = resolveLookup;
+            });
+          }
+          return createStats(false);
+        }
+        throw new Error("missing");
+      }),
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+    const renaming = coordinator.handlers["writeOperation:rename"](
+      { sourcePath: "/Users/demo/source.txt", destinationName: "renamed.txt" },
+      { sender },
+    );
+    await waitFor(() => (finishLookup ? true : null));
+    const write = vi.fn(async () => undefined);
+
+    await expect(coordinator.runWriteAlone(write)).resolves.toEqual({ ran: false });
+    expect(write).not.toHaveBeenCalled();
+
+    (finishLookup as (() => void) | null)?.();
+    await renaming;
+    await waitForTerminalEvent(sender, "write-op-1");
+    coordinator.shutdown();
+  });
+
+  it("holds the write slot while it runs, so no operation starts alongside", async () => {
+    let finishWrite: (() => void) | null = null;
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs(),
+    );
+    const writing = coordinator.runWriteAlone(
+      () =>
+        new Promise<void>((resolveWrite) => {
+          finishWrite = resolveWrite;
+        }),
+    );
+    await waitFor(() => (finishWrite ? true : null));
+
+    await expect(
+      coordinator.handlers["writeOperation:trash"](
+        { paths: ["/Users/demo/a.txt"] },
+        { sender: createSender() },
+      ),
+    ).rejects.toThrow("Another write operation is already running.");
+    await expect(coordinator.emptyTrash(async () => ({ ok: true, error: null }))).resolves.toEqual(
+      expect.objectContaining({ ok: false }),
+    );
+
+    (finishWrite as (() => void) | null)?.();
+    await expect(writing).resolves.toEqual({ ran: true, value: undefined });
+    // Free again once it is done.
+    await expect(
+      coordinator.handlers["writeOperation:trash"](
+        { paths: ["/Users/demo/a.txt"] },
+        { sender: createSender() },
+      ),
+    ).resolves.toEqual(expect.objectContaining({ status: "queued" }));
+    coordinator.shutdown();
+  });
+
+  it("frees the write slot when the write fails", async () => {
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs(),
+    );
+
+    await expect(
+      coordinator.runWriteAlone(async () => {
+        throw new Error("EIO");
+      }),
+    ).rejects.toThrow("EIO");
+    await expect(coordinator.runWriteAlone(async () => 1)).resolves.toEqual({
+      ran: true,
+      value: 1,
+    });
+    coordinator.shutdown();
+  });
+
+  it("doesn't run once the app is quitting", async () => {
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs(),
+    );
+    await coordinator.shutdown();
+    const write = vi.fn(async () => undefined);
+
+    await expect(coordinator.runWriteAlone(write)).resolves.toEqual({ ran: false });
+    expect(write).not.toHaveBeenCalled();
+  });
+});
+
 describe("questions during a paste", () => {
   it("passes on a question about an item dated before 1970", () => {
     const { writeService, emit } = createSubscribingWriteService();
