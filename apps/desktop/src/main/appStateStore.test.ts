@@ -190,6 +190,8 @@ describe("appStateStore", () => {
       sortDirection: "asc" as const,
       includeHidden: false,
       foldersFirst: true,
+      favoritesExpanded: true,
+      locationsExpanded: true,
     };
 
     // Opening, switching and closing tabs is where the user is, not a setting.
@@ -240,6 +242,7 @@ describe("appStateStore", () => {
         preferences: {
           restoreSessionOnStartup: true,
           activeTabIndex: -3,
+          locationsExpanded: false,
           openTabs: [
             {
               path: "/Users/demo/work",
@@ -247,6 +250,7 @@ describe("appStateStore", () => {
               sortBy: "size",
               sortDirection: "desc",
               includeHidden: true,
+              favoritesExpanded: false,
             },
             "not a tab",
             { path: "", treeRootPath: 7, viewMode: "gallery", sortBy: "colour" },
@@ -270,8 +274,11 @@ describe("appStateStore", () => {
         sortDirection: "desc",
         includeHidden: true,
         foldersFirst: true,
+        favoritesExpanded: false,
+        // Saved before tabs kept their sidebar: the window's setting.
+        locationsExpanded: false,
       },
-      // A tab without settings of its own takes the defaults.
+      // A tab without settings of its own takes the defaults, and the window's sidebar.
       {
         path: null,
         treeRootPath: null,
@@ -282,6 +289,8 @@ describe("appStateStore", () => {
         sortDirection: "asc",
         includeHidden: false,
         foldersFirst: true,
+        favoritesExpanded: true,
+        locationsExpanded: false,
       },
     ]);
   });
@@ -537,6 +546,8 @@ describe("appStateStore", () => {
           sortDirection: "desc",
           includeHidden: true,
           foldersFirst: false,
+          favoritesExpanded: false,
+          locationsExpanded: true,
         },
         {
           path: "/Users/demo/Documents",
@@ -548,6 +559,8 @@ describe("appStateStore", () => {
           sortDirection: "asc",
           includeHidden: false,
           foldersFirst: true,
+          favoritesExpanded: true,
+          locationsExpanded: false,
         },
       ],
       activeTabIndex: 1,
@@ -671,6 +684,8 @@ describe("appStateStore", () => {
           sortDirection: "desc",
           includeHidden: true,
           foldersFirst: false,
+          favoritesExpanded: false,
+          locationsExpanded: true,
         },
         {
           path: "/Users/demo/Documents",
@@ -682,6 +697,8 @@ describe("appStateStore", () => {
           sortDirection: "asc",
           includeHidden: false,
           foldersFirst: true,
+          favoritesExpanded: true,
+          locationsExpanded: false,
         },
       ],
       activeTabIndex: 1,

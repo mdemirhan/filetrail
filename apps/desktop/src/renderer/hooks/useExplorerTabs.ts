@@ -602,11 +602,7 @@ export function useExplorerTabs(args: {
   function restoreTabs(
     startupTabs: readonly StartupTab[],
     activeIndex: number,
-    sidebar: {
-      favoritesPlacement: "integrated" | "separate";
-      favoritesExpanded: boolean;
-      locationsExpanded: boolean;
-    },
+    favoritesPlacement: "integrated" | "separate",
   ) {
     const tabs = startupTabs.map((startupTab, index): ExplorerTab => {
       const id = createTabId();
@@ -629,14 +625,12 @@ export function useExplorerTabs(args: {
             ? createFavoriteItemId(startupTab.favoritePath)
             : createFileSystemItemId(startupTab.path),
           leftPaneSubview:
-            startupTab.favoritePath && sidebar.favoritesPlacement === "separate"
-              ? "favorites"
-              : "tree",
+            startupTab.favoritePath && favoritesPlacement === "separate" ? "favorites" : "tree",
           focusedPane: "content",
           includeHidden: startupTab.includeHidden,
           foldersFirst: startupTab.foldersFirst,
-          favoritesExpanded: sidebar.favoritesExpanded,
-          locationsExpanded: sidebar.locationsExpanded,
+          favoritesExpanded: startupTab.favoritesExpanded,
+          locationsExpanded: startupTab.locationsExpanded,
           view: null,
           search: null,
         },
@@ -892,6 +886,8 @@ export function useExplorerTabs(args: {
     sortDirection: navigation.sortDirection,
     includeHidden: preferences.includeHidden,
     foldersFirst: preferences.foldersFirst,
+    favoritesExpanded: preferences.favoritesExpanded,
+    locationsExpanded: preferences.locationsExpanded,
   };
   // No more tabs are remembered than a saved list may hold; a longer list would be refused
   // as a whole, along with everything saved in the same write.
@@ -949,5 +945,7 @@ function toOpenTabPreference(snapshot: TabSnapshot): OpenTabPreference {
     sortDirection: snapshot.sortDirection,
     includeHidden: snapshot.includeHidden,
     foldersFirst: snapshot.foldersFirst,
+    favoritesExpanded: snapshot.favoritesExpanded,
+    locationsExpanded: snapshot.locationsExpanded,
   };
 }
