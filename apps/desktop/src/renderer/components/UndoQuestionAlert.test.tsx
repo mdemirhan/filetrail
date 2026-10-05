@@ -4,29 +4,44 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { UndoQuestionAlert } from "./UndoQuestionAlert";
 
+const changedCopy = {
+  kind: "changed" as const,
+  items: [{ name: "1 copy.kt", putBack: false, replaced: false }],
+};
+
 describe("UndoQuestionAlert", () => {
-  it("stacks its buttons with the default on top and Cancel at the bottom", () => {
+  it("asks before moving changed work to the Trash, with Cancel the default", () => {
+    const onAnswer = vi.fn();
     render(
-      <UndoQuestionAlert question="changed" names={["1.kt"]} direction="undo" onAnswer={vi.fn()} />,
+      <UndoQuestionAlert
+        question={changedCopy}
+        direction="undo"
+        action="duplicate"
+        onAnswer={onAnswer}
+      />,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "“1.kt” has been modified." });
+    const dialog = screen.getByRole("dialog", {
+      name: "“1 copy.kt” was changed after it was duplicated.",
+    });
     expect(
       within(dialog)
         .getAllByRole("button")
         .map((button) => button.textContent),
-    ).toEqual(["Move to Trash", "Skip", "Cancel"]);
-    expect(dialog.querySelector(".alert-buttons")).toHaveClass("is-stacked");
-    expect(within(dialog).getByRole("button", { name: "Move to Trash" })).toHaveFocus();
+    ).toEqual(["Move to Trash", "Cancel"]);
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: "Enter" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Move to Trash" }));
+    expect(onAnswer.mock.calls).toEqual([[false], [true]]);
   });
 
-  it("answers with each button, Return and Escape", () => {
+  it("asks about a name taken with Keep Both the default", () => {
     const onAnswer = vi.fn();
     render(
       <UndoQuestionAlert
-        question="nameTaken"
-        names={["a.txt"]}
+        question={{ kind: "nameTaken", names: ["a.txt"] }}
         direction="redo"
+        action="trash"
         onAnswer={onAnswer}
       />,
     );
@@ -34,52 +49,31 @@ describe("UndoQuestionAlert", () => {
       name: "An item named “a.txt” is already where it would go back.",
     });
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Keep Both" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Skip" }));
+    expect(within(dialog).getByRole("button", { name: "Keep Both" })).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: "Enter" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     fireEvent.keyDown(dialog, { key: "Escape" });
-
-    expect(onAnswer.mock.calls).toEqual([["keep_both"], ["skip"], [null], [null]]);
+    expect(onAnswer.mock.calls).toEqual([[true], [false], [false]]);
   });
 
   it("lists the first names of several, and counts the rest", () => {
     const names = ["a", "b", "c", "d", "e", "f", "g"];
     render(
-      <UndoQuestionAlert question="changed" names={names} direction="redo" onAnswer={vi.fn()} />,
-    );
-
-    const dialog = screen.getByRole("dialog", { name: "7 items have been modified." });
-    expect(
-      within(dialog).getByText(
-        "Redo would move them to the Trash. Skip leaves them where they are.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog)
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual(["a", "b", "c", "d", "e", "and 2 more"]);
-  });
-
-  it("asks about several taken names at once", () => {
-    render(
       <UndoQuestionAlert
-        question="nameTaken"
-        names={["a", "b"]}
+        question={{ kind: "nameTaken", names }}
         direction="undo"
+        action="trash"
         onAnswer={vi.fn()}
       />,
     );
 
-    expect(
-      screen.getByRole("dialog", {
-        name: "2 items have names that other items have taken where they would go back.",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Keep Both puts them back with a number added to their names. Skip leaves them where they are.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "and 2 more",
+    ]);
   });
 });

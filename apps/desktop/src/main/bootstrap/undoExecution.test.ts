@@ -149,19 +149,13 @@ function setUp(fsOverrides: Partial<WriteOperationFs> = {}) {
         ),
       ),
     prepare: (direction: "undo" | "redo" = "undo") => handlers["undo:prepare"]({ direction }),
-    // Asks, then undoes (or redoes) with the answers given.
-    async undo(
-      direction: "undo" | "redo" = "undo",
-      answers: { nameTaken: "skip" | "keep_both"; changed: "trash" | "skip" } = {
-        nameTaken: "skip",
-        changed: "trash",
-      },
-    ) {
+    // Looks first, then undoes (or redoes) all of it, as when what it asked was agreed to.
+    async undo(direction: "undo" | "redo" = "undo") {
       const prepared = await handlers["undo:prepare"]({ direction });
       if (prepared.ticket === null) {
         throw new Error(`Nothing to ${direction}: ${prepared.refusal}`);
       }
-      return finish(handlers["undo:start"]({ ticket: prepared.ticket, ...answers }, { sender }));
+      return finish(handlers["undo:start"]({ ticket: prepared.ticket }, { sender }));
     },
   };
 }
@@ -417,7 +411,7 @@ describe("changes made outside the app", () => {
     await t.coordinator.shutdown();
   });
 
-  it("asks when an old name is taken, and leaves the item or numbers it as told", async () => {
+  it("asks when an old name is taken, then puts the item back with a number", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     writeFileSync(join(root, "b.txt"), "b");
     const t = setUp();
@@ -425,38 +419,30 @@ describe("changes made outside the app", () => {
     writeFileSync(join(root, "a.txt"), "someone else's");
 
     expect(await t.prepare()).toMatchObject({ nameTaken: ["a.txt"], changed: [] });
-    const undone = await t.undo("undo", { nameTaken: "skip", changed: "trash" });
-    expect(undone.status).toBe("partial");
+    expect((await t.undo()).status).toBe("completed");
+
     expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("someone else's");
-    expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("b");
-    expect(undone.result?.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          status: "skipped",
-          error: `An item named “a.txt” is already in “${basename(root)}”.`,
-        }),
-      ]),
-    );
-    await t.coordinator.shutdown();
-  });
-
-  it("puts an item back under a numbered name when told to keep both", async () => {
-    writeFileSync(join(root, "a.txt"), "a");
-    const t = setUp();
-    await t.trash(join(root, "a.txt"));
-    writeFileSync(join(root, "a.txt"), "someone else's");
-
-    await t.undo("undo", { nameTaken: "keep_both", changed: "trash" });
-
     expect(readFileSync(join(root, "a 2.txt"), "utf8")).toBe("a");
-    expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("someone else's");
+    expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("b");
     // Redo moves the very item back to the Trash, under whatever name it has now.
     await t.undo("redo");
     expect(existsSync(join(root, "a 2.txt"))).toBe(false);
     await t.coordinator.shutdown();
   });
 
-  it("asks before moving a copy that changed to the Trash, and leaves it when told to", async () => {
+  it("puts an item back with a number in a folder whose name is taken", async () => {
+    mkdirSync(join(root, "F"));
+    const t = setUp();
+    await t.trash(join(root, "F"));
+    mkdirSync(join(root, "F"));
+
+    await t.undo();
+
+    expect(lstatSync(join(root, "F 2")).isDirectory()).toBe(true);
+    await t.coordinator.shutdown();
+  });
+
+  it("asks before moving a copy that changed to the Trash, saying it is a duplicate", async () => {
     mkdirSync(join(root, "src"));
     writeFileSync(join(root, "src", "a.txt"), "a");
     const t = setUp();
@@ -471,19 +457,20 @@ describe("changes made outside the app", () => {
     );
     writeFileSync(join(root, "src", "a copy.txt"), "edited since");
 
-    expect(await t.prepare()).toMatchObject({ nameTaken: [], changed: ["a copy.txt"] });
-    const left = await t.undo("undo", { nameTaken: "skip", changed: "skip" });
-    expect(left.result?.items).toEqual([
-      expect.objectContaining({
-        status: "skipped",
-        error: "“a copy.txt” has changed since, so it was left where it is.",
-      }),
-    ]);
+    expect(await t.prepare()).toMatchObject({
+      action: "duplicate",
+      nameTaken: [],
+      changed: [{ name: "a copy.txt", putBack: false, replaced: false }],
+    });
+    await t.undo();
+    expect(existsSync(join(root, "src", "a copy.txt"))).toBe(false);
+    // The edits went to the Trash with it, and come back with Redo.
+    await t.undo("redo");
     expect(readFileSync(join(root, "src", "a copy.txt"), "utf8")).toBe("edited since");
     await t.coordinator.shutdown();
   });
 
-  it("moves a copy that changed to the Trash when told to", async () => {
+  it("moves a copied folder something was added to the Trash once agreed", async () => {
     mkdirSync(join(root, "src"));
     mkdirSync(join(root, "src", "Folder"));
     const t = setUp();
@@ -499,8 +486,10 @@ describe("changes made outside the app", () => {
     // An item added right inside the copied folder.
     writeFileSync(join(root, "src", "Folder copy", "added.txt"), "added");
 
-    expect((await t.prepare()).changed).toEqual(["Folder copy"]);
-    await t.undo("undo", { nameTaken: "skip", changed: "trash" });
+    expect((await t.prepare()).changed).toEqual([
+      { name: "Folder copy", putBack: false, replaced: false },
+    ]);
+    await t.undo();
 
     expect(existsSync(join(root, "src", "Folder copy"))).toBe(false);
     expect(inTrash()).toEqual(["1-Folder copy"]);
@@ -637,12 +626,14 @@ describe("changes made outside the app", () => {
       policy: REPLACE_ALL,
       fileSystem: nativeFileSystemWithTrash(pasteTrash),
     });
-    writeFileSync(join(root, "dst", "a.txt"), "new, edited");
+    // Another item takes the new one's place before Undo.
+    rmSync(join(root, "dst", "a.txt"));
+    mkdirSync(join(root, "dst", "a.txt"));
 
-    expect(await t.prepare()).toMatchObject({ nameTaken: [], changed: ["a.txt"] });
-    const undone = await t.undo("undo", { nameTaken: "skip", changed: "skip" });
+    expect(await t.prepare()).toMatchObject({ nameTaken: [], changed: [] });
+    const undone = await t.undo();
 
-    expect(readFileSync(join(root, "dst", "a.txt"), "utf8")).toBe("new, edited");
+    expect(lstatSync(join(root, "dst", "a.txt")).isDirectory()).toBe(true);
     expect(readdirSync(pasteTrash)).toEqual(["1-a.txt"]);
     expect(undone.result?.items).toEqual([
       expect.objectContaining({ status: "skipped" }),
@@ -663,6 +654,7 @@ describe("running an Undo", () => {
       ticket: null,
       refusal: "nothing",
       label: null,
+      action: null,
       nameTaken: [],
       changed: [],
     });
@@ -713,16 +705,10 @@ describe("running an Undo", () => {
     await t.newFolder(root, "F");
 
     expect(() =>
-      t.coordinator.handlers["undo:start"](
-        { ticket: prepared.ticket ?? "", nameTaken: "skip", changed: "trash" },
-        { sender: t.sender },
-      ),
+      t.coordinator.handlers["undo:start"]({ ticket: prepared.ticket ?? "" }, { sender: t.sender }),
     ).toThrow("Something changed since Undo was chosen. Choose it again.");
     expect(() =>
-      t.coordinator.handlers["undo:start"](
-        { ticket: "sideways:1:1", nameTaken: "skip", changed: "trash" },
-        { sender: t.sender },
-      ),
+      t.coordinator.handlers["undo:start"]({ ticket: "sideways:1:1" }, { sender: t.sender }),
     ).toThrow("Something changed since Undo was chosen.");
     await t.coordinator.shutdown();
   });
@@ -748,7 +734,7 @@ describe("running an Undo", () => {
     await t.trash(join(root, "a.txt"), join(root, "b.txt"), join(root, "c.txt"));
     const prepared = await t.prepare();
     const { operationId } = await t.coordinator.handlers["undo:start"](
-      { ticket: prepared.ticket ?? "", nameTaken: "skip", changed: "trash" },
+      { ticket: prepared.ticket ?? "" },
       { sender: t.sender },
     );
     while (holdFirst === null) {
@@ -847,18 +833,18 @@ describe("the rarer paths", () => {
     });
     await t.trash(join(root, "a.txt"));
 
-    await t.undo("undo", { nameTaken: "keep_both", changed: "trash" });
+    await t.undo();
 
     expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("someone else's");
     expect(readFileSync(join(root, "a 2.txt"), "utf8")).toBe("a");
     await t.coordinator.shutdown();
   });
 
-  it("leaves the item when another item takes its name just then and the answer is Skip", async () => {
+  it("leaves the item where it is when every name it tries is taken just then", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     const t = setUp({
       renameExclusive: async (from, to) => {
-        if (to === join(root, "a.txt")) {
+        if (to.startsWith(join(root, "a"))) {
           writeFileSync(to, "someone else's");
           throw Object.assign(new Error("EEXIST: file exists"), { code: "EEXIST" });
         }
@@ -867,12 +853,12 @@ describe("the rarer paths", () => {
     });
     await t.trash(join(root, "a.txt"));
 
-    const undone = await t.undo("undo", { nameTaken: "skip", changed: "trash" });
+    const undone = await t.undo();
 
     expect(undone.result?.items).toEqual([
       expect.objectContaining({
         status: "skipped",
-        error: `An item named “a.txt” is already in “${basename(root)}”.`,
+        error: `An item named “a 3.txt” is already in “${basename(root)}”.`,
       }),
     ]);
     expect(inTrash()).toEqual(["1-a.txt"]);
@@ -910,7 +896,7 @@ describe("the rarer paths", () => {
     await t.coordinator.shutdown();
   });
 
-  it("renames back the items of a batch it can, leaving one whose old name is taken", async () => {
+  it("renames back every item of a batch, numbering one whose old name is taken", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     writeFileSync(join(root, "b.txt"), "b");
     const t = setUp();
@@ -921,11 +907,11 @@ describe("the rarer paths", () => {
     writeFileSync(join(root, "a.txt"), "someone else's");
 
     expect((await t.prepare()).nameTaken).toEqual(["a.txt"]);
-    const undone = await t.undo("undo", { nameTaken: "skip", changed: "trash" });
+    const undone = await t.undo();
 
-    expect(undone.status).toBe("partial");
+    expect(undone.status).toBe("completed");
     expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("b");
-    expect(readFileSync(join(root, "x.txt"), "utf8")).toBe("a");
+    expect(readFileSync(join(root, "a 2.txt"), "utf8")).toBe("a");
     expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("someone else's");
     await t.coordinator.shutdown();
   });
@@ -975,7 +961,7 @@ describe("the rarer paths", () => {
     });
     const prepared = await stopping.prepare();
     ({ operationId } = stopping.coordinator.handlers["undo:start"](
-      { ticket: prepared.ticket ?? "", nameTaken: "skip", changed: "trash" },
+      { ticket: prepared.ticket ?? "" },
       { sender: stopping.sender },
     ));
 

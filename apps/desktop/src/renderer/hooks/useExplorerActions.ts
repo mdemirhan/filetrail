@@ -3509,11 +3509,9 @@ export function useExplorerActions(args: {
     await startCreateFolder(request, refuse);
   }
 
-  // The question an Undo is waiting on, answered with the dialog's buttons; null when it
-  // went without an answer (Cancel, Escape).
-  const undoQuestionResolverRef = useRef<
-    ((answer: "skip" | "keep_both" | "trash" | null) => void) | null
-  >(null);
+  // The question an Undo is waiting on: true to go ahead, false when it went without (Cancel,
+  // Escape). Either all of the Undo happens or none of it.
+  const undoQuestionResolverRef = useRef<((goAhead: boolean) => void) | null>(null);
   // What the Undo running now undoes ("Move of “a.txt”"), to say so when it has finished.
   const runningUndoLabelRef = useRef<string | null>(null);
 
@@ -3522,32 +3520,32 @@ export function useExplorerActions(args: {
       Extract<NonNullable<typeof copyPasteDialogState>, { type: "undoQuestion" }>,
       "type"
     >,
-  ): Promise<"skip" | "keep_both" | "trash" | null> {
-    undoQuestionResolverRef.current?.(null);
+  ): Promise<boolean> {
+    undoQuestionResolverRef.current?.(false);
     return new Promise((resolve) => {
       undoQuestionResolverRef.current = resolve;
       setCopyPasteDialogState({ type: "undoQuestion", ...question });
     });
   }
 
-  function answerUndoQuestion(answer: "skip" | "keep_both" | "trash" | null) {
+  function answerUndoQuestion(goAhead: boolean) {
     const resolve = undoQuestionResolverRef.current;
     undoQuestionResolverRef.current = null;
     setCopyPasteDialogState(null);
-    resolve?.(answer);
+    resolve?.(goAhead);
   }
 
-  // A question closed some other way (Escape) goes without an answer.
+  // A question closed some other way (Escape) goes without.
   useEffect(() => {
     if (copyPasteDialogState?.type !== "undoQuestion" && undoQuestionResolverRef.current) {
       const resolve = undoQuestionResolverRef.current;
       undoQuestionResolverRef.current = null;
-      resolve(null);
+      resolve(false);
     }
   }, [copyPasteDialogState]);
 
-  // Undoes (or redoes) the last file operation: asks first what the main process found it
-  // can't simply do, then runs it as any operation runs.
+  // Undoes (or redoes) the last file operation: asks first about what the main process
+  // found it can't simply do, then runs all of it as any operation runs, or none of it.
   async function startUndo(direction: "undo" | "redo") {
     if (isWriteOperationInFlight()) {
       return;
@@ -3568,29 +3566,25 @@ export function useExplorerActions(args: {
       }
       return;
     }
-    let nameTaken: "skip" | "keep_both" = "keep_both";
-    let changed: "trash" | "skip" = "trash";
-    if (prepared.nameTaken.length > 0) {
-      const answer = await askUndoQuestion({
-        question: "nameTaken",
-        names: prepared.nameTaken,
+    if (
+      prepared.nameTaken.length > 0 &&
+      !(await askUndoQuestion({
+        question: { kind: "nameTaken", names: prepared.nameTaken },
         direction,
-      });
-      if (answer === null) {
-        return;
-      }
-      nameTaken = answer === "skip" ? "skip" : "keep_both";
+        action: prepared.action,
+      }))
+    ) {
+      return;
     }
-    if (prepared.changed.length > 0) {
-      const answer = await askUndoQuestion({
-        question: "changed",
-        names: prepared.changed,
+    if (
+      prepared.changed.length > 0 &&
+      !(await askUndoQuestion({
+        question: { kind: "changed", items: prepared.changed },
         direction,
-      });
-      if (answer === null) {
-        return;
-      }
-      changed = answer === "skip" ? "skip" : "trash";
+        action: prepared.action,
+      }))
+    ) {
+      return;
     }
     if (isWriteOperationInFlight()) {
       showWriteOperationBusyNotice(direction);
@@ -3608,11 +3602,7 @@ export function useExplorerActions(args: {
     applyWriteOperationCardState({ ...card, stage: "starting" });
     runningUndoLabelRef.current = prepared.label;
     try {
-      const response = await client.invoke("undo:start", {
-        ticket: prepared.ticket,
-        nameTaken,
-        changed,
-      });
+      const response = await client.invoke("undo:start", { ticket: prepared.ticket });
       adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({ ...card, stage: "queued" });
     } catch (error) {

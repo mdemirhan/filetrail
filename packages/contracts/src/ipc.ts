@@ -1122,17 +1122,20 @@ export const ipcContractSchemas = {
       refusal: z.enum(["busy", "nothing", "cant_undo"]).nullable(),
       // What the Edit menu calls it ("Move of “a.txt”"), for saying what was undone.
       label: z.string().nullable(),
-      // Items whose old name is now taken by another item.
+      // The operation it undoes (or redoes), for asking in its words.
+      action: writeOperationActionSchema.nullable(),
+      // Items whose old name is taken by another item now: they go back with a number.
       nameTaken: z.array(z.string()),
-      // Items an operation made that have changed since, which Undo would move to the Trash.
-      changed: z.array(z.string()),
+      // Items that changed since and would go to the Trash: put back from the Trash, the
+      // new item of a Replace, or one the operation made.
+      changed: z.array(z.object({ name: z.string(), putBack: z.boolean(), replaced: z.boolean() })),
     }),
   },
+  // Starts what "undo:prepare" looked at, once anything it asked was agreed to: all of it,
+  // never part.
   "undo:start": {
     request: z.object({
       ticket: z.string().min(1),
-      nameTaken: z.enum(["skip", "keep_both"]),
-      changed: z.enum(["trash", "skip"]),
     }),
     response: z.object({
       operationId: z.string().min(1),

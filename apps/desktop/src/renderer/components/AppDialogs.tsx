@@ -138,7 +138,7 @@ export function AppDialogs({
   onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
   onConfirmEmptyTrashDialog: () => void;
   onConfirmDotNameDialog: () => void;
-  onAnswerUndoQuestion: (answer: "skip" | "keep_both" | "trash" | null) => void;
+  onAnswerUndoQuestion: (goAhead: boolean) => void;
   showCopyPasteProgressCard: boolean;
   onCancelWriteOperation: () => void;
   showCopyPasteResultDialog: boolean;
@@ -378,8 +378,8 @@ export function AppDialogs({
       {copyPasteDialogState?.type === "undoQuestion" ? (
         <UndoQuestionAlert
           question={copyPasteDialogState.question}
-          names={copyPasteDialogState.names}
           direction={copyPasteDialogState.direction}
+          action={copyPasteDialogState.action}
           onAnswer={onAnswerUndoQuestion}
         />
       ) : null}

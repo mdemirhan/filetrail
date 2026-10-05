@@ -33,7 +33,7 @@ import {
 import { runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import { clearResponseCaches } from "./responseCache";
-import { type UndoAnswers, runUndo } from "./undoExecution";
+import { runUndo } from "./undoExecution";
 import type { UndoEntry, UndoHistory } from "./undoHistory";
 import { findQuestions } from "./undoPlan";
 
@@ -1295,7 +1295,6 @@ export function createWriteOperationCoordinator(
     history: UndoHistory,
     direction: UndoDirection,
     entry: UndoEntry,
-    answers: UndoAnswers,
     operationId: string,
     controller: AbortController,
   ): Promise<void> {
@@ -1307,7 +1306,6 @@ export function createWriteOperationCoordinator(
       run = await runUndo({
         direction,
         units: entry.units,
-        answers,
         fs,
         signal: controller.signal,
         homeDev: home && home !== "missing" ? home.dev : null,
@@ -1664,6 +1662,7 @@ export function createWriteOperationCoordinator(
           ticket: null,
           refusal,
           label: null,
+          action: null,
           nameTaken: [],
           changed: [],
         });
@@ -1681,6 +1680,7 @@ export function createWriteOperationCoordinator(
           ticket,
           refusal: null,
           label: history.menu()[payload.direction],
+          action: entry.action === "empty_trash" ? null : entry.action,
           ...(await findQuestions(fs, entry.units)),
         };
       },
@@ -1703,12 +1703,11 @@ export function createWriteOperationCoordinator(
         ) {
           throw new Error("Something changed since Undo was chosen. Choose it again.");
         }
-        const answers = { nameTaken: payload.nameTaken, changed: payload.changed };
         return queueLocalWriteOperation({
           action: direction,
           sender: event.sender,
           execute: (operationId, controller) =>
-            executeUndoOperation(history, direction, entry, answers, operationId, controller),
+            executeUndoOperation(history, direction, entry, operationId, controller),
         });
       },
       "writeOperation:cancel": (

@@ -1,69 +1,71 @@
+import type { WriteOperationAction } from "@filetrail/contracts";
 import { useRef } from "react";
 
+import { type UndoQuestion, describeUndoQuestion } from "../lib/undoQuestion";
 import { Alert } from "./Alert";
 import { PushButton } from "./PushButton";
 
 // Names listed under the question; more are counted.
 const LISTED_NAMES = 5;
 
-// What an Undo (or Redo) asks before it starts: about items whose old names other items
-// have taken since, or about items it would move to the Trash though they changed since.
-// Cancel leaves everything as it is; the default answer goes ahead with both kept.
+// What an Undo (or Redo) asks before it starts, about items whose old names other items have
+// taken since, or items it would move to the Trash though they changed since. Each question
+// is all or nothing: the Undo goes ahead as a whole, or Cancel leaves everything as it is.
 export function UndoQuestionAlert({
   question,
-  names,
   direction,
+  action,
   onAnswer,
 }: {
-  question: "nameTaken" | "changed";
-  names: string[];
+  question: UndoQuestion;
   direction: "undo" | "redo";
-  onAnswer: (answer: "skip" | "keep_both" | "trash" | null) => void;
+  action: WriteOperationAction | null;
+  onAnswer: (goAhead: boolean) => void;
 }) {
   const defaultButtonRef = useRef<HTMLButtonElement | null>(null);
-  const one = names.length === 1 ? names[0] : null;
-  const what = direction === "undo" ? "Undo" : "Redo";
-  const title =
-    question === "nameTaken"
-      ? one !== null
-        ? `An item named “${one}” is already where it would go back.`
-        : `${names.length} items have names that other items have taken where they would go back.`
-      : one !== null
-        ? `“${one}” has been modified.`
-        : `${names.length} items have been modified.`;
-  const message =
-    question === "nameTaken"
-      ? one !== null
-        ? "Keep Both puts it back with a number added to its name. Skip leaves it where it is."
-        : "Keep Both puts them back with a number added to their names. Skip leaves them where they are."
-      : one !== null
-        ? `${what} would move it to the Trash. Skip leaves it where it is.`
-        : `${what} would move them to the Trash. Skip leaves them where they are.`;
-  const defaultAnswer = question === "nameTaken" ? "keep_both" : "trash";
+  const text = describeUndoQuestion(question, direction, action);
+  const names =
+    question.kind === "nameTaken" ? question.names : question.items.map((item) => item.name);
   const listed = names.length > 1 ? names.slice(0, LISTED_NAMES) : [];
-  const unlisted = names.length - listed.length - (one !== null ? 1 : 0);
+  const unlisted = names.length - listed.length;
+  const confirm = (
+    <PushButton
+      ref={text.confirmIsDefault ? defaultButtonRef : undefined}
+      variant={text.confirmIsDefault ? "default" : "plain"}
+      onClick={() => onAnswer(true)}
+    >
+      {text.confirmLabel}
+    </PushButton>
+  );
+  const cancel = (
+    <PushButton
+      ref={text.confirmIsDefault ? undefined : defaultButtonRef}
+      variant={text.confirmIsDefault ? "plain" : "default"}
+      onClick={() => onAnswer(false)}
+    >
+      Cancel
+    </PushButton>
+  );
   return (
     <Alert
-      title={title}
-      message={message}
+      title={text.title}
+      message={text.message}
       initialFocusRef={defaultButtonRef}
-      onReturn={() => onAnswer(defaultAnswer)}
-      onEscape={() => onAnswer(null)}
-      // Three buttons don't fit side by side in an alert: stacked as macOS stacks them, the
-      // default on top and Cancel at the bottom.
-      stackedButtons
+      onReturn={() => onAnswer(text.confirmIsDefault)}
+      onEscape={() => onAnswer(false)}
+      // The default button is on the right, as in a macOS alert.
       buttons={
-        <>
-          <PushButton
-            ref={defaultButtonRef}
-            variant="default"
-            onClick={() => onAnswer(defaultAnswer)}
-          >
-            {question === "nameTaken" ? "Keep Both" : "Move to Trash"}
-          </PushButton>
-          <PushButton onClick={() => onAnswer("skip")}>Skip</PushButton>
-          <PushButton onClick={() => onAnswer(null)}>Cancel</PushButton>
-        </>
+        text.confirmIsDefault ? (
+          <>
+            {cancel}
+            {confirm}
+          </>
+        ) : (
+          <>
+            {confirm}
+            {cancel}
+          </>
+        )
       }
     >
       {listed.length > 0 ? (

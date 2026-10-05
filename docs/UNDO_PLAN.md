@@ -334,6 +334,11 @@ Wording to settle when building:
 
 **Tests:** the review sheet footer for each choice, the runtime dialog text, and the history emptied after each Can't Undo case (main-process tests).
 
+### Changed after trying it (2026-10-05)
+
+- Undo's questions are all or nothing. Skip is gone: it left an Undo half done (the operation dropped off the history while an item stayed, a Replace's old item left in the Trash). A name taken: Keep Both (the default) or Cancel. Changed work: Move to Trash or Cancel (the default). Cancel leaves everything as it is, and the operation stays on top.
+- The changed-work question names the operation: "“1 copy.kt” was changed after it was duplicated. Undoing the duplicate moves this copy to the Trash, along with your changes. The original isn’t affected." (and the same for copies, New Folder, Replace, and items put back).
+
 ### What changed while building Phase 5
 
 - Keep All merges folders too (it adds a folder's files into the existing one under "copy" names), and it is offered for moves. So the review sheet warns whenever its choices merge any folder (Add Missing, Keep All, or Merge on a row): the footer adds "Merging can’t be undone". It says nothing when nothing merges.

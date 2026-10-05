@@ -369,10 +369,7 @@ class Case {
     }
   }
 
-  async undoAll(
-    direction: "undo" | "redo",
-    answers = { nameTaken: "keep_both" as const, changed: "trash" as const },
-  ) {
+  async undoAll(direction: "undo" | "redo") {
     const results: WriteOperationProgressEvent[] = [];
     for (let step = 0; step < 50; step += 1) {
       const prepared = await this.coordinator.handlers["undo:prepare"]({ direction });
@@ -381,7 +378,7 @@ class Case {
       }
       const terminal = await this.finish(
         this.coordinator.handlers["undo:start"](
-          { ticket: prepared.ticket, ...answers },
+          { ticket: prepared.ticket },
           { sender: this.sender },
         ),
       );
@@ -476,11 +473,7 @@ describe("Undo, fuzzed on a real disk", () => {
           }
         }
         const before = testCase.ids();
-        const answers = {
-          nameTaken: testCase.random.pick(["skip", "keep_both"] as const),
-          changed: testCase.random.pick(["trash", "skip"] as const),
-        };
-        const undone = await testCase.undoAll("undo", answers as never);
+        const undone = await testCase.undoAll("undo");
         const after = testCase.ids();
         for (const id of before) {
           if (!removedOutside.has(id) && !after.has(id)) {

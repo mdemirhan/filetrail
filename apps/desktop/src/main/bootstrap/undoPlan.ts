@@ -28,8 +28,9 @@ export type PlannedStep =
       parentId: ItemId | null;
       putBack: boolean;
     }
-  // Moves the item at `path` to the Trash: something an operation made, or put back.
-  | { kind: "trash"; path: string; id: ItemId | null; stamp: ItemStamp | null }
+  // Moves the item at `path` to the Trash: something an operation made, or put back from
+  // the Trash (`putBack`).
+  | { kind: "trash"; path: string; id: ItemId | null; stamp: ItemStamp | null; putBack: boolean }
   // Renames each item at `from` back to the name in `to`, as one batch.
   | {
       kind: "batch";
@@ -40,7 +41,7 @@ export function reverseStep(step: UndoStep): PlannedStep {
   switch (step.kind) {
     case "moved":
       return step.fromTrash
-        ? { kind: "trash", path: step.to, id: step.id, stamp: step.stamp ?? null }
+        ? { kind: "trash", path: step.to, id: step.id, stamp: step.stamp ?? null, putBack: true }
         : {
             kind: "move",
             from: step.to,
@@ -51,7 +52,7 @@ export function reverseStep(step: UndoStep): PlannedStep {
             putBack: false,
           };
     case "created":
-      return { kind: "trash", path: step.path, id: step.id, stamp: step.stamp };
+      return { kind: "trash", path: step.path, id: step.id, stamp: step.stamp, putBack: false };
     case "trashed":
       return {
         kind: "move",
@@ -265,6 +266,10 @@ export async function checkBatch(
   return checks;
 }
 
+// An item an Undo would move to the Trash though it changed since: one that was put back
+// from the Trash, the new item of a Replace, or one the operation made.
+export type ChangedItem = { name: string; putBack: boolean; replaced: boolean };
+
 // What to ask before undoing `units`: the names that are taken where items would go back,
 // and the items that would go to the Trash though they changed since. Checked as things
 // will be by then: a step after one that can't be done isn't looked at, and a path a step
@@ -272,9 +277,9 @@ export async function checkBatch(
 export async function findQuestions(
   fs: PlanFs,
   units: readonly UndoUnit[],
-): Promise<{ nameTaken: string[]; changed: string[] }> {
+): Promise<{ nameTaken: string[]; changed: ChangedItem[] }> {
   const nameTaken: string[] = [];
-  const changed: string[] = [];
+  const changed: ChangedItem[] = [];
   for (const unit of [...units].reverse()) {
     const vacated = new Set<string>();
     for (const step of [...unit.steps].reverse()) {
@@ -300,7 +305,12 @@ export async function findQuestions(
           break;
         }
         if (check.changed) {
-          changed.push(basename(planned.path));
+          changed.push({
+            name: basename(planned.path),
+            putBack: planned.putBack,
+            // A Replace's unit also has its old item's trip to the Trash.
+            replaced: !planned.putBack && unit.steps.some((other) => other.kind === "trashed"),
+          });
         }
         vacated.add(planned.path);
       } else {

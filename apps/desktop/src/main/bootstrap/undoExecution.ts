@@ -21,14 +21,10 @@ import type { WriteOperationFs } from "./writeOperations";
 // checked on disk just before it runs and skipped, never forced, when it no longer fits.
 // Nothing is overwritten (every move refuses a taken name) and nothing is deleted: what
 // an operation made goes to the Trash.
-
-// What the person answered before it started (see findQuestions).
-export type UndoAnswers = {
-  // An item's old name is taken by another item now: leave the item, or give it a number.
-  nameTaken: "skip" | "keep_both";
-  // An item that would go to the Trash has changed since: move it anyway, or leave it.
-  changed: "trash" | "skip";
-};
+//
+// What the person was asked first (see findQuestions) was all or nothing: an Undo they
+// agreed to puts an item whose name is taken back with a number, and moves an item that
+// changed since to the Trash, so it is never left half done by an answer.
 
 type ResultItem = WriteOperationResult["items"][number];
 
@@ -61,7 +57,6 @@ type StepOutcome =
 export async function runUndo(args: {
   direction: UndoDirection;
   units: readonly UndoUnit[];
-  answers: UndoAnswers;
   fs: WriteOperationFs;
   signal: AbortSignal;
   // The home folder's disk: an item from there lands in the home folder's Trash.
@@ -207,13 +202,6 @@ async function moveBack(
       missing: check.missing,
     };
   }
-  if (check.nameTaken && args.answers.nameTaken === "skip") {
-    return {
-      status: "skipped",
-      items: [skippedItem(planned.from, planned.to, takenReason(planned.to))],
-      missing: false,
-    };
-  }
   let target = planned.to;
   for (let attempt = 1; ; attempt += 1) {
     if (check.nameTaken || attempt > 1) {
@@ -228,7 +216,7 @@ async function moveBack(
       break;
     } catch (error) {
       const taken = errorCode(error) === "EEXIST";
-      if (taken && args.answers.nameTaken === "keep_both" && attempt < KEEP_BOTH_ATTEMPTS) {
+      if (taken && attempt < KEEP_BOTH_ATTEMPTS) {
         continue;
       }
       if (taken) {
@@ -309,19 +297,6 @@ async function moveToTrash(
       missing: check.missing,
     };
   }
-  if (check.changed && args.answers.changed === "skip") {
-    return {
-      status: "skipped",
-      items: [
-        skippedItem(
-          planned.path,
-          null,
-          `“${basename(planned.path)}” has changed since, so it was left where it is.`,
-        ),
-      ],
-      missing: false,
-    };
-  }
   const id = await readItemId(fs.lstat, planned.path);
   const parentId = await readItemId(fs.lstat, dirname(planned.path));
   const before: ItemSize | null = fs.itemSize
@@ -370,8 +345,6 @@ async function renameBack(
   for (const check of await checkBatch(fs, planned)) {
     if (check.refusal) {
       items.push(skippedItem(check.item.from, check.item.to, check.refusal.reason));
-    } else if (check.nameTaken && args.answers.nameTaken === "skip") {
-      items.push(skippedItem(check.item.from, check.item.to, takenReason(check.item.to)));
     } else {
       toRename.push({
         sourcePath: check.item.from,
@@ -386,7 +359,7 @@ async function renameBack(
     const batch = await runBatchRename({
       request: {
         items: toRename,
-        onConflict: args.answers.nameTaken === "keep_both" ? "number" : "skip",
+        onConflict: "number",
         numberSeparator: " ",
       },
       fs,

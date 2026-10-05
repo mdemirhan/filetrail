@@ -76,6 +76,7 @@ describe("reverseStep", () => {
       path: "/b",
       id: id(5),
       stamp: null,
+      putBack: true,
     });
     expect(
       reverseStep({ kind: "trashed", from: "/a", trashPath: "/T/a", id: id(5), parentId: id(1) }),
@@ -179,7 +180,7 @@ describe("checkTrash", () => {
     const fs = disk({ "/Docs": { kind: "dir", ino: null }, "/Docs/a": { kind: "dir", ino: null } });
     const stamp = { kind: "file" as const, size: 0, mtimeMs: 1000, entryCount: null };
     expect(
-      await checkTrash(fs, { kind: "trash", path: "/Docs/a", id: id(10), stamp }),
+      await checkTrash(fs, { kind: "trash", path: "/Docs/a", id: id(10), stamp, putBack: false }),
     ).toMatchObject({ ok: false });
   });
 
@@ -195,7 +196,9 @@ describe("checkTrash", () => {
       },
     };
     const stamp = { kind: "file" as const, size: 0, mtimeMs: 1000, entryCount: null };
-    expect(await checkTrash(flaky, { kind: "trash", path: "/a", id: id(10), stamp })).toEqual({
+    expect(
+      await checkTrash(flaky, { kind: "trash", path: "/a", id: id(10), stamp, putBack: false }),
+    ).toEqual({
       ok: true,
       changed: true,
     });
@@ -259,7 +262,52 @@ describe("findQuestions", () => {
       { steps: [created("/D/abc", 0)] },
     ];
 
-    expect(await findQuestions(fs, units)).toEqual({ nameTaken: ["x"], changed: ["abc"] });
+    expect(await findQuestions(fs, units)).toEqual({
+      nameTaken: ["x"],
+      changed: [{ name: "abc", putBack: false, replaced: false }],
+    });
+  });
+
+  it("says which changed items replaced an old one, and which were put back", async () => {
+    const fs = disk({
+      "/D": { kind: "dir", ino: 1 },
+      "/D/T": { kind: "dir", ino: 2 },
+      "/D/T/old": { kind: "file", ino: 20 },
+      "/D/new": { kind: "file", ino: 4, size: 9 },
+      "/D/back": { kind: "file", ino: 30, size: 9 },
+    });
+    const stamp = { kind: "file" as const, size: 0, mtimeMs: 1000, entryCount: null };
+
+    expect(
+      await findQuestions(fs, [
+        {
+          steps: [
+            { kind: "trashed", from: "/D/new", trashPath: "/D/T/old", id: id(20), parentId: id(1) },
+            { kind: "created", path: "/D/new", id: id(4), stamp },
+          ],
+        },
+        {
+          steps: [
+            {
+              kind: "moved",
+              from: "/D/T/back",
+              to: "/D/back",
+              id: id(30),
+              itemKind: "file",
+              parentId: id(2),
+              fromTrash: true,
+              stamp,
+            },
+          ],
+        },
+      ]),
+    ).toEqual({
+      nameTaken: [],
+      changed: [
+        { name: "back", putBack: true, replaced: false },
+        { name: "new", putBack: false, replaced: true },
+      ],
+    });
   });
 
   it("stops at an item that is another item now", async () => {

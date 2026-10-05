@@ -529,6 +529,7 @@ export function createAppHarness(
           ticket: `${(payload as IpcRequestInput<"undo:prepare">).direction}:1:1`,
           refusal: null,
           label: "Move of “source.txt”",
+          action: "move_to",
           nameTaken: [],
           changed: [],
         }) as IpcResponse<C>;

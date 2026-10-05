@@ -116,9 +116,7 @@ describe("⌘Z and ⇧⌘Z", () => {
     });
 
     await vi.waitFor(() => {
-      expect(startedWith(harness)).toEqual([
-        { ticket: "undo:1:1", nameTaken: "keep_both", changed: "trash" },
-      ]);
+      expect(startedWith(harness)).toEqual([{ ticket: "undo:1:1" }]);
     });
     expectNativeEditActions(harness, []);
   });
@@ -133,9 +131,7 @@ describe("⌘Z and ⇧⌘Z", () => {
     });
 
     await vi.waitFor(() => {
-      expect(startedWith(harness)).toEqual([
-        { ticket: "redo:1:1", nameTaken: "keep_both", changed: "trash" },
-      ]);
+      expect(startedWith(harness)).toEqual([{ ticket: "redo:1:1" }]);
     });
   });
 
@@ -234,13 +230,14 @@ describe("what the menu is told", () => {
 });
 
 describe("questions before an Undo", () => {
-  it("asks about a name taken, and goes on with the answer", async () => {
+  it("asks about a name taken, and goes ahead with Keep Both", async () => {
     const harness = createAppHarness({
       undoPrepareResponses: [
         {
           ticket: "undo:4:9",
           refusal: null,
           label: "Move to Trash of “a.txt”",
+          action: "trash",
           nameTaken: ["a.txt"],
           changed: [],
         },
@@ -255,27 +252,34 @@ describe("questions before an Undo", () => {
     const question = await screen.findByRole("dialog", {
       name: "An item named “a.txt” is already where it would go back.",
     });
+    expect(
+      within(question)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Cancel", "Keep Both"]);
     expect(startedWith(harness)).toEqual([]);
     await act(async () => {
-      fireEvent.click(within(question).getByRole("button", { name: "Skip" }));
+      fireEvent.click(within(question).getByRole("button", { name: "Keep Both" }));
     });
 
     await vi.waitFor(() => {
-      expect(startedWith(harness)).toEqual([
-        { ticket: "undo:4:9", nameTaken: "skip", changed: "trash" },
-      ]);
+      expect(startedWith(harness)).toEqual([{ ticket: "undo:4:9" }]);
     });
   });
 
-  it("asks about items that changed, listing them, after the names", async () => {
+  it("says why a duplicate that changed would go to the Trash, after asking about names", async () => {
     const harness = createAppHarness({
       undoPrepareResponses: [
         {
           ticket: "undo:4:9",
           refusal: null,
-          label: "Copy of 3 Items",
+          label: "Duplicate of 3 Items",
+          action: "duplicate",
           nameTaken: ["a.txt"],
-          changed: ["b.txt", "c.txt"],
+          changed: [
+            { name: "b copy.txt", putBack: false, replaced: false },
+            { name: "c copy.txt", putBack: false, replaced: false },
+          ],
         },
       ],
     });
@@ -291,21 +295,28 @@ describe("questions before an Undo", () => {
     await act(async () => {
       fireEvent.click(within(names).getByRole("button", { name: "Keep Both" }));
     });
-    const changed = await screen.findByRole("dialog", { name: "2 items have been modified." });
-    expect(within(changed).getByText("b.txt")).toBeInTheDocument();
+    const changed = await screen.findByRole("dialog", {
+      name: "2 copies were changed after they were duplicated.",
+    });
+    expect(within(changed).getByText("b copy.txt")).toBeInTheDocument();
     expect(
       within(changed).getByText(
-        "Undo would move them to the Trash. Skip leaves them where they are.",
+        "Undoing the duplicate moves these copies to the Trash, along with your changes. The originals aren’t affected.",
       ),
     ).toBeInTheDocument();
+    expect(
+      within(changed)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Move to Trash", "Cancel"]);
+    // Cancel is the default: Return leaves everything as it is.
+    expect(within(changed).getByRole("button", { name: "Cancel" })).toHaveFocus();
     await act(async () => {
-      fireEvent.click(within(changed).getByRole("button", { name: "Skip" }));
+      fireEvent.click(within(changed).getByRole("button", { name: "Move to Trash" }));
     });
 
     await vi.waitFor(() => {
-      expect(startedWith(harness)).toEqual([
-        { ticket: "undo:4:9", nameTaken: "keep_both", changed: "skip" },
-      ]);
+      expect(startedWith(harness)).toEqual([{ ticket: "undo:4:9" }]);
     });
   });
 
@@ -313,18 +324,20 @@ describe("questions before an Undo", () => {
     const question = {
       ticket: "undo:4:9",
       refusal: null,
-      label: "Copy of “b.txt”",
+      label: "Duplicate of “b.txt”",
+      action: "duplicate" as const,
       nameTaken: [],
-      changed: ["b.txt"],
+      changed: [{ name: "b copy.txt", putBack: false, replaced: false }],
     };
     const harness = createAppHarness({ undoPrepareResponses: [question, question] });
     renderApp(harness);
     await selectItem("/Users/demo/source.txt");
+    const title = "“b copy.txt” was changed after it was duplicated.";
 
     await act(async () => {
       harness.emitCommand({ type: "undo" });
     });
-    const first = await screen.findByRole("dialog", { name: "“b.txt” has been modified." });
+    const first = await screen.findByRole("dialog", { name: title });
     await act(async () => {
       fireEvent.click(within(first).getByRole("button", { name: "Cancel" }));
     });
@@ -335,7 +348,7 @@ describe("questions before an Undo", () => {
     await act(async () => {
       harness.emitCommand({ type: "undo" });
     });
-    await screen.findByRole("dialog", { name: "“b.txt” has been modified." });
+    await screen.findByRole("dialog", { name: title });
     await act(async () => {
       fireEvent.keyDown(window, { key: "Escape" });
     });
@@ -349,7 +362,14 @@ describe("questions before an Undo", () => {
   it("starts nothing when there is nothing to undo", async () => {
     const harness = createAppHarness({
       undoPrepareResponses: [
-        { ticket: null, refusal: "cant_undo", label: null, nameTaken: [], changed: [] },
+        {
+          ticket: null,
+          refusal: "cant_undo",
+          label: null,
+          action: null,
+          nameTaken: [],
+          changed: [],
+        },
       ],
     });
     renderApp(harness);
