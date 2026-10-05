@@ -2,6 +2,7 @@ import { createContext, useContext, useRef } from "react";
 
 import type {
   AppLogEntry,
+  FolderChange,
   HelpTopic,
   IpcChannel,
   IpcRequestInput,
@@ -27,6 +28,8 @@ export type FiletrailClient = {
   onShowHelpTopic?(listener: (topic: HelpTopic) => void): () => void;
   // The disks mounted besides the startup disk, sent again whenever one comes or goes.
   onVolumesChanged?(listener: (volumes: Volume[]) => void): () => void;
+  // Changes made outside the app to the folder asked for with `folder:watch`.
+  onFolderChanged?(listener: (change: FolderChange) => void): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =

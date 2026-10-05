@@ -3,6 +3,7 @@
 
 import {
   type CopyPasteProgressEvent,
+  type FolderChange,
   type IpcChannel,
   type IpcRequestInput,
   type IpcResponse,
@@ -256,6 +257,10 @@ export function createAppHarness(
   menuStates: Array<IpcRequestInput<"app:setMenuState">["state"]>;
   emitCommand: (command: RendererCommand) => void;
   emitProgress: (event: TestProgressEvent) => void;
+  // The folder the window last asked to have watched (null: none).
+  watchedPath: () => string | null;
+  // A change made outside the app to the watched folder, as the main process tells of it.
+  emitFolderChange: (change: FolderChange) => void;
   setDirectoryEntries: (
     path: string,
     entries: IpcResponse<"directory:getSnapshot">["entries"],
@@ -318,6 +323,8 @@ export function createAppHarness(
   // Like the worker, a search that has reported its end keeps no results to hand out again.
   const finishedSearchJobs = new Set<string>();
   let commandListener: ((command: RendererCommand) => void) | null = null;
+  let watchedPath: string | null = null;
+  const folderChangeListeners = new Set<(change: FolderChange) => void>();
   // Several parts of the window listen (the operation itself, folder sizes), as in the app.
   const writeOperationProgressListeners = new Set<(event: WriteOperationProgressEvent) => void>();
   let copyPasteProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
@@ -347,6 +354,11 @@ export function createAppHarness(
       }
       if (channel === "app:setMenuState") {
         menuStates.push((payload as IpcRequestInput<"app:setMenuState">).state);
+        return { ok: true } as IpcResponse<C>;
+      }
+      // Kept apart from the calls tests count, like the menu state.
+      if (channel === "folder:watch") {
+        watchedPath = (payload as IpcRequestInput<"folder:watch">).path;
         return { ok: true } as IpcResponse<C>;
       }
       const recordedPayload =
@@ -736,6 +748,12 @@ export function createAppHarness(
         }
       };
     },
+    onFolderChanged(listener) {
+      folderChangeListeners.add(listener);
+      return () => {
+        folderChangeListeners.delete(listener);
+      };
+    },
   };
 
   return {
@@ -744,6 +762,12 @@ export function createAppHarness(
     menuStates,
     emitCommand(command) {
       commandListener?.(command);
+    },
+    watchedPath: () => watchedPath,
+    emitFolderChange(change) {
+      for (const listener of folderChangeListeners) {
+        listener(change);
+      }
     },
     emitProgress(event) {
       if ("mode" in event) {

@@ -128,6 +128,13 @@ export const volumeSchema = z.object({
   // apfs, hfs, exfat, smbfs…; empty when not known.
   fileSystem: z.string(),
 });
+// A change made to the folder a window watches (see `folder:watch`).
+export const folderChangeSchema = z.object({
+  path: z.string().min(1),
+  // The items in the folder that changed, or null when that isn't known (too many, or a
+  // change noticed only by the folder's modification time).
+  changedPaths: z.array(z.string().min(1)).nullable(),
+});
 export const applicationSelectionSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
@@ -840,6 +847,16 @@ export const ipcContractSchemas = {
       ok: z.literal(true),
     }),
   },
+  // The folder the window has on screen, watched for changes made outside the app; null
+  // stops watching. Each change is sent back as `filetrail:folderChanged`.
+  "folder:watch": {
+    request: z.object({
+      path: z.string().min(1).nullable(),
+    }),
+    response: z.object({
+      ok: z.literal(true),
+    }),
+  },
   "app:writeLog": {
     request: appLogEntrySchema,
     response: z.object({
@@ -1358,6 +1375,7 @@ export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
 export type SettingsTab = z.output<typeof settingsTabSchema>;
 export type Volume = z.output<typeof volumeSchema>;
+export type FolderChange = z.output<typeof folderChangeSchema>;
 export type AppLogLevel = z.output<typeof appLogLevelSchema>;
 export type AppLogEntry = z.output<typeof appLogEntrySchema>;
 

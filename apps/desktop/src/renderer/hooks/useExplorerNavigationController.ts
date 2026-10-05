@@ -818,8 +818,13 @@ export function useExplorerNavigationController(args: {
     replaceTreeNodes(seededNodes);
   }
 
+  // Items whose details changed on disk since they were read (see
+  // reloadFolderAfterOutsideChange): what is shown for them stays until it is read again.
+  const staleMetadataPathsRef = useRef(new Set<string>());
+
   function applyEmptyDirectorySnapshot() {
     metadataCacheRef.current = new Map();
+    staleMetadataPathsRef.current.clear();
     metadataInflightRef.current.clear();
     pendingPasteSelectionRef.current = null;
     currentPathRef.current = "";
@@ -854,11 +859,22 @@ export function useExplorerNavigationController(args: {
     cachedMetadata: Record<string, DirectoryEntryMetadata>,
     options: { keepSelection?: boolean; keepSearchResults?: boolean } = {},
   ) {
+    const sameFolder = path === currentPathRef.current;
+    if (!sameFolder) {
+      staleMetadataPathsRef.current.clear();
+    }
     metadataCacheRef.current = new Map(Object.entries(cachedMetadata));
     metadataInflightRef.current.clear();
+    // At once, not when the window next draws: what asks about the folder on screen in
+    // between (a change made outside the app to the folder just left) must hear of this one.
+    currentPathRef.current = path;
     setCurrentPath(path);
     setCurrentEntries(entries);
-    setVisiblePaths([]);
+    // The same folder read again keeps the rows on screen: the list tells of them again only
+    // when they change, and the details of those that changed are read again from them.
+    if (!sameFolder) {
+      setVisiblePaths([]);
+    }
     setMetadataByPath(cachedMetadata);
     if (
       searchResultsVisibleRef.current &&
@@ -999,6 +1015,8 @@ export function useExplorerNavigationController(args: {
       quiet?: boolean;
       /** The folder was picked in the Go To box, which counts most for it there. */
       viaGoTo?: boolean;
+      /** What the Info panel shows stays, even when it isn't the selection. */
+      keepInfoTarget?: boolean;
       /** Back or Forward: the folder comes back as it was left (see FolderViewMemory). */
       restoreView?: boolean;
     } = {},
@@ -1015,7 +1033,9 @@ export function useExplorerNavigationController(args: {
     const requestId = ++directoryRequestRef.current;
     pendingNavigationRef.current = { requestId, path };
     const isSameView = createViewGuard();
-    setInfoTargetPathOverride(null);
+    if (!options.keepInfoTarget) {
+      setInfoTargetPathOverride(null);
+    }
     if (!options.quiet) {
       setDirectoryLoading(true);
     }
@@ -1900,6 +1920,44 @@ export function useExplorerNavigationController(args: {
     }
   }
 
+  // Reads the folder on screen again after a change made outside the app, as quietly as can
+  // be: the selection, the search results, the tree and what the Info panel shows all stay.
+  // `changedPaths` are the items in `folderPath` that changed (null when that isn't known):
+  // their details are read again. If the folder is gone, the nearest folder above it is
+  // opened instead. Resolves to false when it has to wait: the folder is being read already,
+  // and that read may have started before the change.
+  async function reloadFolderAfterOutsideChange(
+    folderPath: string,
+    changedPaths: readonly string[] | null,
+  ): Promise<boolean> {
+    const targetPath = currentPathRef.current;
+    // A folder left behind, even just now, is not read again: that would go back to it.
+    if (!targetPath || targetPath !== folderPath) {
+      return true;
+    }
+    const pendingNavigation = pendingNavigationRef.current;
+    if (pendingNavigation !== null) {
+      // Another folder being opened leaves this one behind.
+      return pendingNavigation.path !== targetPath;
+    }
+    const stalePaths = staleMetadataPathsRef.current;
+    for (const path of changedPaths ?? currentEntries.map((entry) => entry.path)) {
+      if (metadataCacheRef.current.has(path)) {
+        stalePaths.add(path);
+      }
+    }
+    await navigateToNearestExistingFolder(targetPath, "skip", {
+      syncTree: false,
+      treeSelectionMode: "preserve",
+      persistOnError: false,
+      keepSelection: true,
+      keepSearchResults: true,
+      keepInfoTarget: true,
+      quiet: true,
+    });
+    return true;
+  }
+
   function handleSortChange(nextSortBy: SortBy) {
     const nextSortDirection: SortDirection =
       nextSortBy === sortBy
@@ -2121,11 +2179,14 @@ export function useExplorerNavigationController(args: {
 
     const cachedItems: DirectoryEntryMetadata[] = [];
     const missingPaths: string[] = [];
+    const stalePaths = staleMetadataPathsRef.current;
     for (const path of prioritizedPaths) {
-      if (metadataByPath[path]) {
+      // An item that changed on disk keeps what is shown for it until it is read again.
+      const stale = stalePaths.has(path);
+      if (metadataByPath[path] && !stale) {
         continue;
       }
-      const cached = metadataCacheRef.current.get(path);
+      const cached = stale ? undefined : metadataCacheRef.current.get(path);
       if (cached) {
         cachedItems.push(cached);
         continue;
@@ -2133,6 +2194,7 @@ export function useExplorerNavigationController(args: {
       if (metadataInflightRef.current.has(path)) {
         continue;
       }
+      stalePaths.delete(path);
       missingPaths.push(path);
     }
 
@@ -2276,6 +2338,7 @@ export function useExplorerNavigationController(args: {
     navigateTo,
     navigateToNearestExistingFolder,
     reloadFolderInPlace,
+    reloadFolderAfterOutsideChange,
     restoreListFilter,
     navigateTreeFileSystemPath,
     loadTreeChildren,

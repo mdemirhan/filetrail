@@ -44,6 +44,7 @@ import { useExplorerSearchController } from "./hooks/useExplorerSearchController
 import { useExplorerShortcuts } from "./hooks/useExplorerShortcuts";
 import { useExplorerTabs } from "./hooks/useExplorerTabs";
 import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
+import { useFolderWatch } from "./hooks/useFolderWatch";
 import { useHiddenItemCount } from "./hooks/useHiddenItemCount";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
@@ -843,6 +844,7 @@ export function App() {
     navigateTo,
     navigateToNearestExistingFolder,
     reloadFolderInPlace,
+    reloadFolderAfterOutsideChange,
     restoreListFilter,
     navigateTreeFileSystemPath,
     loadTreeChildren,
@@ -1149,6 +1151,22 @@ export function App() {
         noticeDragRefusedWhileBusy();
       }
     },
+  });
+  // A change made outside the app to the folder on screen shows without a refresh. It waits
+  // while the person is in the middle of something the list changing under would upset.
+  useFolderWatch({
+    client,
+    path: currentPath.length > 0 ? currentPath : null,
+    held:
+      mainView !== "explorer" ||
+      explorerFocusSuppressed ||
+      copyPasteModalOpen ||
+      sheetOpen ||
+      actionNotice !== null ||
+      contextMenuState !== null ||
+      isWriteOperationLocked ||
+      dragActive,
+    reload: reloadFolderAfterOutsideChange,
   });
   const trashPath = homePath ? getTrashPath(homePath) : null;
   const shortcutContext = useMemo(
