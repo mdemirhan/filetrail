@@ -959,3 +959,41 @@ describe("nativeTrashItem", () => {
     ).toThrow("path must be a string");
   });
 });
+
+describe("nativeStartFileDrag", () => {
+  // A drag needs a window under a pressed mouse button, which a test can't give it; these
+  // check what it does without one.
+  const noView = Buffer.alloc(8);
+
+  it("doesn't start, and never calls back, without a window", async () => {
+    const onEnded = vi.fn();
+    expect(addon.nativeStartFileDrag(noView, ["/tmp/a.txt"], [], onEnded)).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(onEnded).not.toHaveBeenCalled();
+  });
+
+  it("refuses arguments of the wrong kind", () => {
+    const onEnded = () => {};
+    const start = addon.nativeStartFileDrag as unknown as (...args: unknown[]) => boolean;
+    const rect = { x: 0, y: 0, width: 16, height: 16 };
+    const image = {
+      index: 0,
+      iconRect: rect,
+      nameRect: rect,
+      nameFontSize: 13,
+      nameCentered: false,
+      thumbnail: null,
+    };
+    expect(start(noView, ["/tmp/a.txt"], [image], onEnded)).toBe(false);
+    expect(() => start(noView, ["/tmp/a.txt"], [])).toThrow(TypeError);
+    expect(() => start("view", ["/tmp/a.txt"], [], onEnded)).toThrow(TypeError);
+    expect(() => start(Buffer.alloc(2), ["/tmp/a.txt"], [], onEnded)).toThrow(TypeError);
+    expect(() => start(noView, "/tmp/a.txt", [], onEnded)).toThrow(TypeError);
+    expect(() => start(noView, [1], [], onEnded)).toThrow(TypeError);
+    expect(() => start(noView, ["/tmp/a.txt"], null, onEnded)).toThrow(TypeError);
+    expect(() => start(noView, ["/tmp/a.txt"], [{ ...image, iconRect: null }], onEnded)).toThrow(
+      TypeError,
+    );
+    expect(() => start(noView, ["/tmp/a.txt"], [], "callback")).toThrow(TypeError);
+  });
+});

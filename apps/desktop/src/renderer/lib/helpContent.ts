@@ -402,6 +402,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "Drag items onto a folder to move them there. Dragged to another disk (a USB drive, a network share) they are copied instead, as in Finder. Hold Option to copy, or Command to move.",
           },
           {
+            label: "To other apps",
+            description:
+              "Drag items out of File Trail as you would from Finder: into a Finder window or the desktop, onto an app in the Dock to open them, into an email or a message to attach them, or onto the Trash in the Dock. Finder moves or copies them by the same rules; holding Option and Command makes an alias.",
+          },
+          {
             label: "Same name",
             description:
               "If an item already exists, you choose: Skip, Keep Both or Replace, and for a folder being copied, Add Missing, which copies only what the folder there lacks. Replaced items go to the Trash.",

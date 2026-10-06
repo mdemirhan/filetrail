@@ -29,6 +29,28 @@ const absolutePathSchema = z
 export const MAX_PATHS_PER_REQUEST = 100_000;
 const absolutePathListSchema = z.array(absolutePathSchema).min(1).max(MAX_PATHS_PER_REQUEST);
 
+// How many dragged items are drawn; Finder draws no more than fit on screen.
+export const MAX_FILE_DRAG_IMAGES = 200;
+const windowRectSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  width: z.number().finite().nonnegative(),
+  height: z.number().finite().nonnegative(),
+});
+// One dragged item as it shows in the window (CSS pixels from the page's top left).
+const fileDragImageSchema = z.object({
+  // Which of the dragged paths it is.
+  index: z.number().int().nonnegative(),
+  iconRect: windowRectSchema,
+  nameRect: windowRectSchema,
+  nameFontSize: z.number().positive().max(100),
+  // Icon view centers names under their icons; the lists start them after the icon.
+  nameCentered: z.boolean(),
+  // The Quick Look picture shown in place of the icon, as a data URL.
+  thumbnail: z.string().startsWith("data:image/").max(2_000_000).nullable(),
+});
+export type FileDragImage = z.infer<typeof fileDragImageSchema>;
+
 export const explorerEntryKindSchema = z.enum([
   "directory",
   "file",
@@ -1234,6 +1256,32 @@ export const ipcContractSchemas = {
     }),
     response: z.object({
       ids: z.array(z.number().int().nonnegative().nullable()),
+    }),
+  },
+  // Drags the items as a system file drag, which Finder and other apps take as files. Answers
+  // when the drag ends, with what the drop reported; `started` is false when it couldn't
+  // start. Apps other than Finder may report a move that moved nothing.
+  "system:startFileDrag": {
+    request: z.object({
+      paths: absolutePathListSchema,
+      // Where the items on screen are, so each is drawn in its place, as Finder does. Items
+      // not listed (scrolled out of sight) go along unseen.
+      images: z.array(fileDragImageSchema).max(MAX_FILE_DRAG_IMAGES),
+    }),
+    response: z.object({
+      started: z.boolean(),
+      operation: z.enum(["copy", "move", "link", "delete", "none"]),
+    }),
+  },
+  // Which of the items a drag took out of the app are gone from where they were (another
+  // app moved them, or put them in the Trash). Their folders' listings and sizes are read
+  // again, as after a move of the app's own.
+  "system:findDraggedAway": {
+    request: z.object({
+      paths: absolutePathListSchema,
+    }),
+    response: z.object({
+      gone: z.array(z.string()),
     }),
   },
   "system:quickLook": {

@@ -97,7 +97,9 @@ import {
   isTrashListingRefused,
   reorderFavorites,
 } from "./lib/favorites";
+import { measureFileDragImages } from "./lib/fileDragImages";
 import { FileIcon, preloadGenericIcons } from "./lib/fileIcons";
+import { getLoadedFileThumbnail } from "./lib/fileThumbnails";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import type { HelpTopicId } from "./lib/helpContent";
@@ -965,6 +967,7 @@ export function App() {
     submitRenameDialog,
     toggleContentSelection,
     updateCopyPasteChoices,
+    followItemsGoneElsewhere,
   } = useExplorerActions({
     services,
     navigation,
@@ -1146,6 +1149,17 @@ export function App() {
     onToggleTreeNode: toggleTreeNode,
     onActivateTab: activateTab,
     getDiskIds: async (paths) => (await client.invoke("system:getDiskIds", { paths })).ids,
+    startFileDrag: (paths) =>
+      client.invoke("system:startFileDrag", {
+        paths,
+        images: measureFileDragImages(paths, getLoadedFileThumbnail),
+      }),
+    findDraggedAway: async (paths) =>
+      (await client.invoke("system:findDraggedAway", { paths })).gone,
+    onDraggedAway: (gonePaths, { intoTrash }) => {
+      folderSizeCache.forgetChangedSizes(gonePaths, { intoTrash });
+      followItemsGoneElsewhere(gonePaths);
+    },
     onDragRefused: () => {
       if (isWriteOperationLocked) {
         noticeDragRefusedWhileBusy();

@@ -225,3 +225,41 @@ export type NativeVolume = {
  * once even when a network share has stopped answering.
  */
 export function nativeListVolumes(): NativeVolume[];
+
+/** What a file drag's drop did; "delete" is the Trash in the Dock, "none" a cancel. */
+export type FileDragOperation = "copy" | "move" | "link" | "delete" | "none";
+
+/** A dragged item as it shows in the window, in points from the window's top left. */
+export type FileDragImage = {
+  /** Which of the dragged paths it is. */
+  index: number;
+  iconRect: { x: number; y: number; width: number; height: number };
+  nameRect: { x: number; y: number; width: number; height: number };
+  nameFontSize: number;
+  /** Centered in `nameRect` (Icon view), or starting at its left (the lists). */
+  nameCentered: boolean;
+  /** PNG or JPEG data shown in place of the icon (its Quick Look picture), or null. */
+  thumbnail: Buffer | null;
+};
+
+/**
+ * Starts a system file drag of `paths` from the window whose native handle is
+ * `viewHandle` (`BrowserWindow.getNativeWindowHandle()`), at the pointer. The drag
+ * carries file URLs, as Finder's do, and looks like Finder's: each item in `images` is
+ * drawn where it is on screen, its icon and its name, and they keep their places as they
+ * move. Items not in `images` go along unseen; with none at all, the first is drawn at the
+ * pointer. Call on the main thread while the mouse button is down; returns false (and
+ * never calls `onEnded`) when the drag couldn't start.
+ *
+ * Over this app's own windows the ⌥ and ⌘ keys don't change the drag's operations (the
+ * page reads them itself); elsewhere they work as in a Finder drag.
+ *
+ * @param onEnded - Called once, when the drag ends, with what the drop reported. Apps
+ *   other than Finder may report "move" for a drop that moved nothing.
+ */
+export function nativeStartFileDrag(
+  viewHandle: Buffer,
+  paths: string[],
+  images: FileDragImage[],
+  onEnded: (operation: FileDragOperation) => void,
+): boolean;

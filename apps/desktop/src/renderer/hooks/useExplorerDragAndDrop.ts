@@ -16,6 +16,15 @@ import {
   validateInternalDrop,
 } from "../lib/internalDragAndDrop";
 
+// When the disk is asked which dragged-out items left, after the drag ends: a move in
+// Finder can finish a little after the drop.
+const DRAGGED_AWAY_CHECK_DELAYS_MS = [250, 1000, 3000];
+
+type FileDragResult = {
+  started: boolean;
+  operation: "copy" | "move" | "link" | "delete" | "none";
+};
+
 // How long a drag is held over a tab before that tab comes to the front; the same as a
 // folder in the tree takes to open.
 const TAB_HOVER_SWITCH_MS = 700;
@@ -33,29 +42,6 @@ type ActiveTreeDropElement = {
   path: string;
   element: HTMLElement;
 };
-
-function createDragPreviewElement(session: InternalDragSession): HTMLDivElement {
-  const root = document.createElement("div");
-  root.className = "internal-drag-preview";
-
-  const icon = document.createElement("div");
-  icon.className =
-    session.leadKind === "directory" || session.leadKind === "symlink_directory"
-      ? "internal-drag-preview-icon folder"
-      : "internal-drag-preview-icon file";
-
-  const label = document.createElement("div");
-  label.className = "internal-drag-preview-label";
-  label.textContent = session.leadPath.split("/").filter(Boolean).at(-1) ?? session.leadPath;
-
-  const badge = document.createElement("div");
-  badge.className = "internal-drag-preview-badge";
-  badge.textContent = String(session.sourceItems.length);
-
-  root.append(icon, label, badge);
-  document.body.append(root);
-  return root;
-}
 
 export function useExplorerDragAndDrop(args: {
   activeEntries: DirectoryEntry[];
@@ -82,6 +68,15 @@ export function useExplorerDragAndDrop(args: {
   getDiskIds?: (paths: string[]) => Promise<Array<number | null>>;
   /** A drag that couldn't start because something else holds the window. */
   onDragRefused?: () => void;
+  /**
+   * Drags the items as a system file drag (`system:startFileDrag`), so Finder and other apps
+   * take them as files; answers when the drag ends.
+   */
+  startFileDrag: (paths: string[]) => Promise<FileDragResult>;
+  /** Which of the paths are gone from where they were (`system:findDraggedAway`). */
+  findDraggedAway: (paths: string[]) => Promise<string[]>;
+  /** Items dragged out that another app moved away or put in the Trash. */
+  onDraggedAway: (gonePaths: string[], options: { intoTrash: boolean }) => void;
 }) {
   const {
     activeEntries,
@@ -93,6 +88,9 @@ export function useExplorerDragAndDrop(args: {
     onActivateTab,
     getDiskIds,
     onDragRefused,
+    startFileDrag,
+    findDraggedAway,
+    onDraggedAway,
   } = args;
   // Which disk each folder of this drag is on, as far as the disks have answered.
   const diskIdsRef = useRef(new Map<string, number | null>());
@@ -104,7 +102,8 @@ export function useExplorerDragAndDrop(args: {
   const [activeDropTarget, setActiveDropTarget] = useState<ActiveDropTarget | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const dragSessionRef = useRef<InternalDragSession | null>(null);
-  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
+  // The last drag dropped inside the window: its move or copy is the app's own.
+  const droppedSessionRef = useRef<InternalDragSession | null>(null);
   const treeHoverExpandRef = useRef<{ path: string; timerId: number } | null>(null);
   const activeTreeDropElementRef = useRef<ActiveTreeDropElement | null>(null);
 
@@ -119,7 +118,6 @@ export function useExplorerDragAndDrop(args: {
       if (treeHoverExpandRef.current) {
         window.clearTimeout(treeHoverExpandRef.current.timerId);
       }
-      dragPreviewRef.current?.remove();
     },
     [],
   );
@@ -164,8 +162,6 @@ export function useExplorerDragAndDrop(args: {
     dragSessionRef.current = null;
     diskIdsRef.current = new Map();
     diskIdRequestsRef.current = new Map();
-    dragPreviewRef.current?.remove();
-    dragPreviewRef.current = null;
   }
 
   function setDropIndicator(
@@ -257,24 +253,52 @@ export function useExplorerDragAndDrop(args: {
     dragSessionRef.current = session;
     setDragActive(true);
     void requestDiskIds(getSourceFolderPaths(session.sourceItems.map((item) => item.path)));
-    // Showing another tab during the drag takes the dragged row off the page, and a row
-    // that is off the page ends its drag without the list hearing of it.
-    event.currentTarget.addEventListener("dragend", () => clearDragSession(), { once: true });
-    const dragPreview = createDragPreviewElement(session);
-    dragPreviewRef.current = dragPreview;
-    // Whether the drop moves or copies depends on where it lands and the keys held then.
-    event.dataTransfer.effectAllowed = "copyMove";
-    event.dataTransfer.setData(
-      "text/plain",
-      session.sourceItems.map((item) => item.path).join("\n"),
-    );
-    event.dataTransfer.setDragImage(dragPreview, 20, 18);
-    window.setTimeout(() => {
-      dragPreview.remove();
-      if (dragPreviewRef.current === dragPreview) {
-        dragPreviewRef.current = null;
+    // A system drag, not the page's: only it can leave the window. Its drops here still
+    // come to the handlers below, while it is still this session.
+    event.preventDefault();
+    const paths = session.sourceItems.map((item) => item.path);
+    void startFileDrag(paths)
+      .then((result) => {
+        if (
+          droppedSessionRef.current !== session &&
+          (result.operation === "move" || result.operation === "delete")
+        ) {
+          void followDraggedAway(paths, { intoTrash: result.operation === "delete" });
+        }
+      })
+      .catch(() => {
+        // The drag never started; nothing was dropped.
+      })
+      .finally(() => {
+        if (dragSessionRef.current === session) {
+          clearDragSession();
+        }
+      });
+  }
+
+  // Another app said it moved the items, or the Dock's Trash took them. Some apps say so for
+  // a drop that moved nothing (Terminal only types the path), and Finder may finish a move
+  // after the drag has ended, so the disk is asked a few times what really left.
+  async function followDraggedAway(paths: string[], options: { intoTrash: boolean }) {
+    let remaining = paths;
+    for (const delayMs of DRAGGED_AWAY_CHECK_DELAYS_MS) {
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+      let gone: string[];
+      try {
+        gone = await findDraggedAway(remaining);
+      } catch {
+        return;
       }
-    }, 0);
+      if (gone.length === 0) {
+        continue;
+      }
+      onDraggedAway(gone, options);
+      const goneSet = new Set(gone);
+      remaining = remaining.filter((path) => !goneSet.has(path));
+      if (remaining.length === 0) {
+        return;
+      }
+    }
   }
 
   function handleDragEnd() {
@@ -430,6 +454,7 @@ export function useExplorerDragAndDrop(args: {
       return;
     }
     event.preventDefault();
+    droppedSessionRef.current = session;
     clearTreeHoverExpand();
     // The drop does what the disks say, not only what the paths suggested: a network share
     // or a disk mounted outside /Volumes is another disk, and moving there deletes the
