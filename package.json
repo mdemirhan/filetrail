@@ -1,6 +1,6 @@
 {
   "name": "filetrail",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
@@ -20,7 +20,8 @@
     "desktop:make:mac": "bun run --cwd apps/desktop make:mac",
     "desktop:make:mac:notarized": "bun run --cwd apps/desktop make:mac:notarized",
     "desktop:make:mac:adhoc": "bun run --cwd apps/desktop make:mac:adhoc",
-    "ci": "bun run lint && bun run typecheck && FILETRAIL_LARGE_FILE_TESTS=1 bun run test:coverage"
+    "ci": "bun run lint && bun run typecheck && FILETRAIL_LARGE_FILE_TESTS=1 bun run test:coverage",
+    "release": "bun ./apps/desktop/scripts/release.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

@@ -27,14 +27,26 @@ export function resolveDistDir(
 
 // The commit the app was built from, as the build recorded it.
 export function readBuildCommit(distDir: string | null): string | null {
+  return readBuildInfoField(distDir, "commit");
+}
+
+// The app's version, as the build took it from the release tag ("0.2.0"), or from the last
+// release before an untagged commit ("0.1.0+dev.4"). package.json's version is a placeholder.
+export function readBuildVersion(distDir: string | null): string | null {
+  return readBuildInfoField(distDir, "version");
+}
+
+function readBuildInfoField(distDir: string | null, field: "commit" | "version"): string | null {
   if (!distDir) {
     return null;
   }
   try {
-    const info = JSON.parse(readFileSync(join(distDir, "build-info.json"), "utf8")) as {
-      commit?: unknown;
-    };
-    return typeof info.commit === "string" && info.commit.length > 0 ? info.commit : null;
+    const info = JSON.parse(readFileSync(join(distDir, "build-info.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    const value = info[field];
+    return typeof value === "string" && value.length > 0 ? value : null;
   } catch {
     return null;
   }

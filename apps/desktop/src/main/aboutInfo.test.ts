@@ -7,6 +7,7 @@ import {
   formatMacosVersion,
   readAcknowledgements,
   readBuildCommit,
+  readBuildVersion,
   resolveChromiumNoticesPath,
   resolveDistDir,
   resolveNoticesPath,
@@ -46,6 +47,21 @@ describe("aboutInfo", () => {
 
     writeFileSync(join(distDir, "build-info.json"), '{"commit":"df11088"}\n');
     expect(readBuildCommit(distDir)).toBe("df11088");
+  });
+
+  it("reads the version the build took from git, and does without one", () => {
+    expect(readBuildVersion(null)).toBeNull();
+    expect(readBuildVersion(distDir)).toBeNull();
+
+    // A build from before the version was recorded.
+    writeFileSync(join(distDir, "build-info.json"), '{"commit":"df11088"}\n');
+    expect(readBuildVersion(distDir)).toBeNull();
+
+    writeFileSync(
+      join(distDir, "build-info.json"),
+      '{"version":"0.1.0+dev.4","commit":"df11088"}\n',
+    );
+    expect(readBuildVersion(distDir)).toBe("0.1.0+dev.4");
   });
 
   it("names a macOS version the way macOS does", () => {

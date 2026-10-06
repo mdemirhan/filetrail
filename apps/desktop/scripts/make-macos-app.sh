@@ -151,7 +151,15 @@ step_done
 
 step "Building the app"
 run bun run build
-step_done
+# The version comes from the release tag on this commit, or else the last release before it
+# ("0.1.0+dev.4"); the build recorded it (see scripts/lib/version.ts).
+APP_VERSION="$(node -p "require('./dist/build-info.json').version || ''")"
+if [[ -z "${APP_VERSION}" ]]; then
+  fail "The build recorded no version: build from a git checkout of the repository."
+fi
+# macOS shows numbers only: a build past a release shows that release's number.
+BUNDLE_VERSION="${APP_VERSION%%[+-]*}"
+step_done "${APP_VERSION}"
 
 step "Packaging File Trail.app"
 APP_NAME="File Trail"
@@ -173,9 +181,8 @@ if [[ -f "${PLIST}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ${APP_NAME}" "${PLIST}" >/dev/null 2>&1 || true
   /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.filetrail.desktop" "${PLIST}" >/dev/null 2>&1 || true
   # The template carries Electron's own version; Finder and the About panel read these.
-  APP_VERSION="$(node -p "require('./package.json').version")"
-  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
-  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${BUNDLE_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUNDLE_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
   # Empty Trash asks Finder through osascript. macOS shows this text when it asks the user
   # to allow that; without it, a signed app is refused without being asked.
   /usr/libexec/PlistBuddy -c "Add :NSAppleEventsUsageDescription string File Trail asks Finder to empty the Trash." "${PLIST}" >/dev/null 2>&1 || \
@@ -208,7 +215,14 @@ fi
 cp "${CHROMIUM_NOTICES}" "${APP_BUNDLE}/Contents/Resources/LICENSES.chromium.html"
 
 mkdir -p "${RESOURCES_APP}"
-cp "${APP_DIR}/package.json" "${RESOURCES_APP}/package.json"
+# Electron's app.getVersion() reads the bundled package.json, whose version in the
+# repository is a placeholder.
+node -e '
+  const fs = require("fs");
+  const [from, to, version] = process.argv.slice(1);
+  const pkg = JSON.parse(fs.readFileSync(from, "utf8"));
+  fs.writeFileSync(to, `${JSON.stringify({ ...pkg, version }, null, 2)}\n`);
+' "${APP_DIR}/package.json" "${RESOURCES_APP}/package.json" "${APP_VERSION}"
 ditto "${APP_DIR}/dist" "${RESOURCES_APP}/dist"
 
 # Copy native-fs addon into the app bundle. The addon provides copyfile(3)
@@ -346,7 +360,7 @@ elif [[ "${SIGN_IDENTITY}" != "-" ]]; then
 else
   echo "Built and signed ad hoc: for this Mac only."
 fi
-echo "  ${APP_BUNDLE}"
+echo "  ${APP_BUNDLE} (version ${APP_VERSION})"
 if [[ "${NOTARIZE}" == 1 ]]; then
   echo "  ${ZIP_PATH}"
   echo "  ${DMG_PATH}"

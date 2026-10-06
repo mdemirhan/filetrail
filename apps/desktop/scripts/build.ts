@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { versionFromGit } from "./lib/version";
 import { writeThirdPartyLicenses } from "./thirdPartyLicenses";
 
 declare const Bun: {
@@ -108,7 +109,8 @@ function copyAppAssets(): void {
   cpSync(sourceAssetsDir, join(outDir, "assets"), { recursive: true });
 }
 
-// The About window shows which commit the app was built from.
+// The About window shows the version (from the release tag, see lib/version.ts) and which
+// commit the app was built from.
 function writeBuildInfo(): void {
   let commit: string | null = null;
   try {
@@ -121,7 +123,8 @@ function writeBuildInfo(): void {
   } catch {
     // Built outside the repository, or without git: the version is shown on its own.
   }
-  writeFileSync(join(outDir, "build-info.json"), `${JSON.stringify({ commit })}\n`);
+  const version = versionFromGit(repoDir);
+  writeFileSync(join(outDir, "build-info.json"), `${JSON.stringify({ version, commit })}\n`);
 }
 
 function ensureBuildSuccess(

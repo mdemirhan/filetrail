@@ -11,6 +11,7 @@ import {
   formatMacosVersion,
   readAcknowledgements,
   readBuildCommit,
+  readBuildVersion,
   resolveDistDir,
   resolveNoticesPath,
 } from "./aboutInfo";
@@ -267,7 +268,7 @@ export async function bootstrapMainProcess(
         return { ok: windows.openSettingsWindow !== undefined };
       },
       "app:getAboutInfo": () => ({
-        version: app.getVersion(),
+        version: readBuildVersion(resolveDistDir()) ?? app.getVersion(),
         commit: readBuildCommit(resolveDistDir()),
         macosVersion: formatMacosVersion(process.getSystemVersion()),
         architecture: process.arch === "arm64" ? "Apple silicon" : "Intel",
