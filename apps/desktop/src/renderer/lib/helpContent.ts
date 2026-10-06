@@ -399,7 +399,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Drag",
             description:
-              "Drag items onto a folder to move them there. Dragged to another disk (a USB drive, a network share) they are copied instead, as in Finder. Hold Option to copy, or Command to move.",
+              "Drag items onto a folder to move them there. Dragged to another disk (a USB drive, a network share) they are copied instead, as in Finder. Hold Option to copy, or Command to move. Rest the drag on a folder to open it: its icon wiggles first, and moving the pointer stops it. Keep going into folders inside; drop anywhere in the folder that opened to put the items there, or press Esc to go back to where you started.",
           },
           {
             label: "To other apps",

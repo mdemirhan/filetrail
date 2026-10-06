@@ -26,8 +26,34 @@ type FileDragResult = {
 };
 
 // How long a drag is held over a tab before that tab comes to the front; the same as a
-// folder in the tree takes to open.
+// folder in the tree takes to open, and a folder in the content pane to spring open.
 const TAB_HOVER_SWITCH_MS = 700;
+const SPRING_LOAD_MS = 700;
+// Then the folder shows it is about to open (its icon wiggles) for this long, while moving
+// the pointer can still stop it.
+const SPRING_WARN_MS = 625;
+// The pointer must rest on the folder: moving it further than this starts the hold again.
+// A folder opened under a pointer that hasn't moved since doesn't start a hold at all.
+const SPRING_MOVE_PX = 3;
+// A drag over a folder is still being held there while its drag-overs keep coming (they
+// come many times a second, even when the pointer is still); a longer gap means it left.
+const SPRING_HOLD_GAP_MS = 300;
+
+type PointerPosition = { x: number; y: number };
+
+/**
+ * Springing into folders in the content pane, as Finder does: a drag held over a folder
+ * opens it in the tab, and a drag that ends without a drop in File Trail brings the tab
+ * back to where it started.
+ */
+export type SpringLoading = {
+  /** Opens the folder in the tab on screen. */
+  openFolder: (path: string) => void;
+  /** Notes where the tab is before its first spring, to come back to. */
+  remember: () => unknown;
+  /** Brings the tab back to what `remember` noted. */
+  restore: (start: unknown) => void;
+};
 
 type DropIndicatorState = "valid" | "invalid" | null;
 type ActiveDropTarget = {
@@ -77,6 +103,10 @@ export function useExplorerDragAndDrop(args: {
   findDraggedAway: (paths: string[]) => Promise<string[]>;
   /** Items dragged out that another app moved away or put in the Trash. */
   onDraggedAway: (gonePaths: string[], options: { intoTrash: boolean }) => void;
+  /** The folder on screen; once a drag has sprung into it, it takes drops itself. */
+  currentPath: string;
+  /** Null where folders don't spring open (search results). */
+  springLoading: SpringLoading | null;
 }) {
   const {
     activeEntries,
@@ -91,7 +121,30 @@ export function useExplorerDragAndDrop(args: {
     startFileDrag,
     findDraggedAway,
     onDraggedAway,
+    currentPath,
   } = args;
+  const springLoadingRef = useRef(args.springLoading);
+  springLoadingRef.current = args.springLoading;
+  // The folder a drag is being held over in the content pane, since when, and when it was
+  // last heard from.
+  const contentHoverRef = useRef<{
+    path: string;
+    since: number;
+    lastAt: number;
+    at: PointerPosition;
+    // When the folder started showing it is about to open.
+    warnedAt: number | null;
+  } | null>(null);
+  // Where the pointer was when the last folder sprang open, until it moves away from there.
+  const springRestRef = useRef<PointerPosition | null>(null);
+  // The folder showing it is about to open.
+  const [springWarningPath, setSpringWarningPath] = useState<string | null>(null);
+  // The drag that sprang into folders, and where the tab was before it did.
+  const springRef = useRef<{
+    session: InternalDragSession;
+    start: unknown;
+  } | null>(null);
+  const [backgroundDropIndicator, setBackgroundDropIndicator] = useState<DropIndicatorState>(null);
   // Which disk each folder of this drag is on, as far as the disks have answered.
   const diskIdsRef = useRef(new Map<string, number | null>());
   // Answers on their way, per folder, so the drop can wait for one already asked for.
@@ -128,6 +181,13 @@ export function useExplorerDragAndDrop(args: {
     }
   }, [blocked]);
 
+  // A new folder on screen: a hold over a folder starts again in it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the folder changes.
+  useEffect(() => {
+    resetSpringHold();
+    setBackgroundDropIndicator(null);
+  }, [currentPath]);
+
   function clearTreeHoverExpand() {
     if (!treeHoverExpandRef.current) {
       return;
@@ -162,6 +222,9 @@ export function useExplorerDragAndDrop(args: {
     dragSessionRef.current = null;
     diskIdsRef.current = new Map();
     diskIdRequestsRef.current = new Map();
+    resetSpringHold();
+    springRestRef.current = null;
+    setBackgroundDropIndicator(null);
   }
 
   function setDropIndicator(
@@ -259,6 +322,14 @@ export function useExplorerDragAndDrop(args: {
     const paths = session.sourceItems.map((item) => item.path);
     void startFileDrag(paths)
       .then((result) => {
+        const spring = springRef.current?.session === session ? springRef.current : null;
+        if (spring) {
+          springRef.current = null;
+          // Only a drop in File Trail keeps the tab where the drag took it.
+          if (droppedSessionRef.current !== session) {
+            springLoadingRef.current?.restore(spring.start);
+          }
+        }
         if (
           droppedSessionRef.current !== session &&
           (result.operation === "move" || result.operation === "delete")
@@ -484,11 +555,13 @@ export function useExplorerDragAndDrop(args: {
     );
   }
 
-  function getContentItemDropIndicator(path: string): DropIndicatorState {
+  function getContentItemDropIndicator(path: string): DropIndicatorState | "springing" {
     if (activeDropTarget?.surface !== "content" || activeDropTarget.path !== path) {
       return null;
     }
-    return activeDropTarget.validity;
+    return springWarningPath === path && activeDropTarget.validity === "valid"
+      ? "springing"
+      : activeDropTarget.validity;
   }
 
   function getTreeItemDropIndicator(
@@ -502,9 +575,11 @@ export function useExplorerDragAndDrop(args: {
   }
 
   function handleContentDragEnter(entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) {
-    if (!dragSessionRef.current) {
+    if (!dragSessionRef.current || !isFolderLike(entry)) {
       return;
     }
+    // A folder decides for itself; the pane behind it takes only what is dropped elsewhere.
+    event.stopPropagation();
     const validity = evaluateDropTarget(event, {
       surface: "content",
       path: entry.path,
@@ -512,6 +587,107 @@ export function useExplorerDragAndDrop(args: {
       targetIsSelected: dragSessionRef.current.sourceItems.some((item) => item.path === entry.path),
     });
     setDropIndicator("content", entry.path, validity);
+    setBackgroundDropIndicator(null);
+    springWhenHeld(entry.path, validity === "valid" && isRealDirectoryEntry(entry), {
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  function resetSpringHold() {
+    contentHoverRef.current = null;
+    setSpringWarningPath(null);
+  }
+
+  // A folder the drag rests on opens, as in Finder: after a hold it shows it is about to
+  // open, and then opens, unless the pointer moves first.
+  function springWhenHeld(path: string, canSpring: boolean, pointer: PointerPosition) {
+    const session = dragSessionRef.current;
+    const springLoading = springLoadingRef.current;
+    if (!canSpring || !session || !springLoading || blocked || path === currentPath) {
+      resetSpringHold();
+      return;
+    }
+    // A folder that came under the pointer as the last one opened waits for it to move.
+    const rest = springRestRef.current;
+    if (rest) {
+      if (distance(pointer, rest) <= SPRING_MOVE_PX) {
+        return;
+      }
+      springRestRef.current = null;
+    }
+    const now = Date.now();
+    const hover = contentHoverRef.current;
+    if (
+      hover?.path !== path ||
+      now - hover.lastAt > SPRING_HOLD_GAP_MS ||
+      distance(pointer, hover.at) > SPRING_MOVE_PX
+    ) {
+      contentHoverRef.current = { path, since: now, lastAt: now, at: pointer, warnedAt: null };
+      setSpringWarningPath(null);
+      return;
+    }
+    hover.lastAt = now;
+    if (hover.warnedAt === null) {
+      if (now - hover.since >= SPRING_LOAD_MS) {
+        hover.warnedAt = now;
+        setSpringWarningPath(path);
+      }
+      return;
+    }
+    if (now - hover.warnedAt < SPRING_WARN_MS) {
+      return;
+    }
+    resetSpringHold();
+    const spring = springRef.current?.session === session ? springRef.current : null;
+    springRef.current = {
+      session,
+      start: spring ? spring.start : springLoading.remember(),
+    };
+    springRestRef.current = pointer;
+    setActiveDropTarget(null);
+    springLoading.openFolder(path);
+  }
+
+  // A drag over the content pane away from its folders: on a file or on empty space. Once
+  // the drag has sprung into the folder on screen, that folder takes the drop.
+  function handleContentBackgroundDragOver(event: React.DragEvent<HTMLElement>) {
+    const session = dragSessionRef.current;
+    if (!session) {
+      return;
+    }
+    resetSpringHold();
+    if (springRef.current?.session !== session || currentPath.length === 0) {
+      event.dataTransfer.dropEffect = "none";
+      setBackgroundDropIndicator(null);
+      return;
+    }
+    setBackgroundDropIndicator(
+      evaluateDropTarget(event, {
+        surface: "content",
+        path: currentPath,
+        targetSupportsMove: true,
+      }),
+    );
+  }
+
+  function handleContentBackgroundDragLeave(event: React.DragEvent<HTMLElement>) {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+      setBackgroundDropIndicator(null);
+    }
+  }
+
+  async function handleContentBackgroundDrop(event: React.DragEvent<HTMLElement>) {
+    const session = dragSessionRef.current;
+    if (!session || springRef.current?.session !== session || currentPath.length === 0) {
+      return;
+    }
+    setBackgroundDropIndicator(null);
+    await handleDrop("content", currentPath, event, {
+      targetSupportsMove: true,
+      validateWithItemProperties: true,
+    });
   }
 
   function handleContentDragOver(entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) {
@@ -525,6 +701,10 @@ export function useExplorerDragAndDrop(args: {
   }
 
   async function handleContentDrop(entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) {
+    if (!isFolderLike(entry)) {
+      return;
+    }
+    event.stopPropagation();
     await handleDrop("content", entry.path, event, {
       targetSupportsMove: isRealDirectoryEntry(entry),
       targetIsSelected: dragSessionRef.current?.sourceItems.some(
@@ -542,6 +722,7 @@ export function useExplorerDragAndDrop(args: {
     if (!dragSessionRef.current || !item.path) {
       return;
     }
+    resetSpringHold();
     // A disk under Locations takes a drop as a favorite does.
     const isShortcut = item.kind === "favorite" || item.kind === "location";
     const targetSurface = isShortcut ? "favorite" : "tree";
@@ -598,6 +779,7 @@ export function useExplorerDragAndDrop(args: {
     if (!dragSessionRef.current) {
       return;
     }
+    resetSpringHold();
     const validity = evaluateDropTarget(event, {
       surface: "tab",
       path: tab.path.length > 0 ? tab.path : null,
@@ -666,6 +848,10 @@ export function useExplorerDragAndDrop(args: {
     handleContentDragLeave,
     handleContentDragOver,
     handleContentDragStart: handleDragStart,
+    handleContentBackgroundDragOver,
+    handleContentBackgroundDragLeave,
+    handleContentBackgroundDrop,
+    backgroundDropIndicator,
     handleContentDrop,
     handleDragEnd,
     handleSearchDragStart: handleDragStart,
@@ -673,4 +859,13 @@ export function useExplorerDragAndDrop(args: {
     handleTreeDragOver,
     handleTreeDrop,
   };
+}
+
+// Folders take drops (and spring open); a link to one is refused as a target.
+function isFolderLike(entry: DirectoryEntry): boolean {
+  return entry.kind === "directory" || entry.kind === "symlink_directory";
+}
+
+function distance(a: PointerPosition, b: PointerPosition): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }

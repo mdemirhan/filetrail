@@ -1119,6 +1119,10 @@ export function App() {
     handleContentDragOver,
     handleContentDragStart,
     handleContentDrop,
+    handleContentBackgroundDragOver,
+    handleContentBackgroundDragLeave,
+    handleContentBackgroundDrop,
+    backgroundDropIndicator,
     handleDragEnd,
     handleSearchDragStart,
     handleTreeDragEnter,
@@ -1149,6 +1153,34 @@ export function App() {
     onToggleTreeNode: toggleTreeNode,
     onActivateTab: activateTab,
     getDiskIds: async (paths) => (await client.invoke("system:getDiskIds", { paths })).ids,
+    currentPath,
+    // Folders in the content pane spring open under a held drag, as in Finder. The tab
+    // comes back to where it was, history and all, when the drag ends without a drop here.
+    springLoading: isSearchMode
+      ? null
+      : {
+          openFolder: (path) => {
+            void navigateTo(path, "push");
+          },
+          remember: () => ({ tabId: activeTabId, path: currentPath, historyPaths, historyIndex }),
+          restore: (start) => {
+            const noted = start as {
+              tabId: string;
+              path: string;
+              historyPaths: string[];
+              historyIndex: number;
+            };
+            // Another tab came to the front meanwhile: this one is left as the drag left it.
+            if (noted.tabId !== activeTabId) {
+              return;
+            }
+            setHistoryPaths(noted.historyPaths);
+            setHistoryIndex(noted.historyIndex);
+            void navigateTo(noted.path, "skip", undefined, undefined, undefined, undefined, {
+              restoreView: true,
+            });
+          },
+        },
     startFileDrag: (paths) =>
       client.invoke("system:startFileDrag", {
         paths,
@@ -2132,6 +2164,10 @@ export function App() {
                       onItemDragLeave: handleContentDragLeave,
                       onItemDrop: handleContentDrop,
                       getItemDropIndicator: getContentItemDropIndicator,
+                      onBackgroundDragOver: handleContentBackgroundDragOver,
+                      onBackgroundDragLeave: handleContentBackgroundDragLeave,
+                      onBackgroundDrop: handleContentBackgroundDrop,
+                      backgroundDropIndicator,
                     }),
                 compactListView,
                 compactDetailsView,

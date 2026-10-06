@@ -28,6 +28,9 @@ export const contentPaneMock = () => ({
     onItemDragLeave,
     onItemDrop,
     getItemDropIndicator,
+    onBackgroundDragOver,
+    onBackgroundDrop,
+    backgroundDropIndicator,
     onSelectionGesture,
     onActivateEntry,
     selectedPaths,
@@ -74,7 +77,10 @@ export const contentPaneMock = () => ({
       entry: { path: string; name: string; kind: string; isSymlink?: boolean },
       event: React.DragEvent<HTMLElement>,
     ) => void;
-    getItemDropIndicator?: (path: string) => "valid" | "invalid" | null;
+    getItemDropIndicator?: (path: string) => "valid" | "invalid" | "springing" | null;
+    onBackgroundDragOver?: (event: React.DragEvent<HTMLElement>) => void;
+    onBackgroundDrop?: (event: React.DragEvent<HTMLElement>) => void;
+    backgroundDropIndicator?: "valid" | "invalid" | null;
     selectedPaths: string[];
     onSelectionGesture: (
       path: string,
@@ -145,7 +151,13 @@ export const contentPaneMock = () => ({
         ))}
       </div>
     ) : (
-      <div data-testid="content-pane" onPointerDown={() => onFocusChange(true)}>
+      <div
+        data-testid="content-pane"
+        data-drop-target-state={backgroundDropIndicator ?? "none"}
+        onPointerDown={() => onFocusChange(true)}
+        onDragOver={onBackgroundDragOver}
+        onDrop={onBackgroundDrop}
+      >
         <output data-testid="content-current-path">{currentPath}</output>
         <output data-testid="content-entry-count">{entries.length}</output>
         <output data-testid="content-focused">{String(isFocused ?? false)}</output>

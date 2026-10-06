@@ -178,6 +178,10 @@ export function ContentPane({
   onItemDragLeave,
   onItemDrop,
   getItemDropIndicator,
+  onBackgroundDragOver,
+  onBackgroundDragLeave,
+  onBackgroundDrop,
+  backgroundDropIndicator = null,
   compactListView = false,
   compactDetailsView = false,
   compactIconView = false,
@@ -267,7 +271,13 @@ export function ContentPane({
     | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
     | undefined;
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
-  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
+  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | "springing" | null) | undefined;
+  // A drag over the pane outside the folders in it (files, empty space): after a drag has
+  // sprung into the folder on screen, it drops into that folder.
+  onBackgroundDragOver?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
+  onBackgroundDragLeave?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
+  onBackgroundDrop?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
+  backgroundDropIndicator?: "valid" | "invalid" | null;
   compactListView?: boolean;
   compactDetailsView?: boolean;
   compactIconView?: boolean;
@@ -515,7 +525,14 @@ export function ContentPane({
       {header}
       <ContentStateOverrideContext.Provider value={contentStateOverride}>
         <NameHighlightContext.Provider value={nameHighlight}>
-          <div ref={viewportRef} className="content-viewport">
+          <div
+            ref={viewportRef}
+            className="content-viewport"
+            data-drop-target-state={backgroundDropIndicator ?? "none"}
+            onDragOver={onBackgroundDragOver}
+            onDragLeave={onBackgroundDragLeave}
+            onDrop={onBackgroundDrop}
+          >
             <ListFilterPill
               query={filterQuery}
               shownCount={entries.length}
@@ -1119,7 +1136,7 @@ function FlowListView({
     | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
     | undefined;
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
-  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
+  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | "springing" | null) | undefined;
   compactListView?: boolean;
   inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
@@ -1490,7 +1507,7 @@ function DetailsView({
     | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
     | undefined;
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
-  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
+  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | "springing" | null) | undefined;
   compactDetailsView?: boolean;
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
   sizeBars?: SizeBars | null;

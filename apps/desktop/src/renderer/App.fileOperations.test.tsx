@@ -3072,3 +3072,267 @@ describe("dragging items out to Finder and other apps", () => {
     expect(searches()).toBe(searchesBefore + 1);
   });
 });
+
+describe("springing into folders under a held drag", () => {
+  // As in Finder: a drag held over a folder in the content pane opens it, and the folder on
+  // screen then takes the drop itself. A drag that ends without a drop here brings the tab
+  // back to where it started.
+  // Real drag events, so where the pointer is comes with each one.
+  let restoreDragEvent: () => void = () => undefined;
+  beforeEach(() => {
+    restoreDragEvent = installDragEventWithModifiers();
+  });
+  afterEach(() => {
+    restoreDragEvent();
+    vi.useRealTimers();
+  });
+
+  const source = "/Users/demo/source.txt";
+  const folder = "/Users/demo/Folder";
+
+  function harnessWithInnerFolder() {
+    return createAppHarness({
+      directorySnapshots: {
+        [folder]: {
+          path: folder,
+          parentPath: "/Users/demo",
+          entries: [
+            createDirectoryEntry(`${folder}/Inner`, "directory"),
+            createDirectoryEntry(`${folder}/notes.txt`, "file"),
+          ],
+        },
+        [`${folder}/Inner`]: { path: `${folder}/Inner`, parentPath: folder, entries: [] },
+      },
+    });
+  }
+
+  async function startDrag(path: string): Promise<DataTransfer> {
+    const dataTransfer = createMockDataTransfer();
+    const row = await screen.findByTitle(path);
+    await act(async () => {
+      fireEvent.dragStart(row, { dataTransfer });
+    });
+    return dataTransfer;
+  }
+
+  // Drag-overs keep coming while a drag is held still; `ms` of them, a fifth of a second
+  // apart, with the pointer resting at `at`.
+  async function holdOver(
+    path: string,
+    ms: number,
+    dataTransfer: DataTransfer,
+    at = { clientX: 10, clientY: 10 },
+  ): Promise<void> {
+    for (let held = 0; held <= ms; held += 200) {
+      await act(async () => {
+        fireEvent.dragOver(screen.getByTitle(path), { dataTransfer, ...at });
+      });
+      if (held < ms) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(200);
+        });
+      }
+    }
+  }
+
+  function currentPath(): string | null {
+    return screen.getByTestId("content-current-path").textContent;
+  }
+
+  async function endDrag(
+    harness: ReturnType<typeof createAppHarness>,
+    operation: Parameters<ReturnType<typeof createAppHarness>["endFileDrag"]>[0],
+  ): Promise<void> {
+    await act(async () => {
+      harness.endFileDrag(operation);
+    });
+  }
+
+  it("opens a folder the drag is held over, and drops on its empty space into it", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await holdOver(folder, 1600, dataTransfer);
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(folder);
+    });
+
+    const pane = screen.getByTestId("content-pane");
+    await act(async () => {
+      fireEvent.dragOver(pane, { dataTransfer });
+    });
+    expect(pane).toHaveAttribute("data-drop-target-state", "valid");
+    await act(async () => {
+      fireEvent.drop(pane, { dataTransfer });
+    });
+    await endDrag(harness, "move");
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({
+          mode: "cut",
+          sourcePaths: [source],
+          destinationDirectoryPath: folder,
+        }),
+      ]);
+    });
+    // The drop was made here: the tab stays where the drag took it.
+    expect(currentPath()).toBe(folder);
+  });
+
+  it("drops on a file in the folder it opened into that folder", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await holdOver(folder, 1600, dataTransfer);
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(folder);
+    });
+    const file = await screen.findByTitle(`${folder}/notes.txt`);
+    await act(async () => {
+      fireEvent.dragOver(file, { dataTransfer });
+      fireEvent.drop(file, { dataTransfer });
+    });
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ destinationDirectoryPath: folder }),
+      ]);
+    });
+  });
+
+  it("keeps going into folders inside it while the drag is held", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await holdOver(folder, 1600, dataTransfer);
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(folder);
+    });
+    await screen.findByTitle(`${folder}/Inner`);
+    await holdOver(`${folder}/Inner`, 1600, dataTransfer, { clientX: 40, clientY: 30 });
+
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(`${folder}/Inner`);
+    });
+  });
+
+  it("shows a folder is about to open, and moving the pointer stops it", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await holdOver(folder, 800, dataTransfer);
+    const target = screen.getByTitle(folder);
+    expect(target).toHaveAttribute("data-drop-target-state", "springing");
+
+    // A small move, still on the folder.
+    await holdOver(folder, 600, dataTransfer, { clientX: 15, clientY: 10 });
+    expect(target).toHaveAttribute("data-drop-target-state", "valid");
+    expect(currentPath()).toBe("/Users/demo");
+
+    // Resting again, it warns and opens.
+    await holdOver(folder, 1600, dataTransfer, { clientX: 15, clientY: 10 });
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(folder);
+    });
+  });
+
+  it("doesn't open a folder that came under the pointer until the pointer moves", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await holdOver(folder, 1600, dataTransfer);
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(folder);
+    });
+    await screen.findByTitle(`${folder}/Inner`);
+    await holdOver(`${folder}/Inner`, 2000, dataTransfer);
+    expect(currentPath()).toBe(folder);
+    expect(screen.getByTitle(`${folder}/Inner`)).toHaveAttribute("data-drop-target-state", "valid");
+
+    await holdOver(`${folder}/Inner`, 1600, dataTransfer, { clientX: 20, clientY: 10 });
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(`${folder}/Inner`);
+    });
+  });
+
+  it("brings the tab back, history and all, when the drag ends without a drop here", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await holdOver(folder, 1600, dataTransfer);
+    await screen.findByTitle(`${folder}/Inner`);
+    await holdOver(`${folder}/Inner`, 1600, dataTransfer, { clientX: 40, clientY: 30 });
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(`${folder}/Inner`);
+    });
+    // Esc, or a drop in Finder or another app.
+    await endDrag(harness, "none");
+
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe("/Users/demo");
+    });
+    await vi.waitFor(() => {
+      expect(harness.menuStates.at(-1)?.disabledCommands).toEqual(
+        expect.arrayContaining(["goBack", "goForward"]),
+      );
+    });
+    expect(analyzeRequests(harness)).toEqual([]);
+  });
+
+  it("doesn't open a folder passed over quickly, or one that can't take the drop", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    let dataTransfer = await startDrag(source);
+    await holdOver(folder, 400, dataTransfer);
+    await act(async () => {
+      fireEvent.dragOver(screen.getByTestId("content-pane"), { dataTransfer });
+    });
+    await holdOver(folder, 400, dataTransfer);
+    await endDrag(harness, "none");
+
+    // A folder dragged over itself.
+    dataTransfer = await startDrag(folder);
+    await holdOver(folder, 1600, dataTransfer);
+    await endDrag(harness, "none");
+
+    expect(currentPath()).toBe("/Users/demo");
+    expect(
+      harness.invocations.filter(
+        (call) =>
+          call.channel === "directory:getSnapshot" &&
+          (call.payload as { path: string }).path === folder,
+      ),
+    ).toEqual([]);
+  });
+
+  it("takes no drop on the pane's empty space until the drag has sprung", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    const dataTransfer = await startDrag(source);
+    const pane = screen.getByTestId("content-pane");
+    await act(async () => {
+      fireEvent.dragOver(pane, { dataTransfer });
+      fireEvent.drop(pane, { dataTransfer });
+    });
+    await endDrag(harness, "none");
+
+    expect(pane).toHaveAttribute("data-drop-target-state", "none");
+    expect(analyzeRequests(harness)).toEqual([]);
+  });
+});

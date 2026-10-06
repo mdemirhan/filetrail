@@ -1808,6 +1808,17 @@ select:focus-visible {
   min-height: 0;
 }
 
+/* After a drag has sprung into the folder on screen, the pane takes the drop into it, and
+   says so with an accent edge, as a Finder window does. */
+.content-viewport[data-drop-target-state="valid"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ft-accent-border) 90%, white 10%);
+}
+
 .pane-typeahead {
   display: inline-flex;
   align-items: center;
@@ -2561,7 +2572,9 @@ body.resizing-panels * {
 }
 
 .flow-item[data-drop-target-state="valid"],
-.details-row[data-drop-target-state="valid"] {
+.details-row[data-drop-target-state="valid"],
+.flow-item[data-drop-target-state="springing"],
+.details-row[data-drop-target-state="springing"] {
   background: color-mix(in srgb, var(--ft-accent-soft-bg) 96%, var(--bg-elevated) 4%);
   border-color: color-mix(in srgb, var(--ft-accent-border) 90%, white 10%);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ft-accent-border) 22%, transparent), 0 8px 18px
@@ -7894,9 +7907,44 @@ button.shortcut-slot-key.recording:hover {
   background: var(--bg-active-inactive);
 }
 
-.icon-item[data-drop-target-state="valid"] {
+.icon-item[data-drop-target-state="valid"],
+.icon-item[data-drop-target-state="springing"] {
   background: color-mix(in srgb, var(--ft-accent-soft-bg) 96%, var(--bg-elevated) 4%);
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ft-accent-border) 90%, white 10%);
+}
+
+/* A folder a drag rests on is about to spring open: its icon wiggles, as in Finder, while
+   moving the pointer can still stop it. */
+:is(.flow-item, .details-row, .icon-item)[data-drop-target-state="springing"] .file-icon {
+  animation: spring-warning-wiggle 250ms ease-in-out infinite;
+}
+
+@keyframes spring-warning-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-7deg);
+  }
+  75% {
+    transform: rotate(7deg);
+  }
+}
+
+@keyframes spring-warning-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.flow-item, .details-row, .icon-item)[data-drop-target-state="springing"] .file-icon {
+    animation: spring-warning-pulse 250ms ease-in-out infinite alternate;
+  }
 }
 
 .icon-item[data-drop-target-state="invalid"] {

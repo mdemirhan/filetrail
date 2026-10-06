@@ -106,7 +106,7 @@ export function IconGridView({
     | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
     | undefined;
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
-  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
+  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | "springing" | null) | undefined;
   compactIconView?: boolean;
   inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
