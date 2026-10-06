@@ -288,6 +288,9 @@ extern napi_value register_volumes(napi_env env, napi_value exports);
 /* Defined in native_trash.m — registers nativeTrashItem. */
 extern napi_value register_trash(napi_env env, napi_value exports);
 
+/* Defined in native_filedrag.m — registers nativeStartFileDrag. */
+extern napi_value register_file_drag(napi_env env, napi_value exports);
+
 static napi_value init(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
@@ -306,6 +309,7 @@ static napi_value init(napi_env env, napi_value exports) {
   register_dates_taken(env, exports);
   register_volumes(env, exports);
   register_trash(env, exports);
+  register_file_drag(env, exports);
 
   return exports;
 }

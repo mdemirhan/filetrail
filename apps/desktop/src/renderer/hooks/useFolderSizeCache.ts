@@ -378,44 +378,50 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     [bumpVersion, client, updateEntry],
   );
 
-  // A finished file operation may have changed the sizes of the folders it touched. The
-  // main process has taken what a delete removed off the sizes it could, and forgotten the
-  // rest: each is asked about again. A move to the Trash changes the Trash too.
+  // Changed items may have changed the sizes of the folders holding them. The main process
+  // has taken what a delete removed off the sizes it could, and forgotten the rest: each is
+  // asked about again. A move to the Trash changes the Trash too.
+  const forgetChangedSizes = useCallback(
+    (changedPaths: readonly string[], options: { intoTrash: boolean }) => {
+      // Where the Trash is, the folders holding it may have changed; the Trash itself too.
+      const trashPath =
+        options.intoTrash && homePath.length > 0 ? `${homePath.replace(/\/+$/u, "")}/.Trash` : null;
+      let forgotten = false;
+      for (const [path, entry] of [...cacheRef.current]) {
+        if (entry.status === "calculating") {
+          continue;
+        }
+        if (isAffectedByChange(path, changedPaths) && !holdsAny(path, changedPaths)) {
+          // What changed, and what is inside it: the main process forgot these.
+          cacheRef.current.delete(path);
+          probedPaths.current.delete(path);
+          probeMissedAt.current.delete(path);
+          forgotten = true;
+        } else if (
+          holdsAny(path, changedPaths) ||
+          (trashPath !== null && (trashPath === path || holdsAny(path, [trashPath])))
+        ) {
+          refreshEntry(path);
+        }
+      }
+      if (forgotten) {
+        bumpVersion();
+      }
+    },
+    [bumpVersion, homePath, refreshEntry],
+  );
+
   useEffect(
     () =>
       client.onWriteOperationProgress((event) => {
         if (!event.result || !isTerminalWriteStatus(event.status)) {
           return;
         }
-        const changedPaths = pathsChangedByWrite(event.result);
-        // Where the Trash is, the folders holding it may have changed; the Trash itself too.
-        const intoTrash =
-          event.action === "trash" || event.action === "undo" || event.action === "redo";
-        const trashPath =
-          intoTrash && homePath.length > 0 ? `${homePath.replace(/\/+$/u, "")}/.Trash` : null;
-        let forgotten = false;
-        for (const [path, entry] of [...cacheRef.current]) {
-          if (entry.status === "calculating") {
-            continue;
-          }
-          if (isAffectedByChange(path, changedPaths) && !holdsAny(path, changedPaths)) {
-            // What changed, and what is inside it: the main process forgot these.
-            cacheRef.current.delete(path);
-            probedPaths.current.delete(path);
-            probeMissedAt.current.delete(path);
-            forgotten = true;
-          } else if (
-            holdsAny(path, changedPaths) ||
-            (trashPath !== null && (trashPath === path || holdsAny(path, [trashPath])))
-          ) {
-            refreshEntry(path);
-          }
-        }
-        if (forgotten) {
-          bumpVersion();
-        }
+        forgetChangedSizes(pathsChangedByWrite(event.result), {
+          intoTrash: event.action === "trash" || event.action === "undo" || event.action === "redo",
+        });
       }),
-    [bumpVersion, client, homePath, refreshEntry],
+    [client, forgetChangedSizes],
   );
 
   const getEntry = useCallback(
@@ -451,6 +457,7 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     cancelFolderSize,
     calculateFolderSizes,
     cancelFolderSizes,
+    forgetChangedSizes,
     version,
   };
 }

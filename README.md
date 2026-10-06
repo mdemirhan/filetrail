@@ -116,6 +116,7 @@ Settings also covers the everyday choices: which app edits text files and which 
 - Favorites in the sidebar, with an icon of your choice for each, in the order you drag them to
 - Open in Terminal and Copy Path on a key, and Open With for the apps you choose
 - Duplicate, Move To, New Folder and Move to Trash, with the Info panel and Quick Look a key away
+- Drag items out to Finder, the desktop or any app, as from Finder
 - Hidden files on a key (⇧⌘.), and folders kept first when you want them
 - Every command on a keyboard shortcut, shown in the menus and listed in the built-in Help
 

@@ -1749,7 +1749,11 @@ describe("App copy/paste integration", () => {
       sourcePaths: ["/Users/demo/source.txt"],
       destinationDirectoryPath: "/Users/demo/Folder",
     });
-    expect(dataTransfer.setDragImage).toHaveBeenCalledTimes(1);
+    // The drag is the system's, so it can leave the window; the page's own was stopped.
+    expect(
+      harness.invocations.find((call) => call.channel === "system:startFileDrag")?.payload,
+    ).toEqual({ paths: ["/Users/demo/source.txt"], images: [] });
+    expect(dataTransfer.setDragImage).not.toHaveBeenCalled();
   });
 
   it("moves a content selection to a favorite with drag and drop", async () => {

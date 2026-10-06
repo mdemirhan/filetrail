@@ -164,6 +164,11 @@ export function FileThumbnail({
 }
 
 /** Forgets every cached preview and queued request. For tests. */
+// The preview already loaded for the file, if any; a drag shows it instead of the icon.
+export function getLoadedFileThumbnail(path: string): string | null {
+  return thumbnailCache.get(path)?.dataUrl ?? null;
+}
+
 export function resetFileThumbnailCache() {
   thumbnailCache.clear();
   queuedLoads.length = 0;

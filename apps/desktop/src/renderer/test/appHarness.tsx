@@ -271,6 +271,10 @@ export function createAppHarness(
   holdDirectorySnapshot: (path: string) => () => void;
   releaseTreeChildren: () => void;
   releaseSearchUpdates: () => void;
+  // Ends the oldest system file drag still going, as the drop or cancel reported it.
+  endFileDrag: (operation: IpcResponse<"system:startFileDrag">["operation"]) => void;
+  // Another app has moved these items away: they are no longer where they were.
+  markGoneFromDisk: (paths: string[]) => void;
   resolveCopyPastePlan: () => void;
   resolveCopyPasteStart: () => void;
 } {
@@ -315,6 +319,9 @@ export function createAppHarness(
     releaseTreeChildren = resolve;
   });
   let releaseSearchUpdates: () => void = () => undefined;
+  // System file drags still going, oldest first; each ends when the test says.
+  const fileDragEnds: Array<(response: IpcResponse<"system:startFileDrag">) => void> = [];
+  const goneFromDisk = new Set<string>();
   const heldSearchUpdates = args.holdSearchUpdates
     ? new Promise<void>((resolve) => {
         releaseSearchUpdates = resolve;
@@ -685,6 +692,15 @@ export function createAppHarness(
       if (channel === "system:emptyTrash") {
         return { ok: true, error: null } as IpcResponse<C>;
       }
+      if (channel === "system:startFileDrag") {
+        return new Promise<IpcResponse<C>>((resolve) => {
+          fileDragEnds.push((response) => resolve(response as IpcResponse<C>));
+        });
+      }
+      if (channel === "system:findDraggedAway") {
+        const { paths } = payload as IpcRequestInput<"system:findDraggedAway">;
+        return { gone: paths.filter((path) => goneFromDisk.has(path)) } as IpcResponse<C>;
+      }
       if (channel === "system:getDiskIds") {
         // Which disk each folder is on: as given, else the disk its path names.
         const { paths } = payload as IpcRequestInput<"system:getDiskIds">;
@@ -837,6 +853,14 @@ export function createAppHarness(
     },
     releaseSearchUpdates() {
       releaseSearchUpdates();
+    },
+    endFileDrag(operation) {
+      fileDragEnds.shift()?.({ started: true, operation });
+    },
+    markGoneFromDisk(paths) {
+      for (const path of paths) {
+        goneFromDisk.add(path);
+      }
     },
     resolveCopyPastePlan() {
       resolveCopyPastePlanPromises.shift()?.();

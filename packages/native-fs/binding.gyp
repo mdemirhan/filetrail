@@ -7,6 +7,7 @@
         "src/native_datestaken.m",
         "src/native_errors.c",
         "src/native_flags.c",
+        "src/native_filedrag.m",
         "src/native_fileicon.m",
         "src/native_foldersize.c",
         "src/native_package.m",

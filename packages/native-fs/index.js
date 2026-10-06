@@ -86,6 +86,7 @@ module.exports = {
   nativeCopyFile: binding.nativeCopyFile,
   nativeCopyMetadata: binding.nativeCopyMetadata,
   nativeGetFileIcon: binding.nativeGetFileIcon,
+  nativeStartFileDrag: binding.nativeStartFileDrag,
   nativeGetFileThumbnail: binding.nativeGetFileThumbnail,
   nativeKindForPath: binding.nativeKindForPath,
   nativeFolderSize,

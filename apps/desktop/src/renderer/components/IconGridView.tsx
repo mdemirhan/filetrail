@@ -396,6 +396,7 @@ export function IconGridView({
                 canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
               }
               data-selectable-entry-path={entry.path}
+              data-drag-path={entry.path}
               draggable={Boolean(onItemDragStart)}
               onPointerDown={(event) => {
                 if (event.button !== 0) {

@@ -149,11 +149,27 @@ export function followClipboardThroughWrite(
   clipboard: CopyPasteClipboardState,
   result: WriteOperationResult,
 ): CopyPasteClipboardState {
+  const moves = isRenameOrMove(result.action) ? collectFollowedMoves(result) : [];
+  return followClipboard(clipboard, moves, removedByWrite(result));
+}
+
+// What another app moving items away, or putting them in the Trash, did to the clipboard:
+// they are no longer where it says, so they are taken off, and a cut of any is cancelled.
+export function followClipboardThroughRemoval(
+  clipboard: CopyPasteClipboardState,
+  removedPaths: readonly string[],
+): CopyPasteClipboardState {
+  return followClipboard(clipboard, [], removedPaths);
+}
+
+function followClipboard(
+  clipboard: CopyPasteClipboardState,
+  moves: ReturnType<typeof collectFollowedMoves>,
+  removedPaths: readonly string[],
+): CopyPasteClipboardState {
   if (clipboard.type !== "ready") {
     return clipboard;
   }
-  const moves = isRenameOrMove(result.action) ? collectFollowedMoves(result) : [];
-  const removedPaths = removedByWrite(result);
   if (clipboard.mode === "cut") {
     const changedPaths = [...moves.map(({ from }) => from), ...removedPaths];
     const changesAnItem = clipboard.sourcePaths.some((path) =>

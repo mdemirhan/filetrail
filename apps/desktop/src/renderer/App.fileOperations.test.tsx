@@ -41,6 +41,7 @@ import {
   clipboardButton,
   createAppHarness,
   createDirectoryEntry,
+  createMockDataTransfer,
   createNodeFingerprint,
   cutPlan,
   dragBetween,
@@ -542,9 +543,8 @@ describe("App file operations like Finder", () => {
 
       const source = await screen.findByTitle("/Users/demo/source.txt");
       const target = await screen.findByTitle("tree:/Users/demo/Folder");
-      const { dataTransfer, cursors } = await dragWithKeys(source, target, [{}]);
+      const { cursors } = await dragWithKeys(source, target, [{}]);
 
-      expect(dataTransfer.effectAllowed).toBe("copyMove");
       expect(cursors).toEqual(["move"]);
       await vi.waitFor(() => {
         expect(analyzeRequests(harness)).toEqual([
@@ -1944,12 +1944,12 @@ describe("dragging while an operation runs", () => {
     await pressKey({ key: "v", metaKey: true });
     await screen.findByRole("region", { name: "Pasting…" });
 
-    const dataTransfer = await dragBetween(
+    await dragBetween(
       screen.getByTitle("/Users/demo/source.txt"),
       await screen.findByTitle("tree:/Users/demo/Folder"),
     );
 
-    expect(dataTransfer.getData("text/plain")).toBe("");
+    expect(harness.invocations.some((call) => call.channel === "system:startFileDrag")).toBe(false);
     const viewport = await screen.findByTestId("toast-viewport");
     await vi.waitFor(() => {
       expect(viewport).toHaveTextContent(/Can't drag while .* being copied/);
@@ -2925,5 +2925,150 @@ describe("Empty Trash with nothing in the Trash", () => {
       "aria-disabled",
       "false",
     );
+  });
+});
+
+describe("dragging items out to Finder and other apps", () => {
+  // Every drag is the system's, so it can leave the window. When another app says it moved
+  // the items (or the Dock's Trash took them), the disk is asked what really left.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const source = "/Users/demo/source.txt";
+
+  async function startDragOut(title: string): Promise<void> {
+    const row = await screen.findByTitle(title);
+    await act(async () => {
+      fireEvent.dragStart(row, { dataTransfer: createMockDataTransfer() });
+    });
+  }
+
+  async function endDrag(
+    harness: ReturnType<typeof createAppHarness>,
+    operation: Parameters<ReturnType<typeof createAppHarness>["endFileDrag"]>[0],
+  ): Promise<void> {
+    await act(async () => {
+      harness.endFileDrag(operation);
+    });
+  }
+
+  async function waitMs(ms: number): Promise<void> {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  function checksFor(harness: ReturnType<typeof createAppHarness>): unknown[] {
+    return harness.invocations
+      .filter((call) => call.channel === "system:findDraggedAway")
+      .map((call) => call.payload);
+  }
+
+  it("lets go of copied items another app moved away", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem(source);
+    await pressKey({ key: "c", metaKey: true });
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(source);
+    expect(
+      harness.invocations.find((call) => call.channel === "system:startFileDrag")?.payload,
+    ).toEqual({ paths: [source], images: [] });
+    harness.markGoneFromDisk([source]);
+    await endDrag(harness, "move");
+    await waitMs(300);
+
+    expect(checksFor(harness)).toEqual([{ paths: [source] }]);
+    expect(clipboardButton()).toBeNull();
+  });
+
+  it("cancels a cut of items the Dock's Trash took", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem(source);
+    await pressKey({ key: "x", metaKey: true });
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(source);
+    harness.markGoneFromDisk([source]);
+    await endDrag(harness, "delete");
+    await waitMs(300);
+
+    expect(clipboardButton()).toBeNull();
+  });
+
+  it("notices a move Finder finishes after the drag has ended", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem(source);
+    await pressKey({ key: "c", metaKey: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(source);
+    await endDrag(harness, "move");
+    await waitMs(300);
+    expect(checksFor(harness)).toHaveLength(1);
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
+
+    harness.markGoneFromDisk([source]);
+    await waitMs(1100);
+    expect(checksFor(harness)).toHaveLength(2);
+    expect(clipboardButton()).toBeNull();
+  });
+
+  it("keeps everything when the app that took the drop moved nothing", async () => {
+    // Terminal says it moved what was dropped on it, but only types the path.
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem(source);
+    await pressKey({ key: "x", metaKey: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(source);
+    await endDrag(harness, "move");
+    await waitMs(5000);
+
+    expect(checksFor(harness)).toHaveLength(3);
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
+  });
+
+  it("doesn't look for anything after a copy, a cancel, or a drop inside the window", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(source);
+    await endDrag(harness, "copy");
+    await startDragOut(source);
+    await endDrag(harness, "none");
+    await dragBetween(
+      await screen.findByTitle(source),
+      await screen.findByTitle("tree:/Users/demo/Folder"),
+    );
+    await endDrag(harness, "move");
+    await waitMs(5000);
+
+    expect(checksFor(harness)).toEqual([]);
+  });
+
+  it("finds the search results again when another app moved one away", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await openSearchResults();
+    const searches = () =>
+      harness.invocations.filter((call) => call.channel === "search:start").length;
+    const searchesBefore = searches();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(`search:${source}`);
+    harness.markGoneFromDisk([source]);
+    await endDrag(harness, "move");
+    await waitMs(300);
+
+    expect(searches()).toBe(searchesBefore + 1);
   });
 });

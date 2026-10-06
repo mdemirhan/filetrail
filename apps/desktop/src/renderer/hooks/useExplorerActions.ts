@@ -49,6 +49,7 @@ import {
   clearCopyPasteClipboard,
   describeClipboard,
   dropClipboardPaths,
+  followClipboardThroughRemoval,
   followClipboardThroughWrite,
   hasClipboardItems,
   removeClipboardItem,
@@ -1233,6 +1234,20 @@ export function useExplorerActions(args: {
   function applyCopyPasteClipboardState(nextClipboard: CopyPasteClipboardState) {
     copyPasteClipboardRef.current = nextClipboard;
     setCopyPasteClipboardState(nextClipboard);
+  }
+
+  // Items dragged out of the app that another app moved away or put in the Trash: the
+  // clipboard lets go of them (a cut of any is cancelled), and search results on screen are
+  // found again, as after a write of the app's own. The folder on screen follows by itself.
+  function followItemsGoneElsewhere(paths: readonly string[]) {
+    const clipboard = copyPasteClipboardRef.current;
+    const followedClipboard = followClipboardThroughRemoval(clipboard, paths);
+    if (followedClipboard !== clipboard) {
+      applyCopyPasteClipboardState(followedClipboard);
+    }
+    if (isSearchModeRef.current) {
+      void restartActiveSearchRef.current?.();
+    }
   }
 
   function isWriteOperationInFlight(): boolean {
@@ -3977,6 +3992,7 @@ export function useExplorerActions(args: {
   return {
     actionNotice,
     applyContentSelection,
+    followItemsGoneElsewhere,
     browseDefaultTextEditor,
     browseForDirectoryPath,
     browseOpenWithApplication,
