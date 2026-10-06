@@ -17,7 +17,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { draftReleaseNotes } from "./lib/releaseNotes";
-import { formatVersion, latestRelease, nextVersion, readReleaseTags } from "./lib/version";
+import { type GitHubReleaseState, findUnfinishedReleases } from "./lib/releaseState";
+import {
+  formatVersion,
+  latestRelease,
+  nextVersion,
+  parseReleaseTag,
+  readReleaseTags,
+} from "./lib/version";
 
 declare const prompt: (message: string) => string | null;
 
@@ -70,6 +77,45 @@ function findStartingProblems(): string[] {
   return problems;
 }
 
+// The release tags on GitHub, whether or not they were fetched here.
+function readRemoteReleaseTags(): string[] {
+  return capture("git", ["ls-remote", "--tags", "--refs", "origin"])
+    .split("\n")
+    .map((line) => line.split("\t")[1]?.replace(/^refs\/tags\//u, "") ?? "")
+    .filter((tag) => parseReleaseTag(tag) !== null);
+}
+
+function readGitHubReleaseState(tag: string): GitHubReleaseState {
+  const result = spawnSync(
+    "gh",
+    ["release", "view", tag, "--json", "isDraft", "--jq", ".isDraft"],
+    {
+      cwd: repoDir,
+      encoding: "utf8",
+    },
+  );
+  if (result.status === 0) {
+    return result.stdout.trim() === "true" ? "draft" : "published";
+  }
+  if (/release not found/iu.test(result.stderr)) {
+    return "missing";
+  }
+  throw new ReleaseError(`gh couldn't tell whether ${tag} is released: ${result.stderr.trim()}`);
+}
+
+// A release that didn't finish would be skipped over by the next version: each one is
+// finished, or undone, before another is made.
+function findUnfinishedReleaseProblems(localTags: readonly string[]): string[] {
+  const remoteTags = readRemoteReleaseTags();
+  const latest = latestRelease(remoteTags);
+  const latestTag = latest ? `v${formatVersion(latest)}` : null;
+  return findUnfinishedReleases({
+    localTags,
+    remoteTags,
+    latestOnGitHub: latestTag ? { tag: latestTag, state: readGitHubReleaseState(latestTag) } : null,
+  });
+}
+
 function main(): void {
   const args = process.argv.slice(2);
   const request = args.find((arg) => !arg.startsWith("--"));
@@ -83,21 +129,22 @@ function main(): void {
   }
 
   const problems = findStartingProblems();
-  if (problems.length > 0 && !dryRun) {
-    throw new ReleaseError(problems.join("\n"));
-  }
   const tags = readReleaseTags(repoDir);
+  problems.push(...findUnfinishedReleaseProblems(tags));
   const latest = latestRelease(tags);
   const version = formatVersion(nextVersion(latest, request));
   const tag = `v${version}`;
   if (capture("git", ["tag", "--list", tag]).length > 0) {
-    throw new ReleaseError(`${tag} already exists.`);
+    problems.push(`${tag} already exists.`);
   }
   const releasedHere = capture("git", ["tag", "--points-at", "HEAD"])
     .split("\n")
     .filter((existing) => tags.includes(existing));
   if (releasedHere.length > 0) {
-    throw new ReleaseError(`This commit is already released as ${releasedHere.join(", ")}.`);
+    problems.push(`This commit is already released as ${releasedHere.join(", ")}.`);
+  }
+  if (problems.length > 0 && !dryRun) {
+    throw new ReleaseError(problems.join("\n"));
   }
   const subjects = capture("git", [
     "log",
