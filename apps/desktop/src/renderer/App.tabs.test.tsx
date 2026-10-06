@@ -39,6 +39,7 @@ import {
   clipboardButton,
   createAppHarness,
   createDirectoryEntry,
+  createMockDataTransfer,
   dragBetween,
   expectNoRefusedRequests,
   finishedResultEvent,
@@ -849,6 +850,40 @@ describe("App tabs", () => {
         destinationDirectoryPath: "/Users/demo/Folder",
       }),
     );
+  });
+
+  it("brings a tab to the front only while a drag stays over it", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    await pressKey({ key: "Tab", ctrlKey: true });
+    const source = await within(screen.getByTestId("content-pane")).findByTitle(
+      "/Users/demo/source.txt",
+    );
+    const [ownTab, folderTab] = screen.getAllByRole("tab") as [HTMLElement, HTMLElement];
+    const dataTransfer = createMockDataTransfer();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await act(async () => {
+        fireEvent.dragStart(source, { dataTransfer });
+        fireEvent.dragOver(folderTab, { dataTransfer });
+      });
+      // Passed over and left before it came to the front.
+      await act(async () => {
+        fireEvent.dragLeave(folderTab, { dataTransfer });
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(ownTab).toHaveAttribute("aria-selected", "true");
+
+      await act(async () => {
+        fireEvent.dragOver(folderTab, { dataTransfer });
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(folderTab).toHaveAttribute("aria-selected", "true");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("leaves the tab on screen alone while a dialog is open", async () => {

@@ -3320,6 +3320,45 @@ describe("springing into folders under a held drag", () => {
     ).toEqual([]);
   });
 
+  it("lets go of a highlight once the drag moves off the folder or the pane", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    const target = screen.getByTitle(folder);
+    await act(async () => {
+      fireEvent.dragOver(target, { dataTransfer });
+    });
+    expect(target).toHaveAttribute("data-drop-target-state", "valid");
+    await act(async () => {
+      fireEvent.dragLeave(target, { dataTransfer });
+    });
+    expect(target).toHaveAttribute("data-drop-target-state", "none");
+
+    await holdOver(folder, 1600, dataTransfer);
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(folder);
+    });
+    const pane = screen.getByTestId("content-pane");
+    await act(async () => {
+      fireEvent.dragOver(pane, { dataTransfer });
+    });
+    expect(pane).toHaveAttribute("data-drop-target-state", "valid");
+    // Into something inside the pane is still over it; out of the window is not.
+    await act(async () => {
+      fireEvent.dragLeave(pane, {
+        dataTransfer,
+        relatedTarget: screen.getByTitle(`${folder}/notes.txt`),
+      });
+    });
+    expect(pane).toHaveAttribute("data-drop-target-state", "valid");
+    await act(async () => {
+      fireEvent.dragLeave(pane, { dataTransfer });
+    });
+    expect(pane).toHaveAttribute("data-drop-target-state", "none");
+  });
+
   it("takes no drop on the pane's empty space until the drag has sprung", async () => {
     const harness = createAppHarness();
     renderApp(harness);

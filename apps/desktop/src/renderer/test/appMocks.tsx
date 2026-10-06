@@ -29,6 +29,7 @@ export const contentPaneMock = () => ({
     onItemDrop,
     getItemDropIndicator,
     onBackgroundDragOver,
+    onBackgroundDragLeave,
     onBackgroundDrop,
     backgroundDropIndicator,
     onSelectionGesture,
@@ -79,6 +80,7 @@ export const contentPaneMock = () => ({
     ) => void;
     getItemDropIndicator?: (path: string) => "valid" | "invalid" | "springing" | null;
     onBackgroundDragOver?: (event: React.DragEvent<HTMLElement>) => void;
+    onBackgroundDragLeave?: (event: React.DragEvent<HTMLElement>) => void;
     onBackgroundDrop?: (event: React.DragEvent<HTMLElement>) => void;
     backgroundDropIndicator?: "valid" | "invalid" | null;
     selectedPaths: string[];
@@ -156,6 +158,7 @@ export const contentPaneMock = () => ({
         data-drop-target-state={backgroundDropIndicator ?? "none"}
         onPointerDown={() => onFocusChange(true)}
         onDragOver={onBackgroundDragOver}
+        onDragLeave={onBackgroundDragLeave}
         onDrop={onBackgroundDrop}
       >
         <output data-testid="content-current-path">{currentPath}</output>
