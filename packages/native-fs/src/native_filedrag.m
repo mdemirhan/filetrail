@@ -371,7 +371,7 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
         NSDraggingItem *item = [[[NSDraggingItem alloc] initWithPasteboardWriter:url] autorelease];
         drag_image_t *image = [images[@(i)] pointerValue];
         if (image != NULL) {
-          /* Drawn where it is on screen, as Finder does: icon and name in their places. */
+          /* It sets off from where it is on screen: icon and name in their places. */
           NSRect iconRect = window_rect_in_view(view, image->iconRect);
           NSRect nameRect = window_rect_in_view(view, image->nameRect);
           NSImage *icon =
@@ -416,8 +416,8 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
                                                                  event:drag_event
                                                                 source:source];
       session.animatesToStartingPositionsOnCancelOrFail = YES;
-      /* Items keep their places as they move, as in Finder. */
-      session.draggingFormation = NSDraggingFormationNone;
+      /* Items set off from their places and gather into a stack under the pointer. */
+      session.draggingFormation = NSDraggingFormationStack;
       started = true;
     }
     free(image_data);

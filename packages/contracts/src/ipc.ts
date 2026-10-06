@@ -1264,8 +1264,8 @@ export const ipcContractSchemas = {
   "system:startFileDrag": {
     request: z.object({
       paths: absolutePathListSchema,
-      // Where the items on screen are, so each is drawn in its place, as Finder does. Items
-      // not listed (scrolled out of sight) go along unseen.
+      // Where the items on screen are, so each sets off from its place before they gather
+      // into a stack. Items not listed (scrolled out of sight) go along unseen.
       images: z.array(fileDragImageSchema).max(MAX_FILE_DRAG_IMAGES),
     }),
     response: z.object({

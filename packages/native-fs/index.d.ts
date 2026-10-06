@@ -245,10 +245,10 @@ export type FileDragImage = {
 /**
  * Starts a system file drag of `paths` from the window whose native handle is
  * `viewHandle` (`BrowserWindow.getNativeWindowHandle()`), at the pointer. The drag
- * carries file URLs, as Finder's do, and looks like Finder's: each item in `images` is
- * drawn where it is on screen, its icon and its name, and they keep their places as they
- * move. Items not in `images` go along unseen; with none at all, the first is drawn at the
- * pointer. Call on the main thread while the mouse button is down; returns false (and
+ * carries file URLs, as Finder's do. Each item in `images` sets off from where it is on
+ * screen, its icon and its name, and they gather into a stack under the pointer, with a
+ * count. Items not in `images` go along unseen; with none at all, the first is drawn at
+ * the pointer. Call on the main thread while the mouse button is down; returns false (and
  * never calls `onEnded`) when the drag couldn't start.
  *
  * Over this app's own windows the ⌥ and ⌘ keys don't change the drag's operations (the
