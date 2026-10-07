@@ -134,6 +134,7 @@ describe("shortcutPolicy", () => {
       "pasteSelection",
       "copyPath",
       "openSelectionInNewTab",
+      "openSelectionInNewWindow",
     ]);
     expect(
       RAW_EXPLORER_SHORTCUT_IDS.filter(
@@ -162,6 +163,7 @@ describe("shortcutPolicy", () => {
       "pasteSelection",
       "copyPath",
       "openSelectionInNewTab",
+      "openSelectionInNewWindow",
     ]);
     expect(
       RAW_EXPLORER_SHORTCUT_IDS.filter(

@@ -3,9 +3,9 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { BrowserWindow, type WebContents, app, clipboard, ipcMain, shell } from "electron";
 
-import type { AppLogEntry, HelpTopic, SettingsTab } from "@filetrail/contracts";
+import type { AppLogEntry, HelpTopic, IpcResponse, SettingsTab } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
-import type { AppPreferences } from "../shared/appPreferences";
+import type { AppPreferences, OpenTabPreference } from "../shared/appPreferences";
 import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
 import {
   formatMacosVersion,
@@ -16,7 +16,7 @@ import {
   resolveNoticesPath,
 } from "./aboutInfo";
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
-import type { AppStateStore } from "./appStateStore";
+import { type AppStateStore, isWindowSessionKey } from "./appStateStore";
 import { getDiskIds } from "./bootstrap/diskIds";
 import {
   bringWindowToFront,
@@ -103,6 +103,21 @@ export async function bootstrapMainProcess(
       redo: string | null;
       cantUndo: boolean;
     }) => void;
+    // The id of the explorer window a web contents belongs to; null for other windows
+    // (Settings), which see only the app's preferences.
+    explorerWindowIdOf?: (senderId: number | null) => string | null;
+    // What an explorer window opens with: the launch folder for the window in front at
+    // startup, and whether it opens the tabs it was given.
+    launchContextFor?: (senderId: number | null) => IpcResponse<"app:getLaunchContext">;
+    openExplorerWindow?: (
+      senderId: number | null,
+      tabs: OpenTabPreference[],
+      activeTabIndex: number,
+    ) => void;
+    // Closes the other explorer windows and returns their tabs.
+    mergeExplorerWindows?: (senderId: number | null) => OpenTabPreference[];
+    // The explorer window a running operation goes to when the one that started it closes.
+    successorWindowOf?: (senderId: number) => WebContents | null;
   } = {},
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
@@ -218,6 +233,23 @@ export async function bootstrapMainProcess(
       diskHasTrash: createDiskHasTrash(listVolumes),
       recordUndo: undoHistory.record,
       undoHistory,
+      broadcastProgress: (event, owner) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (
+            !window.isDestroyed() &&
+            (window.webContents as unknown) !== owner &&
+            windows.explorerWindowIdOf?.(window.webContents.id)
+          ) {
+            window.webContents.send("filetrail:writeOperationProgress", event);
+          }
+        }
+      },
+      successorOf: (sender) => {
+        const senderId = (sender as Partial<WebContents>).id;
+        return typeof senderId === "number"
+          ? (windows.successorWindowOf?.(senderId) ?? null)
+          : null;
+      },
     },
   );
   // What couldn't be reached at start (its disk wasn't connected, or didn't answer) is
@@ -236,6 +268,8 @@ export async function bootstrapMainProcess(
     onFinished: (messages) => windows.showRecoveryNotices?.(messages),
   });
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
+  // What Copy or Cut put on the clipboard, in whichever window: every window pastes it.
+  let sharedClipboard: IpcResponse<"app:getClipboard">["clipboard"] = { type: "empty" };
   activeWorkerClient = workerClient;
   void activeWriteCoordinator?.shutdown();
   activeWriteCoordinator = writeCoordinator;
@@ -246,16 +280,52 @@ export async function bootstrapMainProcess(
       "app:getHomeDirectory": () => ({
         path: app.getPath("home"),
       }),
-      "app:getPreferences": () => ({
-        preferences: appStateStore.getPreferences(),
-      }),
-      "app:getLaunchContext": () => launchContext,
+      "app:getPreferences": (_payload, event) => {
+        const windowId = windows.explorerWindowIdOf?.(event?.sender?.id ?? null) ?? null;
+        return {
+          preferences: windowId
+            ? appStateStore.getWindowPreferences(windowId)
+            : appStateStore.getPreferences(),
+        };
+      },
+      "app:getLaunchContext": (_payload, event) =>
+        windows.launchContextFor?.(event?.sender?.id ?? null) ?? launchContext,
       "app:updatePreferences": (payload, event) => {
+        const senderId = event?.sender?.id ?? null;
         const patch = toPreferencePatch(payload.preferences);
-        const preferences = appStateStore.updatePreferences(patch);
+        const windowId = windows.explorerWindowIdOf?.(senderId) ?? null;
+        const preferences = windowId
+          ? appStateStore.updateWindowPreferences(windowId, patch)
+          : appStateStore.updatePreferences(patch);
         // The sender id lets main forward the change to the other windows (e.g. Settings).
-        onPreferencesChanged?.(preferences, { patch, senderId: event?.sender?.id ?? null });
+        // What belongs to one window (its tabs, panels, column widths) stays with it.
+        const sharedPatch = Object.fromEntries(
+          Object.entries(patch).filter(([key]) => !isWindowSessionKey(key)),
+        ) as Partial<AppPreferences>;
+        onPreferencesChanged?.(appStateStore.getPreferences(), { patch: sharedPatch, senderId });
         return { preferences };
+      },
+      "app:openWindow": (payload, event) => {
+        windows.openExplorerWindow?.(
+          event?.sender?.id ?? null,
+          payload.tabs as OpenTabPreference[],
+          payload.activeTabIndex,
+        );
+        return { ok: windows.openExplorerWindow !== undefined };
+      },
+      "app:mergeAllWindows": (_payload, event) => ({
+        tabs: windows.mergeExplorerWindows?.(event?.sender?.id ?? null) ?? [],
+      }),
+      "app:getClipboard": () => ({ clipboard: sharedClipboard }),
+      "app:setClipboard": (payload, event) => {
+        sharedClipboard = payload.clipboard;
+        const senderId = event?.sender?.id ?? null;
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed() && window.webContents.id !== senderId) {
+            window.webContents.send("filetrail:clipboardChanged", sharedClipboard);
+          }
+        }
+        return { ok: true };
       },
       "places:list": () => ({
         folders: appStateStore.getVisitedFolders(),
@@ -389,7 +459,8 @@ export async function bootstrapMainProcess(
       "search:getUpdate": (payload) => workerClient.request("search:getUpdate", payload),
       "search:cancel": (payload) => workerClient.request("search:cancel", payload),
       ...writeCoordinator.handlers,
-      "folderSize:start": (payload) => folderSizeHandlers.start(payload),
+      "folderSize:start": (payload, event) =>
+        folderSizeHandlers.start(payload, event?.sender?.id ?? null),
       "folderSize:getStatus": (payload) => folderSizeHandlers.getStatus(payload),
       "folderSize:cancel": (payload) => folderSizeHandlers.cancel(payload),
       "system:openPath": (payload) => openPath(payload),

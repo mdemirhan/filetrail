@@ -82,11 +82,27 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     command: "rootTreeAtSelection",
     description: "Root the folder tree at the selected folder",
   },
+  { group: "navigation", command: "newWindow", description: "New window, on the same folder" },
   { group: "navigation", command: "newTab", description: "New tab, on the same folder" },
   {
     group: "navigation",
     command: "openSelectionInNewTab",
     description: "Open the selected folder in a new tab",
+  },
+  {
+    group: "navigation",
+    command: "openSelectionInNewWindow",
+    description: "Open the selected folder in a new window",
+  },
+  {
+    group: "navigation",
+    command: "moveTabToNewWindow",
+    description: "Move the tab to a window of its own",
+  },
+  {
+    group: "navigation",
+    command: "mergeAllWindows",
+    description: "Bring every window's tabs into this window",
   },
   {
     group: "navigation",
@@ -312,6 +328,42 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           },
         ],
         note: "Only one copy, move or delete runs at a time, whichever tab it was started from. While it runs, the other tabs can browse, search, copy and cut.",
+      },
+      {
+        title: "Windows",
+        rows: [
+          {
+            label: "New window",
+            description:
+              "{newWindow} opens a window on the folder you are in, the size of this one and a step down and to the right of it. File > Open in New Window, or Open in New Window in a folder's right-click menu, opens that folder in one.",
+          },
+          {
+            label: "Each window",
+            description:
+              "Has its own tabs, folder tree, Info panel and Info Row, and column widths. A new window starts with these from the window it was opened from. Settings, favorites and the columns shown are the same in every window.",
+          },
+          {
+            label: "Moving tabs",
+            description:
+              "Window > Move Tab to New Window gives the tab on screen a window of its own; it keeps its folder and view, but not its Back and Forward history. Window > Merge All Windows brings the tabs of every other window into this one and closes the others.",
+          },
+          {
+            label: "Between windows",
+            description:
+              "Copy or cut in one window and paste in another. Drag items from one window into another to move or copy them there: they go where a drop from Finder would. Edit > Undo undoes the last operation, whichever window it was done in.",
+          },
+          {
+            label: "Closing",
+            description:
+              "{closeWindow} closes the window. Closing the last window quits File Trail.",
+          },
+          {
+            label: "Next launch",
+            description:
+              "File Trail reopens every window you had open when it quit, with its tabs, in the same place. With Settings → General → Reopen the last folder and tabs off, it opens one window.",
+          },
+        ],
+        note: "Only one copy, move or delete runs at a time in all the windows together. Its progress shows in the window it was started from; close that window and it carries on in another.",
       },
       {
         title: "Path bar",

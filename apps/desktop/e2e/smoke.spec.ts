@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron } from "playwright";
 import { expect, test } from "playwright/test";
@@ -23,8 +23,9 @@ test("built app launches, shows the File Trail window, and renders the explorer 
 
   try {
     const window = await electronApp.firstWindow();
-    await expect(window).toHaveTitle("File Trail", { timeout: 30_000 });
     await expect(window.locator("main.app-shell")).toBeVisible({ timeout: 30_000 });
+    // A window goes by its front tab's folder, the home folder on a first launch.
+    await expect(window).toHaveTitle(basename(homedir()), { timeout: 30_000 });
   } finally {
     await electronApp.close();
     rmSync(userDataDir, { recursive: true, force: true });

@@ -26,8 +26,9 @@ const NATIVE_EDIT_COMMANDS: Partial<Record<RendererCommandType, keyof NativeEdit
 // ("@filetrail/desktop"), which also names the folder the settings are kept in.
 export const APP_MENU_NAME = "File Trail";
 
-// The commands that still do something while a window other than the explorer (Settings)
-// has the keyboard: the edit commands act on its text field, and ⌘W closes it.
+// The commands that still do something while a window other than an explorer window
+// (Settings) has the keyboard: the edit commands act on its text field, ⌘W closes it, and
+// New Window opens one beside the explorer window in front.
 const COMMANDS_FOR_ANY_WINDOW = new Set<RendererCommandType>([
   "undo",
   "redo",
@@ -36,7 +37,33 @@ const COMMANDS_FOR_ANY_WINDOW = new Set<RendererCommandType>([
   "editPaste",
   "editSelectAll",
   "closeTab",
+  "newWindow",
 ]);
+
+// Sent to the explorer window in front even while another window has the keyboard.
+const EXPLORER_COMMANDS_FROM_ANY_WINDOW = new Set<RendererCommandType>(["newWindow"]);
+
+// Where an explorer command goes: the explorer window that has the keyboard, or the one in
+// front while another window (Settings) has it. `focused` says which of the two it is.
+export type ExplorerCommandTarget = { contents: Pick<WebContents, "send">; focused: boolean };
+
+// The explorer windows the menu sends commands to. A single web contents is the one
+// explorer window there is.
+export type ExplorerMenuTarget =
+  | Pick<WebContents, "send">
+  | { explorerFor: (focusedWindow: unknown) => ExplorerCommandTarget | null };
+
+function toExplorerFor(
+  target: ExplorerMenuTarget,
+): (focusedWindow: unknown) => ExplorerCommandTarget | null {
+  if ("explorerFor" in target) {
+    return target.explorerFor;
+  }
+  return (focusedWindow) => {
+    const focusedContents = (focusedWindow as { webContents?: unknown } | undefined)?.webContents;
+    return { contents: target, focused: !focusedContents || focusedContents === target };
+  };
+}
 
 // Add to Favorites and Remove from Favorites are two items; one shows at a time.
 const FAVORITE_ADD_ITEM_ID = "toggleFavorite:add";
@@ -50,7 +77,7 @@ const FOLDER_TREE_SHOW_ITEM_ID = "toggleFolderTree:show";
 // An item that sends a command carries the command as its id, which is how
 // `resolveApplicationMenuItemStates` finds it.
 export function createApplicationMenuTemplate(
-  webContents: Pick<WebContents, "send">,
+  explorer: ExplorerMenuTarget,
   options: {
     // About and Settings are windows of their own; main opens them when provided.
     onOpenAbout?: () => void;
@@ -72,6 +99,7 @@ export function createApplicationMenuTemplate(
     undoLabels?: { undo: string; redo: string };
   } = {},
 ): MenuItemConstructorOptions[] {
+  const explorerFor = toExplorerFor(explorer);
   const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
     if ((type === "openHelp" || type === "openKeyboardShortcuts") && options.onOpenHelp) {
       options.onOpenHelp(type === "openKeyboardShortcuts" ? "shortcuts" : undefined);
@@ -83,7 +111,8 @@ export function createApplicationMenuTemplate(
       | { webContents?: NativeEditTarget; close?: () => void }
       | undefined;
     const focusedContents = focused?.webContents;
-    if (focusedContents && (focusedContents as unknown) !== webContents) {
+    const target = explorerFor(focusedWindow);
+    if (focusedContents && !target?.focused) {
       const nativeEdit = NATIVE_EDIT_COMMANDS[type];
       if (nativeEdit) {
         focusedContents[nativeEdit]();
@@ -92,9 +121,12 @@ export function createApplicationMenuTemplate(
       if (type === "closeTab") {
         focused?.close?.();
       }
+      if (EXPLORER_COMMANDS_FROM_ANY_WINDOW.has(type)) {
+        target?.contents.send("filetrail:command", { type });
+      }
       return;
     }
-    webContents.send("filetrail:command", { type });
+    target?.contents.send("filetrail:command", { type });
   };
 
   const shortcuts = options.shortcuts ?? DEFAULT_SHORTCUT_BINDINGS;
@@ -156,11 +188,13 @@ export function createApplicationMenuTemplate(
     {
       label: "File",
       submenu: [
+        command("newWindow", "New Window"),
         command("newTab", "New Tab"),
         command("newFolder", "New Folder"),
         separator,
         command("openSelection", "Open"),
         command("openSelectionInNewTab", "Open in New Tab"),
+        command("openSelectionInNewWindow", "Open in New Window"),
         command("editSelection", `Edit in ${options.textEditorName ?? "Text Editor"}`),
         command("quickLookSelection", "Quick Look"),
         // Search results only, as Finder's Show in Enclosing Folder.
@@ -291,6 +325,8 @@ export function createApplicationMenuTemplate(
         separator,
         command("selectPreviousTab", "Show Previous Tab"),
         command("selectNextTab", "Show Next Tab"),
+        command("moveTabToNewWindow", "Move Tab to New Window"),
+        command("mergeAllWindows", "Merge All Windows"),
         separator,
         { role: "front" },
       ],
@@ -335,6 +371,8 @@ export function resolveApplicationMenuItemStates(
   window: {
     // Whether the explorer window is the one the menu acts on (false while Settings is).
     explorerFocused: boolean;
+    // How many explorer windows are open (left out: one). Merging needs two.
+    explorerWindowCount?: number;
     // Whether there is a file operation to undo and to redo (left out: there is).
     undoAvailable?: { undo: boolean; redo: boolean };
   },
@@ -346,6 +384,9 @@ export function resolveApplicationMenuItemStates(
     }
     if (disabled.has(type)) {
       return false;
+    }
+    if (type === "mergeAllWindows") {
+      return (window.explorerWindowCount ?? 1) > 1;
     }
     // A text field's own Undo is always there; the files' only when there is one.
     if ((type === "undo" || type === "redo") && !state.textEditing) {

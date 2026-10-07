@@ -31,6 +31,7 @@ const ZOOM_COMMANDS = new Set<RendererCommandType>(["zoomIn", "zoomOut", "resetZ
 const TREE_SAFE_RENDERER_COMMANDS = new Set<RendererCommandType>([
   "openSelection",
   "openSelectionInNewTab",
+  "openSelectionInNewWindow",
   "openInTerminal",
   "copyPath",
   "copySelection",
@@ -52,6 +53,8 @@ const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>([
 // The command whose shortcut a context-menu item shows.
 const CONTEXT_MENU_SHORTCUT_COMMANDS = {
   open: "openSelection",
+  openInNewTab: "openSelectionInNewTab",
+  openInNewWindow: "openSelectionInNewWindow",
   quickLook: "quickLookSelection",
   showInfo: "toggleInfoPanel",
   calculateSize: "calculateSize",
@@ -112,12 +115,16 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   goApplications: "globalExplorer",
   goTrash: "globalExplorer",
   rootTreeAtSelection: "globalExplorer",
+  newWindow: "globalExplorer",
   newTab: "globalExplorer",
   reopenClosedTab: "globalExplorer",
   closeTab: "globalExplorer",
   selectNextTab: "globalExplorer",
   selectPreviousTab: "globalExplorer",
   openSelectionInNewTab: "contentOnly",
+  openSelectionInNewWindow: "contentOnly",
+  moveTabToNewWindow: "globalExplorer",
+  mergeAllWindows: "globalExplorer",
   quickLookSelection: "contentOnly",
   // From the tree it sizes the tree's folder.
   calculateSize: "globalExplorer",
@@ -346,6 +353,14 @@ function isContextMenuShortcutLive(
   switch (action) {
     case "open":
       return canHandleRendererCommand("openSelection", context);
+    case "openInNewTab":
+    case "openInNewWindow":
+      // As with Paste: a tree or favorite menu opens the right-clicked folder, the key the
+      // selected one.
+      return (
+        context.focusedPane !== "tree" &&
+        canHandleRendererCommand(CONTEXT_MENU_SHORTCUT_COMMANDS[action], context)
+      );
     case "quickLook":
       return canHandleRendererCommand("quickLookSelection", context);
     case "showInfo":

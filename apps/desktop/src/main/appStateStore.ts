@@ -48,9 +48,59 @@ export type StoredWindowState = {
   maximized: boolean;
 };
 
+// What belongs to one explorer window rather than to the app: its tabs and where they are,
+// how its front tab shows its folder, which of its panels are open and how wide, and how
+// wide its columns are (windows of different sizes want different widths). Each
+// window keeps its own; the app's preferences hold the values last set in any window,
+// which a window opened without one of its own starts from.
+export const WINDOW_SESSION_PREFERENCE_KEYS = [
+  "openTabs",
+  "activeTabIndex",
+  "treeRootPath",
+  "lastVisitedPath",
+  "lastVisitedFavoritePath",
+  "viewMode",
+  "searchViewMode",
+  "sortBy",
+  "sortDirection",
+  "searchResultsSortBy",
+  "searchResultsSortDirection",
+  "includeHidden",
+  "foldersFirst",
+  "favoritesExpanded",
+  "locationsExpanded",
+  "folderTreeOpen",
+  "propertiesOpen",
+  "detailRowOpen",
+  "treeWidth",
+  "inspectorWidth",
+  "detailColumnWidths",
+  "searchColumnWidths",
+] as const satisfies readonly (keyof AppPreferences)[];
+
+export type WindowSessionKey = (typeof WINDOW_SESSION_PREFERENCE_KEYS)[number];
+export type WindowSession = Pick<AppPreferences, WindowSessionKey>;
+
+const WINDOW_SESSION_KEY_SET: ReadonlySet<string> = new Set(WINDOW_SESSION_PREFERENCE_KEYS);
+
+export function isWindowSessionKey(key: string): key is WindowSessionKey {
+  return WINDOW_SESSION_KEY_SET.has(key);
+}
+
+// An explorer window as it is brought back at the next launch.
+export type StoredExplorerWindow = {
+  id: string;
+  bounds: StoredWindowState;
+  session: WindowSession;
+};
+
+// No more windows are remembered than anyone keeps open; a damaged file can't make more.
+export const STORED_EXPLORER_WINDOWS_LIMIT = 50;
+
 type AppState = {
   preferences?: AppPreferences;
-  window?: StoredWindowState;
+  // Front to back.
+  windows?: StoredExplorerWindow[];
 };
 
 // The two files the store keeps, so that a change to one does not rewrite the other.
@@ -77,7 +127,7 @@ export type AppStateStoreDependencies = {
   onPersistError?: (error: unknown) => void;
 };
 
-const DEFAULT_WINDOW_STATE: StoredWindowState = {
+export const DEFAULT_WINDOW_STATE: StoredWindowState = {
   width: 1200,
   height: 760,
   maximized: false,
@@ -227,19 +277,107 @@ export class AppStateStore {
     return visitedFolders;
   }
 
-  getWindowState(): StoredWindowState {
-    return this.state.window ?? DEFAULT_WINDOW_STATE;
+  /** The explorer windows to bring back, front to back. */
+  getExplorerWindows(): readonly StoredExplorerWindow[] {
+    return this.state.windows ?? [];
   }
 
-  setWindowState(value: StoredWindowState): void {
-    const window = sanitizeWindowState(value);
-    if (JSON.stringify(window) === JSON.stringify(this.state.window)) {
+  /** The app's preferences as the window `windowId` sees them: with its own session. */
+  getWindowPreferences(windowId: string): AppPreferences {
+    const window = this.findWindow(windowId);
+    return window ? { ...this.getPreferences(), ...window.session } : this.getPreferences();
+  }
+
+  /**
+   * A change made in the window `windowId`. Its session keys are the window's own; every key
+   * also becomes the app's latest value.
+   */
+  updateWindowPreferences(windowId: string, value: Partial<AppPreferences>): AppPreferences {
+    const preferences = this.updatePreferences(value);
+    const window = this.findWindow(windowId);
+    if (!window) {
+      return preferences;
+    }
+    const sessionPatch = pickWindowSession(value);
+    const current = { ...preferences, ...window.session };
+    const session = pickWindowSession(
+      sanitizePreferences({ ...current, ...sessionPatch }, current),
+    );
+    const changedKeys = WINDOW_SESSION_PREFERENCE_KEYS.filter(
+      (key) => JSON.stringify(session[key]) !== JSON.stringify(window.session[key]),
+    );
+    if (changedKeys.length > 0) {
+      this.replaceWindow({ ...window, session });
+      this.markUnsaved("state");
+      if (changedKeys.some((key) => !NAVIGATION_PREFERENCE_KEYS.has(key))) {
+        this.saveSoon();
+      } else {
+        this.saveLater();
+      }
+    }
+    return { ...preferences, ...session };
+  }
+
+  /** A window's session as a new window would start it: the app's latest values. */
+  createWindowSession(overrides: Partial<WindowSession> = {}): WindowSession {
+    return pickWindowSession(
+      sanitizePreferences({ ...this.getPreferences(), ...overrides }, this.defaults),
+    );
+  }
+
+  /** Adds a window in front of the others. */
+  addExplorerWindow(window: StoredExplorerWindow): void {
+    const windows = [
+      {
+        id: window.id,
+        bounds: sanitizeWindowState(window.bounds),
+        session: this.createWindowSession(window.session),
+      },
+      ...this.getExplorerWindows().filter((other) => other.id !== window.id),
+    ].slice(0, STORED_EXPLORER_WINDOWS_LIMIT);
+    this.setWindows(windows);
+  }
+
+  removeExplorerWindow(windowId: string): void {
+    const windows = this.getExplorerWindows();
+    if (windows.some((window) => window.id === windowId)) {
+      this.setWindows(windows.filter((window) => window.id !== windowId));
+    }
+  }
+
+  moveExplorerWindowToFront(windowId: string): void {
+    const windows = this.getExplorerWindows();
+    const window = windows.find((candidate) => candidate.id === windowId);
+    if (window && windows[0] !== window) {
+      this.setWindows([window, ...windows.filter((other) => other !== window)]);
+    }
+  }
+
+  setExplorerWindowBounds(windowId: string, value: StoredWindowState): void {
+    const window = this.findWindow(windowId);
+    const bounds = sanitizeWindowState(value);
+    if (!window || JSON.stringify(bounds) === JSON.stringify(window.bounds)) {
       return;
     }
+    this.replaceWindow({ ...window, bounds });
+    this.markUnsaved("state");
+    this.saveLater();
+  }
+
+  private findWindow(windowId: string): StoredExplorerWindow | undefined {
+    return this.getExplorerWindows().find((window) => window.id === windowId);
+  }
+
+  private replaceWindow(window: StoredExplorerWindow): void {
     this.state = {
       ...this.state,
-      window,
+      windows: this.getExplorerWindows().map((other) => (other.id === window.id ? window : other)),
     };
+  }
+
+  // Which windows there are and their order follow where the user is, like navigation.
+  private setWindows(windows: StoredExplorerWindow[]): void {
+    this.state = { ...this.state, windows };
     this.markUnsaved("state");
     this.saveLater();
   }
@@ -341,9 +479,18 @@ function readState(
     if (!isPlainObject(parsed)) {
       return {};
     }
+    const preferences = sanitizePreferences(parsed.preferences, defaults);
     return {
-      preferences: sanitizePreferences(parsed.preferences, defaults),
-      window: sanitizeWindowState(parsed.window),
+      preferences,
+      windows: sanitizeExplorerWindows(parsed.windows, preferences) ?? [
+        // Saved before there could be more than one window: the one window, with the tabs
+        // and panels the preferences held.
+        {
+          id: LEGACY_WINDOW_ID,
+          bounds: sanitizeWindowState(parsed.window),
+          session: pickWindowSession(preferences),
+        },
+      ],
     };
   } catch (error) {
     onReadError(error);
@@ -853,6 +1000,58 @@ function sanitizeDetailColumnWidths(
       clampDetailColumnWidth(key, typeof record[key] === "number" ? record[key] : defaults[key]),
     ]),
   ) as AppPreferences["detailColumnWidths"];
+}
+
+// The id the one window saved before there were several is given.
+const LEGACY_WINDOW_ID = "window-1";
+
+// The session keys of `value`. Given whole preferences, a whole session.
+export function pickWindowSession(value: Partial<AppPreferences>): WindowSession {
+  const session: Record<string, unknown> = {};
+  for (const key of WINDOW_SESSION_PREFERENCE_KEYS) {
+    if (value[key] !== undefined) {
+      session[key] = value[key];
+    }
+  }
+  return session as WindowSession;
+}
+
+// The saved windows, or null when the file has no list of them (it was saved before there
+// could be several). A window that doesn't make sense is dropped; one whose session is
+// missing a value takes the app's.
+function sanitizeExplorerWindows(
+  value: unknown,
+  preferences: AppPreferences,
+): StoredExplorerWindow[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const windows: StoredExplorerWindow[] = [];
+  for (const candidate of value) {
+    if (
+      !isPlainObject(candidate) ||
+      typeof candidate.id !== "string" ||
+      candidate.id.length === 0 ||
+      windows.some((window) => window.id === candidate.id)
+    ) {
+      continue;
+    }
+    const session = isPlainObject(candidate.session) ? candidate.session : {};
+    windows.push({
+      id: candidate.id,
+      bounds: sanitizeWindowState(candidate.bounds),
+      session: pickWindowSession(
+        sanitizePreferences(
+          { ...preferences, ...pickWindowSession(session as Partial<AppPreferences>) },
+          preferences,
+        ),
+      ),
+    });
+    if (windows.length === STORED_EXPLORER_WINDOWS_LIMIT) {
+      break;
+    }
+  }
+  return windows;
 }
 
 function sanitizeWindowState(value: unknown): StoredWindowState {

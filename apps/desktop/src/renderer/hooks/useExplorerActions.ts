@@ -109,6 +109,7 @@ import type {
   ContextMenuState,
   CopyPasteDialogState,
   DotNameRequest,
+  ForeignWriteOperation,
   WriteOperationCardState,
 } from "./useWriteOperations";
 
@@ -361,6 +362,7 @@ export function useExplorerActions(args: {
   callbacks: {
     restartActiveSearch?: (() => Promise<void>) | null;
     openPathInNewTab: (path: string) => void;
+    openPathInNewWindow: (path: string) => void;
     calculateFolderSize: (path: string) => void;
     /** Several folders, one after another, leaving those whose size is known. */
     calculateFolderSizes: (paths: string[]) => void;
@@ -433,6 +435,8 @@ export function useExplorerActions(args: {
     setWriteOperationCardState,
     writeOperationProgressEvent,
     setWriteOperationProgressEvent,
+    foreignWriteOperation,
+    setForeignWriteOperation,
     renameDialogState,
     setRenameDialogState,
     newFolderDialogState,
@@ -446,6 +450,8 @@ export function useExplorerActions(args: {
     nextToastIdRef,
     copyPasteClipboardRef,
     writeOperationLockedRef,
+    foreignWriteOperationRef,
+    adoptedWriteOperationIdRef,
     pendingPasteSelectionRef,
     pendingTreeSelectionPathRef,
     writeOperationTabIdRef,
@@ -495,7 +501,8 @@ export function useExplorerActions(args: {
     writeOperationCardState,
   );
 
-  const isWriteOperationLocked = writeOperationCardState !== null;
+  // One operation at a time in the whole app: this window's, or another window's.
+  const isWriteOperationLocked = writeOperationCardState !== null || foreignWriteOperation !== null;
   const canPasteAtResolvedDestination =
     hasClipboardItems(copyPasteClipboard) && pasteDestinationPath !== null;
   const showCopyPasteProgressCard = writeOperationCardState !== null;
@@ -579,6 +586,7 @@ export function useExplorerActions(args: {
     // In the file list and search results a new tab opens on one folder.
     if (!isTreeSurface && (surface === "trash" || !isSingleFolder)) {
       hidden.add("openInNewTab");
+      hidden.add("openInNewWindow");
     }
     // An item's Paste goes into it, so it is there only for one folder; the folder on
     // screen has its own, in the menu of the background.
@@ -761,6 +769,29 @@ export function useExplorerActions(args: {
     copyPasteClipboardRef.current = copyPasteClipboard;
   }, [copyPasteClipboard, copyPasteClipboardRef]);
 
+  // What was copied or cut in another window, before this one opened or since.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the setter and ref never change.
+  useEffect(() => {
+    let cancelled = false;
+    const takeClipboard = (clipboard: CopyPasteClipboardState) => {
+      copyPasteClipboardRef.current = clipboard;
+      setCopyPasteClipboardState(clipboard);
+    };
+    void Promise.resolve(client.invoke("app:getClipboard", {}))
+      .then((response) => {
+        // Not over something copied here meanwhile.
+        if (!cancelled && response?.clipboard && copyPasteClipboardRef.current.type === "empty") {
+          takeClipboard(response.clipboard);
+        }
+      })
+      .catch(() => undefined);
+    const unsubscribe = client.onClipboardChanged?.(takeClipboard);
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [client]);
+
   useLayoutEffect(() => {
     writeOperationCardStateRef.current = writeOperationCardState;
   }, [writeOperationCardState]);
@@ -834,6 +865,9 @@ export function useExplorerActions(args: {
   // The playback waits a moment so the caller's "queued" card goes up first.
   const adoptWriteOperation = (operationId: string) => {
     activeWriteOperationIdRef.current = operationId;
+    if (foreignWriteOperationRef.current?.operationId === operationId) {
+      noteForeignWriteOperation(null);
+    }
     const early = earlyWriteOperationEventsRef.current.get(operationId) ?? [];
     earlyWriteOperationEventsRef.current.clear();
     if (early.length > 0) {
@@ -845,10 +879,40 @@ export function useExplorerActions(args: {
     }
   };
 
+  // Another window's operation, or none: kept in the ref at once and in state for drawing.
+  function noteForeignWriteOperation(
+    running: (ForeignWriteOperation & { currentSourcePath: string | null }) | null,
+  ) {
+    const previous = foreignWriteOperationRef.current;
+    foreignWriteOperationRef.current = running;
+    if (previous?.operationId !== running?.operationId || previous?.action !== running?.action) {
+      setForeignWriteOperation(
+        running ? { operationId: running.operationId, action: running.action } : null,
+      );
+    }
+  }
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: write-operation progress should stay subscribed to stable refs without resubscribing on every ref.current mutation.
   useEffect(() => {
     const handleProgress = (event: WriteOperationProgressEvent) => {
       if (event.operationId !== activeWriteOperationIdRef.current) {
+        // Another window's operation: this one starts none while it runs.
+        if (
+          event.status === "completed" ||
+          event.status === "failed" ||
+          event.status === "cancelled" ||
+          event.status === "partial"
+        ) {
+          if (foreignWriteOperationRef.current?.operationId === event.operationId) {
+            noteForeignWriteOperation(null);
+          }
+        } else {
+          noteForeignWriteOperation({
+            operationId: event.operationId,
+            action: event.action,
+            currentSourcePath: event.currentSourcePath,
+          });
+        }
         if (activeWriteOperationIdRef.current === null) {
           const early = earlyWriteOperationEventsRef.current;
           early.set(event.operationId, [...(early.get(event.operationId) ?? []), event]);
@@ -889,10 +953,14 @@ export function useExplorerActions(args: {
         moveOperationSourceSurfaceRef.current.delete(event.operationId);
         const fromExternalDrop = externalDropOperationIdsRef.current.delete(event.operationId);
         // Another tab may be on screen by now. Its folder is still read again, but what
-        // the operation leaves selected belongs to the tab it was started from.
+        // the operation leaves selected belongs to the tab it was started from, or to the
+        // window it was started from, when this one took it over.
+        const adopted = adoptedWriteOperationIdRef.current === event.operationId;
+        adoptedWriteOperationIdRef.current = null;
         const startedInTabOnScreen =
-          writeOperationTabIdRef.current === null ||
-          writeOperationTabIdRef.current === activeTabIdRef.current;
+          !adopted &&
+          (writeOperationTabIdRef.current === null ||
+            writeOperationTabIdRef.current === activeTabIdRef.current);
         writeOperationTabIdRef.current = null;
         if (!startedInTabOnScreen) {
           pendingTreeSelectionPathRef.current = null;
@@ -982,7 +1050,22 @@ export function useExplorerActions(args: {
       }
     };
     writeOperationProgressHandlerRef.current = handleProgress;
-    return client.onWriteOperationProgress(handleProgress);
+    const unsubscribeProgress = client.onWriteOperationProgress(handleProgress);
+    // The window that started an operation closed and this one has it now: its card, Stop
+    // and questions are here from now on.
+    const unsubscribeAdopted = client.onWriteOperationAdopted?.(({ operationId, event }) => {
+      noteForeignWriteOperation(null);
+      earlyWriteOperationEventsRef.current.delete(operationId);
+      activeWriteOperationIdRef.current = operationId;
+      adoptedWriteOperationIdRef.current = operationId;
+      if (event) {
+        handleProgress(event);
+      }
+    });
+    return () => {
+      unsubscribeProgress();
+      unsubscribeAdopted?.();
+    };
   }, [client, refreshDirectory, setWriteOperationProgressEvent]);
 
   function closeContextMenu() {
@@ -1207,13 +1290,13 @@ export function useExplorerActions(args: {
   // dropped; the notification says why, so the rows don't just seem not to move, and the
   // drop doesn't just seem to go nowhere.
   function noticeDragRefusedWhileBusy(gesture: "drag" | "drop" = "drag") {
-    const card = writeOperationCardStateRef.current;
-    if (!card) {
+    const running = writeOperationCardStateRef.current ?? foreignWriteOperationRef.current;
+    if (!running) {
       return;
     }
     pushToast({
       kind: "info",
-      title: describeDragRefusedWhileBusy(card.action, card.currentSourcePath, gesture),
+      title: describeDragRefusedWhileBusy(running.action, running.currentSourcePath, gesture),
     });
   }
 
@@ -1237,9 +1320,14 @@ export function useExplorerActions(args: {
     showModalNotice(getCopyLikePreStartFailureTitle(action), outcome.message);
   }
 
+  // The clipboard is the app's, not the window's: every change goes to main, which tells
+  // the other windows.
   function applyCopyPasteClipboardState(nextClipboard: CopyPasteClipboardState) {
     copyPasteClipboardRef.current = nextClipboard;
     setCopyPasteClipboardState(nextClipboard);
+    void Promise.resolve(client.invoke("app:setClipboard", { clipboard: nextClipboard })).catch(
+      () => undefined,
+    );
   }
 
   // Items dragged out of the app that another app moved away or put in the Trash: the
@@ -1257,7 +1345,7 @@ export function useExplorerActions(args: {
   }
 
   function isWriteOperationInFlight(): boolean {
-    return writeOperationLockedRef.current;
+    return writeOperationLockedRef.current || foreignWriteOperationRef.current !== null;
   }
 
   // One file operation runs at a time. Every write asked for meanwhile says so the same way,
@@ -2758,10 +2846,10 @@ export function useExplorerActions(args: {
       }
       return;
     }
-    if (actionId === "openInNewTab") {
+    if (actionId === "openInNewTab" || actionId === "openInNewWindow") {
       const targetPath = contextMenuTargetPath ?? paths[0];
       if (targetPath) {
-        await openFolderInNewTab(targetPath);
+        await openFolderInNewTab(targetPath, actionId === "openInNewWindow" ? "window" : "tab");
       }
       return;
     }
@@ -2967,12 +3055,17 @@ export function useExplorerActions(args: {
     await activateContentPaths([entry.path]);
   }
 
-  // Opens a folder in a new tab. A folder alias opens the folder it points to, as it does
-  // when it is opened in place.
-  async function openFolderInNewTab(path: string) {
+  // Opens a folder in a new tab, or a new window. A folder alias opens the folder it points
+  // to, as it does when it is opened in place.
+  async function openFolderInNewTab(path: string, place: "tab" | "window" = "tab") {
     const entry = activeContentEntries.find((candidate) => candidate.path === path) ?? null;
     const targetPath = entry?.kind === "symlink_directory" ? await resolveTargetPath(path) : path;
-    if (targetPath) {
+    if (!targetPath) {
+      return;
+    }
+    if (place === "window") {
+      callbacks.openPathInNewWindow(targetPath);
+    } else {
       callbacks.openPathInNewTab(targetPath);
     }
   }

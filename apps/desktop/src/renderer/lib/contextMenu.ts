@@ -19,6 +19,7 @@ export type ContextMenuActionId =
   | "revealInTree"
   | "open"
   | "openInNewTab"
+  | "openInNewWindow"
   | "openWith"
   | "quickLook"
   | "showPackageContents"
@@ -93,6 +94,7 @@ export type ContextMenuIconName =
   | "open"
   | "openFile"
   | "openInNewTab"
+  | "openInNewWindow"
   | "openWith"
   | "quickLook"
   | "showPackageContents"
@@ -176,6 +178,7 @@ export function getContextMenuItems(
       { id: "newFolder", label: "New Folder", icon: "newFolder" },
       { type: "separator", key: "separator-tree-new" },
       { id: "openInNewTab", label: "Open in New Tab", icon: "openInNewTab" },
+      { id: "openInNewWindow", label: "Open in New Window", icon: "openInNewWindow" },
       { id: "rootTreeHere", label: "Use as Tree Root", icon: "rootTreeHere" },
       { type: "separator", key: "separator-tree-open" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
@@ -233,6 +236,7 @@ export function getContextMenuItems(
       { id: "newFolder", label: "New Folder", icon: "newFolder" },
       { type: "separator", key: "separator-favorite-new" },
       { id: "openInNewTab", label: "Open in New Tab", icon: "openInNewTab" },
+      { id: "openInNewWindow", label: "Open in New Window", icon: "openInNewWindow" },
       { id: "revealInTree", label: "Reveal in Tree", icon: "revealInTree" },
       { id: "rootTreeHere", label: "Use as Tree Root", icon: "rootTreeHere" },
       { type: "separator", key: "separator-favorite-open" },
@@ -255,6 +259,7 @@ export function getContextMenuItems(
   return [
     { id: "open", label: "Open", icon: input.targetsFolder ? "open" : "openFile" },
     { id: "openInNewTab", label: "Open in New Tab", icon: "openInNewTab" },
+    { id: "openInNewWindow", label: "Open in New Window", icon: "openInNewWindow" },
     { id: "openWith", label: "Open With", icon: "openWith", hasSubmenu: true },
     { id: "quickLook", label: "Quick Look", icon: "quickLook" },
     { id: "edit", label: `Edit in ${textEditorName}`, icon: "edit" },

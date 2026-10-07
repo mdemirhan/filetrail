@@ -155,10 +155,13 @@ type ExplorerShortcutActions = {
   setSingleContentSelection: (path: string) => void;
   selectAllContentEntries: () => void;
   openNewTab: () => void;
+  openNewWindow: () => void;
+  moveTabToNewWindow: () => void;
+  mergeAllWindows: () => void;
   reopenClosedTab: () => void;
   closeTab: () => void;
   activateAdjacentTab: (direction: "next" | "previous") => void;
-  openFolderInNewTab: (path: string) => Promise<void>;
+  openFolderInNewTab: (path: string, place?: "tab" | "window") => Promise<void>;
   toggleFavoritePath: (path: string) => void;
   showPathsInFinder: (paths: string[]) => Promise<void>;
   revealPathInFolder: (path: string) => Promise<void>;
@@ -1242,6 +1245,18 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         current.openNewTab();
         return;
       }
+      if (commandType === "newWindow") {
+        current.openNewWindow();
+        return;
+      }
+      if (commandType === "moveTabToNewWindow") {
+        current.moveTabToNewWindow();
+        return;
+      }
+      if (commandType === "mergeAllWindows") {
+        current.mergeAllWindows();
+        return;
+      }
       if (commandType === "reopenClosedTab") {
         current.reopenClosedTab();
         return;
@@ -1258,10 +1273,13 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         current.activateAdjacentTab("previous");
         return;
       }
-      if (commandType === "openSelectionInNewTab") {
+      if (commandType === "openSelectionInNewTab" || commandType === "openSelectionInNewWindow") {
         const targetPath = resolveNewTabTargetPath(current);
         if (targetPath) {
-          void current.openFolderInNewTab(targetPath);
+          void current.openFolderInNewTab(
+            targetPath,
+            commandType === "openSelectionInNewWindow" ? "window" : "tab",
+          );
         }
         return;
       }

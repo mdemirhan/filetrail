@@ -501,13 +501,13 @@ export function useExplorerDragAndDrop(args: {
     } catch {
       return;
     }
-    // Gone meanwhile, or the app's own drag started: nothing to take. A drag of the app's
-    // own that this window doesn't know of (it began before a reload) is refused, as is one
-    // of no files (promised files, text, links).
+    // Gone meanwhile, or this window's own drag started: nothing to take. A drag of the
+    // app's own that this window didn't start comes from another of its windows, and is
+    // taken as a drop from Finder would be. One of no files (promised files, text, links)
+    // is refused.
     if (
       externalDragRef.current !== drag ||
       dragSessionRef.current !== null ||
-      contents.ownDrag ||
       contents.items.length === 0
     ) {
       return;

@@ -454,6 +454,33 @@ describe("createFolderSizeHandlers", () => {
     expect(firstStatus.status).toBe("cancelled");
   });
 
+  it("leaves another window's walk running and queues behind it", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+
+    const first = handlers.start({ path: "/test/a" }, 1);
+    const second = handlers.start({ path: "/test/b" }, 2);
+    expect(second.status).toBe("queued");
+    expect(native.cancelFolderSize).not.toHaveBeenCalled();
+    expect(handlers.getStatus({ jobId: first.jobId }).status).toBe("running");
+
+    // The second window asks again: its own waiting job gives way, the first window's walk
+    // still runs.
+    const third = handlers.start({ path: "/test/c" }, 2);
+    expect(handlers.getStatus({ jobId: second.jobId }).status).toBe("cancelled");
+    expect(third.status).toBe("queued");
+    expect(native.cancelFolderSize).not.toHaveBeenCalled();
+
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(handlers.getStatus({ jobId: first.jobId }).status).toBe("ready");
+    expect(native.getFolderSize).toHaveBeenLastCalledWith("/test/c", expect.any(Function));
+
+    // The first window's next walk stops none of the second's.
+    handlers.start({ path: "/test/d" }, 1);
+    expect(native.cancelFolderSize).not.toHaveBeenCalled();
+  });
+
   it("sub-folder cache population from walk results", async () => {
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);

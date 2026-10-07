@@ -79,11 +79,13 @@ describe("createApplicationMenuTemplate", () => {
       "Quit File Trail",
     ]);
     expect(labels(submenuOf(template, "File"))).toEqual([
+      "New Window",
       "New Tab",
       "New Folder",
       "-",
       "Open",
       "Open in New Tab",
+      "Open in New Window",
       "Edit in Text Editor",
       "Quick Look",
       "Reveal in Folder",
@@ -172,6 +174,8 @@ describe("createApplicationMenuTemplate", () => {
       "-",
       "Show Previous Tab",
       "Show Next Tab",
+      "Move Tab to New Window",
+      "Merge All Windows",
       "-",
       "(front)",
     ]);
@@ -212,10 +216,12 @@ describe("createApplicationMenuTemplate", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send });
     const expected = [
+      ["File", "New Window", "Command+N", "newWindow"],
       ["File", "New Tab", "Command+T", "newTab"],
       ["File", "New Folder", "Command+Shift+N", "newFolder"],
       ["File", "Open", "Command+O", "openSelection"],
       ["File", "Open in New Tab", undefined, "openSelectionInNewTab"],
+      ["File", "Open in New Window", undefined, "openSelectionInNewWindow"],
       ["File", "Edit in Text Editor", "Command+E", "editSelection"],
       ["File", "Quick Look", undefined, "quickLookSelection"],
       ["File", "Reveal in Folder", undefined, "revealInFolder"],
@@ -265,6 +271,8 @@ describe("createApplicationMenuTemplate", () => {
       ["Go", "Use as Tree Root", "Command+Shift+R", "rootTreeAtSelection"],
       ["windowMenu", "Show Previous Tab", "Control+Shift+Tab", "selectPreviousTab"],
       ["windowMenu", "Show Next Tab", "Control+Tab", "selectNextTab"],
+      ["windowMenu", "Move Tab to New Window", undefined, "moveTabToNewWindow"],
+      ["windowMenu", "Merge All Windows", undefined, "mergeAllWindows"],
       ["help", "File Trail Help", undefined, "openHelp"],
       ["help", "Keyboard Shortcuts", undefined, "openKeyboardShortcuts"],
     ] as const;
@@ -371,6 +379,46 @@ describe("createApplicationMenuTemplate", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("sends a command to the explorer window that has the keyboard", () => {
+    const front = { send: vi.fn() };
+    const focused = { send: vi.fn() };
+    const focusedWindow = { webContents: focused };
+    const template = createApplicationMenuTemplate({
+      explorerFor: (window) =>
+        window === focusedWindow
+          ? { contents: focused, focused: true }
+          : { contents: front, focused: window === undefined },
+    });
+
+    choose(itemOf(submenuOf(template, "Go"), "Back"), focusedWindow);
+    choose(itemOf(submenuOf(template, "Go"), "Forward"));
+
+    expect(focused.send).toHaveBeenCalledWith("filetrail:command", { type: "goBack" });
+    expect(front.send).toHaveBeenCalledWith("filetrail:command", { type: "goForward" });
+    expect(front.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a new window beside the front explorer window while another window is focused", () => {
+    const front = { send: vi.fn() };
+    const template = createApplicationMenuTemplate({
+      explorerFor: () => ({ contents: front, focused: false }),
+    });
+    const settingsWindow = { webContents: { copy: vi.fn() }, close: vi.fn() };
+
+    choose(itemOf(submenuOf(template, "File"), "New Window"), settingsWindow);
+    choose(itemOf(submenuOf(template, "Go"), "Back"), settingsWindow);
+
+    expect(front.send).toHaveBeenCalledTimes(1);
+    expect(front.send).toHaveBeenCalledWith("filetrail:command", { type: "newWindow" });
+    expect(settingsWindow.close).not.toHaveBeenCalled();
+  });
+
+  it("does nothing with no explorer window to send to", () => {
+    const template = createApplicationMenuTemplate({ explorerFor: () => null });
+
+    expect(() => choose(itemOf(submenuOf(template, "Go"), "Back"))).not.toThrow();
+  });
+
   it("leaves the explorer alone when another window is focused", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send });
@@ -441,7 +489,11 @@ describe("createApplicationMenuTemplate", () => {
 
 describe("resolveApplicationMenuItemStates", () => {
   const explorerWindow = { explorerFocused: true };
-  const stateOf = (id: string, state: ApplicationMenuState, window = explorerWindow) => {
+  const stateOf = (
+    id: string,
+    state: ApplicationMenuState,
+    window: Parameters<typeof resolveApplicationMenuItemStates>[1] = explorerWindow,
+  ) => {
     const item = resolveApplicationMenuItemStates(state, window).find(
       (candidate) => candidate.id === id,
     );
@@ -450,6 +502,24 @@ describe("resolveApplicationMenuItemStates", () => {
     }
     return item;
   };
+
+  it("offers Merge All Windows only with another explorer window open", () => {
+    const state = INITIAL_APPLICATION_MENU_STATE;
+    expect(stateOf("mergeAllWindows", state).enabled).toBe(false);
+    expect(
+      stateOf("mergeAllWindows", state, { explorerFocused: true, explorerWindowCount: 1 }).enabled,
+    ).toBe(false);
+    expect(
+      stateOf("mergeAllWindows", state, { explorerFocused: true, explorerWindowCount: 2 }).enabled,
+    ).toBe(true);
+    expect(
+      stateOf(
+        "mergeAllWindows",
+        { ...state, disabledCommands: ["mergeAllWindows"] },
+        { explorerFocused: true, explorerWindowCount: 2 },
+      ).enabled,
+    ).toBe(false);
+  });
 
   it("has a state for every item of the menu that sends a command", () => {
     const stateIds = new Set(
@@ -546,7 +616,7 @@ describe("resolveApplicationMenuItemStates", () => {
     expect(stateOf("redo", typing, window).enabled).toBe(true);
   });
 
-  it("keeps only the edit commands and ⌘W while another window has the keyboard", () => {
+  it("keeps only the edit commands, ⌘W and New Window while another window has the keyboard", () => {
     const settingsFocused = { explorerFocused: false };
     const enabled = RENDERER_COMMAND_TYPES.filter(
       (type) =>
@@ -562,6 +632,7 @@ describe("resolveApplicationMenuItemStates", () => {
       "editCopy",
       "editPaste",
       "editSelectAll",
+      "newWindow",
       "closeTab",
     ]);
     expect(

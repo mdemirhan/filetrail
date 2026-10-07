@@ -1,5 +1,6 @@
 import type {
   AppLogEntry,
+  CopyPasteClipboard,
   FolderChange,
   HelpTopic,
   IpcChannel,
@@ -7,6 +8,7 @@ import type {
   IpcResponse,
   SettingsTab,
   Volume,
+  WriteOperationAdoption,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
@@ -31,6 +33,10 @@ declare global {
       onVolumesChanged?(listener: (volumes: Volume[]) => void): () => void;
       // Changes made outside the app to the folder asked for with `folder:watch`.
       onFolderChanged?(listener: (change: FolderChange) => void): () => void;
+      // The app's clipboard, changed in another window.
+      onClipboardChanged?(listener: (clipboard: CopyPasteClipboard) => void): () => void;
+      // A running operation this window takes over from one that closed.
+      onWriteOperationAdopted?(listener: (adoption: WriteOperationAdoption) => void): () => void;
     };
   }
 }

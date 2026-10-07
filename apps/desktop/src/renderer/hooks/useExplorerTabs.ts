@@ -484,8 +484,13 @@ export function useExplorerTabs(args: {
     }
   }
 
-  // ⌘W: closes a tab. The last view left closes the window with it.
-  function closeTab(tabId: string = stateRef.current.activeTabId) {
+  // ⌘W: closes a tab. The last view left closes the window with it. A tab moved to another
+  // window isn't offered by Reopen Closed Tab (`remember: false`).
+  function closeTab(
+    tabId: string = stateRef.current.activeTabId,
+    options: { remember?: boolean } = {},
+  ) {
+    const remember = options.remember !== false;
     if (derived.blocked) {
       return;
     }
@@ -503,7 +508,9 @@ export function useExplorerTabs(args: {
     }
     if (tabId !== current.activeTabId) {
       cancelSearchJob(closing.snapshot?.search?.jobId ?? null);
-      rememberClosedTab(closing.snapshot);
+      if (remember) {
+        rememberClosedTab(closing.snapshot);
+      }
       commitState({ ...current, tabs: current.tabs.filter((tab) => tab.id !== tabId) });
       return;
     }
@@ -514,7 +521,9 @@ export function useExplorerTabs(args: {
     }
     const closedSnapshot = captureLiveTab();
     cancelSearchJob(closedSnapshot.search?.jobId ?? null);
-    rememberClosedTab(closedSnapshot);
+    if (remember) {
+      rememberClosedTab(closedSnapshot);
+    }
     commitState({
       activeTabId: nextTab.id,
       tabs: current.tabs
@@ -589,6 +598,61 @@ export function useExplorerTabs(args: {
     openTabWithSnapshot(captureLiveTab(), snapshot, "load");
   }
 
+  // ⌘N: a new window on the folder on screen, shown the way this tab shows it.
+  function openNewWindow() {
+    if (!preferences.preferencesReady || navigation.currentPath.length === 0) {
+      return;
+    }
+    openWindowWithTab(liveTabPreference);
+  }
+
+  // Open in New Window: `path` in a window of its own, with this tab's view and tree root.
+  function openPathInNewWindow(path: string) {
+    if (!preferences.preferencesReady || path.length === 0) {
+      return;
+    }
+    openWindowWithTab({ ...liveTabPreference, path, favoritePath: null });
+  }
+
+  // Window › Move Tab to New Window: the tab on screen leaves for a window of its own. Its
+  // folder, tree and view go along; its history and search don't.
+  function moveTabToNewWindow() {
+    if (!canChangeTabs() || stateRef.current.tabs.length < 2) {
+      return;
+    }
+    const movedTabId = stateRef.current.activeTabId;
+    openWindowWithTab(liveTabPreference, () => closeTab(movedTabId, { remember: false }));
+  }
+
+  function openWindowWithTab(tab: OpenTabPreference, onOpened?: () => void) {
+    void client
+      .invoke("app:openWindow", { tabs: [tab], activeTabIndex: 0 })
+      .then((response) => {
+        if (response.ok) {
+          onOpened?.();
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  // Merge All Windows: the other windows' tabs join this window's, after them, waiting
+  // unread until they are shown. No more are kept than a window may hold.
+  function addTabs(
+    startupTabs: readonly StartupTab[],
+    favoritesPlacement: "integrated" | "separate",
+  ) {
+    const current = stateRef.current;
+    const room = Math.max(0, OPEN_TABS_LIMIT - current.tabs.length);
+    const added = startupTabs
+      .slice(0, room)
+      .map((startupTab) => createWaitingTab(startupTab, favoritesPlacement));
+    if (added.length === 0) {
+      return;
+    }
+    commitState({ ...current, tabs: [...current.tabs, ...added] });
+    dropWaitingTabsWhoseFolderIsGone(added);
+  }
+
   // Dragging a tab along the row.
   function moveTab(tabId: string, toIndex: number) {
     const current = stateRef.current;
@@ -607,42 +671,54 @@ export function useExplorerTabs(args: {
     favoritesPlacement: "integrated" | "separate",
   ) {
     const tabs = startupTabs.map((startupTab, index): ExplorerTab => {
-      const id = createTabId();
       if (index === activeIndex) {
-        return { id, snapshot: null, stale: false };
+        return { id: createTabId(), snapshot: null, stale: false };
       }
-      return {
-        id,
-        stale: false,
-        snapshot: {
-          currentPath: startupTab.path,
-          historyPaths: [startupTab.path],
-          historyIndex: 0,
-          viewMode: startupTab.viewMode,
-          searchViewMode: startupTab.searchViewMode,
-          sortBy: startupTab.sortBy,
-          sortDirection: startupTab.sortDirection,
-          treeRootPath: startupTab.rootPath,
-          selectedTreeItemId: startupTab.favoritePath
-            ? createFavoriteItemId(startupTab.favoritePath)
-            : createFileSystemItemId(startupTab.path),
-          leftPaneSubview:
-            startupTab.favoritePath && favoritesPlacement === "separate" ? "favorites" : "tree",
-          focusedPane: "content",
-          includeHidden: startupTab.includeHidden,
-          foldersFirst: startupTab.foldersFirst,
-          favoritesExpanded: startupTab.favoritesExpanded,
-          locationsExpanded: startupTab.locationsExpanded,
-          view: null,
-          search: null,
-        },
-      };
+      return createWaitingTab(startupTab, favoritesPlacement);
     });
     const activeTab = tabs[activeIndex];
     if (!activeTab) {
       return;
     }
     commitState({ tabs, activeTabId: activeTab.id });
+    dropWaitingTabsWhoseFolderIsGone(tabs);
+  }
+
+  // A tab that waits, unread, until it is shown.
+  function createWaitingTab(
+    startupTab: StartupTab,
+    favoritesPlacement: "integrated" | "separate",
+  ): ExplorerTab {
+    return {
+      id: createTabId(),
+      stale: false,
+      snapshot: {
+        currentPath: startupTab.path,
+        historyPaths: [startupTab.path],
+        historyIndex: 0,
+        viewMode: startupTab.viewMode,
+        searchViewMode: startupTab.searchViewMode,
+        sortBy: startupTab.sortBy,
+        sortDirection: startupTab.sortDirection,
+        treeRootPath: startupTab.rootPath,
+        selectedTreeItemId: startupTab.favoritePath
+          ? createFavoriteItemId(startupTab.favoritePath)
+          : createFileSystemItemId(startupTab.path),
+        leftPaneSubview:
+          startupTab.favoritePath && favoritesPlacement === "separate" ? "favorites" : "tree",
+        focusedPane: "content",
+        includeHidden: startupTab.includeHidden,
+        foldersFirst: startupTab.foldersFirst,
+        favoritesExpanded: startupTab.favoritesExpanded,
+        locationsExpanded: startupTab.locationsExpanded,
+        view: null,
+        search: null,
+      },
+    };
+  }
+
+  // A waiting tab whose folder turns out to be gone is dropped.
+  function dropWaitingTabsWhoseFolderIsGone(tabs: readonly ExplorerTab[]) {
     for (const tab of tabs) {
       const path = tab.snapshot?.currentPath;
       if (!path) {
@@ -915,6 +991,10 @@ export function useExplorerTabs(args: {
       ),
     ),
     restoreTabs,
+    addTabs,
+    openNewWindow,
+    openPathInNewWindow,
+    moveTabToNewWindow,
     sidebarScrollHeld,
     tabItems,
     activeTabId: state.activeTabId,

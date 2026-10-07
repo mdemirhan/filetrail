@@ -201,7 +201,26 @@ export function createFolderSizeHandlers(native: {
     }
   });
   let activeJobId: string | null = null;
-  let queuedJobId: string | null = null;
+  // Measurements waiting for the one that runs, in the order they run. Each window has at
+  // most one here: asking again replaces it.
+  let queuedJobIds: string[] = [];
+  // The window that asked for each job. A window's new measurement stops its own earlier
+  // one, never another window's: that one finishes, and the new one waits for it.
+  const jobOwners = new Map<string, number | null>();
+
+  function cancelQueuedJobsOf(owner: number | null): void {
+    queuedJobIds = queuedJobIds.filter((queuedId) => {
+      if (jobOwners.get(queuedId) !== owner) {
+        return true;
+      }
+      jobOwners.delete(queuedId);
+      const queued = folderSizeJobs.get(queuedId);
+      if (queued) {
+        setFolderSizeJob(queuedId, { ...queued, status: "cancelled" });
+      }
+      return false;
+    });
+  }
 
   function storeSize(path: string, stats: FolderSizeStats): void {
     folderSizeCache.set(path, stats);
@@ -238,12 +257,13 @@ export function createFolderSizeHandlers(native: {
   }
 
   function processQueue(): void {
-    if (!queuedJobId) return;
-    const nextJobId = queuedJobId;
-    queuedJobId = null;
-    const job = folderSizeJobs.get(nextJobId);
-    if (job && job.status === "queued") {
-      runJob(nextJobId, job.path);
+    while (queuedJobIds.length > 0) {
+      const nextJobId = queuedJobIds.shift() as string;
+      const job = folderSizeJobs.get(nextJobId);
+      if (job && job.status === "queued") {
+        runJob(nextJobId, job.path);
+        return;
+      }
     }
   }
 
@@ -378,17 +398,26 @@ export function createFolderSizeHandlers(native: {
         }
         // Measured again under the same job, which the window is still waiting on; a
         // measurement asked for meanwhile takes its place instead.
-        if (runAgain && !queuedJobId && folderSizeJobs.get(jobId)?.status === "running") {
+        if (
+          runAgain &&
+          queuedJobIds.length === 0 &&
+          folderSizeJobs.get(jobId)?.status === "running"
+        ) {
           runJob(jobId, path);
           return;
         }
+        jobOwners.delete(jobId);
         pruneFinishedFolderSizeJobs();
         processQueue();
       });
   }
 
   return {
-    start(payload: IpcRequest<"folderSize:start">): IpcResponse<"folderSize:start"> {
+    // `owner` is the window asking (its web contents id).
+    start(
+      payload: IpcRequest<"folderSize:start">,
+      owner: number | null = null,
+    ): IpcResponse<"folderSize:start"> {
       if (payload.recalculate) {
         folderSizeCache.delete(payload.path);
       }
@@ -432,24 +461,25 @@ export function createFolderSizeHandlers(native: {
 
       const jobId = generateJobId();
 
-      if (activeJobId) {
-        // Cancel the active walk so the new one can start promptly.
-        // The native cancel sets a volatile flag checked each fts_read
-        // iteration, so the active walk aborts quickly. We queue the new
-        // job and it will be picked up in the active job's .finally().
-        native.cancelFolderSize();
-        const activeJob = folderSizeJobs.get(activeJobId);
-        if (activeJob) {
-          setFolderSizeJob(activeJobId, { ...activeJob, status: "cancelled" });
-        }
+      jobOwners.set(jobId, owner);
 
-        if (queuedJobId) {
-          const oldQueued = folderSizeJobs.get(queuedJobId);
-          if (oldQueued) {
-            setFolderSizeJob(queuedJobId, { ...oldQueued, status: "cancelled" });
+      if (activeJobId) {
+        cancelQueuedJobsOf(owner);
+        if (jobOwners.get(activeJobId) === owner) {
+          // Cancel this window's active walk so the new one can start promptly.
+          // The native cancel sets a volatile flag checked each fts_read
+          // iteration, so the active walk aborts quickly. We queue the new
+          // job and it will be picked up in the active job's .finally().
+          native.cancelFolderSize();
+          const activeJob = folderSizeJobs.get(activeJobId);
+          if (activeJob) {
+            setFolderSizeJob(activeJobId, { ...activeJob, status: "cancelled" });
           }
+          queuedJobIds = [jobId, ...queuedJobIds];
+        } else {
+          // Another window's walk goes on; this one waits its turn.
+          queuedJobIds = [...queuedJobIds, jobId];
         }
-        queuedJobId = jobId;
         setFolderSizeJob(jobId, {
           jobId,
           path: payload.path,
@@ -489,8 +519,9 @@ export function createFolderSizeHandlers(native: {
         if (job.jobId === activeJobId) {
           native.cancelFolderSize();
         }
-        if (job.jobId === queuedJobId) {
-          queuedJobId = null;
+        if (queuedJobIds.includes(job.jobId)) {
+          queuedJobIds = queuedJobIds.filter((queuedId) => queuedId !== job.jobId);
+          jobOwners.delete(job.jobId);
         }
       }
       return { ok: true };

@@ -163,6 +163,25 @@ describe("dropping files from other apps", () => {
     });
   });
 
+  // Started in another of the app's windows: this one takes it as it would one from Finder.
+  it("takes a drag from another File Trail window like one from Finder", async () => {
+    const harness = createAppHarness();
+    draggedIn(harness, elsewhere, { ownDrag: true });
+    renderApp(harness);
+    const pane = await screen.findByTestId("content-pane");
+
+    expect(await dropFromOtherApp(harness, pane)).toBe("move");
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({
+          mode: "cut",
+          sourcePaths: elsewhere.map((item) => item.path),
+          destinationDirectoryPath: home,
+        }),
+      ]);
+    });
+  });
+
   it("drops on a file into the folder it's in", async () => {
     const harness = createAppHarness();
     draggedIn(harness, elsewhere);
@@ -262,16 +281,9 @@ describe("dropping files from other apps", () => {
     expect(analyzeRequests(harness)).toEqual([]);
   });
 
-  it.each([
-    { what: "promised files, text or links", contents: { items: [] } },
-    // It started before the window was reloaded: the window doesn't know its items.
-    {
-      what: "the app's own drag it doesn't know of",
-      contents: { items: elsewhere, ownDrag: true },
-    },
-  ])("refuses a drag of $what", async ({ contents }) => {
+  it("refuses a drag of promised files, text or links", async () => {
     const harness = createAppHarness();
-    draggedIn(harness, contents.items, { ownDrag: contents.ownDrag });
+    draggedIn(harness, []);
     renderApp(harness);
     const pane = await screen.findByTestId("content-pane");
 

@@ -400,6 +400,113 @@ describe("createWriteOperationCoordinator", () => {
     expect(sender.listenerCount("destroyed")).toBe(0);
   });
 
+  describe("with several windows", () => {
+    it("tells every other window how the operation is doing", () => {
+      const { writeService, emit } = createSubscribingWriteService();
+      const broadcastProgress = vi.fn();
+      const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
+        broadcastProgress,
+      });
+      const sender = createSender();
+      startPaste(coordinator, sender);
+
+      emit(createCopyPasteTerminalEvent("copy-op-1", "running"));
+      emit(createCopyPasteTerminalEvent("copy-op-1", "completed"));
+
+      expect(
+        broadcastProgress.mock.calls.map(([event, owner]) => [
+          (event as WriteOperationProgressEvent).status,
+          owner,
+        ]),
+      ).toEqual([
+        ["running", sender],
+        ["completed", sender],
+      ]);
+      coordinator.shutdown();
+    });
+
+    it("hands a running operation to another window when its own closes", () => {
+      const { writeService, emit } = createSubscribingWriteService();
+      const successor = createLifecycleSender();
+      const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
+        successorOf: () => successor,
+      });
+      const sender = createLifecycleSender();
+      startPaste(coordinator, sender);
+      emit({
+        ...createCopyPasteTerminalEvent("copy-op-1", "awaiting_resolution"),
+        result: null,
+        runtimeConflict: createRuntimeConflict("conflict-1"),
+      });
+
+      sender.destroyed = true;
+      sender.emit("destroyed");
+
+      expect(writeService.cancelOperation).not.toHaveBeenCalled();
+      // The window taking over hears where the operation is, its question included.
+      expect(successor.send).toHaveBeenCalledWith(
+        "filetrail:writeOperationAdopted",
+        expect.objectContaining({
+          operationId: "copy-op-1",
+          event: expect.objectContaining({
+            status: "awaiting_resolution",
+            runtimeConflict: expect.objectContaining({ conflictId: "conflict-1" }),
+          }),
+        }),
+      );
+      expect(countLifecycleListeners(sender)).toBe(0);
+      // It answers and stops it now; the window that closed can't.
+      expect(
+        coordinator.handlers["copyPaste:resolveConflict"](
+          { operationId: "copy-op-1", conflictId: "conflict-1", resolution: "skip" },
+          { sender },
+        ),
+      ).toEqual({ ok: false });
+      expect(
+        coordinator.handlers["copyPaste:resolveConflict"](
+          { operationId: "copy-op-1", conflictId: "conflict-1", resolution: "skip" },
+          { sender: successor },
+        ),
+      ).toEqual({ ok: true });
+      emit(createCopyPasteTerminalEvent("copy-op-1", "completed"));
+      expect(
+        successor.send.mock.calls
+          .filter(([channel]) => channel === "filetrail:writeOperationProgress")
+          .map(([, payload]) => (payload as WriteOperationProgressEvent).status),
+      ).toEqual(["completed"]);
+      expect(countLifecycleListeners(successor)).toBe(0);
+      coordinator.shutdown();
+    });
+
+    it("hands it on again when the window that took it over closes too", () => {
+      const { writeService } = createSubscribingWriteService();
+      const second = createLifecycleSender();
+      const third = createLifecycleSender();
+      const successors = new Map<unknown, unknown>();
+      const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
+        successorOf: (gone) =>
+          (successors.get(gone) as ReturnType<typeof createLifecycleSender>) ?? null,
+      });
+      const first = createLifecycleSender();
+      successors.set(first, second);
+      successors.set(second, third);
+      startPaste(coordinator, first);
+
+      first.emit("destroyed");
+      second.emit("render-process-gone");
+
+      expect(writeService.cancelOperation).not.toHaveBeenCalled();
+      expect(third.send).toHaveBeenCalledWith(
+        "filetrail:writeOperationAdopted",
+        expect.objectContaining({ operationId: "copy-op-1", event: null }),
+      );
+      // With no window left, it stops.
+      third.emit("destroyed");
+      expect(writeService.cancelOperation).toHaveBeenCalledWith("copy-op-1");
+      coordinator.shutdown();
+    });
+  });
+
   it("rejects a paste that arrives while a rename is still being prepared", async () => {
     let finishLstat: (() => void) | null = null;
     const fs = createWriteOperationFs({

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import type {
   AppLogEntry,
+  CopyPasteClipboard,
   FolderChange,
   HelpTopic,
   IpcChannel,
@@ -9,6 +10,7 @@ import type {
   IpcResponse,
   SettingsTab,
   Volume,
+  WriteOperationAdoption,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
@@ -36,6 +38,8 @@ type InvokeApi = {
   onShowHelpTopic(listener: (topic: HelpTopic) => void): () => void;
   onVolumesChanged(listener: (volumes: Volume[]) => void): () => void;
   onFolderChanged(listener: (change: FolderChange) => void): () => void;
+  onClipboardChanged(listener: (clipboard: CopyPasteClipboard) => void): () => void;
+  onWriteOperationAdopted(listener: (adoption: WriteOperationAdoption) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -102,6 +106,24 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:folderChanged", handleChange);
     return () => {
       ipcRenderer.removeListener("filetrail:folderChanged", handleChange);
+    };
+  },
+  onClipboardChanged: (listener) => {
+    const handleChange = (_event: unknown, clipboard: CopyPasteClipboard) => {
+      listener(clipboard);
+    };
+    ipcRenderer.on("filetrail:clipboardChanged", handleChange);
+    return () => {
+      ipcRenderer.removeListener("filetrail:clipboardChanged", handleChange);
+    };
+  },
+  onWriteOperationAdopted: (listener) => {
+    const handleAdoption = (_event: unknown, adoption: WriteOperationAdoption) => {
+      listener(adoption);
+    };
+    ipcRenderer.on("filetrail:writeOperationAdopted", handleAdoption);
+    return () => {
+      ipcRenderer.removeListener("filetrail:writeOperationAdopted", handleAdoption);
     };
   },
   onShowSettingsTab: (listener) => {

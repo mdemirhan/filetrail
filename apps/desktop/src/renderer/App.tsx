@@ -122,7 +122,7 @@ import {
 import { summarizeSelectionSize } from "./lib/selectionSize";
 import { createShortcutDisplay } from "./lib/shortcutDisplay";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
-import { resolveStartupTabs } from "./lib/startupNavigation";
+import { resolveStartupTabs, toStartupTab } from "./lib/startupNavigation";
 import {
   buildContentStatusSummary,
   folderStatusSize,
@@ -399,6 +399,7 @@ export function App() {
     setWriteOperationCardState,
     writeOperationProgressEvent,
     setWriteOperationProgressEvent,
+    foreignWriteOperation,
     renameDialogState,
     setRenameDialogState,
     newFolderDialogState,
@@ -808,7 +809,8 @@ export function App() {
       homePath,
     ],
   );
-  const isWriteOperationLocked = writeOperationCardState !== null;
+  // One operation at a time in the whole app: this window's, or another window's.
+  const isWriteOperationLocked = writeOperationCardState !== null || foreignWriteOperation !== null;
   const locationDialogOpen = locationSheetOpen || moveDialogState !== null;
   // While the toolbar is customized, in place, the rest of the window waits as it does
   // under a sheet: no shortcuts, menu commands, drags or focus for the panes.
@@ -897,6 +899,7 @@ export function App() {
   // Tabs are set up after the actions (they need to know whether a dialog is open), so the
   // actions reach "open in a new tab" through this.
   const openPathInNewTabRef = useRef<(path: string) => void>(() => undefined);
+  const openPathInNewWindowRef = useRef<(path: string) => void>(() => undefined);
   const {
     closeContextMenu,
     activateContentEntry,
@@ -997,6 +1000,7 @@ export function App() {
     },
     callbacks: {
       openPathInNewTab: (path) => openPathInNewTabRef.current(path),
+      openPathInNewWindow: (path) => openPathInNewWindowRef.current(path),
       calculateFolderSize: (path) => folderSizeCache.recalculateFolderSize(path),
       calculateFolderSizes: (paths) => void folderSizeCache.calculateFolderSizes(paths),
       openBatchRename: (targets) => void batchRename.open(targets),
@@ -1048,6 +1052,10 @@ export function App() {
     openTabs,
     activeTabIndex,
     restoreTabs,
+    addTabs,
+    openNewWindow,
+    openPathInNewWindow,
+    moveTabToNewWindow,
     sidebarScrollHeld,
     activeTabId,
     tabItems,
@@ -1087,7 +1095,32 @@ export function App() {
       blocked: copyPasteModalOpen || sheetOpen || actionNotice !== null,
     },
   });
+  // The window goes by its front tab's name in the Window menu, ⌘` and Mission Control,
+  // as a Finder window goes by its folder's.
+  const activeTabLabel = tabItems.find((tab) => tab.active)?.label ?? "";
+  useEffect(() => {
+    document.title = activeTabLabel.length > 0 ? activeTabLabel : "File Trail";
+  }, [activeTabLabel]);
   openPathInNewTabRef.current = openPathInNewTab;
+  openPathInNewWindowRef.current = openPathInNewWindow;
+  // Window › Merge All Windows: the other windows close and their tabs come here.
+  const mergeAllWindows = () => {
+    void client
+      .invoke("app:mergeAllWindows", {})
+      .then(({ tabs }) =>
+        addTabs(
+          tabs.map((tab) => {
+            const startupTab = toStartupTab(tab, homePath);
+            // A favorite that was removed since is opened as the plain folder it is.
+            return startupTab.favoritePath && !isFavoritePath(favorites, startupTab.favoritePath)
+              ? { ...startupTab, favoritePath: null }
+              : startupTab;
+          }),
+          favoritesPlacement,
+        ),
+      )
+      .catch(() => undefined);
+  };
   // A disk unmounted takes its folders with it: tabs showing one go Home.
   const mountedDiskPathsRef = useRef<ReadonlySet<string>>(new Set());
   useEffect(() => {
@@ -1448,6 +1481,9 @@ export function App() {
       setSingleContentSelection,
       selectAllContentEntries,
       openNewTab,
+      openNewWindow,
+      moveTabToNewWindow,
+      mergeAllWindows,
       reopenClosedTab,
       closeTab,
       activateAdjacentTab,
@@ -1706,6 +1742,7 @@ export function App() {
           preferences,
           homeResponse.path,
           launchContextResponse.startupFolderPath,
+          launchContextResponse.restoreTabs === true,
         );
         // A favorite that was removed since is opened as the plain folder it is. Favorites
         // set up just now are shown open.

@@ -593,7 +593,29 @@ export const writeOperationProgressEventSchema = z.object({
 
 export const launchContextSchema = z.object({
   startupFolderPath: z.string().min(1).nullable(),
+  // A window opened while the app runs opens the tabs it was given, whatever the "reopen
+  // the last folders and tabs" setting says.
+  restoreTabs: z.boolean().optional(),
 });
+
+// The items Copy or Cut put on the app's clipboard, which every window shares.
+export const copyPasteClipboardSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("empty") }),
+  z.object({
+    type: z.literal("ready"),
+    mode: copyPasteModeSchema,
+    sourcePaths: z.array(z.string().min(1)).min(1).max(MAX_PATHS_PER_REQUEST),
+    sourceEntries: z.record(
+      z.string(),
+      z.object({
+        kind: explorerEntryKindSchema,
+        isSymlink: z.boolean(),
+        isExecutable: z.boolean().optional(),
+      }),
+    ),
+    capturedAt: z.string().min(1),
+  }),
+]);
 
 export const appLogEntrySchema = z.object({
   level: appLogLevelSchema,
@@ -829,6 +851,30 @@ export const ipcContractSchemas = {
   "app:getLaunchContext": {
     request: emptyRequestSchema,
     response: launchContextSchema,
+  },
+  // A new explorer window with these tabs (New Window, Open in New Window, Move Tab to New
+  // Window), with the panels of the window asking.
+  "app:openWindow": {
+    request: z.object({
+      tabs: z.array(openTabPreferenceSchema).min(1).max(100),
+      activeTabIndex: z.number().int().nonnegative(),
+    }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  // Merge All Windows: the other windows close, and their tabs are handed to the window
+  // asking, front window's first.
+  "app:mergeAllWindows": {
+    request: emptyRequestSchema,
+    response: z.object({ tabs: z.array(openTabPreferenceSchema) }),
+  },
+  // The app's clipboard, shared by every window; a change is sent to the other windows.
+  "app:getClipboard": {
+    request: emptyRequestSchema,
+    response: z.object({ clipboard: copyPasteClipboardSchema }),
+  },
+  "app:setClipboard": {
+    request: z.object({ clipboard: copyPasteClipboardSchema }),
+    response: z.object({ ok: z.boolean() }),
   },
   "app:updatePreferences": {
     request: z.object({
@@ -1446,6 +1492,13 @@ export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
 export type UndoDirection = z.output<typeof undoDirectionSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
+export type CopyPasteClipboard = z.output<typeof copyPasteClipboardSchema>;
+// A running operation handed to this window because the one that started it closed, with
+// its latest progress (null before any was reported).
+export type WriteOperationAdoption = {
+  operationId: string;
+  event: WriteOperationProgressEvent | null;
+};
 export type SettingsTab = z.output<typeof settingsTabSchema>;
 export type Volume = z.output<typeof volumeSchema>;
 export type FolderChange = z.output<typeof folderChangeSchema>;

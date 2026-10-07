@@ -223,6 +223,7 @@ export function canRunToolbarRendererCommand(
       }
       return selectedCount > 0;
     case "openSelectionInNewTab":
+    case "openSelectionInNewWindow":
       return resolveNewTabTargetPath({ ...context, focusedPane }) !== null;
     case "quickLookSelection":
       return context.selectedEntry !== null;
@@ -260,6 +261,7 @@ export function canRunToolbarRendererCommand(
       return context.currentPath.length > 0 && parentDirectoryPath(context.currentPath) !== null;
     case "selectNextTab":
     case "selectPreviousTab":
+    case "moveTabToNewWindow":
       return context.tabCount === undefined || context.tabCount > 1;
     default:
       return true;

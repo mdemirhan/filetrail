@@ -53,7 +53,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="content"
         disabledActionIds={["quickLook"]}
-        hiddenActionIds={["openInNewTab", "showPackageContents", "edit"]}
+        hiddenActionIds={["openInNewTab", "openInNewWindow", "showPackageContents", "edit"]}
         submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
@@ -348,6 +348,7 @@ describe("ItemContextMenu", () => {
     ).toEqual([
       "New Folder",
       "Open in New Tab",
+      "Open in New Window",
       "Use as Tree Root",
       "Show Info",
       "Calculate Size",

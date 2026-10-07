@@ -108,6 +108,9 @@ type SenderLifecycleEvents = {
 };
 
 const WRITE_OPERATION_PROGRESS_CHANNEL = "filetrail:writeOperationProgress";
+// Tells a window that a running operation is its own now: the window that started it
+// closed. Carries the operation's latest progress, so the window can show where it is.
+const WRITE_OPERATION_ADOPTED_CHANNEL = "filetrail:writeOperationAdopted";
 
 // Progress is reported once per item, which for a folder of small files is thousands of
 // messages a second. The window only keeps a progress card current, so plain "running"
@@ -150,10 +153,19 @@ export function createWriteOperationCoordinator(
     diskHasTrash?: (path: string) => boolean;
     // What Undo and Redo work from. Without it there is nothing to undo.
     undoHistory?: UndoHistory;
+    // Every window hears how the running operation is doing, so the others know one is
+    // running (and refuse to start another) and can follow what it changed. Called with
+    // each progress event and the window it was sent to.
+    broadcastProgress?: (event: WriteOperationProgressEvent, owner: WriteOperationSender) => void;
+    // The window an operation goes to when the one that started it closes or its page
+    // goes away; null when there is none (the app is quitting), and it is cancelled.
+    successorOf?: (sender: WriteOperationSender) => WriteOperationSender | null;
   } = {},
 ) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
   const senderDetachers = new Map<string, () => void>();
+  // The last progress sent for each running operation, for a window that takes it over.
+  const latestProgress = new Map<string, WriteOperationProgressEvent>();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
   // Whether each running copy-paste copies or moves, from the write service's own events.
   const copyPasteModes = new Map<string, CopyPasteProgressEvent["mode"]>();
@@ -477,23 +489,46 @@ export function createWriteOperationCoordinator(
     if (typeof events.on !== "function" || typeof events.removeListener !== "function") {
       return;
     }
-    const cancel = () => {
+    // With another window open, the operation goes on there instead.
+    const handOverOrCancel = () => {
+      const successor = options.successorOf?.(sender) ?? null;
+      if (successor && successor !== sender && !isSenderDestroyed(successor)) {
+        handOver(operationId, successor);
+        return;
+      }
       cancelWriteOperation(operationId);
     };
     for (const eventName of SENDER_GONE_EVENTS) {
-      events.on.call(sender, eventName, cancel);
+      events.on.call(sender, eventName, handOverOrCancel);
     }
     senderDetachers.set(operationId, () => {
       for (const eventName of SENDER_GONE_EVENTS) {
-        events.removeListener?.call(sender, eventName, cancel);
+        events.removeListener?.call(sender, eventName, handOverOrCancel);
       }
     });
+  }
+
+  // Makes `successor` the window an operation answers to: its progress, Stop and conflict
+  // questions go there from now on.
+  function handOver(operationId: string, successor: WriteOperationSender): void {
+    senderDetachers.get(operationId)?.();
+    senderDetachers.delete(operationId);
+    attachSender(operationId, successor);
+    try {
+      successor.send(WRITE_OPERATION_ADOPTED_CHANNEL, {
+        operationId,
+        event: latestProgress.get(operationId) ?? null,
+      });
+    } catch {
+      // The window went away mid-send; its own close hands the operation on again.
+    }
   }
 
   function detachSender(operationId: string): void {
     writeOperationSenders.delete(operationId);
     senderDetachers.get(operationId)?.();
     senderDetachers.delete(operationId);
+    latestProgress.delete(operationId);
   }
 
   // Cancel and conflict answers are only taken from the window that started the
@@ -507,6 +542,10 @@ export function createWriteOperationCoordinator(
   // "Object has been destroyed". Losing a progress update for a window that's gone is fine;
   // letting the throw skip the operation's cleanup is not.
   function sendProgress(sender: WriteOperationSender, payload: WriteOperationProgressEvent): void {
+    if (!isTerminalStatus(payload.status) && writeOperationSenders.has(payload.operationId)) {
+      latestProgress.set(payload.operationId, payload);
+    }
+    options.broadcastProgress?.(payload, sender);
     if (isSenderDestroyed(sender)) {
       return;
     }

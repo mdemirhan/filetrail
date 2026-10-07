@@ -22,7 +22,7 @@ export type ShortcutCommandDefinition = {
 
 export const SHORTCUT_GROUP_LABELS: Record<ShortcutGroup, string> = {
   navigation: "Navigation",
-  tabs: "Tabs",
+  tabs: "Windows and Tabs",
   files: "Files",
   search: "Search",
   view: "View",
@@ -145,6 +145,13 @@ export const SHORTCUT_COMMANDS = [
   { id: "pageDown", label: "Scroll One Page Down", group: "navigation", defaults: ["Ctrl+D"] },
 
   {
+    id: "newWindow",
+    label: "New Window",
+    group: "tabs",
+    defaults: ["Cmd+N"],
+    menuPath: "File > New Window",
+  },
+  {
     id: "newTab",
     label: "New Tab",
     group: "tabs",
@@ -185,6 +192,27 @@ export const SHORTCUT_COMMANDS = [
     group: "tabs",
     defaults: [],
     menuPath: "File > Open in New Tab",
+  },
+  {
+    id: "openSelectionInNewWindow",
+    label: "Open in New Window",
+    group: "tabs",
+    defaults: [],
+    menuPath: "File > Open in New Window",
+  },
+  {
+    id: "moveTabToNewWindow",
+    label: "Move Tab to New Window",
+    group: "tabs",
+    defaults: [],
+    menuPath: "Window > Move Tab to New Window",
+  },
+  {
+    id: "mergeAllWindows",
+    label: "Merge All Windows",
+    group: "tabs",
+    defaults: [],
+    menuPath: "Window > Merge All Windows",
   },
 
   {

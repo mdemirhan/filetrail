@@ -150,6 +150,13 @@ type MoveDialogState = {
   error: string | null;
 } | null;
 
+// An operation another window is running. One runs at a time in the whole app, so while it
+// runs this window starts none.
+export type ForeignWriteOperation = {
+  operationId: string;
+  action: WriteOperationProgressEvent["action"];
+};
+
 type WriteOperationsState = {
   contextMenuState: ContextMenuState | null;
   actionNotice: ActionNoticeState;
@@ -158,6 +165,7 @@ type WriteOperationsState = {
   copyPasteDialogState: CopyPasteDialogState;
   writeOperationCardState: WriteOperationCardState | null;
   writeOperationProgressEvent: WriteOperationProgressEvent | null;
+  foreignWriteOperation: ForeignWriteOperation | null;
   renameDialogState: RenameDialogState;
   newFolderDialogState: NewFolderDialogState;
   moveDialogState: MoveDialogState;
@@ -178,6 +186,7 @@ export const INITIAL_WRITE_OPERATIONS_STATE: WriteOperationsState = {
   copyPasteDialogState: null,
   writeOperationCardState: null,
   writeOperationProgressEvent: null,
+  foreignWriteOperation: null,
   renameDialogState: null,
   newFolderDialogState: null,
   moveDialogState: null,
@@ -213,6 +222,7 @@ export function useWriteOperations() {
     copyPasteDialogState,
     writeOperationCardState,
     writeOperationProgressEvent,
+    foreignWriteOperation,
     renameDialogState,
     newFolderDialogState,
     moveDialogState,
@@ -246,6 +256,10 @@ export function useWriteOperations() {
         dispatch({ key: "writeOperationProgressEvent", value })) as Dispatch<
         SetStateAction<WriteOperationProgressEvent | null>
       >,
+      setForeignWriteOperation: ((value) =>
+        dispatch({ key: "foreignWriteOperation", value })) as Dispatch<
+        SetStateAction<ForeignWriteOperation | null>
+      >,
       setRenameDialogState: ((value) => dispatch({ key: "renameDialogState", value })) as Dispatch<
         SetStateAction<RenameDialogState>
       >,
@@ -267,6 +281,7 @@ export function useWriteOperations() {
     setCopyPasteDialogState,
     setWriteOperationCardState,
     setWriteOperationProgressEvent,
+    setForeignWriteOperation,
     setRenameDialogState,
     setNewFolderDialogState,
     setMoveDialogState,
@@ -282,6 +297,14 @@ export function useWriteOperations() {
   const nextToastIdRef = useRef(0);
   const copyPasteClipboardRef = useRef<CopyPasteClipboardState>(EMPTY_COPY_PASTE_CLIPBOARD);
   const writeOperationLockedRef = useRef(false);
+  // The operation another window runs, as soon as its progress arrives (the state follows
+  // on the next render), and the item it is on, for the notice when a drag is refused.
+  const foreignWriteOperationRef = useRef<
+    (ForeignWriteOperation & { currentSourcePath: string | null }) | null
+  >(null);
+  // An operation this window took over from one that closed: what it leaves selected
+  // belonged to that window.
+  const adoptedWriteOperationIdRef = useRef<string | null>(null);
   const pendingPasteSelectionRef = useRef<{
     directoryPath: string;
     selectedPaths: string[];
@@ -306,6 +329,8 @@ export function useWriteOperations() {
     setWriteOperationCardState,
     writeOperationProgressEvent,
     setWriteOperationProgressEvent,
+    foreignWriteOperation,
+    setForeignWriteOperation,
     renameDialogState,
     setRenameDialogState,
     newFolderDialogState,
@@ -319,6 +344,8 @@ export function useWriteOperations() {
     nextToastIdRef,
     copyPasteClipboardRef,
     writeOperationLockedRef,
+    foreignWriteOperationRef,
+    adoptedWriteOperationIdRef,
     pendingPasteSelectionRef,
     pendingTreeSelectionPathRef,
     writeOperationTabIdRef,

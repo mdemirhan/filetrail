@@ -1,4 +1,4 @@
-import type { AppPreferences } from "../../shared/appPreferences";
+import type { AppPreferences, OpenTabPreference } from "../../shared/appPreferences";
 import { isPathWithinRoot } from "./pathUtils";
 import { getVolumeRootPath } from "./volumes";
 
@@ -86,9 +86,34 @@ export type StartupTab = {
   locationsExpanded: boolean;
 };
 
+// A saved tab as a window opens it: in its folder, with the tree rooted where it was when
+// the folder is still inside that root.
+export function toStartupTab(tab: OpenTabPreference, homePath: string): StartupTab {
+  const tabView = {
+    viewMode: tab.viewMode,
+    searchViewMode: tab.searchViewMode,
+    sortBy: tab.sortBy,
+    sortDirection: tab.sortDirection,
+    includeHidden: tab.includeHidden,
+    foldersFirst: tab.foldersFirst,
+    favoritesExpanded: tab.favoritesExpanded,
+    locationsExpanded: tab.locationsExpanded,
+  };
+  if (!tab.path) {
+    return { path: homePath, rootPath: homePath, favoritePath: null, ...tabView };
+  }
+  return {
+    path: tab.path,
+    rootPath: resolvePersistedStartupRoot(tab.treeRootPath, homePath, tab.path),
+    favoritePath: tab.favoritePath === tab.path ? tab.favoritePath : null,
+    ...tabView,
+  };
+}
+
 // The tabs the window opens with and the one that is on screen. "Reopen the last folder and
 // tabs" brings back the tabs that were open, each in its own folder; without it the window
-// opens one tab at home. A folder the app was launched with is shown in a tab of its own,
+// opens one tab at home. A window opened while the app runs (`restoreTabs`) always opens
+// the tabs it was given. A folder the app was launched with is shown in a tab of its own,
 // unless one of the restored tabs already has it.
 export function resolveStartupTabs(
   preferences: Pick<
@@ -110,6 +135,7 @@ export function resolveStartupTabs(
   >,
   homePath: string,
   startupFolderPath: string | null = null,
+  restoreTabs = false,
 ): { tabs: StartupTab[]; activeIndex: number } {
   const view = {
     viewMode: preferences.viewMode,
@@ -121,7 +147,7 @@ export function resolveStartupTabs(
     favoritesExpanded: preferences.favoritesExpanded,
     locationsExpanded: preferences.locationsExpanded,
   };
-  if (!preferences.restoreSessionOnStartup || preferences.openTabs.length === 0) {
+  if (!(preferences.restoreSessionOnStartup || restoreTabs) || preferences.openTabs.length === 0) {
     const { startupPath, startupRootPath, startupFavoritePath } = resolveStartupNavigation(
       preferences,
       homePath,
@@ -140,27 +166,7 @@ export function resolveStartupTabs(
     };
   }
 
-  const tabs = preferences.openTabs.map((tab): StartupTab => {
-    const tabView = {
-      viewMode: tab.viewMode,
-      searchViewMode: tab.searchViewMode,
-      sortBy: tab.sortBy,
-      sortDirection: tab.sortDirection,
-      includeHidden: tab.includeHidden,
-      foldersFirst: tab.foldersFirst,
-      favoritesExpanded: tab.favoritesExpanded,
-      locationsExpanded: tab.locationsExpanded,
-    };
-    if (!tab.path) {
-      return { path: homePath, rootPath: homePath, favoritePath: null, ...tabView };
-    }
-    return {
-      path: tab.path,
-      rootPath: resolvePersistedStartupRoot(tab.treeRootPath, homePath, tab.path),
-      favoritePath: tab.favoritePath === tab.path ? tab.favoritePath : null,
-      ...tabView,
-    };
-  });
+  const tabs = preferences.openTabs.map((tab) => toStartupTab(tab, homePath));
   let activeIndex = Math.min(preferences.activeTabIndex, tabs.length - 1);
   if (startupFolderPath) {
     const existingIndex = tabs.findIndex((tab) => tab.path === startupFolderPath);

@@ -295,6 +295,18 @@ describe("startup navigation", () => {
       });
     });
 
+    it("opens the tabs a window was given, whatever the setting says", () => {
+      const off = { ...preferences, restoreSessionOnStartup: false };
+      expect(resolveStartupTabs(off, "/Users/demo").tabs).toHaveLength(1);
+      const given = resolveStartupTabs(off, "/Users/demo", null, true);
+      expect(given.activeIndex).toBe(1);
+      expect(given.tabs.map((tab) => tab.path)).toEqual([
+        "/Users/demo/work",
+        "/Users/demo/Documents",
+        "/Volumes/Backup",
+      ]);
+    });
+
     it("falls back to the last tab when the saved active tab is out of range", () => {
       expect(
         resolveStartupTabs({ ...preferences, activeTabIndex: 9 }, "/Users/demo").activeIndex,

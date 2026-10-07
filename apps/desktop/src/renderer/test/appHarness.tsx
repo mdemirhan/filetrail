@@ -2,11 +2,13 @@
 // the App test files share. Those files mock the panes first (see appMocks.tsx).
 
 import {
+  type CopyPasteClipboard,
   type CopyPasteProgressEvent,
   type FolderChange,
   type IpcChannel,
   type IpcRequestInput,
   type IpcResponse,
+  type WriteOperationAdoption,
   type WriteOperationProgressEvent,
   ipcContractSchemas,
 } from "@filetrail/contracts";
@@ -250,6 +252,12 @@ export function createAppHarness(
     // to ask about.
     undoPrepareResponses?: Array<IpcResponse<"undo:prepare">>;
     undoStartError?: Error;
+    // What the app's clipboard holds when the window opens (copied in another window).
+    clipboard?: CopyPasteClipboard;
+    // The tabs of the other windows, handed over by Merge All Windows.
+    mergedTabs?: IpcResponse<"app:mergeAllWindows">["tabs"];
+    // How the main process says the window was opened (see app:getLaunchContext).
+    launchContext?: IpcResponse<"app:getLaunchContext">;
   } = {},
 ): {
   client: FiletrailClient;
@@ -257,6 +265,10 @@ export function createAppHarness(
   menuStates: Array<IpcRequestInput<"app:setMenuState">["state"]>;
   emitCommand: (command: RendererCommand) => void;
   emitProgress: (event: TestProgressEvent) => void;
+  // Something was copied or cut in another window.
+  emitClipboardChanged: (clipboard: CopyPasteClipboard) => void;
+  // The window that ran an operation closed and this one takes it over.
+  emitWriteOperationAdopted: (adoption: WriteOperationAdoption) => void;
   // The folder the window last asked to have watched (null: none).
   watchedPath: () => string | null;
   // A change made outside the app to the watched folder, as the main process tells of it.
@@ -342,6 +354,8 @@ export function createAppHarness(
   let commandListener: ((command: RendererCommand) => void) | null = null;
   let watchedPath: string | null = null;
   const folderChangeListeners = new Set<(change: FolderChange) => void>();
+  let clipboardListener: ((clipboard: CopyPasteClipboard) => void) | null = null;
+  let adoptionListener: ((adoption: WriteOperationAdoption) => void) | null = null;
   // Several parts of the window listen (the operation itself, folder sizes), as in the app.
   const writeOperationProgressListeners = new Set<(event: WriteOperationProgressEvent) => void>();
   let copyPasteProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
@@ -394,7 +408,16 @@ export function createAppHarness(
         return { path: "/Users/demo" } as IpcResponse<C>;
       }
       if (channel === "app:getLaunchContext") {
-        return { startupFolderPath: null } as IpcResponse<C>;
+        return (args.launchContext ?? { startupFolderPath: null }) as IpcResponse<C>;
+      }
+      if (channel === "app:getClipboard") {
+        return { clipboard: args.clipboard ?? { type: "empty" } } as IpcResponse<C>;
+      }
+      if (channel === "app:setClipboard" || channel === "app:openWindow") {
+        return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "app:mergeAllWindows") {
+        return { tabs: args.mergedTabs ?? [] } as IpcResponse<C>;
       }
       if (channel === "app:updatePreferences") {
         preferences = mergePreferences(
@@ -786,6 +809,22 @@ export function createAppHarness(
         folderChangeListeners.delete(listener);
       };
     },
+    onClipboardChanged(listener) {
+      clipboardListener = listener;
+      return () => {
+        if (clipboardListener === listener) {
+          clipboardListener = null;
+        }
+      };
+    },
+    onWriteOperationAdopted(listener) {
+      adoptionListener = listener;
+      return () => {
+        if (adoptionListener === listener) {
+          adoptionListener = null;
+        }
+      };
+    },
   };
 
   return {
@@ -794,6 +833,12 @@ export function createAppHarness(
     menuStates,
     emitCommand(command) {
       commandListener?.(command);
+    },
+    emitClipboardChanged(clipboard) {
+      clipboardListener?.(clipboard);
+    },
+    emitWriteOperationAdopted(adoption) {
+      adoptionListener?.(adoption);
     },
     watchedPath: () => watchedPath,
     emitFolderChange(change) {

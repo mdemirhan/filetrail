@@ -146,7 +146,18 @@ describe("appStateStore", () => {
 
     store.updatePreferences({ lastVisitedPath: "/Users/demo/work", treeRootPath: "/Users/demo" });
     store.recordFolderVisit("/Users/demo/work", "goTo", 1_000);
-    store.setWindowState({ x: 10, y: 20, width: 900, height: 600, maximized: false });
+    store.addExplorerWindow({
+      id: "window-a",
+      bounds: { width: 800, height: 500, maximized: false },
+      session: store.createWindowSession(),
+    });
+    store.setExplorerWindowBounds("window-a", {
+      x: 10,
+      y: 20,
+      width: 900,
+      height: 600,
+      maximized: false,
+    });
     store.updatePreferences({ lastVisitedPath: "/Users/demo/music" });
     store.recordFolderVisit("/Users/demo/music", "stay", 2_000);
 
@@ -160,7 +171,7 @@ describe("appStateStore", () => {
     expect(pendingDelays()).toEqual([]);
     const saved = JSON.parse(readFileSync(filePath, "utf8"));
     expect(saved.preferences.lastVisitedPath).toBe("/Users/demo/music");
-    expect(saved.window).toMatchObject({ x: 10, width: 900 });
+    expect(saved.windows[0].bounds).toMatchObject({ x: 10, width: 900 });
     expect(saved.visitedFolders).toBeUndefined();
     const visits = JSON.parse(readFileSync(resolveVisitedFoldersPath(filePath), "utf8"));
     expect(visits.folders).toHaveLength(2);
@@ -299,7 +310,11 @@ describe("appStateStore", () => {
     const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
 
     store.updatePreferences({ lastVisitedPath: "/Users/demo/work" });
-    store.setWindowState({ width: 900, height: 600, maximized: false });
+    store.addExplorerWindow({
+      id: "window-a",
+      bounds: { width: 900, height: 600, maximized: false },
+      session: store.createWindowSession(),
+    });
     store.updatePreferences({ foldersFirst: false });
     // The prompt write takes the place of the long timer.
     expect(pendingDelays()).toEqual([150]);
@@ -313,7 +328,14 @@ describe("appStateStore", () => {
 
     // The same values again, and the same window, are not changes.
     store.updatePreferences({ foldersFirst: false, lastVisitedPath: "/Users/demo/work" });
-    store.setWindowState(store.getWindowState());
+    store.setExplorerWindowBounds(
+      "window-a",
+      store.getExplorerWindows()[0]?.bounds ?? {
+        width: 0,
+        height: 0,
+        maximized: false,
+      },
+    );
     runTimers();
     store.flush();
     expect(writes()).toBe(1);
@@ -433,11 +455,7 @@ describe("appStateStore", () => {
       favoritesInitialized: false,
       ...BATCH_RENAME_DEFAULTS,
     });
-    expect(store.getWindowState()).toEqual({
-      width: 1200,
-      height: 760,
-      maximized: false,
-    });
+    expect(store.getExplorerWindows()).toEqual([]);
   });
 
   it("persists preferences and window state in one file", () => {
@@ -579,13 +597,17 @@ describe("appStateStore", () => {
       favoritesInitialized: true,
       ...BATCH_RENAME_DEFAULTS,
     });
-    store.setWindowState({
-      x: 120,
-      y: 140,
-      width: 1600,
-      height: 1000,
-      maximized: true,
-    } satisfies StoredWindowState);
+    store.addExplorerWindow({
+      id: "window-a",
+      bounds: {
+        x: 120,
+        y: 140,
+        width: 1600,
+        height: 1000,
+        maximized: true,
+      } satisfies StoredWindowState,
+      session: store.createWindowSession(),
+    });
     store.flush();
 
     const reloaded = createAppStateStore(resolveAppStatePath(userDataPath), {
@@ -718,13 +740,15 @@ describe("appStateStore", () => {
       favoritesInitialized: true,
       ...BATCH_RENAME_DEFAULTS,
     });
-    expect(reloaded.getWindowState()).toEqual({
-      x: 120,
-      y: 140,
-      width: 1600,
-      height: 1000,
-      maximized: true,
-    });
+    expect(reloaded.getExplorerWindows().map((window) => window.bounds)).toEqual([
+      {
+        x: 120,
+        y: 140,
+        width: 1600,
+        height: 1000,
+        maximized: true,
+      },
+    ]);
   });
 
   it("keeps a saved theme and defaults any other value", () => {
@@ -1129,5 +1153,166 @@ describe("appStateStore", () => {
       expect(reloaded.batchRenamePresets).toEqual(presets);
       expect(appPreferencesSchema.safeParse(reloaded).success).toBe(true);
     });
+  });
+});
+
+describe("appStateStore explorer windows", () => {
+  const tab = (path: string) => ({
+    path,
+    treeRootPath: "/Users/demo",
+    favoritePath: null,
+    viewMode: "list" as const,
+    searchViewMode: "details" as const,
+    sortBy: "name" as const,
+    sortDirection: "asc" as const,
+    includeHidden: false,
+    foldersFirst: true,
+    favoritesExpanded: true,
+    locationsExpanded: true,
+  });
+
+  function storeWithFile(contents: unknown) {
+    const filePath = resolveAppStatePath(mkdtempSync(join(tmpdir(), "filetrail-app-state-")));
+    writeFileSync(filePath, JSON.stringify(contents), "utf8");
+    return { filePath, store: createAppStateStore(filePath, { defaultTheme: "dark" }) };
+  }
+
+  it("reads a file saved with one window as that window, with its tabs and panels", () => {
+    const { store } = storeWithFile({
+      preferences: {
+        openTabs: [tab("/Users/demo/work"), tab("/Users/demo/music")],
+        activeTabIndex: 1,
+        treeWidth: 300,
+        propertiesOpen: true,
+      },
+      window: { x: 10, y: 20, width: 900, height: 600, maximized: false },
+    });
+
+    const [window, ...others] = store.getExplorerWindows();
+    expect(others).toEqual([]);
+    expect(window?.bounds).toEqual({ x: 10, y: 20, width: 900, height: 600, maximized: false });
+    expect(window?.session.openTabs.map((open) => open.path)).toEqual([
+      "/Users/demo/work",
+      "/Users/demo/music",
+    ]);
+    expect(window?.session.activeTabIndex).toBe(1);
+    expect(window?.session.treeWidth).toBe(300);
+    expect(window?.session.propertiesOpen).toBe(true);
+  });
+
+  it("keeps each window's tabs, panels and column widths to itself", () => {
+    const { store } = storeWithFile({ preferences: {}, windows: [] });
+    store.addExplorerWindow({
+      id: "window-b",
+      bounds: { width: 900, height: 600, maximized: false },
+      session: store.createWindowSession(),
+    });
+    store.addExplorerWindow({
+      id: "window-a",
+      bounds: { width: 900, height: 600, maximized: false },
+      session: store.createWindowSession(),
+    });
+    const widths = store.getPreferences().detailColumnWidths;
+
+    store.updateWindowPreferences("window-a", {
+      openTabs: [tab("/Users/demo/work")],
+      propertiesOpen: true,
+      detailColumnWidths: { ...widths, name: 410 },
+      // Not a window's own: every window shares it.
+      notificationsEnabled: false,
+    });
+
+    const a = store.getWindowPreferences("window-a");
+    const b = store.getWindowPreferences("window-b");
+    expect(a.openTabs.map((open) => open.path)).toEqual(["/Users/demo/work"]);
+    expect(a.propertiesOpen).toBe(true);
+    expect(a.detailColumnWidths.name).toBe(410);
+    expect(b.openTabs).toEqual([]);
+    expect(b.propertiesOpen).toBe(false);
+    expect(b.detailColumnWidths.name).toBe(widths.name);
+    expect(b.notificationsEnabled).toBe(false);
+    // The app keeps the values set last, for a window that opens without its own.
+    expect(store.getPreferences().detailColumnWidths.name).toBe(410);
+    expect(store.createWindowSession().propertiesOpen).toBe(true);
+  });
+
+  it("keeps the windows front to back across a restart, without those closed", () => {
+    const { store, filePath } = storeWithFile({ preferences: {}, windows: [] });
+    for (const id of ["window-c", "window-b", "window-a"]) {
+      store.addExplorerWindow({
+        id,
+        bounds: { width: 900, height: 600, maximized: false },
+        session: store.createWindowSession({ openTabs: [tab(`/Users/demo/${id}`)] }),
+      });
+    }
+    store.moveExplorerWindowToFront("window-c");
+    store.removeExplorerWindow("window-b");
+    store.flush();
+
+    const reloaded = createAppStateStore(filePath, { defaultTheme: "dark" });
+    expect(reloaded.getExplorerWindows().map((window) => window.id)).toEqual([
+      "window-c",
+      "window-a",
+    ]);
+    expect(reloaded.getWindowPreferences("window-c").openTabs[0]?.path).toBe(
+      "/Users/demo/window-c",
+    );
+  });
+
+  it("writes a window's panels at once, and where it is at quit", () => {
+    const filePath = resolveAppStatePath(mkdtempSync(join(tmpdir(), "filetrail-app-state-")));
+    writeFileSync(filePath, JSON.stringify({ preferences: {}, windows: [] }), "utf8");
+    const delays: number[] = [];
+    const store = createAppStateStore(filePath, {
+      defaultTheme: "dark",
+      timer: {
+        setTimeout: (_callback, delayMs) => {
+          delays.push(delayMs);
+          return delays.length as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimeout: () => undefined,
+      },
+    });
+    store.addExplorerWindow({
+      id: "window-a",
+      bounds: { width: 900, height: 600, maximized: false },
+      session: store.createWindowSession(),
+    });
+    store.addExplorerWindow({
+      id: "window-b",
+      bounds: { width: 900, height: 600, maximized: false },
+      session: store.createWindowSession(),
+    });
+    expect(delays).toEqual([5 * 60 * 1000]);
+    delays.length = 0;
+    store.updateWindowPreferences("window-a", { treeWidth: 333 });
+    expect(new Set(delays)).toEqual(new Set([150]));
+    delays.length = 0;
+
+    // The app already has this width (window A set it); window B's own changes, and is
+    // written promptly all the same.
+    store.updateWindowPreferences("window-b", { treeWidth: 333 });
+    expect(delays).toEqual([150]);
+  });
+
+  it("keeps the windows of a damaged file that make sense", () => {
+    const { store } = storeWithFile({
+      preferences: { treeWidth: 300 },
+      windows: [
+        "not a window",
+        { id: "", bounds: {} },
+        { id: "window-a", bounds: { width: 10 }, session: { treeWidth: "wide", openTabs: 3 } },
+        { id: "window-a", session: { treeWidth: 400 } },
+        ...Array.from({ length: 60 }, (_, index) => ({ id: `window-${index + 1000}` })),
+      ],
+    });
+
+    const windows = store.getExplorerWindows();
+    expect(windows).toHaveLength(50);
+    expect(windows[0]?.id).toBe("window-a");
+    // A missing or bad value takes the app's.
+    expect(windows[0]?.session.treeWidth).toBe(300);
+    expect(windows[0]?.session.openTabs).toEqual([]);
+    expect(windows[0]?.bounds).toEqual({ width: 1200, height: 760, maximized: false });
   });
 });

@@ -56,7 +56,14 @@ describe("ShortcutSettings", () => {
   it("lists every command with its keys, grouped, and the standard ones as fixed", () => {
     renderSettings();
 
-    for (const title of ["Navigation", "Tabs", "Files", "Search", "View", "Standard shortcuts"]) {
+    for (const title of [
+      "Navigation",
+      "Windows and Tabs",
+      "Files",
+      "Search",
+      "View",
+      "Standard shortcuts",
+    ]) {
       expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
     }
     expect(keysOf("Back")).toEqual(["⌘[", "⌘←"]);
