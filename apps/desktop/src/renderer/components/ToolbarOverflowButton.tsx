@@ -5,6 +5,7 @@ import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { placeDropdownMenu } from "../lib/menuPlacement";
 import { MenuCheck } from "./MenuCheck";
 import { ToolbarIcon } from "./ToolbarIcon";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 export type ToolbarOverflowEntry = {
   key: string;
@@ -90,6 +91,7 @@ export function ToolbarOverflowButton({
               aria-label="More Toolbar Items"
               style={menuStyle}
             >
+              <WindowDragRelease />
               {groups.map((group, index) => (
                 <Fragment key={group.key}>
                   {index > 0 ? <hr className="toolbar-menu-separator" /> : null}

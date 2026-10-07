@@ -25,6 +25,7 @@ import { placeSubmenu } from "../lib/menuPlacement";
 import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { MenuCheck } from "./MenuCheck";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 export type {
   ContextMenuActionId,
@@ -263,6 +264,7 @@ export function ItemContextMenu({
 
   return (
     <div className="context-menu-layer" style={menuStyle}>
+      <WindowDragRelease />
       <div
         ref={menuRef}
         className="context-menu"

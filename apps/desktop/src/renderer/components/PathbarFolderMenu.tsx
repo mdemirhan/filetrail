@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { MenuCheck } from "./MenuCheck";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 export type PathbarFolder = { path: string; name: string };
 
@@ -235,6 +236,7 @@ export function PathbarFolderMenu({
                 right: "auto",
               }}
             >
+              <WindowDragRelease />
               {folders === null ? (
                 <div className="pathbar-folder-menu-note">Loading…</div>
               ) : menu.failed ? (

@@ -20,6 +20,7 @@ import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { ClearButton } from "./ClearButton";
 import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
 import { PushButton } from "./PushButton";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
 
@@ -533,6 +534,7 @@ function GetInfoPanelContent({
                 role="menu"
                 onMouseLeave={() => setOpenWithActiveId(null)}
               >
+                <WindowDragRelease />
                 {openWithItems.map((entry) =>
                   entry.type === "separator" ? (
                     <div key={entry.key} className="context-menu-separator" />

@@ -53,6 +53,7 @@ import { createShortcutDisplay } from "../lib/shortcutDisplay";
 import { MenuCheck } from "./MenuCheck";
 import { ActionButton, SectionCard } from "./SettingsControls";
 import { ShortcutSettings } from "./ShortcutSettings";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 export type SettingsTab = IpcSettingsTab;
 
@@ -983,6 +984,7 @@ function ApplicationPopup({
               aria-label={ariaLabel}
               style={{ top: position.top, left: position.left, minWidth: position.width }}
             >
+              <WindowDragRelease />
               {choices.map((choice) => (
                 <button
                   key={choice.application.appPath}
@@ -1110,6 +1112,7 @@ function ZoomComboBox({ value, onChange }: { value: number; onChange: (value: nu
               aria-label="Zoom levels"
               style={{ top: position.top, left: position.left, minWidth: position.width }}
             >
+              <WindowDragRelease />
               {zoomSteps().map((step) => (
                 <button
                   key={step}

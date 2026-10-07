@@ -8,6 +8,7 @@ import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { placeDropdownMenu } from "../lib/menuPlacement";
 import { MenuCheck } from "./MenuCheck";
 import { ToolbarIcon } from "./ToolbarIcon";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
 type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
@@ -227,6 +228,7 @@ export function SearchOptionsMenu({
             style={menuStyle}
             onMouseDown={(event) => event.preventDefault()}
           >
+            <WindowDragRelease />
             <div className="toolbar-menu-heading">Match</div>
             {radioItem("Name", matchScope === "name", () => onMatchScopeChange("name"))}
             {radioItem("Full Path", matchScope === "path", () => onMatchScopeChange("path"))}

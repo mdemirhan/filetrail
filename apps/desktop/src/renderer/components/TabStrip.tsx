@@ -6,6 +6,7 @@ import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { formatTooltip } from "../lib/tooltips";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { ToolbarIcon } from "./ToolbarIcon";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 // How far a tab is dragged before it starts moving along the row; less than that is a click.
 const TAB_DRAG_THRESHOLD_PX = 6;
@@ -267,6 +268,7 @@ export function TabStrip({
               aria-label="Tab"
               style={{ position: "fixed", left: `${menu.left}px`, top: `${menu.top}px` }}
             >
+              <WindowDragRelease />
               {(
                 [
                   ["close", "Close Tab"],

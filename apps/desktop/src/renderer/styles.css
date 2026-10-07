@@ -334,10 +334,10 @@ select:focus-visible {
 }
 
 /* A click on a part of the window that drags it (the toolbar, the title) never reaches the
-   page: macOS takes it. While a menu is open those parts drag nothing, so a click there
-   closes the menu as a click anywhere else does, like a click on the title bar with a
-   Finder menu open. */
-:root:has([role="menu"], .context-menu-layer) * {
+   page: macOS takes it. While a menu is open (see WindowDragRelease) those parts drag
+   nothing, so a click there closes the menu as a click anywhere else does, like a click on
+   the title bar with a Finder menu open. */
+:root[data-menu-open] * {
   -webkit-app-region: no-drag !important;
 }
 

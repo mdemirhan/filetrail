@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import type { HistoryMenuEntry } from "../lib/historyMenu";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 // How long Back or Forward is held before the list of folders appears, as in Safari.
 export const HISTORY_MENU_HOLD_MS = 350;
@@ -207,6 +208,7 @@ export function HistoryButton({
               aria-label={`${label} history`}
               style={{ position: "fixed", left: `${position.left}px`, top: `${position.top}px` }}
             >
+              <WindowDragRelease />
               {entries.map((entry, index) => (
                 <button
                   key={entry.index}

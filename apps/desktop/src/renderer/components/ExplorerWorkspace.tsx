@@ -70,6 +70,7 @@ import { ToolbarCustomizePanel } from "./ToolbarCustomizePanel";
 import { ToolbarIcon } from "./ToolbarIcon";
 import { ToolbarOverflowButton, type ToolbarOverflowEntry } from "./ToolbarOverflowButton";
 import { TreePane } from "./TreePane";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
@@ -1090,6 +1091,7 @@ export function ExplorerWorkspace({
                 aria-label="View Options"
                 style={viewOptionsMenuStyle}
               >
+                <WindowDragRelease />
                 {viewOptionsItems.map((item) => {
                   if (item.kind === "separator") {
                     return <hr key={item.id} className="toolbar-menu-separator" />;
@@ -1247,6 +1249,7 @@ export function ExplorerWorkspace({
                   top: `${sortMenuViewportPosition.top}px`,
                 }}
               >
+                <WindowDragRelease />
                 {(["name", "kind", "modified", "size"] as const).map((value) => (
                   <button
                     key={value}
@@ -1760,6 +1763,7 @@ export function ExplorerWorkspace({
                 top: `${toolbarMenuPosition.y}px`,
               }}
             >
+              <WindowDragRelease />
               <button
                 type="button"
                 className="toolbar-menu-item"

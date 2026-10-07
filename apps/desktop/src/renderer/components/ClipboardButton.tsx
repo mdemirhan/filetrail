@@ -11,6 +11,7 @@ import { FileIcon } from "../lib/fileIcons";
 import { placeDropdownMenu } from "../lib/menuPlacement";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { ToolbarIcon } from "./ToolbarIcon";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 // Every row of the list is this tall (see `.clipboard-menu-row`), so the rows on screen can
 // be worked out from how far the list is scrolled: a clipboard may hold thousands of items,
@@ -227,6 +228,7 @@ export function ClipboardButton({
               aria-label="Clipboard"
               style={menuStyle}
             >
+              <WindowDragRelease />
               <div className="clipboard-menu-header">
                 <span className="clipboard-menu-title">{summary.countLabel}</span>
                 <span className="clipboard-menu-hint">

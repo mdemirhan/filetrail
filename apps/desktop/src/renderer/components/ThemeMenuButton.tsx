@@ -6,6 +6,7 @@ import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { placeDropdownMenu } from "../lib/menuPlacement";
 import { MenuCheck } from "./MenuCheck";
 import { ToolbarIcon } from "./ToolbarIcon";
+import { WindowDragRelease } from "./WindowDragRelease";
 
 // The toolbar's Theme button: Auto, Light and Dark, with the one in use checked. It is the
 // one-click way to change the look; Settings → General has the rest.
@@ -112,6 +113,7 @@ export function ThemeMenuButton({
               aria-label="Theme"
               style={menuStyle}
             >
+              <WindowDragRelease />
               {THEME_OPTIONS.map(renderOption)}
             </div>,
             document.body,
