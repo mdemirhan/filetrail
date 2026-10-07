@@ -7,6 +7,13 @@ import type { ComponentProps } from "react";
 
 import { SettingsView } from "./SettingsView";
 
+// A list in Settings with the buttons under it. Queries are kept to it: looking for a role
+// across the whole page is slow, slow enough on CI with coverage to run past a test's time.
+function settingsList(name: string) {
+  const listbox = screen.getByRole("listbox", { name });
+  return within(listbox.parentElement as HTMLElement);
+}
+
 function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsView>> = {}) {
   return render(
     <SettingsView
@@ -528,21 +535,24 @@ describe("SettingsView", () => {
       onRemoveFavorite,
       onFavoriteIconChange,
     });
+    const list = settingsList("Favorites");
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Favorite" }));
+    // Nothing is selected yet, so there is nothing to change or remove.
+    expect(list.getByRole("button", { name: "Remove" })).toBeDisabled();
+    expect(list.getByRole("button", { name: "Change" })).toBeDisabled();
+
+    fireEvent.click(list.getByRole("button", { name: "Add Favorite" }));
     fireEvent.click(screen.getByLabelText("Favorite icon for Home"));
     fireEvent.click(screen.getByLabelText("Favorite icon for Home: Star"));
 
-    // Nothing is selected yet, so there is nothing to change or remove.
-    expect(screen.getByRole("button", { name: "Remove" })).toBeDisabled();
-    const home = screen.getByRole("option", { name: "Home" });
+    const home = list.getByRole("option", { name: "Home" });
     fireEvent.mouseDown(home);
-    fireEvent.click(screen.getByRole("button", { name: "Change Home" }));
+    fireEvent.click(list.getByRole("button", { name: "Change Home" }));
     fireEvent.doubleClick(home);
 
-    const applications = screen.getByRole("option", { name: "Applications" });
+    const applications = list.getByRole("option", { name: "Applications" });
     fireEvent.mouseDown(applications);
-    fireEvent.click(screen.getByRole("button", { name: "Remove Applications" }));
+    fireEvent.click(list.getByRole("button", { name: "Remove Applications" }));
     fireEvent.keyDown(applications, { key: "ArrowUp", altKey: true });
 
     expect(onAddFavorite).toHaveBeenCalledTimes(1);
@@ -595,12 +605,13 @@ describe("SettingsView", () => {
       onRemoveOpenWithApplication,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Open With application" }));
-    fireEvent.mouseDown(screen.getByRole("option", { name: "Visual Studio Code" }));
-    fireEvent.click(screen.getByRole("button", { name: "Change Visual Studio Code" }));
-    const zed = screen.getByRole("option", { name: "Zed" });
+    const list = settingsList("Open With applications");
+    fireEvent.click(list.getByRole("button", { name: "Add Open With application" }));
+    fireEvent.mouseDown(list.getByRole("option", { name: "Visual Studio Code" }));
+    fireEvent.click(list.getByRole("button", { name: "Change Visual Studio Code" }));
+    const zed = list.getByRole("option", { name: "Zed" });
     fireEvent.mouseDown(zed);
-    fireEvent.click(screen.getByRole("button", { name: "Remove Zed" }));
+    fireEvent.click(list.getByRole("button", { name: "Remove Zed" }));
     fireEvent.keyDown(zed, { key: "ArrowUp", metaKey: true });
 
     expect(onAddOpenWithApplication).toHaveBeenCalledTimes(1);
@@ -698,24 +709,25 @@ describe("SettingsView", () => {
   it("moves a column with the arrow buttons, the keyboard or a drag", () => {
     const onDetailColumnOrderChange = vi.fn();
     renderSettingsView({ onDetailColumnOrderChange });
+    const list = settingsList("Columns in List view");
 
-    const moveUp = screen.getByRole("button", { name: "Move Up" });
+    const moveUp = list.getByRole("button", { name: "Move Up" });
     expect(moveUp).toBeDisabled();
-    const size = screen.getByRole("option", { name: "Size" });
+    const size = list.getByRole("option", { name: "Size" });
     fireEvent.mouseDown(size);
-    fireEvent.click(screen.getByRole("button", { name: "Move Size Up" }));
-    fireEvent.click(screen.getByRole("button", { name: "Move Size Down" }));
+    fireEvent.click(list.getByRole("button", { name: "Move Size Up" }));
+    fireEvent.click(list.getByRole("button", { name: "Move Size Down" }));
     fireEvent.keyDown(size, { key: "ArrowDown", altKey: true });
 
     // The first optional column cannot go above Name; the last cannot go further down.
-    fireEvent.mouseDown(screen.getByRole("option", { name: "Date Modified" }));
-    expect(screen.getByRole("button", { name: "Move Date Modified Up" })).toBeDisabled();
-    fireEvent.mouseDown(screen.getByRole("option", { name: "Permissions" }));
-    expect(screen.getByRole("button", { name: "Move Permissions Down" })).toBeDisabled();
+    fireEvent.mouseDown(list.getByRole("option", { name: "Date Modified" }));
+    expect(list.getByRole("button", { name: "Move Date Modified Up" })).toBeDisabled();
+    fireEvent.mouseDown(list.getByRole("option", { name: "Permissions" }));
+    expect(list.getByRole("button", { name: "Move Permissions Down" })).toBeDisabled();
 
     const dataTransfer = { setData: () => undefined, effectAllowed: "", dropEffect: "" };
-    const permissions = screen.getByRole("option", { name: "Permissions" });
-    const modified = screen.getByRole("option", { name: "Date Modified" });
+    const permissions = list.getByRole("option", { name: "Permissions" });
+    const modified = list.getByRole("option", { name: "Date Modified" });
     fireEvent.dragStart(permissions, { dataTransfer });
     fireEvent.dragOver(modified, { dataTransfer });
     fireEvent.drop(modified, { dataTransfer });

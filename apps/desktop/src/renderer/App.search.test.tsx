@@ -39,6 +39,7 @@ import {
   createTreeChild,
   dragBetween,
   expectNoRefusedRequests,
+  focusContentPane,
   openDirectory,
   openSearchResults,
 } from "./test/appHarness";
@@ -172,7 +173,6 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    const contentPane = await screen.findByTestId("content-pane");
     const shownCount = () => screen.getByTestId("content-entry-count").textContent;
     const isSelected = (path: string) => screen.getByTitle(path).getAttribute("data-selected");
     const press = async (key: string) => {
@@ -181,9 +181,7 @@ describe("App copy/paste integration", () => {
       });
     };
     await vi.waitFor(() => expect(shownCount()).toBe("4"));
-    await act(async () => {
-      fireEvent.pointerDown(contentPane);
-    });
+    await focusContentPane();
 
     // "d" is in three names; the one that starts with it is selected, not the first.
     await press("d");
@@ -233,10 +231,7 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    const contentPane = await screen.findByTestId("content-pane");
-    await act(async () => {
-      fireEvent.pointerDown(contentPane);
-    });
+    await focusContentPane();
     for (const key of ["s", "o", "u"]) {
       await act(async () => {
         fireEvent.keyDown(window, { key });

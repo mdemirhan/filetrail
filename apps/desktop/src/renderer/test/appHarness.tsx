@@ -1007,15 +1007,40 @@ export async function dragBetween(source: HTMLElement, target: HTMLElement): Pro
   return dataTransfer;
 }
 
+// At start the window gives the keyboard to a pane by itself, in an effect that may not
+// have run yet when the panes are drawn. A click on a pane before it would be taken over,
+// and the keys that follow would go to the other pane: the helpers that click a pane wait
+// for it first.
+async function waitForStartupPaneFocus(): Promise<void> {
+  await vi.waitFor(() => {
+    expect(
+      screen.getByTestId("tree-focused").textContent === "true" ||
+        screen.getByTestId("content-focused").textContent === "true",
+    ).toBe(true);
+  });
+}
+
 export async function focusTreePane(): Promise<void> {
   const treePane = await screen.findByTestId("tree-pane");
+  await waitForStartupPaneFocus();
   await act(async () => {
     fireEvent.click(treePane);
   });
 }
 
+// Clicks the file list so typing goes to it.
+export async function focusContentPane(): Promise<void> {
+  const contentPane = await screen.findByTestId("content-pane");
+  await waitForStartupPaneFocus();
+  await act(async () => {
+    fireEvent.pointerDown(contentPane);
+  });
+  expect(screen.getByTestId("content-focused")).toHaveTextContent("true");
+}
+
 export async function clearContentSelection(): Promise<void> {
   const backgroundButton = await screen.findByTestId("content-pane-background");
+  await waitForStartupPaneFocus();
   await act(async () => {
     fireEvent.click(backgroundButton);
   });

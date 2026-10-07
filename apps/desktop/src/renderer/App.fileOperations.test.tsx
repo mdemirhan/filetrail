@@ -50,6 +50,7 @@ import {
   failedResultEvent,
   finishedResultEvent,
   finishedWriteEvent,
+  focusContentPane,
   folderConflictPlan,
   installDragEventWithModifiers,
   missingSourceIssue,
@@ -1643,10 +1644,7 @@ describe("what stays on screen when an operation finishes", () => {
   it("selects a renamed item while the list is filtered", async () => {
     const harness = createAppHarness();
     renderApp(harness);
-    const contentPane = await screen.findByTestId("content-pane");
-    await act(async () => {
-      fireEvent.pointerDown(contentPane);
-    });
+    await focusContentPane();
     await pressKey({ key: "s" });
     await pressKey({ key: "o" });
     expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
