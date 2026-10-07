@@ -9,18 +9,18 @@ import {
 } from "./quitWhileBusy";
 
 describe("shouldOpenWindowOnActivate", () => {
-  it("opens a window from the Dock when none is open", () => {
-    expect(shouldOpenWindowOnActivate({ shutdownInProgress: false, openWindowCount: 0 })).toBe(
+  it("opens a window from the Dock when no explorer window is open, even with Settings open", () => {
+    expect(shouldOpenWindowOnActivate({ shutdownInProgress: false, explorerWindowCount: 0 })).toBe(
       true,
     );
-    expect(shouldOpenWindowOnActivate({ shutdownInProgress: false, openWindowCount: 1 })).toBe(
+    expect(shouldOpenWindowOnActivate({ shutdownInProgress: false, explorerWindowCount: 1 })).toBe(
       false,
     );
   });
 
-  // After "Stop and Close" the app waits for the operation to stop, then quits.
+  // After "Stop and Quit" the app waits for the operation to stop, then quits.
   it("doesn't open one while quitting waits for an operation to stop", () => {
-    expect(shouldOpenWindowOnActivate({ shutdownInProgress: true, openWindowCount: 0 })).toBe(
+    expect(shouldOpenWindowOnActivate({ shutdownInProgress: true, explorerWindowCount: 0 })).toBe(
       false,
     );
   });
@@ -55,7 +55,7 @@ describe("describeQuitWhileBusy", () => {
     expect(describeQuitWhileBusy("copy", "close")).toEqual({
       message: "A copy is still in progress.",
       detail:
-        "If you close the window now, it stops after the current item and File Trail quits. Items already copied stay where they are.",
+        "If you close the window now, it stops after the current item. Items already copied stay where they are.",
     });
     expect(describeQuitWhileBusy("rename", "close")).toBeNull();
   });

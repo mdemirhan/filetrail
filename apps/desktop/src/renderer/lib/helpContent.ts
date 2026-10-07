@@ -355,12 +355,12 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Closing",
             description:
-              "{closeWindow} closes the window. Closing the last window quits File Trail.",
+              "{closeWindow} closes the window. File Trail stays open with no window, as Finder does: click its icon in the Dock, or use {newWindow} or the Go menu, and a window opens where the last one you closed was. While a copy, move or delete runs, closing the last window asks first, since it would stop it.",
           },
           {
             label: "Next launch",
             description:
-              "File Trail reopens every window you had open when it quit, with its tabs, in the same place. With Settings → General → Reopen the last folder and tabs off, it opens one window.",
+              "File Trail reopens every window you had open when it quit, with its tabs, in the same place; if none was open, it opens one where the last one you closed was. With Settings → General → Reopen the last folder and tabs off, it opens one window.",
           },
         ],
         note: "Only one copy, move or delete runs at a time in all the windows together. Its progress shows in the window it was started from; close that window and it carries on in another.",

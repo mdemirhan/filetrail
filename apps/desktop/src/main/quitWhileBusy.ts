@@ -1,7 +1,7 @@
 import type { WriteOperationKind } from "./bootstrap/writeOperations";
 
-// What stops a running operation: quitting, or closing the explorer window (which quits
-// the app too).
+// What stops a running operation: quitting, or closing the last explorer window (the one
+// it shows in; the app stays open).
 export type StopTrigger = "quit" | "close";
 
 // The buttons of the question, in order: the first is the default and what Escape picks.
@@ -12,13 +12,14 @@ export function stopQuestionButtons(trigger: StopTrigger): [string, string] {
   return ["Keep Working", trigger === "quit" ? "Stop and Quit" : "Stop and Close"];
 }
 
-// Clicking the Dock icon with no window open opens one, but not while quitting waits for an
-// operation to stop: that window would be closed again moments later.
+// Clicking the Dock icon with no explorer window open opens one, as Finder does, even
+// while Settings or Help is open; but not while quitting waits for an operation to stop:
+// that window would be closed again moments later.
 export function shouldOpenWindowOnActivate(state: {
   shutdownInProgress: boolean;
-  openWindowCount: number;
+  explorerWindowCount: number;
 }): boolean {
-  return !state.shutdownInProgress && state.openWindowCount === 0;
+  return !state.shutdownInProgress && state.explorerWindowCount === 0;
 }
 
 // What to ask before quitting or closing the window stops a running operation. A rename or
@@ -30,7 +31,7 @@ export function describeQuitWhileBusy(
   const stops =
     trigger === "quit"
       ? "If you quit now, it stops after the current item."
-      : "If you close the window now, it stops after the current item and File Trail quits.";
+      : "If you close the window now, it stops after the current item.";
   switch (kind) {
     case "copy":
       return {

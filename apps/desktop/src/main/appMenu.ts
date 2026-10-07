@@ -43,6 +43,21 @@ const COMMANDS_FOR_ANY_WINDOW = new Set<RendererCommandType>([
 // Sent to the explorer window in front even while another window has the keyboard.
 const EXPLORER_COMMANDS_FROM_ANY_WINDOW = new Set<RendererCommandType>(["newWindow"]);
 
+// What the menu still does with no explorer window open, as Finder's does: New Window, and
+// the Go menu's places, which open a window there. The host opens the window.
+export const COMMANDS_WITHOUT_EXPLORER_WINDOW = new Set<RendererCommandType>([
+  "newWindow",
+  "goHomeRootTree",
+  "goDocuments",
+  "goDesktop",
+  "goDownloads",
+  "goLibrary",
+  "goMacintoshHD",
+  "goApplications",
+  "goTrash",
+  "openLocationSheet",
+]);
+
 // Where an explorer command goes: the explorer window that has the keyboard, or the one in
 // front while another window (Settings) has it. `focused` says which of the two it is.
 export type ExplorerCommandTarget = { contents: Pick<WebContents, "send">; focused: boolean };
@@ -97,6 +112,8 @@ export function createApplicationMenuTemplate(
     textEditorName?: string | undefined;
     // What Undo and Redo say ("Undo Move of “a.txt”"): see undoMenuLabels.
     undoLabels?: { undo: string; redo: string };
+    // A command chosen with no explorer window open (COMMANDS_WITHOUT_EXPLORER_WINDOW).
+    onCommandWithoutExplorerWindow?: (type: RendererCommandType) => void;
   } = {},
 ): MenuItemConstructorOptions[] {
   const explorerFor = toExplorerFor(explorer);
@@ -112,6 +129,10 @@ export function createApplicationMenuTemplate(
       | undefined;
     const focusedContents = focused?.webContents;
     const target = explorerFor(focusedWindow);
+    if (!target && COMMANDS_WITHOUT_EXPLORER_WINDOW.has(type)) {
+      options.onCommandWithoutExplorerWindow?.(type);
+      return;
+    }
     if (focusedContents && !target?.focused) {
       const nativeEdit = NATIVE_EDIT_COMMANDS[type];
       if (nativeEdit) {
@@ -371,8 +392,12 @@ export function resolveApplicationMenuItemStates(
   window: {
     // Whether the explorer window is the one the menu acts on (false while Settings is).
     explorerFocused: boolean;
-    // How many explorer windows are open (left out: one). Merging needs two.
+    // How many explorer windows are open (left out: one). Merging needs two; with none,
+    // only COMMANDS_WITHOUT_EXPLORER_WINDOW do anything, besides another window's own.
     explorerWindowCount?: number;
+    // Whether a window other than an explorer window (Settings) has the keyboard, rather
+    // than no window at all (left out: it has, when the explorer isn't focused).
+    otherWindowFocused?: boolean;
     // Whether there is a file operation to undo and to redo (left out: there is).
     undoAvailable?: { undo: boolean; redo: boolean };
   },
@@ -380,7 +405,10 @@ export function resolveApplicationMenuItemStates(
   const disabled = new Set<RendererCommandType>(state.disabledCommands);
   const isEnabled = (type: RendererCommandType) => {
     if (!window.explorerFocused) {
-      return COMMANDS_FOR_ANY_WINDOW.has(type);
+      if (window.explorerWindowCount === 0 && COMMANDS_WITHOUT_EXPLORER_WINDOW.has(type)) {
+        return true;
+      }
+      return window.otherWindowFocused !== false && COMMANDS_FOR_ANY_WINDOW.has(type);
     }
     if (disabled.has(type)) {
       return false;

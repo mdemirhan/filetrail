@@ -254,6 +254,29 @@ describe("App windows", () => {
     );
   });
 
+  it("goes to the Go menu's place it was opened for, once", async () => {
+    const harness = createAppHarness({
+      launchContext: { startupFolderPath: null, initialCommand: "goDocuments" },
+      directorySnapshots: {
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+    });
+    renderApp(harness);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Documents"),
+    );
+    // Back goes to where the window opened.
+    await pressKey({ key: "[", metaKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/),
+    );
+  });
+
   it("names the window after its front tab", async () => {
     const harness = createAppHarness();
     await ready(harness);

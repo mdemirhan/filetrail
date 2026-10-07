@@ -13,6 +13,9 @@ export type ExplorerWindowEntry<W> = {
   // Opened while the app runs: it opens the tabs it was given, whatever the restore
   // setting says.
   restoreTabs: boolean;
+  // A menu command the window runs once it has opened: a place in the Go menu chosen while
+  // no window was open.
+  initialCommand?: string | null;
 };
 
 export class ExplorerWindowList<W> {

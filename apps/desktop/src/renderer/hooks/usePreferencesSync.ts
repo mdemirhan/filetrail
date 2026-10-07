@@ -108,17 +108,23 @@ export function usePreferencesSync({
     return () => unsubscribe?.();
   }, [client]);
 
-  // Flush a pending write on unmount so the latest values win.
-  useEffect(
-    () => () => {
+  // Flush a pending write on unmount, and when the window closes (which unmounts
+  // nothing), so the latest values win: a window closed just after a navigation is
+  // remembered where it was.
+  useEffect(() => {
+    const flushPending = () => {
       if (timerRef.current === null) {
         return;
       }
       clearTimeout(timerRef.current);
       flush();
-    },
-    [flush],
-  );
+    };
+    window.addEventListener("pagehide", flushPending);
+    return () => {
+      window.removeEventListener("pagehide", flushPending);
+      flushPending();
+    };
+  }, [flush]);
 
   return { markSynced };
 }

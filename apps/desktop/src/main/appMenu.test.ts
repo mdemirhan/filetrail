@@ -419,6 +419,29 @@ describe("createApplicationMenuTemplate", () => {
     expect(() => choose(itemOf(submenuOf(template, "Go"), "Back"))).not.toThrow();
   });
 
+  it("with no explorer window, opens one for New Window and the Go menu's places", () => {
+    const onCommandWithoutExplorerWindow = vi.fn();
+    const template = createApplicationMenuTemplate(
+      { explorerFor: () => null },
+      { onCommandWithoutExplorerWindow },
+    );
+    const settingsWindow = { webContents: { copy: vi.fn() }, close: vi.fn() };
+
+    choose(itemOf(submenuOf(template, "File"), "New Window"));
+    choose(itemOf(submenuOf(template, "Go"), "Documents"), settingsWindow);
+    choose(itemOf(submenuOf(template, "Go"), "Go to Folder…"));
+    choose(itemOf(submenuOf(template, "Go"), "Back"));
+    choose(itemOf(submenuOf(template, "Edit"), "Copy"), settingsWindow);
+
+    expect(onCommandWithoutExplorerWindow.mock.calls.map(([type]) => type)).toEqual([
+      "newWindow",
+      "goDocuments",
+      "openLocationSheet",
+    ]);
+    // Settings' own copy still works.
+    expect(settingsWindow.webContents.copy).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves the explorer alone when another window is focused", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send });
@@ -502,6 +525,46 @@ describe("resolveApplicationMenuItemStates", () => {
     }
     return item;
   };
+
+  it("with no explorer window open, offers only what opens one, besides another window's own", () => {
+    const enabledWith = (window: Parameters<typeof resolveApplicationMenuItemStates>[1]) =>
+      RENDERER_COMMAND_TYPES.filter(
+        (type) =>
+          type !== "toggleFavorite" &&
+          type !== "toggleFolderTree" &&
+          stateOf(type, INITIAL_APPLICATION_MENU_STATE, window).enabled,
+      );
+    const placesAndNewWindow = [
+      "openLocationSheet",
+      "goHomeRootTree",
+      "goDocuments",
+      "goDesktop",
+      "goDownloads",
+      "goLibrary",
+      "goMacintoshHD",
+      "goApplications",
+      "goTrash",
+      "newWindow",
+    ];
+
+    expect(
+      enabledWith({ explorerFocused: false, explorerWindowCount: 0, otherWindowFocused: false }),
+    ).toEqual(placesAndNewWindow);
+    // Settings has the keyboard: its text fields' edit commands and ⌘W work too.
+    expect(
+      enabledWith({ explorerFocused: false, explorerWindowCount: 0, otherWindowFocused: true }),
+    ).toEqual([
+      "undo",
+      "redo",
+      "editCut",
+      "editCopy",
+      "editPaste",
+      "editSelectAll",
+      ...placesAndNewWindow.slice(0, -1),
+      "newWindow",
+      "closeTab",
+    ]);
+  });
 
   it("offers Merge All Windows only with another explorer window open", () => {
     const state = INITIAL_APPLICATION_MENU_STATE;

@@ -1295,6 +1295,33 @@ describe("appStateStore explorer windows", () => {
     expect(delays).toEqual([150]);
   });
 
+  it("remembers the window closed last with its front tab, across a restart", () => {
+    const { store, filePath } = storeWithFile({ preferences: {}, windows: [] });
+    expect(store.getLastClosedWindow()).toBeNull();
+    store.addExplorerWindow({
+      id: "window-a",
+      bounds: { x: 40, y: 60, width: 900, height: 600, maximized: false },
+      session: store.createWindowSession({
+        openTabs: [tab("/Users/demo/work"), tab("/Users/demo/music")],
+        activeTabIndex: 1,
+        propertiesOpen: true,
+      }),
+    });
+
+    store.rememberClosedWindow("window-a");
+    store.removeExplorerWindow("window-a");
+    store.rememberClosedWindow("window-gone");
+    store.flush();
+
+    const reloaded = createAppStateStore(filePath, { defaultTheme: "dark" });
+    expect(reloaded.getExplorerWindows()).toEqual([]);
+    const lastClosed = reloaded.getLastClosedWindow();
+    expect(lastClosed?.bounds).toEqual({ x: 40, y: 60, width: 900, height: 600, maximized: false });
+    expect(lastClosed?.session.openTabs.map((open) => open.path)).toEqual(["/Users/demo/music"]);
+    expect(lastClosed?.session.activeTabIndex).toBe(0);
+    expect(lastClosed?.session.propertiesOpen).toBe(true);
+  });
+
   it("keeps the windows of a damaged file that make sense", () => {
     const { store } = storeWithFile({
       preferences: { treeWidth: 300 },

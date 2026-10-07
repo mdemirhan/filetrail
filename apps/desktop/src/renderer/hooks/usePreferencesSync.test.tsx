@@ -28,6 +28,34 @@ describe("usePreferencesSync", () => {
     ).toEqual({ theme: "dark" });
   });
 
+  it("writes what is waiting at once when the window closes", async () => {
+    const updateHandler = vi.fn(async () => ({ preferences: {} }));
+    const client = createMockFiletrailClient({ "app:updatePreferences": updateHandler as never });
+    const { result, rerender } = renderHook(
+      ({ payload }: { payload: PreferencesPatch }) =>
+        usePreferencesSync({ client, ready: true, payload, onRemotePatch: vi.fn() }),
+      { initialProps: { payload: { lastVisitedPath: "/Users/demo" } as PreferencesPatch } },
+    );
+    act(() => {
+      result.current.markSynced({ lastVisitedPath: "/Users/demo" });
+    });
+
+    rerender({ payload: { lastVisitedPath: "/Users/demo/Sub" } });
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+
+    expect(updateHandler).toHaveBeenCalledTimes(1);
+    expect(updateHandler).toHaveBeenLastCalledWith({
+      preferences: { lastVisitedPath: "/Users/demo/Sub" },
+    });
+    // Nothing is left to write when the wait would have ended.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(updateHandler).toHaveBeenCalledTimes(1);
+  });
+
   it("writes only changed keys after the debounce and does not echo remote changes", async () => {
     const updateHandler = vi.fn(async () => ({ preferences: {} }));
     let remoteListener: ((patch: PreferencesPatch) => void) | null = null;

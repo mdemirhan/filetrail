@@ -15,7 +15,9 @@ Status: decisions agreed and built on 2026-10-07 on `claude/multiple-windows-sup
 
 All four commands are in the shortcut table, so Settings › Shortcuts can change or add keys. Only New Window has a key by default (⌘N; New Folder stays ⇧⌘N, as in Finder).
 
-**Closing.** Closing a window that isn't the last just closes it, and it won't come back at the next launch. Closing the last window quits, asking first when an operation is running, as today. Settings, About and Acknowledgements close when the app quits.
+**Closing.** Closing a window just closes it, and it won't come back at the next launch. Since 2026-10-08 this includes the last window: File Trail stays open with no window, like Finder (it used to quit). Closing the last window while an operation runs asks first, and Stop and Close stops the operation, so nothing runs with no window. Settings, About and Acknowledgements stay open.
+
+**With no window open** (2026-10-08). A click on the Dock icon, New Window (menu, ⌘N, Dock menu) or a second launch opens a window where the window closed last was: its place and size, panels, column widths and the tab that was in front. The Go menu's places and Go to Folder open such a window and go there. Everything else that needs a window is dimmed, Undo, Redo and Empty Trash included. Quitting with no window open brings back one window started the same way at the next launch.
 
 **Launching.** With "Reopen the last folder and tabs" on, every window comes back with its place, size, tabs, front tab and panels, and the window that was in front is in front again. With it off, one window opens, as today. A folder File Trail was launched with opens in the front window. Saved tabs from before this change become the first window.
 

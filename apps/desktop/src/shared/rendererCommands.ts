@@ -76,6 +76,12 @@ export const RENDERER_COMMAND_TYPES = [
 
 export type RendererCommandType = (typeof RENDERER_COMMAND_TYPES)[number];
 
+const RENDERER_COMMAND_TYPE_SET: ReadonlySet<string> = new Set(RENDERER_COMMAND_TYPES);
+
+export function isRendererCommandType(value: string): value is RendererCommandType {
+  return RENDERER_COMMAND_TYPE_SET.has(value);
+}
+
 export type RendererCommand = {
   type: RendererCommandType;
 };

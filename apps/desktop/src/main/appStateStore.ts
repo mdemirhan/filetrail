@@ -101,6 +101,9 @@ type AppState = {
   preferences?: AppPreferences;
   // Front to back.
   windows?: StoredExplorerWindow[];
+  // The window closed last, with only the tab that was in front: where a window opened
+  // with none open starts (and the app, when it quit with no window open).
+  lastClosedWindow?: StoredExplorerWindow;
 };
 
 // The two files the store keeps, so that a change to one does not rewrite the other.
@@ -338,6 +341,33 @@ export class AppStateStore {
     this.setWindows(windows);
   }
 
+  /** The window closed last, or none yet. */
+  getLastClosedWindow(): StoredExplorerWindow | null {
+    return this.state.lastClosedWindow ?? null;
+  }
+
+  /**
+   * Remembers the window `windowId` as it closes, keeping only the tab that was in front:
+   * a window opened when none is open starts from it.
+   */
+  rememberClosedWindow(windowId: string): void {
+    const window = this.findWindow(windowId);
+    if (!window) {
+      return;
+    }
+    const frontTab = window.session.openTabs[window.session.activeTabIndex];
+    const lastClosedWindow: StoredExplorerWindow = {
+      ...window,
+      session: { ...window.session, openTabs: frontTab ? [frontTab] : [], activeTabIndex: 0 },
+    };
+    if (JSON.stringify(lastClosedWindow) === JSON.stringify(this.state.lastClosedWindow)) {
+      return;
+    }
+    this.state = { ...this.state, lastClosedWindow };
+    this.markUnsaved("state");
+    this.saveLater();
+  }
+
   removeExplorerWindow(windowId: string): void {
     const windows = this.getExplorerWindows();
     if (windows.some((window) => window.id === windowId)) {
@@ -480,8 +510,10 @@ function readState(
       return {};
     }
     const preferences = sanitizePreferences(parsed.preferences, defaults);
+    const lastClosedWindow = sanitizeExplorerWindows([parsed.lastClosedWindow], preferences)?.[0];
     return {
       preferences,
+      ...(lastClosedWindow ? { lastClosedWindow } : {}),
       windows: sanitizeExplorerWindows(parsed.windows, preferences) ?? [
         // Saved before there could be more than one window: the one window, with the tabs
         // and panels the preferences held.

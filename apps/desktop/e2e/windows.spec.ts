@@ -68,13 +68,17 @@ async function waitUntil(check: () => Promise<boolean>, timeout = 15_000): Promi
   await expect.poll(check, { timeout }).toBe(true);
 }
 
+// A new window can be handed over while its page is still blank: reading it while the
+// app's page loads in its place fails, and is tried again.
 async function waitForListing(page: Page, path: string): Promise<void> {
   await waitUntil(
     () =>
-      page.evaluate(
-        (selector) => document.querySelector(selector) !== null,
-        `[data-selectable-entry-path="${path}"]`,
-      ),
+      page
+        .evaluate(
+          (selector) => document.querySelector(selector) !== null,
+          `[data-selectable-entry-path="${path}"]`,
+        )
+        .catch(() => false),
     30_000,
   );
 }
@@ -218,4 +222,56 @@ test("pastes in one window what was copied in another", async () => {
     .poll(() => readdirSync(join(folder, "Sub")).sort(), { timeout: 15_000 })
     .toEqual(["a.txt", "inside.txt"]);
   expect(readFileSync(join(folder, "Sub", "a.txt"), "utf8")).toBe("alpha");
+});
+
+test("stays open with no window, and opens one where the last one closed", async () => {
+  const first = await electronApp.firstWindow();
+  await item(first, join(folder, "Sub")).dblclick();
+  await waitForListing(first, join(folder, "Sub", "inside.txt"));
+  const allWindowCount = () =>
+    electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
+  const menuItemEnabled = (id: string) =>
+    electronApp.evaluate(
+      ({ Menu }, itemId) => Menu.getApplicationMenu()?.getMenuItemById(itemId)?.enabled ?? null,
+      id,
+    );
+  const closeOnlyWindow = async () => {
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.close();
+      }
+    });
+    await waitUntil(async () => (await allWindowCount()) === 0);
+  };
+
+  await closeOnlyWindow();
+  // Still running, with only what opens a window on offer.
+  expect(await menuItemEnabled("newWindow")).toBe(true);
+  expect(await menuItemEnabled("goDesktop")).toBe(true);
+  expect(await menuItemEnabled("goBack")).toBe(false);
+  expect(await menuItemEnabled("emptyTrash")).toBe(false);
+
+  // The Dock icon is clicked: a window opens where the last one was.
+  const reopened = electronApp.waitForEvent("window");
+  await electronApp.evaluate(({ app }) => {
+    app.emit("activate");
+  });
+  await waitForListing(await reopened, join(folder, "Sub", "inside.txt"));
+  await closeOnlyWindow();
+
+  // A place in the Go menu opens a window there.
+  const toDesktop = electronApp.waitForEvent("window");
+  await electronApp.evaluate(({ Menu }) => {
+    Menu.getApplicationMenu()?.getMenuItemById("goDesktop")?.click();
+  });
+  const desktopWindow = await toDesktop;
+  await waitUntil(async () => (await desktopWindow.title().catch(() => "")) === "Desktop", 30_000);
+  // Then the one window open is closed, and the app quits.
+  await closeOnlyWindow();
+  await closeApp();
+
+  // The next launch opens one window, where the last one was.
+  electronApp = await launch();
+  await waitUntil(async () => (await explorerWindows()).length === 1, 30_000);
+  await waitUntil(async () => (await explorerWindows())[0]?.title === "Desktop", 30_000);
 });

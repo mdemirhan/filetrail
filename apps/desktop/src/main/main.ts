@@ -21,6 +21,7 @@ import {
   type ApplicationMenuState,
   INITIAL_APPLICATION_MENU_STATE,
 } from "../shared/applicationMenuState";
+import type { RendererCommandType } from "../shared/rendererCommands";
 import { resolveShortcuts } from "../shared/shortcuts";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
 import {
@@ -90,6 +91,8 @@ let stopQuestionOpen = false;
 // Explorer windows that close without asking first: the person agreed to stop the running
 // operation, or their tabs were merged into another window.
 const windowsClosingWithoutAsking = new WeakSet<BrowserWindow>();
+// Explorer windows closed by Merge All Windows: not remembered as the window closed last.
+const windowsMerged = new WeakSet<BrowserWindow>();
 let processLoggingHandlersInstalled = false;
 // Found while starting, before the window opened; shown once it has.
 const pendingStartupNotices: string[] = [];
@@ -206,18 +209,19 @@ if (hasSingleInstanceLock) {
           },
           showRecoveryNotices: (notices) => {
             const window = explorerWindows.front()?.window;
-            if (!window || window.isDestroyed()) {
-              return;
-            }
-            void dialog.showMessageBox(window, {
-              type: "info",
+            const options = {
+              type: "info" as const,
               message:
                 notices.length === 1
                   ? "An item waiting for its disk is in place now"
                   : "Items waiting for their disk are in place now",
               detail: notices.join("\n\n"),
               buttons: ["OK"],
-            });
+            };
+            // With no window open it stands on its own.
+            void (window && !window.isDestroyed()
+              ? dialog.showMessageBox(window, options)
+              : dialog.showMessageBox(options));
           },
           openHelpWindow,
           setApplicationMenuState: (state, senderId) => {
@@ -233,6 +237,7 @@ if (hasSingleInstanceLock) {
             return {
               startupFolderPath: entry?.launchFolderPath ?? null,
               restoreTabs: entry?.restoreTabs ?? false,
+              ...(entry?.initialCommand ? { initialCommand: entry.initialCommand } : {}),
             };
           },
           openExplorerWindow: (senderId, tabs, activeTabIndex) =>
@@ -265,11 +270,12 @@ if (hasSingleInstanceLock) {
       app.on("activate", () => {
         appLogger.info("[filetrail] app activate", {
           openWindowCount: BrowserWindow.getAllWindows().length,
+          explorerWindowCount: explorerWindows.count,
         });
         if (
           shouldOpenWindowOnActivate({
             shutdownInProgress,
-            openWindowCount: BrowserWindow.getAllWindows().length,
+            explorerWindowCount: explorerWindows.count,
           })
         ) {
           openDefaultExplorerWindow();
@@ -292,16 +298,18 @@ if (hasSingleInstanceLock) {
     void confirmQuit();
   });
 
-  app.on("window-all-closed", () => {
-    app.quit();
-  });
+  // Closing the last window leaves the app open, as Finder does: a click on the Dock icon,
+  // New Window or a place in the Go menu opens a window again. (Without this listener
+  // Electron would quit.)
+  app.on("window-all-closed", () => undefined);
 
   app.on("second-instance", () => {
     appLoggerRef?.info("[filetrail] second instance activation", {
       hasWindow: BrowserWindow.getAllWindows().length > 0,
     });
-    const window = explorerWindows.front()?.window ?? BrowserWindow.getAllWindows()[0] ?? null;
+    const window = explorerWindows.front()?.window ?? null;
     if (!window) {
+      openDefaultExplorerWindow();
       return;
     }
     if (window.isMinimized()) {
@@ -327,8 +335,9 @@ function openStartupWindows(startupFolderPath: string | null): void {
   for (const dropped of stored.slice(records.length)) {
     appStateStore.removeExplorerWindow(dropped.id);
   }
+  // No window was open at quit: one, as a window opened with none open starts.
   if (records.length === 0) {
-    const record = createExplorerWindowRecord(appStateStore, DEFAULT_WINDOW_STATE, {});
+    const record = createWindowRecordFromLastClosed(appStateStore);
     appStateStore.addExplorerWindow(record);
     records.push(record);
   }
@@ -381,15 +390,34 @@ function createExplorerWindowRecord(
   };
 }
 
-// A window opened with nothing to take after (the Dock icon clicked with no window open).
-function openDefaultExplorerWindow(): void {
+// A window that starts as the window closed last ended: its place and size, panels and
+// column widths, and the tab that was in front. Before any window has closed, the app's
+// latest values at the default size.
+function createWindowRecordFromLastClosed(appStateStore: AppStateStore): StoredExplorerWindow {
+  const lastClosed = appStateStore.getLastClosedWindow();
+  return createExplorerWindowRecord(
+    appStateStore,
+    lastClosed?.bounds ?? DEFAULT_WINDOW_STATE,
+    lastClosed?.session ?? {},
+  );
+}
+
+// A window opened with none open (the Dock icon, New Window, the second launch): it starts
+// where the window closed last was. `initialCommand` is run once it has opened (a place in
+// the Go menu, chosen with no window open).
+function openDefaultExplorerWindow(initialCommand?: RendererCommandType): void {
   const appStateStore = appStateStoreRef;
   if (!appStateStore) {
     return;
   }
-  const record = createExplorerWindowRecord(appStateStore, DEFAULT_WINDOW_STATE, {});
+  const record = createWindowRecordFromLastClosed(appStateStore);
   appStateStore.addExplorerWindow(record);
-  createExplorerWindow(record, { launchFolderPath: null, restoreTabs: false, place: "front" });
+  createExplorerWindow(record, {
+    launchFolderPath: null,
+    restoreTabs: record.session.openTabs.length > 0,
+    place: "front",
+    ...(initialCommand ? { initialCommand } : {}),
+  });
 }
 
 // New Window from the Dock menu: the window in front opens it on its folder, as ⌘N does.
@@ -454,6 +482,7 @@ function mergeExplorerWindowsInto(senderId: number | null): OpenTabPreference[] 
   for (const entry of others) {
     if (!entry.window.isDestroyed()) {
       windowsClosingWithoutAsking.add(entry.window);
+      windowsMerged.add(entry.window);
       entry.window.close();
     }
   }
@@ -468,6 +497,8 @@ function createExplorerWindow(
     // "front": opened while the app runs, and shown as soon as it is ready. "back": one of
     // the windows the app opens with, shown by openStartupWindows.
     place: "front" | "back";
+    // A menu command the window runs once it has opened.
+    initialCommand?: RendererCommandType;
   },
 ): BrowserWindow {
   const appStateStore = appStateStoreRef;
@@ -513,6 +544,7 @@ function createExplorerWindow(
       webContentsId,
       launchFolderPath: options.launchFolderPath,
       restoreTabs: options.restoreTabs,
+      initialCommand: options.initialCommand ?? null,
     },
     options.place,
   );
@@ -597,18 +629,14 @@ function createExplorerWindow(
     explorerWindows.remove(windowId);
     applicationMenuStates.delete(webContentsId);
     windowBoundsRecorders.delete(windowId);
-    if (!shutdownInProgress && explorerWindows.count > 0) {
-      // Closed while others stay open: it doesn't come back at the next launch. The last
-      // window closing quits the app, and comes back.
-      appStateStore.removeExplorerWindow(windowId);
-    }
-    if (explorerWindows.count === 0) {
-      // The other windows belong to the explorer windows; closing the last one quits.
-      for (const window of [settingsWindowRef, aboutWindowRef, acknowledgementsWindowRef]) {
-        if (window && !window.isDestroyed()) {
-          window.close();
-        }
+    // Closed while the app runs: it doesn't come back at the next launch, but the next
+    // window opened with none open starts as it ended. (Windows merged into another one
+    // weren't closed by hand.) Quitting keeps the windows open then.
+    if (!shutdownInProgress) {
+      if (!windowsMerged.has(explorerWindow)) {
+        appStateStore.rememberClosedWindow(windowId);
       }
+      appStateStore.removeExplorerWindow(windowId);
     }
     syncApplicationMenuItems();
   });
@@ -948,6 +976,9 @@ function buildApplicationMenu(): void {
             .bindings,
           textEditorName: appStateStoreRef?.getPreferences().defaultTextEditor.appName,
           undoLabels: currentUndoLabels(),
+          // With no window open, New Window and the Go menu's places open one.
+          onCommandWithoutExplorerWindow: (type) =>
+            openDefaultExplorerWindow(type === "newWindow" ? undefined : type),
         },
       ),
     ),
@@ -973,8 +1004,13 @@ function menuExplorerFor(focusedWindow: unknown): ExplorerCommandTarget | null {
 }
 
 // The explorer window the menu shows, and whether it has the keyboard. With no window
-// focused (the app is in the background) the front window's state stays.
-function currentMenuExplorer(): { state: ApplicationMenuState; explorerFocused: boolean } {
+// focused (the app is in the background) the front window's state stays; with no explorer
+// window open there is none to show.
+function currentMenuExplorer(): {
+  state: ApplicationMenuState;
+  explorerFocused: boolean;
+  otherWindowFocused: boolean;
+} {
   const focusedWindow = BrowserWindow.getFocusedWindow();
   const focusedEntry = focusedWindow ? explorerWindows.byWindow(focusedWindow) : null;
   const entry = focusedEntry ?? explorerWindows.front();
@@ -982,7 +1018,8 @@ function currentMenuExplorer(): { state: ApplicationMenuState; explorerFocused: 
     state:
       (entry ? applicationMenuStates.get(entry.webContentsId) : undefined) ??
       INITIAL_APPLICATION_MENU_STATE,
-    explorerFocused: focusedWindow === null || focusedEntry !== null,
+    explorerFocused: focusedEntry !== null || (focusedWindow === null && explorerWindows.count > 0),
+    otherWindowFocused: focusedWindow !== null && focusedEntry === null,
   };
 }
 
@@ -1011,11 +1048,12 @@ function syncApplicationMenuItems(): void {
   if (!menu) {
     return;
   }
-  const { state, explorerFocused } = currentMenuExplorer();
+  const { state, explorerFocused, otherWindowFocused } = currentMenuExplorer();
   applyApplicationMenuItemStates(
     menu,
     resolveApplicationMenuItemStates(state, {
       explorerFocused,
+      otherWindowFocused,
       explorerWindowCount: explorerWindows.count,
       undoAvailable: { undo: undoHistoryMenu.undo !== null, redo: undoHistoryMenu.redo !== null },
     }),

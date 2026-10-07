@@ -596,6 +596,9 @@ export const launchContextSchema = z.object({
   // A window opened while the app runs opens the tabs it was given, whatever the "reopen
   // the last folders and tabs" setting says.
   restoreTabs: z.boolean().optional(),
+  // A menu command the window runs once it has opened (a place in the Go menu chosen while
+  // no window was open).
+  initialCommand: z.string().min(1).optional(),
 });
 
 // The items Copy or Cut put on the app's clipboard, which every window shares.

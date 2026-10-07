@@ -17,6 +17,7 @@ import {
   clampSearchColumnWidth,
   clampZoomPercent,
 } from "../shared/appPreferences";
+import { isRendererCommandType } from "../shared/rendererCommands";
 import { resolveShortcuts } from "../shared/shortcuts";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolders";
@@ -899,6 +900,8 @@ export function App() {
   // actions reach "open in a new tab" through this.
   const openPathInNewTabRef = useRef<(path: string) => void>(() => undefined);
   const openPathInNewWindowRef = useRef<(path: string) => void>(() => undefined);
+  // The menu command this window was opened to run (see app:getLaunchContext).
+  const initialCommandRef = useRef<string | null>(null);
   const {
     closeContextMenu,
     activateContentEntry,
@@ -1498,6 +1501,19 @@ export function App() {
     },
   });
 
+  // A place in the Go menu chosen while no window was open: this window was opened for it,
+  // and goes there once it has opened.
+  useEffect(() => {
+    const command = initialCommandRef.current;
+    if (!preferencesReady || command === null) {
+      return;
+    }
+    initialCommandRef.current = null;
+    if (isRendererCommandType(command)) {
+      runRendererCommand(command);
+    }
+  }, [preferencesReady, runRendererCommand]);
+
   useEffect(
     () => () => {
       if (typeaheadTimeoutRef.current) {
@@ -1743,6 +1759,7 @@ export function App() {
           launchContextResponse.startupFolderPath,
           launchContextResponse.restoreTabs === true,
         );
+        initialCommandRef.current = launchContextResponse.initialCommand ?? null;
         // A favorite that was removed since is opened as the plain folder it is. Favorites
         // set up just now are shown open.
         const startupTabs = startup.tabs.map((tab) => ({
