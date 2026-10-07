@@ -131,6 +131,7 @@ export const contentPaneMock = () => ({
             key={entry.path}
             type="button"
             title={`search:${entry.path}`}
+            data-drop-target-state={getItemDropIndicator?.(entry.path) ?? "none"}
             data-selected={selectedPaths.includes(entry.path) ? "true" : "false"}
             draggable={Boolean(onItemDragStart)}
             onClick={(event) => {
@@ -146,6 +147,10 @@ export const contentPaneMock = () => ({
             }}
             onDragStart={(event) => onItemDragStart?.(entry, event)}
             onDragEnd={(event) => onItemDragEnd?.(event)}
+            onDragEnter={(event) => onItemDragEnter?.(entry, event)}
+            onDragOver={(event) => onItemDragOver?.(entry, event)}
+            onDragLeave={(event) => onItemDragLeave?.(entry, event)}
+            onDrop={(event) => onItemDrop?.(entry, event)}
             onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
           >
             Search {entry.name}

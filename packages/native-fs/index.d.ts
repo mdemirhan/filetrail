@@ -263,3 +263,23 @@ export function nativeStartFileDrag(
   images: FileDragImage[],
   onEnded: (operation: FileDragOperation) => void,
 ): boolean;
+
+/** What the drag going on now carries, as the system's drag pasteboard has it. */
+export type DragPasteboardContents = {
+  /** Changes with every new drag, wherever it starts. */
+  changeCount: number;
+  /** Whether the drag is one this app started (`nativeStartFileDrag`). */
+  ownDrag: boolean;
+  /**
+   * The files and folders it carries (file URLs, references resolved), each once. Empty
+   * for a drag of promised files (Mail attachments, Photos), text or links.
+   */
+  paths: string[];
+};
+
+/**
+ * Reads the drag going on now from the system's drag pasteboard, wherever it came from:
+ * a window can read it while the drag is over it, before anything is dropped. Call on the
+ * main thread.
+ */
+export function nativeReadDragPasteboard(): DragPasteboardContents;

@@ -1284,6 +1284,31 @@ export const ipcContractSchemas = {
       gone: z.array(z.string()),
     }),
   },
+  // What a drag from another app, over the window now, carries: the files and folders it
+  // holds (read from the system's drag pasteboard, since the page only gets them at the
+  // drop), each with its kind as lstat has it; items no longer on disk are left out.
+  // `changeCount` changes with every new drag. `ownDrag` marks a drag this app started.
+  // Empty for a drag of promised files, text or links, or of more items than one request
+  // takes.
+  "system:readDraggedIn": {
+    request: emptyRequestSchema,
+    response: z.object({
+      changeCount: z.number().int(),
+      ownDrag: z.boolean(),
+      items: z
+        .array(z.object({ path: absolutePathSchema, kind: explorerEntryKindSchema }))
+        .max(MAX_PATHS_PER_REQUEST),
+    }),
+  },
+  // Brings the window and the app to the front, for a question or an error about a drop
+  // from another app that came while another app was in front. Where macOS won't let the
+  // app come forward, its Dock icon bounces once. `focused` says whether it was in front.
+  "system:bringWindowToFront": {
+    request: emptyRequestSchema,
+    response: z.object({
+      focused: z.boolean(),
+    }),
+  },
   "system:quickLook": {
     request: z.object({
       path: z.string().min(1),

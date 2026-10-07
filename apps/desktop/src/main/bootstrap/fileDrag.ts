@@ -1,7 +1,14 @@
 import { createRequire } from "node:module";
 
-import type { FileDragImage, IpcRequest, IpcResponse } from "@filetrail/contracts";
-import { BrowserWindow, type IpcMainInvokeEvent } from "electron";
+import type { Stats } from "node:fs";
+
+import {
+  type FileDragImage,
+  type IpcRequest,
+  type IpcResponse,
+  MAX_PATHS_PER_REQUEST,
+} from "@filetrail/contracts";
+import { BrowserWindow, type IpcMainInvokeEvent, app } from "electron";
 import { clearResponseCaches } from "./responseCache";
 
 type FileDragOperation = IpcResponse<"system:startFileDrag">["operation"];
@@ -13,11 +20,25 @@ type StartNativeFileDrag = (
   onEnded: (operation: FileDragOperation) => void,
 ) => boolean;
 
+type DragPasteboardContents = { changeCount: number; ownDrag: boolean; paths: string[] };
+type DraggedInItem = IpcResponse<"system:readDraggedIn">["items"][number];
+
 const require = createRequire(import.meta.url);
 
 function loadNativeStartFileDrag(): StartNativeFileDrag {
   return (require("@filetrail/native-fs") as { nativeStartFileDrag: StartNativeFileDrag })
     .nativeStartFileDrag;
+}
+
+function loadNativeReadDragPasteboard(): () => DragPasteboardContents {
+  return (
+    require("@filetrail/native-fs") as { nativeReadDragPasteboard: () => DragPasteboardContents }
+  ).nativeReadDragPasteboard;
+}
+
+// Electron's own `fs` takes .asar files for folders; `original-fs` sees them as they are.
+function originalFs(): typeof import("node:fs") {
+  return require("original-fs") as typeof import("node:fs");
 }
 
 // Starts a system file drag from the sender's window and answers when it ends. The page
@@ -86,9 +107,7 @@ export async function findDraggedAway(
     clearCaches?: (changedPaths: readonly string[]) => void;
   } = {},
 ): Promise<IpcResponse<"system:findDraggedAway">> {
-  // Electron's own `fs` takes .asar files for folders; `original-fs` sees them as they are.
-  const lstatFn =
-    deps.lstatFn ?? (require("original-fs") as typeof import("node:fs")).promises.lstat;
+  const lstatFn = deps.lstatFn ?? originalFs().promises.lstat;
   const answers = await Promise.all(
     payload.paths.map(async (path) => {
       try {
@@ -104,4 +123,82 @@ export async function findDraggedAway(
     (deps.clearCaches ?? clearResponseCaches)(gone);
   }
   return { gone };
+}
+
+// The files and folders a drag from another app carries, while it is over the window. Each
+// is looked at as it is on disk: a link is the link (its kind says where it points), and an
+// item that can't be looked at is left out, so nothing is dropped that isn't there.
+export async function readDraggedIn(
+  deps: {
+    readDragPasteboard?: () => DragPasteboardContents;
+    lstatFn?: (path: string) => Promise<Pick<Stats, "isDirectory" | "isSymbolicLink">>;
+    statFn?: (path: string) => Promise<Pick<Stats, "isDirectory">>;
+  } = {},
+): Promise<IpcResponse<"system:readDraggedIn">> {
+  const contents = (deps.readDragPasteboard ?? loadNativeReadDragPasteboard())();
+  const { changeCount, ownDrag } = contents;
+  const paths = contents.paths.filter((path) => path.startsWith("/"));
+  // Too many for the copy that would follow: refused as a whole, never cut short.
+  if (paths.length > MAX_PATHS_PER_REQUEST) {
+    return { changeCount, ownDrag, items: [] };
+  }
+  const lstatFn = deps.lstatFn ?? originalFs().promises.lstat;
+  const statFn = deps.statFn ?? originalFs().promises.stat;
+  const items = await Promise.all(
+    paths.map(async (path): Promise<DraggedInItem | null> => {
+      try {
+        const stats = await lstatFn(path);
+        if (stats.isSymbolicLink()) {
+          const pointsToFolder = await statFn(path).then(
+            (target) => target.isDirectory(),
+            () => false,
+          );
+          return { path, kind: pointsToFolder ? "symlink_directory" : "symlink_file" };
+        }
+        return { path, kind: stats.isDirectory() ? "directory" : "file" };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return {
+    changeCount,
+    ownDrag,
+    items: items.filter((item): item is DraggedInItem => item !== null),
+  };
+}
+
+// How long after asking the app to come forward it is checked: activation is not at once.
+const BRING_TO_FRONT_CHECK_MS = 250;
+
+// Brings the sender's window forward for a question about a drop made while another app
+// was in front. macOS may refuse to let an app take the front from the one in use; then
+// the Dock icon bounces once, so the question isn't missed.
+export async function bringWindowToFront(
+  event: Pick<IpcMainInvokeEvent, "sender">,
+  deps: {
+    windowFor?: (
+      sender: IpcMainInvokeEvent["sender"],
+    ) => Pick<BrowserWindow, "show" | "focus" | "isFocused" | "isDestroyed"> | null;
+    focusApp?: () => void;
+    bounceDockIcon?: () => void;
+    waitMs?: number;
+  } = {},
+): Promise<IpcResponse<"system:bringWindowToFront">> {
+  const window = (deps.windowFor ?? BrowserWindow.fromWebContents)(event.sender);
+  if (!window) {
+    return { focused: false };
+  }
+  (deps.focusApp ?? (() => app.focus({ steal: true })))();
+  window.show();
+  window.focus();
+  await new Promise((resolve) => setTimeout(resolve, deps.waitMs ?? BRING_TO_FRONT_CHECK_MS));
+  if (window.isDestroyed()) {
+    return { focused: false };
+  }
+  const focused = window.isFocused();
+  if (!focused) {
+    (deps.bounceDockIcon ?? (() => app.dock?.bounce("informational")))();
+  }
+  return { focused };
 }

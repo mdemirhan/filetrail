@@ -2,7 +2,9 @@
  * Starts a system file drag from a window, as Finder does: the drag carries file URLs, so
  * Finder, the Dock and other apps take it as files.
  *
- * Exposes nativeStartFileDrag(viewHandle, paths, images, onEnded) → boolean.
+ * Exposes nativeStartFileDrag(viewHandle, paths, images, onEnded) → boolean, and
+ * nativeReadDragPasteboard() → { changeCount, ownDrag, paths }: the files a drag going on
+ * now carries, wherever it came from.
  *
  * Must be called on the main thread (Electron's main process runs JS there). The drag
  * runs in AppKit's event loop; when it ends, `onEnded` is called with what the drop did:
@@ -56,6 +58,10 @@ static void call_on_ended(napi_env env, napi_value callback, void *context, void
   napi_get_undefined(env, &undefined);
   napi_call_function(env, undefined, callback, 1, &operation, NULL);
 }
+
+/* The drag pasteboard's change count once this app's last drag had written to it: a drag
+   going on with that count is this app's own. */
+static NSInteger own_drag_change_count = -1;
 
 /* ── Dragging source ─────────────────────────────────────────────── */
 
@@ -418,6 +424,7 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
       session.animatesToStartingPositionsOnCancelOrFail = YES;
       /* Items set off from their places and gather into a stack under the pointer. */
       session.draggingFormation = NSDraggingFormationStack;
+      own_drag_change_count = session.draggingPasteboard.changeCount;
       started = true;
     }
     free(image_data);
@@ -426,11 +433,58 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
   return started_value;
 }
 
+/* ── nativeReadDragPasteboard() ──────────────────────────────────── */
+
+/* What the drag going on now carries, read from the system's drag pasteboard: the files it
+   holds (file URLs only, references resolved to paths; promised files, text and links have
+   none), its change count, which every new drag changes, and whether it is this app's own.
+   Any window can read it while a drag is over it; the page itself only gets the files once
+   they are dropped. */
+static napi_value native_read_drag_pasteboard(napi_env env, napi_callback_info info) {
+  (void)info;
+  napi_value result;
+  napi_create_object(env, &result);
+  @autoreleasepool {
+    NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName:NSPasteboardNameDrag];
+    NSInteger change_count = pasteboard.changeCount;
+    NSArray *urls = [pasteboard readObjectsForClasses:@[ [NSURL class] ]
+                                              options:@{
+                                                NSPasteboardURLReadingFileURLsOnlyKey : @YES
+                                              }];
+    NSMutableOrderedSet<NSString *> *paths = [NSMutableOrderedSet orderedSet];
+    for (NSURL *url in urls) {
+      /* Finder hands out file reference URLs (file:///.file/id=…); the path is what counts. */
+      NSString *path = url.filePathURL.path;
+      if (path.length > 0) {
+        [paths addObject:path];
+      }
+    }
+
+    napi_value value;
+    napi_create_int64(env, (int64_t)change_count, &value);
+    napi_set_named_property(env, result, "changeCount", value);
+    napi_get_boolean(env, change_count == own_drag_change_count, &value);
+    napi_set_named_property(env, result, "ownDrag", value);
+    napi_value list;
+    napi_create_array_with_length(env, paths.count, &list);
+    uint32_t index = 0;
+    for (NSString *path in paths) {
+      napi_create_string_utf8(env, path.UTF8String, NAPI_AUTO_LENGTH, &value);
+      napi_set_element(env, list, index++, value);
+    }
+    napi_set_named_property(env, result, "paths", list);
+  }
+  return result;
+}
+
 /* Called from the main module init in native_copyfile.c. */
 napi_value register_file_drag(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeStartFileDrag", NAPI_AUTO_LENGTH, native_start_file_drag,
                        NULL, &fn);
   napi_set_named_property(env, exports, "nativeStartFileDrag", fn);
+  napi_create_function(env, "nativeReadDragPasteboard", NAPI_AUTO_LENGTH,
+                       native_read_drag_pasteboard, NULL, &fn);
+  napi_set_named_property(env, exports, "nativeReadDragPasteboard", fn);
   return exports;
 }

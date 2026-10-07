@@ -18,7 +18,12 @@ import {
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
 import type { AppStateStore } from "./appStateStore";
 import { getDiskIds } from "./bootstrap/diskIds";
-import { findDraggedAway, startFileDrag } from "./bootstrap/fileDrag";
+import {
+  bringWindowToFront,
+  findDraggedAway,
+  readDraggedIn,
+  startFileDrag,
+} from "./bootstrap/fileDrag";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import {
   openReplaceJournal,
@@ -393,6 +398,8 @@ export async function bootstrapMainProcess(
       "system:getDiskIds": (payload) => getDiskIds(payload),
       "system:startFileDrag": (payload, event) => startFileDrag(payload, event),
       "system:findDraggedAway": (payload) => findDraggedAway(payload),
+      "system:readDraggedIn": () => readDraggedIn(),
+      "system:bringWindowToFront": (_payload, event) => bringWindowToFront(event),
       "system:pickApplication": (_payload, event) => pickApplication(event),
       "system:pickDirectory": (payload, event) => pickDirectory(payload, event),
       "system:openPathsWithApplication": (payload) => openPathsWithApplication(payload),

@@ -720,4 +720,13 @@ describe("describeDragRefusedWhileBusy", () => {
       "Can't drag while a folder is being made",
     );
   });
+
+  it("says a drop can't be made, for a drag from another app", () => {
+    expect(describeDragRefusedWhileBusy("paste", "/Users/demo/Photos", "drop")).toBe(
+      "Can't drop while “Photos” is being copied",
+    );
+    expect(describeDragRefusedWhileBusy("new_folder", null, "drop")).toBe(
+      "Can't drop while a folder is being made",
+    );
+  });
 });

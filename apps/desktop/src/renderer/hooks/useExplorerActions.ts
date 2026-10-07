@@ -488,6 +488,8 @@ export function useExplorerActions(args: {
     null,
   );
   const moveOperationSourceSurfaceRef = useRef(new Map<string, InternalMoveSourceSurface>());
+  // Copies and moves of items dropped from another app: told of only when not on screen.
+  const externalDropOperationIdsRef = useRef(new Set<string>());
   const restartActiveSearchRef = useRef(restartActiveSearch ?? null);
   const writeOperationCardStateRef = useRef<WriteOperationCardState | null>(
     writeOperationCardState,
@@ -885,6 +887,7 @@ export function useExplorerActions(args: {
       ) {
         const sourceSurface = moveOperationSourceSurfaceRef.current.get(event.operationId);
         moveOperationSourceSurfaceRef.current.delete(event.operationId);
+        const fromExternalDrop = externalDropOperationIdsRef.current.delete(event.operationId);
         // Another tab may be on screen by now. Its folder is still read again, but what
         // the operation leaves selected belongs to the tab it was started from.
         const startedInTabOnScreen =
@@ -947,7 +950,9 @@ export function useExplorerActions(args: {
           setWriteOperationProgressEvent(event);
         } else {
           setWriteOperationProgressEvent(null);
-          pushTerminalCopyPasteToast(event);
+          pushTerminalCopyPasteToast(event, {
+            quietOnScreen: fromExternalDrop && startedInTabOnScreen,
+          });
         }
         const nextPath = event.result
           ? resolveWriteOperationRefreshPath(event.result, currentPathRef.current)
@@ -1198,16 +1203,17 @@ export function useExplorerActions(args: {
     setWriteOperationCardState(nextState);
   }
 
-  // A drag doesn't start while an operation runs; the notification says why, so the rows
-  // don't just seem not to move.
-  function noticeDragRefusedWhileBusy() {
+  // A drag doesn't start while an operation runs, and one from another app can't be
+  // dropped; the notification says why, so the rows don't just seem not to move, and the
+  // drop doesn't just seem to go nowhere.
+  function noticeDragRefusedWhileBusy(gesture: "drag" | "drop" = "drag") {
     const card = writeOperationCardStateRef.current;
     if (!card) {
       return;
     }
     pushToast({
       kind: "info",
-      title: describeDragRefusedWhileBusy(card.action, card.currentSourcePath),
+      title: describeDragRefusedWhileBusy(card.action, card.currentSourcePath, gesture),
     });
   }
 
@@ -1408,9 +1414,21 @@ export function useExplorerActions(args: {
     return itemCount <= 1 ? name : `${name} and ${itemCount - 1} more`;
   }
 
-  function pushTerminalCopyPasteToast(event: WriteOperationProgressEvent) {
+  function pushTerminalCopyPasteToast(
+    event: WriteOperationProgressEvent,
+    options: { quietOnScreen?: boolean } = {},
+  ) {
     const result = event.result;
     if (!result) {
+      return;
+    }
+    // Items dropped from another app into the folder on screen are in sight there.
+    if (
+      options.quietOnScreen &&
+      event.status === "completed" &&
+      !isSearchModeRef.current &&
+      result.targetPath === currentPathRef.current
+    ) {
       return;
     }
     if (event.action === "undo" || event.action === "redo") {
@@ -1673,6 +1691,9 @@ export function useExplorerActions(args: {
       });
       if (action === "move_to" && sourceSurface) {
         moveOperationSourceSurfaceRef.current.set(response.operationId, sourceSurface);
+      }
+      if (sourceSurface === "external") {
+        externalDropOperationIdsRef.current.add(response.operationId);
       }
       // Like Finder: copied items stay on the clipboard for more pastes; cut items are
       // cleared once something was actually moved.
@@ -3215,6 +3236,7 @@ export function useExplorerActions(args: {
       action: "copy_to",
       pasteAttemptId,
       clearClipboardOnStart: false,
+      sourceSurface: options.sourceSurface ?? null,
       pendingTreeSelectionPath: options.pendingTreeSelectionPath ?? null,
       initiator: options.initiator ?? null,
       defaultPolicy: DEFAULT_COPY_PASTE_POLICY,

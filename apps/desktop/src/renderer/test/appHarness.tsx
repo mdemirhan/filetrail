@@ -273,6 +273,10 @@ export function createAppHarness(
   releaseSearchUpdates: () => void;
   // Ends the oldest system file drag still going, as the drop or cancel reported it.
   endFileDrag: (operation: IpcResponse<"system:startFileDrag">["operation"]) => void;
+  // What a drag from another app over the window carries, from now on.
+  setDraggedIn: (contents: IpcResponse<"system:readDraggedIn">) => void;
+  // Whether the window is in front, as asking it to come forward finds.
+  setWindowComesToFront: (comes: boolean) => void;
   // Another app has moved these items away: they are no longer where they were.
   markGoneFromDisk: (paths: string[]) => void;
   resolveCopyPastePlan: () => void;
@@ -322,6 +326,12 @@ export function createAppHarness(
   // System file drags still going, oldest first; each ends when the test says.
   const fileDragEnds: Array<(response: IpcResponse<"system:startFileDrag">) => void> = [];
   const goneFromDisk = new Set<string>();
+  let draggedIn: IpcResponse<"system:readDraggedIn"> = {
+    changeCount: 0,
+    ownDrag: false,
+    items: [],
+  };
+  let windowComesToFront = true;
   const heldSearchUpdates = args.holdSearchUpdates
     ? new Promise<void>((resolve) => {
         releaseSearchUpdates = resolve;
@@ -697,6 +707,12 @@ export function createAppHarness(
           fileDragEnds.push((response) => resolve(response as IpcResponse<C>));
         });
       }
+      if (channel === "system:readDraggedIn") {
+        return draggedIn as IpcResponse<C>;
+      }
+      if (channel === "system:bringWindowToFront") {
+        return { focused: windowComesToFront } as IpcResponse<C>;
+      }
       if (channel === "system:findDraggedAway") {
         const { paths } = payload as IpcRequestInput<"system:findDraggedAway">;
         return { gone: paths.filter((path) => goneFromDisk.has(path)) } as IpcResponse<C>;
@@ -856,6 +872,12 @@ export function createAppHarness(
     },
     endFileDrag(operation) {
       fileDragEnds.shift()?.({ started: true, operation });
+    },
+    setDraggedIn(contents) {
+      draggedIn = contents;
+    },
+    setWindowComesToFront(comes) {
+      windowComesToFront = comes;
     },
     markGoneFromDisk(paths) {
       for (const path of paths) {

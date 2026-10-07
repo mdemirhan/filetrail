@@ -1104,6 +1104,9 @@ export function App() {
       void navigateTo(homePath, "push");
     }
   }, [volumes, leaveUnmountedDisksInBackgroundTabs, navigateTo, homePath, currentPath]);
+  // A drop from another app is made while that app is in front. A question or an error about
+  // it brings the window forward, until its work is done or the window is in front anyway.
+  const externalDropInFlightRef = useRef(false);
   const dragDropBlocked =
     mainView !== "explorer" ||
     actionNotice !== null ||
@@ -1138,6 +1141,10 @@ export function App() {
     homePath,
     blocked: dragDropBlocked,
     onDropItems: async (sourcePaths, destinationDirectoryPath, { operation, ...options }) => {
+      const fromOtherApp = options.sourceSurface === "external";
+      if (fromOtherApp) {
+        externalDropInFlightRef.current = true;
+      }
       // A copying drop copies into the folder the way a paste does; a moving one, the way a
       // cut and paste does. Each is named for what it is, not for the paste it works like.
       const action = operation === "copy" ? "copy_to" : "move_to";
@@ -1147,6 +1154,9 @@ export function App() {
           : await startMoveToDestination(sourcePaths, destinationDirectoryPath, options);
       if (outcome.status === "blocked" || outcome.status === "error") {
         surfaceCopyLikePreStartFailureNotice(action, outcome);
+      }
+      if (fromOtherApp && outcome.status === "cancelled") {
+        externalDropInFlightRef.current = false;
       }
       return outcome.status === "queued" || outcome.status === "review";
     },
@@ -1192,12 +1202,37 @@ export function App() {
       folderSizeCache.forgetChangedSizes(gonePaths, { intoTrash });
       followItemsGoneElsewhere(gonePaths);
     },
-    onDragRefused: () => {
+    onDragRefused: (gesture) => {
       if (isWriteOperationLocked) {
-        noticeDragRefusedWhileBusy();
+        noticeDragRefusedWhileBusy(gesture);
       }
     },
+    // Files dragged in from Finder and other apps, read from the drag as it comes in.
+    readDraggedIn: () => client.invoke("system:readDraggedIn", {}),
+    contentShowsSearchResults: isSearchMode,
   });
+  const dropDialogOpen = copyPasteModalOpen || actionNotice !== null;
+  useEffect(() => {
+    if (!externalDropInFlightRef.current) {
+      return;
+    }
+    if (dropDialogOpen) {
+      if (!document.hasFocus()) {
+        void client.invoke("system:bringWindowToFront", {}).catch(() => undefined);
+      }
+      return;
+    }
+    if (!isWriteOperationLocked && copyPasteDialogState === null) {
+      externalDropInFlightRef.current = false;
+    }
+  }, [client, dropDialogOpen, isWriteOperationLocked, copyPasteDialogState]);
+  useEffect(() => {
+    const forgetDrop = () => {
+      externalDropInFlightRef.current = false;
+    };
+    window.addEventListener("focus", forgetDrop);
+    return () => window.removeEventListener("focus", forgetDrop);
+  }, []);
   // A change made outside the app to the folder on screen shows without a refresh. It waits
   // while the person is in the middle of something the list changing under would upset.
   useFolderWatch({
@@ -2156,14 +2191,15 @@ export function App() {
                     ? handleSearchDragStart(entry, "search", event)
                     : handleContentDragStart(entry, "content", event),
                 onItemDragEnd: handleDragEnd,
+                // Folders in search results take drops from other apps.
+                onItemDragEnter: handleContentDragEnter,
+                onItemDragOver: handleContentDragOver,
+                onItemDragLeave: handleContentDragLeave,
+                onItemDrop: handleContentDrop,
+                getItemDropIndicator: getContentItemDropIndicator,
                 ...(isSearchMode
                   ? {}
                   : {
-                      onItemDragEnter: handleContentDragEnter,
-                      onItemDragOver: handleContentDragOver,
-                      onItemDragLeave: handleContentDragLeave,
-                      onItemDrop: handleContentDrop,
-                      getItemDropIndicator: getContentItemDropIndicator,
                       onBackgroundDragOver: handleContentBackgroundDragOver,
                       onBackgroundDragLeave: handleContentBackgroundDragLeave,
                       onBackgroundDrop: handleContentBackgroundDrop,

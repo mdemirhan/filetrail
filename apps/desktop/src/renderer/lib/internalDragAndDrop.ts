@@ -2,7 +2,8 @@ import { parentDirectoryPath } from "./explorerNavigation";
 import type { DirectoryEntry } from "./explorerTypes";
 import { isOnSameVolume } from "./volumes";
 
-export type InternalMoveSourceSurface = "content" | "search";
+// "external" is a drag from Finder or another app, its items read from the drag itself.
+export type InternalMoveSourceSurface = "content" | "search" | "external";
 // "tab" is a tab in the strip: what is dropped on it goes into the folder the tab is on.
 export type InternalDropTargetSurface = "content" | "tree" | "favorite" | "tab";
 
@@ -101,6 +102,30 @@ export function resolveInternalDropOperation(args: {
   }
   // Search results can come from several disks; they move only if all are on the target's.
   return args.sourcePaths.every((path) => isOnSameVolume(path, args.targetPath)) ? "move" : "copy";
+}
+
+// What another app's drag allows (`effectAllowed`), from what that app offers and the keys
+// held. One that offers no move (Mail and some editors offer copies only) gets a copy,
+// without a question, as Finder does; a move it didn't offer would be refused.
+const EFFECTS_WITH_MOVE = new Set(["move", "copyMove", "linkMove", "all", "uninitialized"]);
+
+export function allowedBySource(
+  operation: InternalDropOperation,
+  effectAllowed: string | undefined,
+): InternalDropOperation {
+  if (
+    operation === "move" &&
+    effectAllowed !== undefined &&
+    !EFFECTS_WITH_MOVE.has(effectAllowed)
+  ) {
+    return "copy";
+  }
+  return operation;
+}
+
+// A drag of files, from this app or another: the page sees "Files" among its types.
+export function isFileDrag(dataTransfer: Pick<DataTransfer, "types"> | null): boolean {
+  return dataTransfer !== null && Array.from(dataTransfer.types ?? []).includes("Files");
 }
 
 // The folders that hold the dragged items: which disk an item is on is the disk of its

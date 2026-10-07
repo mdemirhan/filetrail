@@ -997,3 +997,56 @@ describe("nativeStartFileDrag", () => {
     expect(() => start(noView, ["/tmp/a.txt"], [], "callback")).toThrow(TypeError);
   });
 });
+
+describe("nativeReadDragPasteboard", () => {
+  // Writes the system's drag pasteboard as another app's drag would: through AppKit, from
+  // a process of its own.
+  function writeDragPasteboard(script: string): number {
+    const output = execFileSync("osascript", [
+      "-l",
+      "JavaScript",
+      "-e",
+      `ObjC.import("AppKit");
+       const pasteboard = $.NSPasteboard.pasteboardWithName($.NSPasteboardNameDrag);
+       pasteboard.clearContents;
+       ${script};
+       pasteboard.changeCount;`,
+    ]);
+    return Number(output.toString().trim());
+  }
+
+  it("reads the files another app's drag carries, file references as paths", () => {
+    const dir = mkdtempSync(join(tmpdir(), "filetrail-drag-pasteboard-"));
+    try {
+      const file = join(dir, "a b.txt");
+      const folder = join(dir, "Folder");
+      writeFileSync(file, "a");
+      mkdirSync(folder);
+      const changeCount = writeDragPasteboard(
+        `pasteboard.writeObjects($([
+           $.NSURL.fileURLWithPath(${JSON.stringify(file)}).fileReferenceURL,
+           $.NSURL.fileURLWithPath(${JSON.stringify(folder)}),
+           $.NSURL.fileURLWithPath(${JSON.stringify(folder)}),
+           $.NSURL.URLWithString("https://example.com/"),
+         ]))`,
+      );
+
+      const contents = addon.nativeReadDragPasteboard();
+
+      // A reference names the file where it really is (/var is /private/var).
+      expect(contents.paths).toEqual([execFileSync("realpath", [file]).toString().trim(), folder]);
+      expect(contents.changeCount).toBe(changeCount);
+      expect(contents.ownDrag).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("finds no files in a drag of text", () => {
+    const changeCount = writeDragPasteboard(
+      `pasteboard.setStringForType($("some text"), $.NSPasteboardTypeString)`,
+    );
+
+    expect(addon.nativeReadDragPasteboard()).toEqual({ changeCount, ownDrag: false, paths: [] });
+  });
+});

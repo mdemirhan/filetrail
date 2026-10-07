@@ -278,22 +278,25 @@ export function resolveNewFolderTargetPath(args: {
 export function describeDragRefusedWhileBusy(
   action: WriteOperationAction,
   currentSourcePath: string | null,
+  // A drag of the app's own that didn't start, or one from another app that can't drop.
+  gesture: "drag" | "drop" = "drag",
 ): string {
   const subject = currentSourcePath ? `“${getPathLeafName(currentSourcePath)}” is` : "items are";
+  const refused = `Can't ${gesture} while`;
   switch (action) {
     case "move_to":
-      return `Can't drag while ${subject} being moved`;
+      return `${refused} ${subject} being moved`;
     case "trash":
-      return `Can't drag while ${subject} being moved to the Trash`;
+      return `${refused} ${subject} being moved to the Trash`;
     case "delete_immediately":
-      return `Can't drag while ${subject} being deleted`;
+      return `${refused} ${subject} being deleted`;
     case "rename":
     case "batch_rename":
-      return `Can't drag while ${subject} being renamed`;
+      return `${refused} ${subject} being renamed`;
     case "new_folder":
-      return "Can't drag while a folder is being made";
+      return `${refused} a folder is being made`;
     default:
-      return `Can't drag while ${subject} being copied`;
+      return `${refused} ${subject} being copied`;
   }
 }
 

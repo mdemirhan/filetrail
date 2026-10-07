@@ -407,6 +407,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "Drag items out of File Trail as you would from Finder: into a Finder window or the desktop, onto an app in the Dock to open them, into an email or a message to attach them, or onto the Trash in the Dock. Finder moves or copies them by the same rules; holding Option and Command makes an alias.",
           },
           {
+            label: "From other apps",
+            description:
+              "Drag files and folders in from Finder or another app: drop them anywhere in the folder on screen, or on a folder in the list, the sidebar or search results, or on a tab. They move or copy by the same rules as a drag inside File Trail, and Option copies; an app that only lets its items be copied gets a copy. Command doesn't work for these drags: let go of it before you drop. Mail attachments, photos from Photos, text and links can't be dropped. Undo takes a drop back like any other move or copy.",
+          },
+          {
             label: "Same name",
             description:
               "If an item already exists, you choose: Skip, Keep Both or Replace, and for a folder being copied, Add Missing, which copies only what the folder there lacks. Replaced items go to the Trash.",
