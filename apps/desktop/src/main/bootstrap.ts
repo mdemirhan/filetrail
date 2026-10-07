@@ -116,6 +116,7 @@ export async function bootstrapMainProcess(
     ) => void;
     // Closes the other explorer windows and returns their tabs.
     mergeExplorerWindows?: (senderId: number | null) => OpenTabPreference[];
+    explorerWindowCount?: () => number;
     // The explorer window a running operation goes to when the one that started it closes.
     successorWindowOf?: (senderId: number) => WebContents | null;
   } = {},
@@ -313,6 +314,7 @@ export async function bootstrapMainProcess(
         );
         return { ok: windows.openExplorerWindow !== undefined };
       },
+      "app:getExplorerWindowCount": () => ({ count: windows.explorerWindowCount?.() ?? 1 }),
       "app:mergeAllWindows": (_payload, event) => ({
         tabs: windows.mergeExplorerWindows?.(event?.sender?.id ?? null) ?? [],
       }),

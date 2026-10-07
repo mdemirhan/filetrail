@@ -238,6 +238,7 @@ if (hasSingleInstanceLock) {
           openExplorerWindow: (senderId, tabs, activeTabIndex) =>
             openExplorerWindowFrom(senderId, tabs, activeTabIndex),
           mergeExplorerWindows: (senderId) => mergeExplorerWindowsInto(senderId),
+          explorerWindowCount: () => explorerWindows.count,
           successorWindowOf: (senderId) => {
             const successor = explorerWindows
               .all()

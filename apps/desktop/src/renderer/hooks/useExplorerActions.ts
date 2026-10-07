@@ -846,10 +846,13 @@ export function useExplorerActions(args: {
     window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("scroll", closeMenu, true);
     window.addEventListener("resize", closeMenu);
+    // Another window or app was clicked, as a native menu closes then.
+    window.addEventListener("blur", closeMenu);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("scroll", closeMenu, true);
       window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("blur", closeMenu);
     };
   }, [contextMenuState, setContextMenuState]);
 

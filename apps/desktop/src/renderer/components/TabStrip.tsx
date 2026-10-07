@@ -10,7 +10,7 @@ import { ToolbarIcon } from "./ToolbarIcon";
 // How far a tab is dragged before it starts moving along the row; less than that is a click.
 const TAB_DRAG_THRESHOLD_PX = 6;
 
-type TabMenuAction = "close" | "closeOthers" | "duplicate";
+type TabMenuAction = "close" | "closeOthers" | "duplicate" | "moveToNewWindow" | "mergeAll";
 
 // The row of tabs under the toolbar. It is only shown while there is more than one tab.
 export function TabStrip({
@@ -19,6 +19,9 @@ export function TabStrip({
   onCloseTab,
   onCloseOtherTabs,
   onDuplicateTab,
+  onMoveTabToNewWindow,
+  onMergeAllWindows,
+  countWindows,
   onMoveTab,
   onNewTab,
   onItemDragOver,
@@ -31,6 +34,10 @@ export function TabStrip({
   onCloseTab: (tabId: string) => void;
   onCloseOtherTabs: (tabId: string) => void;
   onDuplicateTab: (tabId: string) => void;
+  onMoveTabToNewWindow: (tabId: string) => void;
+  onMergeAllWindows: () => void;
+  /** How many windows are open: merging needs another one. */
+  countWindows: () => Promise<number>;
   /** A tab was dragged over the place of another one. */
   onMoveTab: (tabId: string, toIndex: number) => void;
   onNewTab: () => void;
@@ -46,6 +53,8 @@ export function TabStrip({
   // The click that ends a drag along the row must not also select the tab.
   const draggedRef = useRef(false);
   const [menu, setMenu] = useState<{ tabId: string; left: number; top: number } | null>(null);
+  // Whether there is another window to merge with, asked each time the menu opens.
+  const [canMerge, setCanMerge] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   useKeepInViewport(menuRef, menu !== null);
 
@@ -111,6 +120,10 @@ export function TabStrip({
       onCloseTab(tabId);
     } else if (action === "closeOthers") {
       onCloseOtherTabs(tabId);
+    } else if (action === "moveToNewWindow") {
+      onMoveTabToNewWindow(tabId);
+    } else if (action === "mergeAll") {
+      onMergeAllWindows();
     } else {
       onDuplicateTab(tabId);
     }
@@ -145,6 +158,10 @@ export function TabStrip({
             onContextMenu={(event) => {
               event.preventDefault();
               setMenu({ tabId: tab.id, left: event.clientX, top: event.clientY });
+              setCanMerge(false);
+              void countWindows()
+                .then((count) => setCanMerge(count > 1))
+                .catch(() => undefined);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -255,19 +272,27 @@ export function TabStrip({
                   ["close", "Close Tab"],
                   ["closeOthers", "Close Other Tabs"],
                   ["duplicate", "Duplicate Tab"],
+                  null,
+                  ["moveToNewWindow", "Move Tab to New Window"],
+                  ["mergeAll", "Merge All Windows"],
                 ] as const
-              ).map(([action, label]) => (
-                <button
-                  key={action}
-                  type="button"
-                  className="toolbar-menu-item"
-                  role="menuitem"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => runMenuAction(action)}
-                >
-                  <span className="toolbar-menu-label">{label}</span>
-                </button>
-              ))}
+              ).map((entry) =>
+                entry === null ? (
+                  <hr key="separator-windows" className="toolbar-menu-separator" />
+                ) : (
+                  <button
+                    key={entry[0]}
+                    type="button"
+                    className="toolbar-menu-item"
+                    role="menuitem"
+                    disabled={entry[0] === "mergeAll" && !canMerge}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => runMenuAction(entry[0])}
+                  >
+                    <span className="toolbar-menu-label">{entry[1]}</span>
+                  </button>
+                ),
+              )}
             </div>,
             document.body,
           )

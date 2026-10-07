@@ -614,14 +614,19 @@ export function useExplorerTabs(args: {
     openWindowWithTab({ ...liveTabPreference, path, favoritePath: null });
   }
 
-  // Window › Move Tab to New Window: the tab on screen leaves for a window of its own. Its
-  // folder, tree and view go along; its history and search don't.
-  function moveTabToNewWindow() {
-    if (!canChangeTabs() || stateRef.current.tabs.length < 2) {
+  // Move Tab to New Window: a tab (the one on screen, from the Window menu) leaves for a
+  // window of its own. Its folder, tree and view go along; its history and search don't.
+  function moveTabToNewWindow(tabId: string = stateRef.current.activeTabId) {
+    const current = stateRef.current;
+    const moving = current.tabs.find((tab) => tab.id === tabId);
+    if (!moving || !canChangeTabs() || current.tabs.length < 2) {
       return;
     }
-    const movedTabId = stateRef.current.activeTabId;
-    openWindowWithTab(liveTabPreference, () => closeTab(movedTabId, { remember: false }));
+    const tab =
+      tabId === current.activeTabId || !moving.snapshot
+        ? liveTabPreference
+        : toOpenTabPreference(moving.snapshot);
+    openWindowWithTab(tab, () => closeTab(tabId, { remember: false }));
   }
 
   function openWindowWithTab(tab: OpenTabPreference, onOpened?: () => void) {

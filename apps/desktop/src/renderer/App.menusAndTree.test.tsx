@@ -1190,7 +1190,7 @@ describe("App copy/paste integration", () => {
     }
   });
 
-  it("shows tree-safe shortcut badges for right-clicked tree and favorite targets even when Favorites is selected", async () => {
+  it("shows tree-safe shortcut badges for right-clicked tree and favorite targets after the Favorites heading is clicked", async () => {
     for (const targetTitle of ["tree:/Users/demo/Folder", "favorite:/Users/demo/Documents"]) {
       const harness = createAppHarness({
         directorySnapshots: {
@@ -1212,7 +1212,7 @@ describe("App copy/paste integration", () => {
       await act(async () => {
         fireEvent.click(favoritesRootButton);
       });
-      expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
+      expect(screen.getByTestId("tree-selection")).not.toHaveTextContent("favorites-root");
 
       const targetButton = await screen.findByTitle(targetTitle);
       await act(async () => {
@@ -1855,34 +1855,55 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("clears the content pane when the integrated Favorites root is selected", async () => {
-    const harness = createAppHarness();
+  it.each(["integrated", "separate"] as const)(
+    "opens and closes the Favorites heading on a click, leaving the folder on screen (%s)",
+    async (favoritesPlacement) => {
+      const harness = createAppHarness({ preferences: { favoritesPlacement } });
 
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
+      render(
+        <FiletrailClientProvider value={harness.client}>
+          <App />
+        </FiletrailClientProvider>,
+      );
 
-    await screen.findByTestId("content-pane");
-    expect(screen.getByTitle("/Users/demo/source.txt")).toBeInTheDocument();
+      await screen.findByTestId("content-pane");
+      expect(await screen.findByTitle("/Users/demo/source.txt")).toBeInTheDocument();
+      const savedExpanded = () =>
+        harness.invocations
+          .filter((call) => call.channel === "app:updatePreferences")
+          .map(
+            (call) =>
+              (call.payload as { preferences: { favoritesExpanded?: boolean } }).preferences
+                .favoritesExpanded,
+          )
+          .filter((value) => value !== undefined)
+          .at(-1);
 
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("favorites-root"));
-    });
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("favorites-root"));
+      });
 
-    await vi.waitFor(() => {
-      expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
-      expect(screen.getByTestId("content-current-path")).toHaveTextContent("");
-      expect(screen.getByTestId("content-entry-count")).toHaveTextContent("0");
-      expect(screen.queryByTitle("/Users/demo/source.txt")).not.toBeInTheDocument();
-    });
-  });
+      // It is never selected, and the folder, its items and its history stay.
+      await vi.waitFor(() => expect(savedExpanded()).toBe(false));
+      expect(screen.getByTestId("tree-selection")).not.toHaveTextContent("favorites-root");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+      expect(screen.getByTitle("/Users/demo/source.txt")).toBeInTheDocument();
 
-  it("keeps the separate favorites subview active and clears content when Favorites is selected", async () => {
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("favorites-root"));
+      });
+      await vi.waitFor(() => expect(savedExpanded()).toBe(true));
+    },
+  );
+
+  it("goes past the Favorites and Locations headings with the arrow keys", async () => {
     const harness = createAppHarness({
-      preferences: {
-        favoritesPlacement: "separate",
+      directorySnapshots: {
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
       },
     });
 
@@ -1892,17 +1913,22 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    await screen.findByTestId("content-pane");
+    const favorite = await screen.findByTitle("favorite:/Users/demo/Documents");
     await act(async () => {
-      fireEvent.click(screen.getByTestId("favorites-root"));
+      fireEvent.click(favorite);
     });
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Documents"),
+    );
+    await focusTreePane();
 
-    await vi.waitFor(() => {
-      expect(screen.getByTestId("left-pane-subview")).toHaveTextContent("favorites");
-      expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
-      expect(screen.getByTestId("content-current-path")).toHaveTextContent("");
-      expect(screen.getByTestId("content-entry-count")).toHaveTextContent("0");
-    });
+    for (const key of ["ArrowLeft", "ArrowUp", "ArrowUp", "Home", "ArrowLeft"]) {
+      await act(async () => {
+        fireEvent.keyDown(window, { key });
+      });
+      expect(screen.getByTestId("tree-selection")).not.toHaveTextContent(/-root$/);
+      expect(screen.getByTestId("content-current-path")).not.toHaveTextContent(/^$/);
+    }
   });
 
   it("copies the tree's folder with Cmd+C in tree focus, not a stale selection in the list", async () => {
@@ -1973,33 +1999,6 @@ describe("App copy/paste integration", () => {
         destinationDirectoryPath: "/Users/demo/Folder",
       });
     });
-  });
-
-  it("does not paste from the tree when the Favorites root is selected", async () => {
-    const harness = createAppHarness();
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    await selectItem("/Users/demo/source.txt");
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "c", metaKey: true });
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("favorites-root"));
-    });
-    expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "v", metaKey: true });
-      harness.emitCommand({ type: "editPaste" });
-    });
-
-    expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
-      false,
-    );
   });
 
   it("pastes into the folder on screen when no pane has focus, even with a folder selected", async () => {

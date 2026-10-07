@@ -256,6 +256,8 @@ export function createAppHarness(
     clipboard?: CopyPasteClipboard;
     // The tabs of the other windows, handed over by Merge All Windows.
     mergedTabs?: IpcResponse<"app:mergeAllWindows">["tabs"];
+    // How many explorer windows are open (left out: one).
+    explorerWindowCount?: number;
     // How the main process says the window was opened (see app:getLaunchContext).
     launchContext?: IpcResponse<"app:getLaunchContext">;
   } = {},
@@ -415,6 +417,9 @@ export function createAppHarness(
       }
       if (channel === "app:setClipboard" || channel === "app:openWindow") {
         return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "app:getExplorerWindowCount") {
+        return { count: args.explorerWindowCount ?? 1 } as IpcResponse<C>;
       }
       if (channel === "app:mergeAllWindows") {
         return { tabs: args.mergedTabs ?? [] } as IpcResponse<C>;

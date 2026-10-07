@@ -345,11 +345,14 @@ function FavoriteIconPicker({
       }
     };
     updatePopupPosition();
+    const closePopup = () => setOpen(false);
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("resize", updatePopupPosition);
     window.addEventListener("scroll", updatePopupPosition, true);
     window.addEventListener("keydown", handleEscape, true);
+    window.addEventListener("blur", closePopup);
     return () => {
+      window.removeEventListener("blur", closePopup);
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("resize", updatePopupPosition);
       window.removeEventListener("scroll", updatePopupPosition, true);
@@ -910,11 +913,14 @@ function useSettingsMenu(
         items[next]?.focus();
       }
     };
+    const closeOnBlur = () => close(false);
     window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("blur", closeOnBlur);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("blur", closeOnBlur);
     };
   }, [anchorRef, close, open]);
 

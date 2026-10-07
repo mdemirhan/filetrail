@@ -314,7 +314,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Closing",
             description:
-              "{closeTab} closes the tab, and the window when a single view is left. {reopenClosedTab} brings back the tab closed last. Right-click a tab for Close Other Tabs and Duplicate Tab.",
+              "{closeTab} closes the tab, and the window when a single view is left. {reopenClosedTab} brings back the tab closed last. Right-click a tab for Close Other Tabs, Duplicate Tab, Move Tab to New Window and Merge All Windows.",
           },
           {
             label: "Between tabs",
@@ -345,7 +345,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Moving tabs",
             description:
-              "Window > Move Tab to New Window gives the tab on screen a window of its own; it keeps its folder and view, but not its Back and Forward history. Window > Merge All Windows brings the tabs of every other window into this one and closes the others.",
+              "Window > Move Tab to New Window, or the same item in a tab's right-click menu, gives the tab a window of its own; it keeps its folder and view, but not its Back and Forward history. Window > Merge All Windows brings the tabs of every other window into this one and closes the others.",
           },
           {
             label: "Between windows",

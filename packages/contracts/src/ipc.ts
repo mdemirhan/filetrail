@@ -861,6 +861,11 @@ export const ipcContractSchemas = {
     }),
     response: z.object({ ok: z.boolean() }),
   },
+  // How many explorer windows are open: Merge All Windows needs two.
+  "app:getExplorerWindowCount": {
+    request: emptyRequestSchema,
+    response: z.object({ count: z.number().int().nonnegative() }),
+  },
   // Merge All Windows: the other windows close, and their tabs are handed to the window
   // asking, front window's first.
   "app:mergeAllWindows": {

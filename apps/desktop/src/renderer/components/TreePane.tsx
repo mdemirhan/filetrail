@@ -70,6 +70,10 @@ type FavoriteReorder = {
 
 const FavoriteReorderContext = createContext<FavoriteReorder | null>(null);
 
+// How long after a folder or section is opened or closed by hand its rows may still change
+// (a folder being read) without the sidebar scrolling to the selected item.
+const HAND_TOGGLE_SETTLE_MS = 1500;
+
 export function TreePane({
   paneRef,
   isFocused,
@@ -89,21 +93,20 @@ export function TreePane({
   onLeftPaneSubviewChange,
   onClearSelection,
   includeHidden,
-  onToggleExpand,
+  onToggleExpand: onToggleExpandProp,
   onNavigate,
   onNavigateFavorite,
   onOpenInNewTab,
-  onSelectFavoritesRoot,
   onItemContextMenu,
   contextMenuTarget = null,
   onItemDragEnter,
   onItemDragOver,
   onItemDrop,
   getItemDropIndicator,
-  onToggleFavoritesExpanded,
+  onToggleFavoritesExpanded: onToggleFavoritesExpandedProp,
   locations = [],
   locationsExpanded = true,
-  onToggleLocationsExpanded = () => undefined,
+  onToggleLocationsExpanded: onToggleLocationsExpandedProp = () => undefined,
   onSelectItem,
   onReorderFavorites,
   typeaheadQuery,
@@ -133,7 +136,6 @@ export function TreePane({
   onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
   /** ⌘-click on a folder or a favorite. */
   onOpenInNewTab?: ((path: string) => void) | undefined;
-  onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
   onItemContextMenu?:
     | ((
         item: TreePresentationItem,
@@ -288,6 +290,27 @@ export function TreePane({
   // Read when the rows change, not watched: letting go of the hold scrolls nothing by itself.
   const holdScrollPositionRef = useRef(holdScrollPosition);
   holdScrollPositionRef.current = holdScrollPosition;
+  // A folder or a section opened or closed by hand: the rows move, but the sidebar stays
+  // where it is scrolled rather than going back to the selected item, as Finder's does. A
+  // folder not read yet shows its rows once they are read, so this lasts a moment rather
+  // than one render.
+  const handToggleTimerRef = useRef<number | null>(null);
+  const toggledByHand =
+    <Args extends unknown[]>(toggle: (...args: Args) => void) =>
+    (...args: Args) => {
+      if (handToggleTimerRef.current !== null) {
+        window.clearTimeout(handToggleTimerRef.current);
+      }
+      handToggleTimerRef.current = window.setTimeout(() => {
+        handToggleTimerRef.current = null;
+      }, HAND_TOGGLE_SETTLE_MS);
+      toggle(...args);
+    };
+  const onToggleExpand = toggledByHand(onToggleExpandProp);
+  const onToggleFavoritesExpanded = toggledByHand(onToggleFavoritesExpandedProp);
+  const onToggleLocationsExpanded = toggledByHand(onToggleLocationsExpandedProp);
+  // The selected item the sidebar last brought into view.
+  const lastRevealedItemIdRef = useRef(selectedTreeItemId);
   const treeVisibilityVersion = useMemo(
     () =>
       [
@@ -315,6 +338,9 @@ export function TreePane({
       if (scrollFrameRef.current !== null) {
         window.cancelAnimationFrame(scrollFrameRef.current);
       }
+      if (handToggleTimerRef.current !== null) {
+        window.clearTimeout(handToggleTimerRef.current);
+      }
     },
     [],
   );
@@ -333,6 +359,13 @@ export function TreePane({
     if (!selectedTreeItemId || holdScrollPositionRef.current) {
       return;
     }
+    if (
+      handToggleTimerRef.current !== null &&
+      lastRevealedItemIdRef.current === selectedTreeItemId
+    ) {
+      return;
+    }
+    lastRevealedItemIdRef.current = selectedTreeItemId;
     const currentRow = rowRefs.current[selectedTreeItemId];
     if (!currentRow || typeof currentRow.scrollIntoView !== "function") {
       return;
@@ -498,7 +531,6 @@ export function TreePane({
         onNavigate={onNavigate}
         onNavigateFavorite={onNavigateFavorite}
         onOpenInNewTab={onOpenInNewTab}
-        onSelectFavoritesRoot={onSelectFavoritesRoot}
         onItemContextMenu={onItemContextMenu}
         contextMenuTarget={contextMenuTarget}
         onItemDragEnter={onItemDragEnter}
@@ -541,7 +573,6 @@ export function TreePane({
           onNavigate={onNavigate}
           onNavigateFavorite={onNavigateFavorite}
           onOpenInNewTab={onOpenInNewTab}
-          onSelectFavoritesRoot={onSelectFavoritesRoot}
           onItemContextMenu={onItemContextMenu}
           contextMenuTarget={contextMenuTarget}
           getItemDropIndicator={getItemDropIndicator}
@@ -697,7 +728,6 @@ export function TreePane({
                   onNavigate={onNavigate}
                   onNavigateFavorite={onNavigateFavorite}
                   onOpenInNewTab={onOpenInNewTab}
-                  onSelectFavoritesRoot={onSelectFavoritesRoot}
                   onItemContextMenu={onItemContextMenu}
                   contextMenuTarget={contextMenuTarget}
                   onItemDragEnter={onItemDragEnter}
@@ -756,7 +786,6 @@ function TreeList({
   onNavigate,
   onNavigateFavorite,
   onOpenInNewTab,
-  onSelectFavoritesRoot,
   onItemContextMenu,
   contextMenuTarget = null,
   onItemDragEnter,
@@ -784,7 +813,6 @@ function TreeList({
   onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
   /** ⌘-click on a folder or a favorite. */
   onOpenInNewTab?: ((path: string) => void) | undefined;
-  onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
   onItemContextMenu?:
     | ((
         item: TreePresentationItem,
@@ -847,7 +875,6 @@ function TreeList({
               onNavigate={onNavigate}
               onNavigateFavorite={onNavigateFavorite}
               onOpenInNewTab={onOpenInNewTab}
-              onSelectFavoritesRoot={onSelectFavoritesRoot}
               onItemContextMenu={onItemContextMenu}
               contextMenuTarget={contextMenuTarget}
               onItemDragEnter={onItemDragEnter}
@@ -884,7 +911,6 @@ function TreeItemRow({
   onNavigate,
   onNavigateFavorite,
   onOpenInNewTab,
-  onSelectFavoritesRoot,
   onItemContextMenu,
   contextMenuTarget = null,
   onItemDragEnter,
@@ -911,7 +937,6 @@ function TreeItemRow({
   onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
   /** ⌘-click on a folder or a favorite. */
   onOpenInNewTab?: ((path: string) => void) | undefined;
-  onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
   onItemContextMenu?:
     | ((
         item: TreePresentationItem,
@@ -994,6 +1019,10 @@ function TreeItemRow({
       return;
     }
     onSubviewFocus();
+    // A heading is never selected.
+    if (isFavoritesRoot) {
+      return;
+    }
     if (metaKey && isCurrent) {
       setOptimisticSelectedItemId(null);
       return;
@@ -1004,8 +1033,17 @@ function TreeItemRow({
     setOptimisticSelectedItemId(item.id);
   }
 
-  function handleActivateClick(metaKey: boolean) {
+  // `clickCount` is 2 for the second click of a double-click.
+  function handleActivateClick(metaKey: boolean, clickCount = 1) {
     onSubviewFocus();
+    // A click on the Favorites or Locations heading opens or closes it; the folder on screen
+    // stays. The second click of a double-click doesn't undo the first.
+    if (isFavoritesRoot) {
+      if (clickCount <= 1) {
+        toggleSection();
+      }
+      return;
+    }
     if (metaKey && isCurrent) {
       if (clickTimeoutRef.current !== null) {
         window.clearTimeout(clickTimeoutRef.current);
@@ -1019,14 +1057,6 @@ function TreeItemRow({
       onOpenInNewTab?.(itemPath);
       return;
     }
-    if (isLocationsRoot) {
-      onSelectItem?.(item.id);
-      return;
-    }
-    if (isFavoritesRoot) {
-      onSelectFavoritesRoot?.();
-      return;
-    }
     if (clickTimeoutRef.current !== null) {
       window.clearTimeout(clickTimeoutRef.current);
     }
@@ -1038,8 +1068,8 @@ function TreeItemRow({
 
   function handleActivateDoubleClick() {
     onSubviewFocus();
+    // Its clicks have already opened or closed it.
     if (isFavoritesRoot) {
-      toggleSection();
       return;
     }
     if (clickTimeoutRef.current !== null) {
@@ -1177,7 +1207,7 @@ function TreeItemRow({
           if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
             return;
           }
-          handleActivateClick(event.metaKey);
+          handleActivateClick(event.metaKey, event.detail);
         }}
         onDoubleClick={(event) => {
           const target = event.target;
@@ -1241,7 +1271,7 @@ function TreeItemRow({
           onPointerDown={(event) =>
             handleActivatePointerDown(event.metaKey, event.button, event.ctrlKey)
           }
-          onClick={(event) => handleActivateClick(event.metaKey)}
+          onClick={(event) => handleActivateClick(event.metaKey, event.detail)}
           onDoubleClick={() => {
             handleActivateDoubleClick();
           }}

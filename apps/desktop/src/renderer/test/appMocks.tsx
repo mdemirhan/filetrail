@@ -279,7 +279,6 @@ export const treePaneMock = () => ({
     onLeftPaneSubviewChange,
     onNavigate,
     onNavigateFavorite,
-    onSelectFavoritesRoot,
     onClearSelection,
     onItemContextMenu,
     onItemDragEnter,
@@ -307,7 +306,6 @@ export const treePaneMock = () => ({
     onNavigate: (path: string) => Promise<boolean> | undefined;
     onNavigateFavorite: (path: string) => Promise<boolean> | undefined;
     onSelectItem?: (itemId: string) => Promise<unknown> | undefined;
-    onSelectFavoritesRoot?: () => Promise<boolean> | undefined;
     onClearSelection?: () => void;
     onItemContextMenu?: (
       item: {
@@ -446,9 +444,8 @@ export const treePaneMock = () => ({
         type="button"
         data-testid="favorites-root"
         onClick={() => {
-          onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
           onFocusChange(true);
-          void onSelectFavoritesRoot?.();
+          onToggleFavoritesExpanded?.();
         }}
       >
         Favorites

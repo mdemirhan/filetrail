@@ -169,11 +169,14 @@ export function SearchOptionsMenu({
         setOpen(false);
       }
     };
+    const closeOnBlur = () => close(false);
     window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("blur", closeOnBlur);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("blur", closeOnBlur);
     };
   }, [inputRef, open]);
 

@@ -154,6 +154,65 @@ describe("App windows", () => {
     expect(tabLabels()).toEqual([]);
   });
 
+  describe("the tab's menu", () => {
+    async function openTabMenu(index: number) {
+      await act(async () => {
+        fireEvent.contextMenu(screen.getAllByRole("tab")[index] as HTMLElement);
+      });
+    }
+
+    it("moves the tab it was opened on to a new window, even one in the background", async () => {
+      const harness = createAppHarness();
+      await ready(harness);
+      await pressKey({ key: "t", metaKey: true });
+      await openDirectory("/Users/demo/Folder");
+
+      // The first tab, in the background.
+      await openTabMenu(0);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Move Tab to New Window" }));
+      });
+
+      await waitFor(() => expect(tabLabels()).toEqual([]));
+      expect(openWindowRequests(harness)[0]?.tabs[0]?.path).toBe("/Users/demo");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    });
+
+    it("merges the windows, offered only with another window open", async () => {
+      const harness = createAppHarness({
+        explorerWindowCount: 2,
+        mergedTabs: [savedTab("/Users/demo/Folder")],
+      });
+      await ready(harness);
+      await pressKey({ key: "t", metaKey: true });
+
+      await openTabMenu(0);
+      const merge = screen.getByRole("menuitem", { name: "Merge All Windows" });
+      await waitFor(() => expect(merge).toBeEnabled());
+      await act(async () => {
+        fireEvent.click(merge);
+      });
+
+      await waitFor(() => expect(tabLabels()).toEqual(["demo", "demo", "Folder"]));
+    });
+
+    it("dims Merge All Windows with one window", async () => {
+      const harness = createAppHarness();
+      await ready(harness);
+      await pressKey({ key: "t", metaKey: true });
+
+      await openTabMenu(1);
+
+      await waitFor(() =>
+        expect(
+          harness.invocations.some((call) => call.channel === "app:getExplorerWindowCount"),
+        ).toBe(true),
+      );
+      expect(screen.getByRole("menuitem", { name: "Merge All Windows" })).toBeDisabled();
+      expect(screen.getByRole("menuitem", { name: "Move Tab to New Window" })).toBeEnabled();
+    });
+  });
+
   it("doesn't move the only tab, which says so in the menu", async () => {
     const harness = createAppHarness();
     await ready(harness);
@@ -203,6 +262,21 @@ describe("App windows", () => {
     await openDirectory("/Users/demo/Folder");
 
     await waitFor(() => expect(document.title).toBe("Folder"));
+  });
+
+  it("closes an item's menu when another window or app is clicked", async () => {
+    const harness = createAppHarness();
+    await ready(harness);
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByTitle("/Users/demo/Folder"));
+    });
+    expect(screen.getByRole("button", { name: /^Open in New Window/ })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.blur(window);
+    });
+
+    expect(screen.queryByRole("button", { name: /^Open in New Window/ })).not.toBeInTheDocument();
   });
 
   describe("the clipboard", () => {

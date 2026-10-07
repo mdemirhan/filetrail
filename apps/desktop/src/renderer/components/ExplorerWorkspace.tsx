@@ -452,11 +452,14 @@ export function ExplorerWorkspace({
         setSortMenuOpen(false);
       }
     };
+    const close = () => setSortMenuOpen(false);
     window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("keydown", handleEscape);
+    window.addEventListener("blur", close);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("blur", close);
     };
   }, [sortMenuOpen]);
 
@@ -503,11 +506,14 @@ export function ExplorerWorkspace({
         setViewOptionsMenuStyle(null);
       }
     };
+    const close = () => setViewOptionsMenuStyle(null);
     window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("blur", close);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("blur", close);
     };
   }, [viewOptionsMenuStyle]);
 

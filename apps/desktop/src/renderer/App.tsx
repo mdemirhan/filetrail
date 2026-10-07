@@ -877,7 +877,6 @@ export function App() {
       explorerFocusSuppressed,
       locations: sidebarLocations,
       locationsExpanded,
-      setLocationsExpanded,
     },
   });
   // Hiding the tree while it has the keyboard gives the keyboard to the list.
@@ -2100,10 +2099,6 @@ export function App() {
                 }),
               onOpenInNewTab: openPathInNewTab,
               onClearSelection: clearTreeSelection,
-              onSelectFavoritesRoot: async () => {
-                await selectTreeItem(getFavoritesRootItemId(), "skip");
-                return undefined;
-              },
               locations: sidebarLocations,
               locationsExpanded,
               onToggleLocationsExpanded: () => setLocationsExpanded((value) => !value),
@@ -2571,6 +2566,11 @@ export function App() {
                   onCloseTab={closeTab}
                   onCloseOtherTabs={closeOtherTabs}
                   onDuplicateTab={duplicateTab}
+                  onMoveTabToNewWindow={moveTabToNewWindow}
+                  onMergeAllWindows={mergeAllWindows}
+                  countWindows={async () =>
+                    (await client.invoke("app:getExplorerWindowCount", {})).count
+                  }
                   onMoveTab={moveTab}
                   onNewTab={openNewTab}
                   onItemDragOver={handleTabDragOver}

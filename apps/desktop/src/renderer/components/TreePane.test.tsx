@@ -312,13 +312,26 @@ describe("TreePane", () => {
     expect(handleToggleFavoritesExpanded).toHaveBeenCalledTimes(1);
   });
 
-  it("notifies the app when the Favorites root label is selected", () => {
-    const handleSelectFavoritesRoot = vi.fn();
-    renderTreePane({ onSelectFavoritesRoot: handleSelectFavoritesRoot });
+  it("opens and closes the Favorites section from its heading, never selecting it", () => {
+    const handleToggleFavoritesExpanded = vi.fn();
+    const handleSelectItem = vi.fn();
+    renderTreePane({
+      onToggleFavoritesExpanded: handleToggleFavoritesExpanded,
+      onSelectItem: handleSelectItem,
+    });
+    const heading = screen.getByRole("button", { name: "Favorites" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+    fireEvent.pointerDown(heading, { button: 0 });
+    fireEvent.click(heading, { detail: 1 });
+    expect(handleToggleFavoritesExpanded).toHaveBeenCalledTimes(1);
+    expect(heading.closest("[role='treeitem']")).toHaveAttribute("aria-selected", "false");
 
-    expect(handleSelectFavoritesRoot).toHaveBeenCalledTimes(1);
+    // A double-click toggles once, not twice.
+    fireEvent.click(heading, { detail: 1 });
+    fireEvent.click(heading, { detail: 2 });
+    fireEvent.doubleClick(heading);
+    expect(handleToggleFavoritesExpanded).toHaveBeenCalledTimes(2);
+    expect(handleSelectItem).not.toHaveBeenCalled();
   });
 
   it("clears tree selection when pressing empty space in the tree pane", () => {
@@ -708,6 +721,76 @@ describe("TreePane", () => {
     });
 
     expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    getBoundingClientRectSpy.mockRestore();
+    scrollIntoViewSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("stays where it is scrolled when a section is opened or closed by hand", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    let selectedRowTop = 80;
+    const rect = (top: number, height: number) =>
+      ({
+        top,
+        bottom: top + height,
+        left: 0,
+        right: 240,
+        width: 240,
+        height,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const getBoundingClientRectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function mockRect(this: HTMLElement) {
+        if (this.classList.contains("tree-scroll")) {
+          return rect(0, 160);
+        }
+        if (this.getAttribute("data-tree-path") === "/Users/demo/Documents") {
+          return rect(selectedRowTop, 32);
+        }
+        return rect(0, 0);
+      });
+    const onToggleFavoritesExpanded = vi.fn();
+    const props = {
+      ...treePaneDefaults(),
+      selectedTreeItemId: "fs:/Users/demo/Documents" as const,
+      onToggleFavoritesExpanded,
+    };
+    const { rerender } = renderTreePane(props);
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    // The heading is clicked: the section closes, and the rows below it move up past the
+    // top of the sidebar, the selected one with them.
+    fireEvent.click(screen.getByRole("button", { name: "Favorites" }), { detail: 1 });
+    expect(onToggleFavoritesExpanded).toHaveBeenCalledTimes(1);
+    selectedRowTop = -36;
+    rerender(<TreePane {...props} favoritesExpanded={false} />);
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    // Later changes that move the selected row out of sight still bring it back.
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    rerender(<TreePane {...props} favoritesExpanded={false} includeHidden />);
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(scrollIntoViewSpy).toHaveBeenCalledTimes(1);
 
     getBoundingClientRectSpy.mockRestore();
     scrollIntoViewSpy.mockRestore();

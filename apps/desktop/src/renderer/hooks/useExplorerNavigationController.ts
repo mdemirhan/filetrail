@@ -46,10 +46,8 @@ import {
   createLocationItemId,
   getFavoriteItemPath,
   getFavoriteLabel,
-  getFavoritesRootItemId,
   getFileSystemItemPath,
   getLocationItemPath,
-  getLocationsRootItemId,
   getShortcutItemPath,
   isFavoriteItemId,
   isFavoritesRootItemId,
@@ -101,7 +99,6 @@ export function useExplorerNavigationController(args: {
     /** The sidebar's Locations: Macintosh HD and the other disks mounted. */
     locations: SidebarLocation[];
     locationsExpanded: boolean;
-    setLocationsExpanded: (expanded: boolean) => void;
   };
 }) {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -199,7 +196,6 @@ export function useExplorerNavigationController(args: {
     favorites,
     favoritesPlacement,
     favoritesExpanded,
-    setFavoritesExpanded,
     foldersFirst,
     setFoldersFirst,
     includeHidden,
@@ -1403,10 +1399,9 @@ export function useExplorerNavigationController(args: {
   }
 
   async function selectTreeItem(itemId: TreeItemId, historyMode: "push" | "replace" | "skip") {
+    // The Favorites and Locations headings are not places: they are never selected, and the
+    // folder on screen stays.
     if (isFavoritesRootItemId(itemId) || isLocationsRootItemId(itemId)) {
-      setTreeSelection(itemId);
-      setLeftPaneSubview(favoritesPlacement === "separate" ? "favorites" : "tree");
-      applyEmptyDirectorySnapshot();
       return;
     }
     // A location: its row stays selected, and the folder tree shows it from its top.
@@ -1487,12 +1482,8 @@ export function useExplorerNavigationController(args: {
     if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
       return;
     }
-    if (isFavoriteItemId(currentItemId)) {
-      await selectTreeItem(getFavoritesRootItemId(), "skip");
-      return;
-    }
-    if (isLocationItemId(currentItemId)) {
-      await selectTreeItem(getLocationsRootItemId(), "skip");
+    // A favorite or a location has nothing above it: its heading is not a place.
+    if (isFavoriteItemId(currentItemId) || isLocationItemId(currentItemId)) {
       return;
     }
     const path = getFileSystemItemPath(currentItemId);
@@ -1560,7 +1551,11 @@ export function useExplorerNavigationController(args: {
       return false;
     }
 
-    const { items, visibleItemIds } = getTreePresentationState();
+    const { items, visibleItemIds: allVisibleItemIds } = getTreePresentationState();
+    // The arrow keys go past the Favorites and Locations headings, as in Finder's sidebar.
+    const visibleItemIds = allVisibleItemIds.filter(
+      (itemId) => !isFavoritesRootItemId(itemId) && !isLocationsRootItemId(itemId),
+    );
     if (visibleItemIds.length === 0) {
       if (
         favoritesPlacement === "separate" &&
@@ -1632,30 +1627,6 @@ export function useExplorerNavigationController(args: {
       return true;
     }
     if (key === "ArrowRight") {
-      if (isFavoritesRootItemId(safeCurrentId)) {
-        if (!favoritesExpanded && favorites.length > 0) {
-          setFavoritesExpanded(true);
-          return true;
-        }
-        const firstFavoriteId = favorites[0] ? createFavoriteItemId(favorites[0].path) : null;
-        if (favoritesExpanded && firstFavoriteId) {
-          await selectTreeItem(firstFavoriteId, "push");
-          return true;
-        }
-        return false;
-      }
-      if (isLocationsRootItemId(safeCurrentId)) {
-        if (!derived.locationsExpanded) {
-          derived.setLocationsExpanded(true);
-          return true;
-        }
-        const firstLocation = derived.locations[0];
-        if (firstLocation) {
-          await selectTreeItem(createLocationItemId(firstLocation.path), "push");
-          return true;
-        }
-        return false;
-      }
       if (isFavoriteItemId(safeCurrentId) || isLocationItemId(safeCurrentId)) {
         return false;
       }
@@ -1682,27 +1653,9 @@ export function useExplorerNavigationController(args: {
       return false;
     }
 
-    if (isFavoritesRootItemId(safeCurrentId)) {
-      if (favoritesExpanded && favorites.length > 0) {
-        setFavoritesExpanded(false);
-        return true;
-      }
+    // A favorite or a location has nothing above it to go to.
+    if (isFavoriteItemId(safeCurrentId) || isLocationItemId(safeCurrentId)) {
       return false;
-    }
-    if (isFavoriteItemId(safeCurrentId)) {
-      await selectTreeItem(getFavoritesRootItemId(), "skip");
-      return true;
-    }
-    if (isLocationsRootItemId(safeCurrentId)) {
-      if (derived.locationsExpanded) {
-        derived.setLocationsExpanded(false);
-        return true;
-      }
-      return false;
-    }
-    if (isLocationItemId(safeCurrentId)) {
-      await selectTreeItem(getLocationsRootItemId(), "skip");
-      return true;
     }
     const path = getFileSystemItemPath(safeCurrentId);
     const node = path ? treeNodesRef.current[path] : null;
