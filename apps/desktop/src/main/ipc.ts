@@ -29,6 +29,15 @@ type IpcEnvelope =
 
 const debugIpcErrorsEnabled = process.env.FILETRAIL_DEBUG === "1";
 
+// Folder listings, which can hold 100,000 items: the worker makes their items itself, typed
+// from the same contract, so only the response around the list is checked on the way out.
+// Checking every item took 5 ms per 10,000 and copied each one. What a window asks is
+// still checked in full.
+const LISTS_NOT_CHECKED_ITEM_BY_ITEM: Partial<Record<IpcChannel, string>> = {
+  "directory:getSnapshot": "entries",
+  "tree:getChildren": "children",
+};
+
 export function registerIpcHandlers(
   ipcMain: Pick<IpcMain, "handle">,
   handlers: IpcHandlerMap,
@@ -48,7 +57,10 @@ export function registerIpcHandlers(
           throw new Error(`Missing IPC handler for ${channel}.`);
         }
         const responsePayload = await handler(request.data as never, event);
-        const response = ipcContractSchemas[channel].response.safeParse(responsePayload);
+        const list = uncheckedList(channel, responsePayload);
+        const response = ipcContractSchemas[channel].response.safeParse(
+          list === null ? responsePayload : { ...responsePayload, [list.key]: [] },
+        );
         if (!response.success) {
           throw new IpcValidationError(
             `Invalid response for ${channel}: ${response.error.message}`,
@@ -56,7 +68,7 @@ export function registerIpcHandlers(
         }
         return {
           ok: true,
-          payload: response.data,
+          payload: list === null ? response.data : { ...response.data, [list.key]: list.items },
         } satisfies IpcEnvelope;
       } catch (error) {
         // Filesystem access failures are expected when the user navigates into protected or
@@ -75,6 +87,18 @@ export function registerIpcHandlers(
       }
     });
   }
+}
+
+function uncheckedList(
+  channel: IpcChannel,
+  payload: unknown,
+): { key: string; items: unknown[] } | null {
+  const key = LISTS_NOT_CHECKED_ITEM_BY_ITEM[channel];
+  const items =
+    key !== undefined && typeof payload === "object" && payload !== null
+      ? (payload as Record<string, unknown>)[key]
+      : undefined;
+  return key !== undefined && Array.isArray(items) ? { key, items } : null;
 }
 
 // A copy, rename, delete or Undo that can't start is explained to the person in a dialog, so

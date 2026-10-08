@@ -256,6 +256,50 @@ describe("registerIpcHandlers", () => {
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
   });
 
+  // A folder of 100,000 items took 45 ms to check item by item, on every listing.
+  it("checks a folder listing's response but not each of its items", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handle = vi.fn();
+    const { registerIpcHandlers } = await import("./ipc");
+    const entries = Array.from({ length: 3 }, (_, index) => ({
+      path: `/Users/demo/f${index}.txt`,
+      name: `f${index}.txt`,
+      extension: "txt",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+    }));
+    let snapshot: unknown = { path: "/Users/demo", parentPath: "/Users", entries };
+    registerIpcHandlers({ handle }, {
+      ...createHandlersThatFailOnSnapshot(),
+      "directory:getSnapshot": async () => snapshot,
+      "tree:getChildren": async () => ({ path: "", children: [] }),
+    } as unknown as IpcHandlerMap);
+    const handlerFor = (channel: string) =>
+      handle.mock.calls.find((call) => call[0] === channel)?.[1];
+
+    const listed = await handlerFor("directory:getSnapshot")?.({}, { path: "/Users/demo" });
+    expect(listed).toEqual({
+      ok: true,
+      payload: { path: "/Users/demo", parentPath: "/Users", entries },
+    });
+    // The list itself is passed on, not a checked copy of it.
+    expect(listed.payload.entries).toBe(entries);
+
+    // What is around the list is still checked, and so is a list that isn't one.
+    await expect(handlerFor("tree:getChildren")?.({}, { path: "/Users/demo" })).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining("Invalid response for tree:getChildren"),
+    });
+    snapshot = { path: "/Users/demo", parentPath: "/Users", entries: "all of them" };
+    await expect(
+      handlerFor("directory:getSnapshot")?.({}, { path: "/Users/demo" }),
+    ).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining("Invalid response for directory:getSnapshot"),
+    });
+  });
+
   it("stringifies non-Error throw values in failed responses", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const handle = vi.fn();
