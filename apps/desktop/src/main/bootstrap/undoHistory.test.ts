@@ -1,6 +1,11 @@
 import type { UndoLog, UndoStep, UndoUnit } from "@filetrail/core";
 
-import { createUndoHistory, labelOf } from "./undoHistory";
+import {
+  UNDO_HISTORY_MAX_ITEM_STEPS,
+  createUndoHistory,
+  itemStepCount,
+  labelOf,
+} from "./undoHistory";
 import type { FinishedWrite } from "./writeOperations";
 
 const ID = { dev: 1, ino: 2 };
@@ -83,15 +88,17 @@ describe("createUndoHistory", () => {
     expect(history.menu()).toEqual({ undo: null, redo: null, cantUndo: false });
   });
 
-  it("ignores the end of an Undo of an entry that is no longer on top", () => {
+  it("refuses the end of an Undo of an entry that is no longer on top, and says so", () => {
     const history = createUndoHistory();
     history.record(undoable("rename", [moved("/a", "/b")]));
     const first = history.top("undo");
     history.record(undoable("rename", [moved("/c", "/d")]));
 
-    history.finish("undo", first?.id ?? -1, { done: [], leftover: [] });
-
+    expect(() =>
+      history.finish("undo", first?.id ?? -1, { done: units([moved("/b", "/a")]), leftover: [] }),
+    ).toThrow("The Undo list changed while one of its operations was being undone.");
     expect(history.top("undo")?.units).toEqual(units([moved("/c", "/d")]));
+    expect(history.top("redo")).toBeNull();
   });
 
   it("leaves nothing to redo after a new operation", () => {
@@ -180,6 +187,74 @@ describe("an Undo done in two tries", () => {
     history.finish("undo", entry?.id ?? -1, { done: units([moved("/T/a", "/a")]), leftover: [] });
 
     expect(history.top("redo")?.units).toEqual(units([moved("/T/a", "/a")]));
+  });
+});
+
+describe("the history's size", () => {
+  const renamedMany = (count: number): UndoStep => ({
+    kind: "batchRenamed",
+    items: Array.from({ length: count }, (_unused, index) => ({
+      from: `/a${index}`,
+      to: `/b${index}`,
+      id: ID,
+      itemKind: "file" as const,
+    })),
+  });
+
+  it("is a million item steps", () => {
+    expect(UNDO_HISTORY_MAX_ITEM_STEPS).toBe(1_000_000);
+  });
+
+  it("counts each step, and each item of a batch", () => {
+    expect(itemStepCount(units([moved("/a", "/b"), created("/c")], [renamedMany(3)]))).toBe(5);
+  });
+
+  it("lets go of the oldest operations once there are too many items, never the newest", () => {
+    const history = createUndoHistory({ maxItemSteps: 5 });
+    history.record(undoable("rename", [moved("/a", "/b")]));
+    history.record(undoable("batch_rename", [renamedMany(3)]));
+    history.record(undoable("new_folder", [created("/F")]));
+    history.finish("undo", history.top("undo")?.id ?? -1, {
+      done: units([trashed("/F")]),
+      leftover: [],
+    });
+    expect(history.menu()).toMatchObject({ undo: "Rename of 3 Items", redo: "New Folder" });
+
+    // Two more: the rename at the bottom goes, then the batch.
+    history.record(undoable("rename", [moved("/c", "/d")]));
+    expect(history.top("redo")).toBeNull();
+    history.record(undoable("batch_rename", [renamedMany(2)]));
+    const left: string[] = [];
+    for (let entry = history.top("undo"); entry; entry = history.top("undo")) {
+      left.push(labelOf(entry.action, entry.units));
+      history.finish("undo", entry.id, { done: [], leftover: [] });
+    }
+    expect(left).toEqual(["Rename of 2 Items", "Rename"]);
+  });
+
+  it("keeps an operation larger than the limit on its own", () => {
+    const history = createUndoHistory({ maxItemSteps: 2 });
+    history.record(undoable("rename", [moved("/a", "/b")]));
+    history.record(undoable("batch_rename", [renamedMany(4)]));
+
+    expect(history.menu().undo).toBe("Rename of 4 Items");
+    history.finish("undo", history.top("undo")?.id ?? -1, { done: [], leftover: [] });
+    expect(history.top("undo")).toBeNull();
+  });
+
+  it("keeps what an Undo did and left, though together they are over the limit", () => {
+    const history = createUndoHistory({ maxItemSteps: 3 });
+    history.record(undoable("rename", [moved("/x", "/y")]));
+    history.record(undoable("batch_rename", [renamedMany(3)]));
+    history.finish("undo", history.top("undo")?.id ?? -1, {
+      done: units([renamedMany(2)]),
+      leftover: units([renamedMany(1)]),
+    });
+
+    expect(history.menu()).toEqual({ undo: "Rename", redo: "Rename of 2 Items", cantUndo: false });
+    history.finish("undo", history.top("undo")?.id ?? -1, { done: [], leftover: [] });
+    // The older rename was let go.
+    expect(history.top("undo")).toBeNull();
   });
 });
 

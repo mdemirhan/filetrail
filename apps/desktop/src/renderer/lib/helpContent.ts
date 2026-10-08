@@ -491,7 +491,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Undo",
             description:
-              "{undo} takes back the last thing you did to your files. Press it again to take back the one before, and so on, back to when you opened File Trail. Edit › Undo shows what it will take back, such as “Undo Rename”.",
+              "{undo} takes back the last thing you did to your files. Press it again to take back the one before, and so on, back to when you opened File Trail (after about a million items, the oldest are let go). Edit › Undo shows what it will take back, such as “Undo Rename”.",
           },
           {
             label: "Redo",

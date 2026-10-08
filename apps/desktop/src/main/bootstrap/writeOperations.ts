@@ -41,7 +41,7 @@ import { movedItemsOf, runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import { clearResponseCaches, noteWriteStarting } from "./responseCache";
 import { runUndo } from "./undoExecution";
-import type { UndoEntry, UndoHistory } from "./undoHistory";
+import { type UndoEntry, type UndoHistory, itemStepCount } from "./undoHistory";
 import { type UndoQuestions, findQuestions } from "./undoPlan";
 
 type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
@@ -1511,15 +1511,7 @@ export function createWriteOperationCoordinator(
   ): Promise<void> {
     const startedAt = new Date().toISOString();
     // Counted as the run counts what it has done: each step, and each item of a batch.
-    const totalItemCount = entry.units.reduce(
-      (sum, unit) =>
-        sum +
-        unit.steps.reduce(
-          (stepSum, step) => stepSum + (step.kind === "batchRenamed" ? step.items.length : 1),
-          0,
-        ),
-      0,
-    );
+    const totalItemCount = itemStepCount(entry.units);
     const home = fs.itemSize ? await readItemSize(fs.itemSize, homePath) : null;
     let run: Awaited<ReturnType<typeof runUndo>>;
     try {
