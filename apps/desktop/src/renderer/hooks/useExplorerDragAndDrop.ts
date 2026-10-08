@@ -44,6 +44,9 @@ const OWN_DRAG_OVER_QUIET_MS = 300;
 const DRAG_AWAY_MS = 300;
 // How many of a drop's files are looked at to tell whether it is the drag the window knows.
 const DROPPED_FILES_CHECKED = 64;
+// How long a drop waits for the disks to say whether it moves or copies; then the paths
+// decide, as they did for the drag's cursor.
+const DISK_ANSWER_WAIT_MS = 1500;
 
 // How long a drag is held over a tab before that tab comes to the front; the same as a
 // folder in the tree takes to open, and a folder in the content pane to spring open.
@@ -118,6 +121,17 @@ type OwnDrag = {
   // Waiting for the drop on this window, the drag's end already heard.
   awaitingDrop: (() => void) | null;
 };
+
+// Which disk each folder of a drag is on, as far as the disks have answered, and the answers
+// on their way, per folder, so a drop can wait for one already asked for.
+type DiskAnswers = {
+  ids: Map<string, number | null>;
+  requests: Map<string, Promise<void>>;
+};
+
+function noDiskAnswers(): DiskAnswers {
+  return { ids: new Map(), requests: new Map() };
+}
 
 type DropIndicatorState = "valid" | "invalid" | null;
 type ActiveDropTarget = {
@@ -255,10 +269,8 @@ export function useExplorerDragAndDrop(args: {
   const timersRef = useRef(new Set<number>());
   const unmountedRef = useRef(false);
   const [backgroundDropIndicator, setBackgroundDropIndicator] = useState<DropIndicatorState>(null);
-  // Which disk each folder of this drag is on, as far as the disks have answered.
-  const diskIdsRef = useRef(new Map<string, number | null>());
-  // Answers on their way, per folder, so the drop can wait for one already asked for.
-  const diskIdRequestsRef = useRef(new Map<string, Promise<void>>());
+  // What the disks have said about this drag's folders.
+  const diskAnswersRef = useRef<DiskAnswers>(noDiskAnswers());
   const onActivateTabRef = useRef(onActivateTab);
   onActivateTabRef.current = onActivateTab;
   const tabHoverSwitchRef = useRef<{ tabId: string; timerId: number } | null>(null);
@@ -293,6 +305,20 @@ export function useExplorerDragAndDrop(args: {
         resolve();
       }, ms);
       timersRef.current.add(timerId);
+    });
+  }
+
+  // Waits for `promise`, `ms` at most.
+  function waitAtMost(promise: Promise<void>, ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timerId = window.setTimeout(done, ms);
+      timersRef.current.add(timerId);
+      void promise.then(done, done);
+      function done() {
+        window.clearTimeout(timerId);
+        timersRef.current.delete(timerId);
+        resolve();
+      }
     });
   }
 
@@ -396,8 +422,7 @@ export function useExplorerDragAndDrop(args: {
     setActiveDropTarget(null);
     setDragActive(false);
     dragSessionRef.current = null;
-    diskIdsRef.current = new Map();
-    diskIdRequestsRef.current = new Map();
+    diskAnswersRef.current = noDiskAnswers();
     resetSpringHold();
     springRestRef.current = null;
     setBackgroundDropIndicator(null);
@@ -801,7 +826,9 @@ export function useExplorerDragAndDrop(args: {
   function checkExternalDragStillOver(drag: ExternalDrag) {
     const now = Date.now();
     // The check came late, so the window was busy: the drag-overs it held back come next.
-    if (now - drag.lastCheckAt > EXTERNAL_DRAG_GONE_MS) {
+    // A hidden window's checks come late as a rule (its timers are slowed), and no drag is
+    // over a window that can't be seen.
+    if (now - drag.lastCheckAt > EXTERNAL_DRAG_GONE_MS && document.visibilityState !== "hidden") {
       drag.lastOverAt = now;
     }
     drag.lastCheckAt = now;
@@ -830,12 +857,14 @@ export function useExplorerDragAndDrop(args: {
   // Asks the disks about folders not asked about yet in this drag, and resolves once every
   // one asked for has an answer (or the asking failed). Until then, the folder's path
   // decides (see resolveInternalDropOperation).
-  function requestDiskIds(paths: string[]): Promise<void> {
+  function requestDiskIds(
+    paths: string[],
+    answers: DiskAnswers = diskAnswersRef.current,
+  ): Promise<void> {
     if (!getDiskIds) {
       return Promise.resolve();
     }
-    const ids = diskIdsRef.current;
-    const requests = diskIdRequestsRef.current;
+    const { ids, requests } = answers;
     const wanted = paths.filter((path) => !ids.has(path) && !requests.has(path));
     if (wanted.length > 0) {
       const request = getDiskIds(wanted)
@@ -868,7 +897,7 @@ export function useExplorerDragAndDrop(args: {
   function knownOnSameDisk(
     session: InternalDragSession,
     path: string,
-    diskIds: ReadonlyMap<string, number | null> = diskIdsRef.current,
+    diskIds: ReadonlyMap<string, number | null> = diskAnswersRef.current.ids,
   ): boolean | undefined {
     return resolveOnSameDisk(getDragFacts(session).folderPaths, path, diskIds);
   }
@@ -1043,33 +1072,37 @@ export function useExplorerDragAndDrop(args: {
     if (ownDragRef.current?.session === session) {
       ownDragRef.current.awaitingDrop?.();
     }
-    // A drag from another app ends with its drop: no more drag-overs are waited for.
+    // The drag ends with its drop, before the disks are waited for: a drag that comes over
+    // the window meanwhile is a new one. This drop keeps its own hold on what the disks
+    // have said, and are still to say.
+    const answers = diskAnswersRef.current;
     const externalDrag =
       externalDragRef.current?.session === session ? externalDragRef.current : null;
     if (externalDrag) {
-      window.clearInterval(externalDrag.timerId);
+      endExternalDrag(externalDrag);
+    } else {
+      clearDragSession();
     }
-    clearTreeHoverExpand();
     // The drop does what the disks say, not only what the paths suggested: a network share
     // or a disk mounted outside /Volumes is another disk, and moving there deletes the
-    // originals once copied.
-    // The drag ends (and forgets its answers) as soon as the drop is in, so this drop keeps
-    // its own hold on them while it waits.
-    const diskIds = diskIdsRef.current;
+    // originals once copied. A disk that is slow to say (a share that doesn't answer)
+    // leaves it to the paths.
     let stillValid = true;
-    if (!modifiers.altKey && !modifiers.metaKey && knownOnSameDisk(session, path) === undefined) {
-      await requestDiskIds([...getDragFacts(session).folderPaths, path]);
-      const onSameDisk = knownOnSameDisk(session, path, diskIds);
+    if (
+      !modifiers.altKey &&
+      !modifiers.metaKey &&
+      knownOnSameDisk(session, path, answers.ids) === undefined
+    ) {
+      await waitAtMost(
+        requestDiskIds([...getDragFacts(session).folderPaths, path], answers),
+        DISK_ANSWER_WAIT_MS,
+      );
+      const onSameDisk = knownOnSameDisk(session, path, answers.ids);
       if (onSameDisk !== undefined) {
         operation = allowedBySource(onSameDisk ? "move" : "copy", modifiers.effectAllowed);
         // A move where the paths suggested a copy may be one into the items' own folder.
         stillValid = validityFor(operation) === "valid";
       }
-    }
-    if (externalDrag) {
-      endExternalDrag(externalDrag);
-    } else {
-      clearDragSession();
     }
     if (!stillValid) {
       return;

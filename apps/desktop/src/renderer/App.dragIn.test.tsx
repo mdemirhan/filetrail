@@ -392,6 +392,108 @@ describe("dropping files from other apps on search results", () => {
   });
 });
 
+describe("a drop waiting for the disks to say whether it moves", () => {
+  const other = "/Users/demo/Other";
+
+  function harnessWithSlowDisks(): Harness {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        [home]: {
+          path: home,
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry(folder, "directory"),
+            createDirectoryEntry(other, "directory"),
+          ],
+        },
+        [other]: { path: other, parentPath: home, entries: [] },
+      },
+    });
+    // A share that never answers.
+    const invoke = harness.client.invoke.bind(harness.client);
+    harness.client.invoke = ((channel, payload) =>
+      channel === "system:getDiskIds"
+        ? new Promise(() => undefined)
+        : invoke(channel, payload)) as typeof harness.client.invoke;
+    return harness;
+  }
+
+  it("takes the next drag as a new one, and goes by the paths once it has waited long enough", async () => {
+    const harness = harnessWithSlowDisks();
+    draggedIn(harness, [{ path: "/Users/other/a.txt", kind: "file" }]);
+    renderApp(harness);
+    const first = await screen.findByTitle(folder);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await dropFromOtherApp(harness, first);
+    await waitMs(200);
+    harness.setDraggedIn({ changeCount: 2, items: [{ path: "/Users/other/b.txt", kind: "file" }] });
+    const second = screen.getByTitle(other);
+    const dataTransfer = dragFromOtherApp();
+    await enter(harness, second, dataTransfer);
+    await act(async () => {
+      fireEvent.dragOver(second, { dataTransfer });
+    });
+    expect(second).toHaveAttribute("data-drop-target-state", "valid");
+    expect(readsOf(harness)).toBe(2);
+
+    expect(analyzeRequests(harness)).toEqual([]);
+    await waitMs(1400);
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({
+          mode: "cut",
+          sourcePaths: ["/Users/other/a.txt"],
+          destinationDirectoryPath: folder,
+        }),
+      ]);
+    });
+  });
+});
+
+describe("a drag from another app over a hidden window", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, "visibilityState");
+  });
+
+  it("is over once its drag-overs stop, though the window's timers come late", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        [folder]: {
+          path: folder,
+          parentPath: home,
+          entries: [createDirectoryEntry(`${folder}/Inner`, "directory")],
+        },
+      },
+    });
+    draggedIn(harness, elsewhere);
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const dataTransfer = dragFromOtherApp();
+    const target = await screen.findByTitle(folder);
+
+    await enter(harness, target, dataTransfer);
+    for (let held = 0; held <= 1600; held += 200) {
+      await act(async () => {
+        fireEvent.dragOver(target, { dataTransfer, clientX: 10, clientY: 10 });
+      });
+      await waitMs(200);
+    }
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(folder);
+    });
+    // The window is hidden, and its timers come a second apart.
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    for (let second = 0; second < 3; second += 1) {
+      vi.setSystemTime(Date.now() + 1000);
+      await waitMs(100);
+    }
+
+    // Before the window's timers come on time again.
+    expect(currentPath()).toBe(home);
+  });
+});
+
 describe("a drag from another app while an operation runs", () => {
   it("is refused, and says why once", async () => {
     const harness = createAppHarness({ deferCopyPasteStart: true });
