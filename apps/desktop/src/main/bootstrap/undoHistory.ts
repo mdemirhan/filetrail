@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 
-import type { UndoDirection } from "@filetrail/contracts";
+import type { UndoDirection, WriteOperationAction } from "@filetrail/contracts";
 import type { UndoStep, UndoUnit } from "@filetrail/core";
 
 import type { FinishedWrite } from "./writeOperations";
@@ -8,7 +8,7 @@ import type { FinishedWrite } from "./writeOperations";
 // One operation that can be undone (or, once undone, done again).
 export type UndoEntry = {
   id: number;
-  action: FinishedWrite["action"];
+  action: WriteOperationAction;
   units: UndoUnit[];
   // Whether it moved anything, so a paste is named a Move for as long as it is in the
   // history: what a stop leaves of a moving Replace may be only its trip to the Trash.
@@ -48,7 +48,8 @@ export function createUndoHistory() {
     // redo; one that can't leaves nothing to undo either.
     record(finished: FinishedWrite): void {
       redoList.length = 0;
-      if (!finished.log.undoable) {
+      // (Emptying the Trash is never undoable.)
+      if (finished.action === "empty_trash" || !finished.log.undoable) {
         undoList.length = 0;
         cantUndo = true;
         changed();

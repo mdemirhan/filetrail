@@ -1896,7 +1896,7 @@ export function createWriteOperationCoordinator(
           ticket,
           refusal: null,
           label: history.menu()[payload.direction],
-          action: entry.action === "empty_trash" ? null : entry.action,
+          action: entry.action,
           ...questions,
         };
       },
