@@ -1291,6 +1291,9 @@ export function App() {
     },
     // Files dragged in from Finder and other apps, read from the drag as it comes in.
     readDraggedIn: () => client.invoke("system:readDraggedIn", {}),
+    readDragChangeCount: async () =>
+      (await client.invoke("system:readDragChangeCount", {})).changeCount,
+    getPathForFile: (file) => client.getPathForFile?.(file) ?? "",
     contentShowsSearchResults: isSearchMode,
   });
   const dropDialogOpen = copyPasteModalOpen || actionNotice !== null;

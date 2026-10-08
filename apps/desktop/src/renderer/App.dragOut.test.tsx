@@ -38,6 +38,7 @@ import {
   analyzeRequests,
   createAppHarness,
   createDirectoryEntry,
+  createDroppedFile,
   createMockDataTransfer,
   dragBetween,
   installDragEventWithModifiers,
@@ -299,7 +300,6 @@ describe("hearing a drag's end", () => {
 
   it("lets go of a drag whose end is never heard once the pointer is pressed or moved free", async () => {
     const harness = harnessWithFolders();
-    harness.setDraggedIn({ changeCount: 9, items: [{ path: "/Users/other/a.txt", kind: "file" }] });
     renderApp(harness);
     await screen.findByTitle(source);
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -327,6 +327,7 @@ describe("hearing a drag's end", () => {
     });
 
     // A drag from Finder is taken from then on.
+    harness.setDraggedIn({ changeCount: 9, items: [{ path: "/Users/other/a.txt", kind: "file" }] });
     const fromFinder = fileDrag();
     const pane = screen.getByTestId("content-pane");
     await act(async () => {
@@ -345,6 +346,135 @@ describe("hearing a drag's end", () => {
     await vi.waitFor(() => {
       expect(analyzeRequests(harness)).toEqual([
         expect.objectContaining({ sourcePaths: ["/Users/other/a.txt"] }),
+      ]);
+    });
+  });
+});
+
+describe("a drag that comes back over the window", () => {
+  const fromFinder = { path: "/Users/other/a.txt", kind: "file" as const };
+
+  // The drag comes over `target` from outside the window, and is dropped there.
+  async function comeBackAndDrop(target: HTMLElement, dataTransfer: DataTransfer) {
+    await act(async () => {
+      fireEvent.dragEnter(target, { dataTransfer });
+    });
+    await waitMs(50);
+    await act(async () => {
+      fireEvent.dragOver(target, { dataTransfer });
+      fireEvent.drop(target, { dataTransfer });
+    });
+  }
+
+  it("is a drag from Finder when the window's own drag ended without its end being heard", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDrag(source);
+    // The drag leaves the window, and its end is never heard; the pointer doesn't come back
+    // over the window until it brings a drag from Finder.
+    await waitMs(2000);
+    harness.setDraggedIn({ changeCount: 9, items: [fromFinder] });
+    await comeBackAndDrop(screen.getByTitle(folder), fileDrag());
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({
+          sourcePaths: [fromFinder.path],
+          destinationDirectoryPath: folder,
+        }),
+      ]);
+    });
+  });
+
+  it("is still the window's own when it left the window and came back", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await act(async () => {
+      fireEvent.dragOver(screen.getByTitle(folder), { dataTransfer });
+    });
+    await waitMs(2000);
+    await comeBackAndDrop(screen.getByTitle(folder), dataTransfer);
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ sourcePaths: [source], destinationDirectoryPath: folder }),
+      ]);
+    });
+    expect(readsOf(harness)).toBe(0);
+  });
+
+  it("is still the window's own when the drag carries its items under another count", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await waitMs(2000);
+    // The count was read before the drag had changed it.
+    harness.setDraggedIn({ changeCount: 40, items: [{ path: source, kind: "file" }] });
+    await comeBackAndDrop(screen.getByTitle(folder), dataTransfer);
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ mode: "cut", sourcePaths: [source] }),
+      ]);
+    });
+    expect(harness.fileDragsGoing()).toBe(1);
+  });
+
+  it("isn't dropped as the window's own when the drop hands over other files", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+
+    const dataTransfer = Object.assign(await startDrag(source), {
+      files: [createDroppedFile(fromFinder.path)],
+    });
+    const target = screen.getByTitle(folder);
+    await act(async () => {
+      fireEvent.dragOver(target, { dataTransfer });
+      fireEvent.drop(target, { dataTransfer });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(analyzeRequests(harness)).toEqual([]);
+    // The window's own drag is over: the next drag over it is read as a new one.
+    harness.setDraggedIn({ changeCount: 9, items: [fromFinder] });
+    await act(async () => {
+      fireEvent.dragEnter(target, { dataTransfer: fileDrag() });
+    });
+    await vi.waitFor(() => {
+      expect(readsOf(harness)).toBe(1);
+    });
+  });
+
+  it("is dropped as the window's own when the drop hands over its items", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+
+    const dataTransfer = Object.assign(await startDrag(source), {
+      files: [createDroppedFile(source)],
+    });
+    const target = screen.getByTitle(folder);
+    await act(async () => {
+      fireEvent.dragOver(target, { dataTransfer });
+      fireEvent.drop(target, { dataTransfer });
+    });
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ sourcePaths: [source], destinationDirectoryPath: folder }),
       ]);
     });
   });

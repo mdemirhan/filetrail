@@ -508,6 +508,57 @@ describe("springing into folders under a drag from another app", () => {
     expect(readsOf(harness)).toBe(2);
     expect(cursor).toBe("copy");
   });
+
+  it("takes a new drag as new when it comes before the last one is known to have left", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const pane = await screen.findByTestId("content-pane");
+
+    await enter(harness, pane, dragFromOtherApp());
+    // Away from the window a moment, and back with another drag.
+    await waitMs(350);
+    const another = { path: "/Users/other/b.txt", kind: "file" as const };
+    harness.setDraggedIn({ changeCount: 2, items: [another] });
+    const dataTransfer = dragFromOtherApp();
+    await act(async () => {
+      fireEvent.dragEnter(pane, { dataTransfer });
+    });
+    await vi.waitFor(() => {
+      expect(readsOf(harness)).toBe(2);
+    });
+    await waitMs(0);
+    await overAndDrop(pane, dataTransfer);
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ sourcePaths: [another.path] }),
+      ]);
+    });
+  });
+
+  it("keeps a drag that comes back as the same one", async () => {
+    const harness = harnessWithInnerFolder();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const pane = await screen.findByTestId("content-pane");
+
+    const dataTransfer = dragFromOtherApp();
+    await enter(harness, pane, dataTransfer);
+    await waitMs(350);
+    await act(async () => {
+      fireEvent.dragEnter(pane, { dataTransfer });
+    });
+    await waitMs(0);
+    await overAndDrop(pane, dataTransfer);
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ sourcePaths: elsewhere.map((item) => item.path) }),
+      ]);
+    });
+    expect(readsOf(harness)).toBe(1);
+  });
 });
 
 describe("what a finished drop from another app says", () => {
