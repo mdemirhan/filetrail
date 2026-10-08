@@ -1,9 +1,10 @@
 import type { FolderSizeStats } from "./folderSizeAdjust";
 
-// The folder sizes known, the oldest first: each size stored or asked for goes to the end,
-// and the first go when there are too many. Measuring the home folder stores hundreds of
-// thousands, so what a write changed is found from the paths it changed, not by looking at
-// every size: each folder is listed under the folder holding it.
+// The folder sizes known. All are kept: a measurement's sizes are what the folders inside
+// it show, and one let go would show none until the folder holding it is measured again.
+// Measuring the home folder stores hundreds of thousands, so what a write changed is found
+// from the paths it changed, not by looking at every size: each folder is listed under the
+// folder holding it.
 export class FolderSizeCache {
   private readonly sizes = new Map<string, FolderSizeStats>();
   // The paths directly in each folder that have a size, or hold one (see parentOf). A
@@ -12,8 +13,6 @@ export class FolderSizeCache {
   private readonly children = new Map<string, Set<string>>();
   // The paths stored while a write runs (see startRecording); null when none runs.
   private recorded: Set<string> | null = null;
-
-  constructor(private readonly maxSizes: number) {}
 
   get size(): number {
     return this.sizes.size;
@@ -31,42 +30,13 @@ export class FolderSizeCache {
     return this.sizes.entries();
   }
 
-  // A size measured: kept longest. Over the limit, the oldest go, a tenth at a time: one
-  // at a time, each store would walk past the places of all those gone before it.
+  // A size measured.
   store(path: string, stats: FolderSizeStats): void {
-    if (this.sizes.delete(path)) {
-      this.sizes.set(path, stats);
-    } else {
-      this.sizes.set(path, stats);
+    if (!this.sizes.has(path)) {
       this.link(path);
     }
+    this.sizes.set(path, stats);
     this.recorded?.add(path);
-    if (this.sizes.size <= this.maxSizes) {
-      return;
-    }
-    const keep = Math.ceil(this.maxSizes * 0.9);
-    let over = this.sizes.size - keep;
-    const oldest: string[] = [];
-    for (const oldPath of this.sizes.keys()) {
-      if (over === 0) {
-        break;
-      }
-      oldest.push(oldPath);
-      over -= 1;
-    }
-    for (const oldPath of oldest) {
-      this.delete(oldPath);
-    }
-  }
-
-  // A size asked for, moved to the end so it is kept longest.
-  use(path: string): FolderSizeStats | undefined {
-    const stats = this.sizes.get(path);
-    if (stats) {
-      this.sizes.delete(path);
-      this.sizes.set(path, stats);
-    }
-    return stats;
   }
 
   // A size changed where it is kept (something taken off it), not as one measured.

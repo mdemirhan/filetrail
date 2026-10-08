@@ -50,7 +50,7 @@ function adjust(
   removals: RemovedItem[],
   counted: HomeTrash["counted"] = null,
 ): Record<string, FolderSizeStats> {
-  const cache = new FolderSizeCache(Number.POSITIVE_INFINITY);
+  const cache = new FolderSizeCache();
   for (const [path, entry] of Object.entries(entries)) {
     cache.store(path, entry);
   }

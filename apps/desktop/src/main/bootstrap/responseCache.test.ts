@@ -215,21 +215,23 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.getCachedSize("/Users/demo/Library/c8/d8")).toBe(1);
   });
 
-  it("keeps the sizes used most recently, up to its limit", async () => {
+  // A home folder's walk stores far more sizes than a limit of 100,000 kept, and the first
+  // finished, often folders directly in the home folder, showed no size afterwards.
+  it("keeps every size a measurement stores, the first finished too", async () => {
     const native = createMockNative();
-    const handlers = createFolderSizeHandlers({ ...native, maxFolderSizes: 3 });
+    const handlers = createFolderSizeHandlers(native);
     handlers.start({ path: "/test" });
-    native.finish({ "/test/a": [1, 1, 1, 0], "/test/b": [2, 2, 1, 0] });
-    // Asked about, so kept over the one not asked about.
-    handlers.probeMany({ paths: ["/test/a"] });
-    native.resolveActive(
-      JSON.stringify({ ...JSON.parse(sampleJson), dirs: { "/test/c": [3, 3, 1, 0] } }),
-    );
+    native.finish({ "/test/small": [1, 1, 1, 0] });
+    const dirs: Record<string, [number, number, number, number]> = {};
+    for (let index = 0; index < 150_000; index++) {
+      dirs[`/test/big/d${index}`] = [2, 2, 1, 0];
+    }
+    native.finish(dirs);
+    native.resolveActive(sampleJson);
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(handlers.getCachedSize("/test/b")).toBeUndefined();
-    expect(handlers.getCachedSize("/test/a")).toBe(1);
-    expect(handlers.getCachedSize("/test/c")).toBe(3);
+    expect(handlers.probeMany({ paths: ["/test/small"] }).sizes).toHaveLength(1);
+    expect(handlers.getCachedSize("/test/big/d0")).toBe(2);
     expect(handlers.getCachedSize("/test")).toBe(1000);
   });
 
@@ -545,9 +547,9 @@ describe("createFolderSizeHandlers", () => {
     resetResponseCacheState();
   });
 
-  // 400,000 sizes took 7 s, one 10,000-folder take of a walk half a second: each size stored
-  // looked for the oldest from the start of the cache, past all those let go before it.
-  it("keeps up with a walk that stores far more sizes than it keeps", () => {
+  // A walk of the home folder stores hundreds of thousands of sizes, a take of 10,000 folders
+  // at a time: each take must be stored in a moment.
+  it("keeps up with a walk that stores hundreds of thousands of sizes", () => {
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);
     handlers.start({ path: "/Users/demo" });
@@ -562,7 +564,7 @@ describe("createFolderSizeHandlers", () => {
     // About a second on a laptop; the bound only catches going back to one at a time.
     expect(performance.now() - started).toBeLessThan(6_000);
     expect(handlers.getCachedSize("/Users/demo/Library/c399/d399999")).toBe(1);
-    expect(handlers.getCachedSize("/Users/demo/Library/c0/d0")).toBeUndefined();
+    expect(handlers.getCachedSize("/Users/demo/Library/c0/d0")).toBe(1);
   });
 
   describe("a window that goes away", () => {

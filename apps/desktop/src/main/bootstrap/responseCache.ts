@@ -16,10 +16,6 @@ const MAX_DIRECTORY_METADATA_ENTRIES = 5_000;
 // Finished folder-size jobs are kept so repeated status polls stay answerable,
 // but only the most recent ones; queued and running jobs are never evicted.
 const MAX_FINISHED_FOLDER_SIZE_JOBS = 256;
-// Measuring the home folder stores the size of every folder in it, often hundreds of
-// thousands. The sizes used least recently go first: those a measurement finished first
-// are the deepest, and the folders near the top, finished last, are the ones shown.
-export const MAX_FOLDER_SIZES = 100_000;
 
 type TtlCacheEntry = { expiresAt: number; value: unknown };
 type TtlCache = { entries: Map<string, TtlCacheEntry>; maxEntries: number };
@@ -223,15 +219,13 @@ export function createFolderSizeHandlers(native: {
   cancelFolderSize: () => void;
   // Where the home folder is (tests use their own): its Trash is where deleted items go.
   homePath?: string;
-  // How many folder sizes are kept (tests use fewer).
-  maxFolderSizes?: number;
   // Told when a measurement ends (measured, failed or stopped), with the window that asked
   // (its web contents id): it learns at once, rather than at its next look.
   onSettled?: (owner: number | null, jobId: string) => void;
 }) {
   // Only a store adds a size, so none goes while removals are taken off. What was stored
   // while a write ran is noted there, until its end has been cleared.
-  const folderSizeCache = new FolderSizeCache(native.maxFolderSizes ?? MAX_FOLDER_SIZES);
+  const folderSizeCache = new FolderSizeCache();
   // Each measurement run stores its sizes under a number of its own (see FolderSizeStats).
   let measurementCount = 0;
   const homePath = native.homePath ?? homedir();
@@ -517,7 +511,7 @@ export function createFolderSizeHandlers(native: {
         folderSizeCache.delete(payload.path);
       }
 
-      const cached = folderSizeCache.use(payload.path);
+      const cached = folderSizeCache.get(payload.path);
       if (cached !== undefined) {
         const jobId = generateJobId();
         setJob(jobId, {
@@ -597,7 +591,7 @@ export function createFolderSizeHandlers(native: {
     probeMany(payload: IpcRequest<"folderSize:probeMany">): IpcResponse<"folderSize:probeMany"> {
       const sizes: IpcResponse<"folderSize:probeMany">["sizes"] = [];
       for (const path of payload.paths) {
-        const stats = folderSizeCache.use(path);
+        const stats = folderSizeCache.get(path);
         if (stats) {
           sizes.push({
             path,

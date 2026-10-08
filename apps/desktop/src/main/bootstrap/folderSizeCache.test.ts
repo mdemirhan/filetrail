@@ -37,11 +37,10 @@ function isAtOrInside(path: string, folder: string): boolean {
   return path === folder || path.startsWith(prefix);
 }
 
-// The sizes kept, after random stores, uses and deletes of `paths`, some pushed out by the
-// limit, as a plain list kept the same way.
-function randomCache(seed: number, maxSizes: number) {
+// The sizes kept, after random stores, changes and deletes of `paths`.
+function randomCache(seed: number) {
   const next = randomGenerator(seed);
-  const cache = new FolderSizeCache(maxSizes);
+  const cache = new FolderSizeCache();
   const paths = randomPaths(next, 60);
   for (let step = 0; step < 80; step++) {
     const path = paths[next(paths.length)] as string;
@@ -49,7 +48,7 @@ function randomCache(seed: number, maxSizes: number) {
     if (action < 7) {
       cache.store(path, stats(step));
     } else if (action < 8) {
-      cache.use(path);
+      cache.set(path, stats(step));
     } else {
       cache.delete(path);
     }
@@ -60,7 +59,7 @@ function randomCache(seed: number, maxSizes: number) {
 describe("FolderSizeCache", () => {
   it("forgets what a change touched as looking at every size does", () => {
     for (let seed = 1; seed <= 300; seed++) {
-      const { cache, next, kept } = randomCache(seed, 5 + (seed % 40));
+      const { cache, next, kept } = randomCache(seed);
       const changed = randomPaths(next, 1 + (seed % 6));
       const expected = kept().filter((path) => !isAffectedByChange(path, changed));
 
@@ -72,7 +71,7 @@ describe("FolderSizeCache", () => {
 
   it("forgets what is at or inside paths as looking at every size does", () => {
     for (let seed = 1; seed <= 300; seed++) {
-      const { cache, next, kept } = randomCache(seed, 5 + (seed % 40));
+      const { cache, next, kept } = randomCache(seed);
       const removed = randomPaths(next, 1 + (seed % 4));
       const expected = kept().filter((path) => !removed.some((gone) => isAtOrInside(path, gone)));
 
@@ -83,7 +82,7 @@ describe("FolderSizeCache", () => {
   });
 
   it("finds what is inside a folder again after sizes come and go", () => {
-    const cache = new FolderSizeCache(Number.POSITIVE_INFINITY);
+    const cache = new FolderSizeCache();
     cache.store("/Users/demo/a/b/c", stats(1));
     cache.store("/Users/demo/a", stats(2));
     cache.delete("/Users/demo/a");
@@ -99,47 +98,24 @@ describe("FolderSizeCache", () => {
     expect(cache.size).toBe(0);
   });
 
-  it("lets the oldest go a tenth at a time once there are too many", () => {
-    const cache = new FolderSizeCache(100);
-    for (let index = 0; index < 100; index++) {
-      cache.store(`/f${index}`, stats(index));
-    }
-    // Asked for, so kept over those not asked for.
-    cache.use("/f0");
-    expect(cache.size).toBe(100);
-
-    cache.store("/f100", stats(100));
-
-    expect(cache.size).toBe(90);
-    expect(cache.has("/f0")).toBe(true);
-    expect(cache.has("/f1")).toBe(false);
-    expect(cache.has("/f11")).toBe(false);
-    expect(cache.has("/f12")).toBe(true);
-    // Changed where it is, not stored again: still among the oldest.
-    cache.set("/f12", stats(12));
-    for (let index = 101; index < 112; index++) {
-      cache.store(`/f${index}`, stats(index));
-    }
-    expect(cache.has("/f12")).toBe(false);
-  });
-
-  // 300,000 sizes stored took 5 s: each store looked for the oldest from the start, past
-  // the places of all those gone before.
-  it("stores many more sizes than it keeps quickly", () => {
-    const cache = new FolderSizeCache(100_000);
+  // A home folder's walk stores 176,000 sizes. With a limit of 100,000, the folders it
+  // finished first (small ones directly in the home folder among them) were let go, and
+  // showed no size until the home folder was measured again.
+  it("keeps every size stored, quickly", () => {
+    const cache = new FolderSizeCache();
     const started = performance.now();
     for (let index = 0; index < 400_000; index++) {
       cache.store(`/Users/demo/Library/c${index % 400}/d${index}`, stats(index));
     }
-    // Well under a second on a laptop; the bound only catches going back to one at a time.
+    // Well under a second on a laptop.
     expect(performance.now() - started).toBeLessThan(5_000);
-    expect(cache.size).toBeLessThanOrEqual(100_000);
-    expect(cache.has("/Users/demo/Library/c399/d399999")).toBe(true);
+    expect(cache.size).toBe(400_000);
+    expect(cache.has("/Users/demo/Library/c0/d0")).toBe(true);
   });
 
   describe("while a write runs", () => {
     it("forgets, of the sizes stored meanwhile, those of the folders holding what it removed", () => {
-      const cache = new FolderSizeCache(Number.POSITIVE_INFINITY);
+      const cache = new FolderSizeCache();
       cache.store("/Users/demo/Work", stats(1));
       cache.startRecording();
       for (const path of [
@@ -160,17 +136,18 @@ describe("FolderSizeCache", () => {
       expect(cache.has("/Users/demo/Music")).toBe(false);
     });
 
-    // Every size stored after the first write was noted until the next one started, those
-    // pushed out by the limit too: 70 MB for a million.
+    // Every size stored after the first write was noted until the next one started: 70 MB
+    // for a million.
     it("notes only what is stored until it ends, and lets go of what goes", () => {
-      const cache = new FolderSizeCache(10);
+      const cache = new FolderSizeCache();
+      cache.store("/before", stats(1));
       cache.startRecording();
       for (let index = 0; index < 30; index++) {
         cache.store(`/f${index}`, stats(index));
       }
-      expect(cache.recordedCount).toBeLessThanOrEqual(10);
+      expect(cache.recordedCount).toBe(30);
       cache.delete("/f29");
-      expect(cache.recordedCount).toBe(cache.size);
+      expect(cache.recordedCount).toBe(29);
 
       cache.stopRecording();
       cache.store("/after", stats(1));
