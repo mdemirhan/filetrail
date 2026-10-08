@@ -427,6 +427,27 @@ export function isUndoOrRedo(action: WriteOperationAction): boolean {
   return action === "undo" || action === "redo";
 }
 
+/** Whether an operation's event is its last: it finished, failed, stopped or partly worked. */
+export function isTerminalWriteStatus(status: string): boolean {
+  return (
+    status === "completed" || status === "failed" || status === "cancelled" || status === "partial"
+  );
+}
+
+/** What a write took out of the folder it was in: what it moved to the Trash or deleted,
+ *  and what it moved into another folder (not what it renamed in place). */
+export function pathsLeftByWrite(result: WriteOperationResult): string[] {
+  const left = new Set(removedByWrite(result));
+  if (movedItems(result)) {
+    for (const { from, to } of collectFollowedMoves(result)) {
+      if (parentDirectoryPath(from) !== parentDirectoryPath(to)) {
+        left.add(from);
+      }
+    }
+  }
+  return [...left];
+}
+
 /** What a write took away from where it was: everything a Trash or delete was asked to
  *  remove, or what an Undo moved to the Trash. */
 export function removedByWrite(result: WriteOperationResult): string[] {

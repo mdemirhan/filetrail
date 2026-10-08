@@ -10,6 +10,7 @@ import {
   isExpectedPlannedSkipResult,
   isFolderSizeEligibleKind,
   isPathWithinTreeRoot,
+  pathsLeftByWrite,
   resolveExplorerTreeRootPath,
   resolveFreeNewFolderName,
   resolveNewFolderTargetPath,
@@ -289,6 +290,33 @@ describe("explorerAppUtils", () => {
       "/Users/demo/Folder/Inner",
     );
     expect(resolveWriteOperationTreeSelectionPath(pasted("copy"), "/Users/demo/Folder")).toBe(null);
+  });
+
+  it("tells what a write took out of its folder: trashed, deleted or moved elsewhere, not renamed", () => {
+    const result = (
+      action: WriteOperationResult["action"],
+      items: Array<[string, string | null]>,
+      mode?: "copy" | "cut",
+    ) =>
+      ({
+        action,
+        ...(mode ? { mode } : {}),
+        targetPath: null,
+        items: items.map(([sourcePath, destinationPath]) => ({
+          sourcePath,
+          destinationPath,
+          status: "completed",
+          error: null,
+        })),
+      }) as WriteOperationResult;
+
+    expect(pathsLeftByWrite(result("trash", [["/a/x", null]]))).toEqual(["/a/x"]);
+    expect(pathsLeftByWrite(result("delete_immediately", [["/a/x", null]]))).toEqual(["/a/x"]);
+    expect(pathsLeftByWrite(result("move_to", [["/a/x", "/b/x"]]))).toEqual(["/a/x"]);
+    expect(pathsLeftByWrite(result("paste", [["/a/x", "/b/x"]], "cut"))).toEqual(["/a/x"]);
+    // A rename stays in its folder, and a copy leaves the original where it was.
+    expect(pathsLeftByWrite(result("rename", [["/a/x", "/a/y"]]))).toEqual([]);
+    expect(pathsLeftByWrite(result("paste", [["/a/x", "/b/x"]], "copy"))).toEqual([]);
   });
 
   it("remaps tree selection after a rename when the selected node is inside the renamed folder", () => {

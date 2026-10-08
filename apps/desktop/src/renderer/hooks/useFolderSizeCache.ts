@@ -2,13 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createChangeMatcher, pathsChangedByWrite } from "@filetrail/contracts";
 
+import { isTerminalWriteStatus } from "../lib/explorerAppUtils";
 import type { FiletrailClient } from "../lib/filetrailClient";
-
-function isTerminalWriteStatus(status: string): boolean {
-  return (
-    status === "completed" || status === "failed" || status === "cancelled" || status === "partial"
-  );
-}
 
 export type FolderSizeEntry =
   | { status: "idle" }

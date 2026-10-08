@@ -77,6 +77,8 @@ import {
   isEditableFileEntry,
   isExpectedPlannedSkipResult,
   isFolderSizeEligibleKind,
+  isTerminalWriteStatus,
+  pathsLeftByWrite,
   resolveFreeNewFolderName,
   resolveNewFolderTargetPath,
   resolveWriteOperationRefreshPath,
@@ -759,6 +761,34 @@ export function useExplorerActions(args: {
       return nextSelection;
     });
   }, [activeContentEntries, setContentSelection, unfilteredContentEntries]);
+
+  // Items a finished write took out of the folder (to the Trash, deleted, moved elsewhere)
+  // leave the selection at once, whichever window did it. Until the folder is read again
+  // they are still listed, and the list mustn't keep an item that is gone in view: sorted
+  // by size, one whose size was just forgotten sorts last, and the list would follow it.
+  useEffect(
+    () =>
+      client.onWriteOperationProgress((event) => {
+        if (!event.result || !isTerminalWriteStatus(event.status)) {
+          return;
+        }
+        const left = new Set(pathsLeftByWrite(event.result));
+        if (left.size === 0) {
+          return;
+        }
+        setContentSelection((current) => {
+          if (!current.paths.some((path) => left.has(path))) {
+            return current;
+          }
+          const entries = previousActiveContentEntriesRef.current;
+          const remaining = entries.filter((entry) => !left.has(entry.path));
+          const nextSelection = sanitizeContentSelection(current, remaining, entries);
+          syncContentSelectionRefs(nextSelection, remaining);
+          return nextSelection;
+        });
+      }),
+    [client, setContentSelection],
+  );
 
   useEffect(() => {
     if (isSearchMode) {
