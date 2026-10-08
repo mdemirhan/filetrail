@@ -220,13 +220,25 @@ export function createWriteOperationCoordinator(
     if (log.units.length === 0) {
       return null;
     }
-    const copiedOntoDiskWithoutTrash =
-      options.diskHasTrash !== undefined &&
-      log.units.some((unit) =>
-        unit.steps.some(
-          (step) => step.kind === "created" && !options.diskHasTrash?.(dirname(step.path)),
-        ),
-      );
+    const { diskHasTrash } = options;
+    if (diskHasTrash === undefined) {
+      return log;
+    }
+    // Asked once per folder: each answer reads the mount table, and a paste's copies are
+    // all in one folder or a few.
+    const answers = new Map<string, boolean>();
+    const hasTrash = (folder: string) => {
+      const known = answers.get(folder);
+      if (known !== undefined) {
+        return known;
+      }
+      const answer = diskHasTrash(folder);
+      answers.set(folder, answer);
+      return answer;
+    };
+    const copiedOntoDiskWithoutTrash = log.units.some((unit) =>
+      unit.steps.some((step) => step.kind === "created" && !hasTrash(dirname(step.path))),
+    );
     return copiedOntoDiskWithoutTrash ? { undoable: false, reason: "no_trash" } : log;
   }
   const trashPath = resolve(homePath, ".Trash").toLowerCase();

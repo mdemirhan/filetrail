@@ -525,6 +525,31 @@ describe("what a paste records", () => {
     expect(asked).toEqual(["/Volumes/Share"]);
   });
 
+  // Each answer reads the mount table.
+  it("asks whether a disk has a Trash once per folder the copies are in", async () => {
+    const created = (path: string, ino: number) => ({
+      steps: [{ kind: "created" as const, path, id: { dev: 9, ino }, stamp: null }],
+    });
+    const asked: string[] = [];
+    const log: UndoLog = {
+      undoable: true,
+      units: [
+        created("/Volumes/Share/a.txt", 1),
+        created("/Volumes/Share/b.txt", 2),
+        created("/Volumes/Share/c.txt", 3),
+        created("/Volumes/Other/d.txt", 4),
+      ],
+    };
+
+    const finished = await paste(log, (path) => {
+      asked.push(path);
+      return true;
+    });
+
+    expect(finished.map((entry) => entry.log)).toEqual([log]);
+    expect(asked).toEqual(["/Volumes/Share", "/Volumes/Other"]);
+  });
+
   it("passes on a paste that can't be undone", async () => {
     expect((await paste({ undoable: false, reason: "merge" })).map((entry) => entry.log)).toEqual([
       { undoable: false, reason: "merge" },
