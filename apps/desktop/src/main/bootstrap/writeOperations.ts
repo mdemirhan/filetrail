@@ -1619,12 +1619,23 @@ export function createWriteOperationCoordinator(
         if (!isOperationOwner(payload.operationId, event.sender)) {
           return REJECTED_REQUEST;
         }
-        return writeService.resolveRuntimeConflict(
+        const answer = writeService.resolveRuntimeConflict(
           payload.operationId,
           payload.conflictId,
           payload.resolution,
           payload.applyToRemaining ?? false,
         );
+        // The question is answered: a window taking the operation over before its next
+        // update must not be shown it again.
+        const latest = latestProgress.get(payload.operationId);
+        if (answer.ok && latest?.runtimeConflict) {
+          latestProgress.set(payload.operationId, {
+            ...latest,
+            status: "running",
+            runtimeConflict: null,
+          });
+        }
+        return answer;
       },
       "writeOperation:rename": async (
         payload: IpcRequest<"writeOperation:rename">,
