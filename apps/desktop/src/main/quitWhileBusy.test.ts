@@ -54,6 +54,16 @@ describe("describeQuitWhileBusy", () => {
     });
   });
 
+  // Finder empties the Trash, and goes on after File Trail quits: nothing is stopped.
+  it("asks before quitting while the Trash is emptied, without offering to stop it", () => {
+    expect(describeQuitWhileBusy("empty_trash")).toEqual({
+      message: "The Trash is still being emptied.",
+      detail: "Finder goes on emptying it after File Trail quits.",
+    });
+    expect(stopQuestionButtons("quit", "empty_trash")).toEqual(["Keep Working", "Quit"]);
+    expect(describeQuitWhileBusy("empty_trash", "close")).toBeNull();
+  });
+
   it("makes Keep Working the default and Stop and Quit the second button", () => {
     expect(stopQuestionButtons("quit")[KEEP_WORKING_BUTTON_INDEX]).toBe("Keep Working");
     expect(stopQuestionButtons("quit")[STOP_BUTTON_INDEX]).toBe("Stop and Quit");

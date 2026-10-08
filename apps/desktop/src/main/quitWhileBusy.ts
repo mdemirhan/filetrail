@@ -8,7 +8,14 @@ export type StopTrigger = "quit" | "close";
 export const KEEP_WORKING_BUTTON_INDEX = 0;
 export const STOP_BUTTON_INDEX = 1;
 
-export function stopQuestionButtons(trigger: StopTrigger): [string, string] {
+export function stopQuestionButtons(
+  trigger: StopTrigger,
+  kind?: WriteOperationKind,
+): [string, string] {
+  // Finder empties the Trash: quitting doesn't stop it.
+  if (kind === "empty_trash") {
+    return ["Keep Working", trigger === "quit" ? "Quit" : "Close"];
+  }
   return ["Keep Working", trigger === "quit" ? "Stop and Quit" : "Stop and Close"];
 }
 
@@ -64,6 +71,15 @@ export function describeQuitWhileBusy(
         message: "Items are still being renamed.",
         detail: `${stops} Items already renamed keep their new names; the rest keep their old ones.`,
       };
+    // Finder empties the Trash and goes on after File Trail quits; closing a window has
+    // nothing to do with it.
+    case "empty_trash":
+      return trigger === "quit"
+        ? {
+            message: "The Trash is still being emptied.",
+            detail: "Finder goes on emptying it after File Trail quits.",
+          }
+        : null;
     case "rename":
     case "new_folder":
       return null;

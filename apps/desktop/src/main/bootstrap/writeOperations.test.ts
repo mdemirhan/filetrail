@@ -2227,6 +2227,48 @@ describe("emptying the Trash", () => {
     coordinator.shutdown();
   });
 
+  // Other windows were refused with nothing to show for it, and quitting didn't ask.
+  it("runs as an operation of its own, which the other windows and quitting see", async () => {
+    let finishEmpty: (() => void) | null = null;
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs(),
+    );
+    const emptying = coordinator.emptyTrash(
+      () =>
+        new Promise((resolveEmpty) => {
+          finishEmpty = () => resolveEmpty({ ok: true, error: null });
+        }),
+    );
+    await waitFor(() => (finishEmpty ? true : null));
+
+    const active = coordinator.getActiveOperation();
+    expect(active).toEqual({ operationId: expect.any(String), kind: "empty_trash" });
+    expect(coordinator.handlers["writeOperation:getActive"]()).toEqual({
+      operationId: active?.operationId,
+    });
+
+    (finishEmpty as (() => void) | null)?.();
+    await emptying;
+    expect(coordinator.getActiveOperation()).toBeNull();
+    expect(coordinator.handlers["writeOperation:getActive"]()).toEqual({ operationId: null });
+    coordinator.shutdown();
+  });
+
+  // Finder goes on emptying it after File Trail quits.
+  it("doesn't hold quitting up while Finder empties the Trash", async () => {
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs(),
+    );
+    void coordinator.emptyTrash(() => new Promise(() => undefined));
+
+    const quitting = coordinator.shutdown(60_000).then(() => "quit");
+    const tooLong = new Promise((resolveLater) => setTimeout(() => resolveLater("waited"), 500));
+
+    await expect(Promise.race([quitting, tooLong])).resolves.toBe("quit");
+  });
+
   // The main process forgot the Trash's size, but each window kept showing its own.
   it("tells the windows once the Trash was emptied, or tried to be, and not when refused", async () => {
     const onTrashEmptied = vi.fn();

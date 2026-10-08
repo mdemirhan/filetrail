@@ -541,6 +541,42 @@ describe("what the simple operations record", () => {
     await coordinator.shutdown();
   });
 
+  it("can't undo an Empty Trash that ended without saying how far it got", async () => {
+    const { coordinator, finished } = setUp();
+
+    await expect(
+      coordinator.emptyTrash(async () => {
+        throw new Error("osascript went away");
+      }),
+    ).rejects.toThrow("osascript went away");
+
+    expect(finished.map((entry) => entry.action)).toEqual(["empty_trash"]);
+    await coordinator.shutdown();
+  });
+
+  // Nothing was emptied: what could be undone before still can be.
+  it.each([
+    [
+      "macOS doesn't let File Trail control Finder",
+      "Not authorized to send Apple events to Finder. (-1743)",
+    ],
+    [
+      "macOS would have to ask first",
+      "execution error: Finder got an error: Not permitted. (-1744)",
+    ],
+    [
+      "Finder isn't running",
+      "execution error: Finder got an error: Application isn't running. (-600)",
+    ],
+  ])("keeps the history when Finder refused before it began: %s", async (_label, error) => {
+    const { coordinator, finished } = setUp();
+
+    await coordinator.emptyTrash(async () => ({ ok: false, error }));
+
+    expect(finished).toEqual([]);
+    await coordinator.shutdown();
+  });
+
   it("records an operation before the next one can start", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     let slotFreeWhenRecorded: boolean | null = null;

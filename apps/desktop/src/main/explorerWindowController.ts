@@ -733,7 +733,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
         {
           message: question.message,
           detail: question.detail,
-          buttons: stopQuestionButtons(trigger),
+          buttons: stopQuestionButtons(trigger, operation?.kind),
           defaultId: KEEP_WORKING_BUTTON_INDEX,
           cancelId: KEEP_WORKING_BUTTON_INDEX,
         },

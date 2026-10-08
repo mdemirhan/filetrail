@@ -111,7 +111,8 @@ export type WriteOperationKind =
   | "rename"
   | "batch_rename"
   | "new_folder"
-  | "undo";
+  | "undo"
+  | "empty_trash";
 
 type WriteOperationSender = {
   send: (channel: string, payload: unknown) => void;
@@ -261,6 +262,8 @@ export function createWriteOperationCoordinator(
   // "copyPaste:start").
   let eventsBeforeStart: Map<string, CopyPasteProgressEvent> | null = null;
   let activeWriteOperationId: string | null = null;
+  // The Empty Trash running now, if any: Finder does it, so there is nothing to stop.
+  let emptyTrashOperationId: string | null = null;
   let localWriteOperationSequence = 0;
   // Set once the app starts quitting; no new operation may begin after that.
   let closing = false;
@@ -555,6 +558,9 @@ export function createWriteOperationCoordinator(
     // A rename or new folder still being checked has changed nothing yet.
     if (operationId === null || operationId === PREPARING_WRITE_OPERATION_ID) {
       return null;
+    }
+    if (operationId === emptyTrashOperationId) {
+      return { operationId, kind: "empty_trash" };
     }
     const localAction = localWriteOperationActions.get(operationId);
     if (localAction !== undefined) {
@@ -1784,7 +1790,8 @@ export function createWriteOperationCoordinator(
   }
 
   // Emptying the Trash while a paste is replacing items would delete the replaced items
-  // for good as they arrive there, so it waits its turn like any other write.
+  // for good as they arrive there, so it waits its turn like any other write. It holds the
+  // write slot as an operation of its own, which the other windows and quitting see.
   async function emptyTrash(
     empty: () => Promise<{ ok: boolean; error: string | null }>,
   ): Promise<{ ok: boolean; error: string | null }> {
@@ -1798,22 +1805,31 @@ export function createWriteOperationCoordinator(
           : "The Trash can't be emptied while another operation is running. Try again when it has finished.",
       };
     }
+    const operationId = createLocalWriteOperationId();
+    activeWriteOperationId = operationId;
+    emptyTrashOperationId = operationId;
+    noteWriteStarting();
+    let outcome: { ok: boolean; error: string | null } | null = null;
     try {
-      return await prepareWithReservedSlot(async () => {
-        try {
-          return await empty();
-        } finally {
-          // Whatever it managed to empty is gone for good, even when it then failed.
-          recordFinishedWrite({
-            action: "empty_trash",
-            log: { undoable: false, reason: "deleted_for_good" },
-            items: [],
-          });
-        }
-      });
+      outcome = await empty();
+      return outcome;
     } finally {
+      // Whatever it managed to empty is gone for good, even when it then failed: Undo can't
+      // put back what was in the Trash. Only a refusal before Finder began leaves the
+      // history as it was.
+      const leftAlone = outcome !== null && !outcome.ok && trashLeftAsItWas(outcome.error);
+      if (!leftAlone) {
+        recordFinishedWrite({
+          action: "empty_trash",
+          log: { undoable: false, reason: "deleted_for_good" },
+          items: [],
+        });
+      }
       // The Trash's listing (and anything shown from it) is out of date now.
-      clearResponseCaches([resolve(homePath, ".Trash")]);
+      forgetCachedResponses([resolve(homePath, ".Trash")]);
+      noteWriteEnded();
+      emptyTrashOperationId = null;
+      freeWriteSlot(operationId);
       options.onTrashEmptied?.();
     }
   }
@@ -1830,7 +1846,10 @@ export function createWriteOperationCoordinator(
     }
     senderDetachers.clear();
     const operationId = activeWriteOperationId;
-    if (operationId !== null && operationId !== PREPARING_WRITE_OPERATION_ID) {
+    // Finder empties the Trash, and goes on after File Trail quits: there is nothing to stop
+    // or wait for.
+    const emptyingTrash = operationId !== null && operationId === emptyTrashOperationId;
+    if (operationId !== null && operationId !== PREPARING_WRITE_OPERATION_ID && !emptyingTrash) {
       cancelWriteOperation(operationId);
     }
     // A stopped copy ends within moments; only a disk that stops answering (a network
@@ -1841,7 +1860,7 @@ export function createWriteOperationCoordinator(
     // may be left part done.
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = await Promise.race([
-      whenIdle().then(() => false),
+      (emptyingTrash ? Promise.resolve() : whenIdle()).then(() => false),
       new Promise<boolean>((resolveTimeout) => {
         timer = setTimeout(() => resolveTimeout(true), maxWaitMs);
       }),
@@ -2515,6 +2534,13 @@ function describeTrashError(error: unknown, path: string): string {
   }
   const described = describeCopyPasteError(error);
   return described || `“${basename(path)}” couldn’t be moved to the Trash.`;
+}
+
+// Finder said no before it began, so nothing was emptied: macOS doesn't let File Trail
+// control it (-1743, or -1744 when it would first have to ask the person), or it isn't
+// running (-600). Any other failure may come part way through.
+export function trashLeftAsItWas(error: string | null): boolean {
+  return error !== null && /\((?:-1743|-1744|-600)\)/u.test(error);
 }
 
 function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind {
