@@ -290,8 +290,9 @@ export function TreePane({
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const clickTimeoutRef = useRef<number | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
-  const lastRegisteredSelectedRowRef = useRef<HTMLDivElement | null>(null);
-  const lastRegisteredSelectedItemIdRef = useRef(selectedTreeItemId);
+  // The selected row as last drawn: a row drawn again (a row is memoized, and gets a new
+  // ref callback) is not a new row to bring into view.
+  const lastRegisteredSelectedRowRef = useRef<{ id: string; element: HTMLDivElement } | null>(null);
   const lastCommittedSelectedItemIdRef = useRef(selectedTreeItemId);
   const [optimisticSelectedItemId, setOptimisticSelectedItemId] = useState<TreeItemId | null>(null);
   const [selectedRowRegistrationVersion, setSelectedRowRegistrationVersion] = useState(0);
@@ -369,14 +370,6 @@ export function TreePane({
   );
 
   useEffect(() => {
-    if (lastRegisteredSelectedItemIdRef.current === selectedTreeItemId) {
-      return;
-    }
-    lastRegisteredSelectedItemIdRef.current = selectedTreeItemId;
-    lastRegisteredSelectedRowRef.current = null;
-  }, [selectedTreeItemId]);
-
-  useEffect(() => {
     void selectedRowRegistrationVersion;
     void treeVisibilityVersion;
     if (!selectedTreeItemId) {
@@ -425,12 +418,9 @@ export function TreePane({
   const registerTreeRowRef = useCallback(
     (id: string, element: HTMLDivElement | null) => {
       rowRefs.current[id] = element;
-      if (
-        id === selectedTreeItemId &&
-        element &&
-        lastRegisteredSelectedRowRef.current !== element
-      ) {
-        lastRegisteredSelectedRowRef.current = element;
+      const last = lastRegisteredSelectedRowRef.current;
+      if (id === selectedTreeItemId && element && (last?.id !== id || last.element !== element)) {
+        lastRegisteredSelectedRowRef.current = { id, element };
         setSelectedRowRegistrationVersion((current) => current + 1);
       }
     },
