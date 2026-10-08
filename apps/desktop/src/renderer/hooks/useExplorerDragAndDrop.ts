@@ -1121,15 +1121,11 @@ export function useExplorerDragAndDrop(args: {
       return;
     }
     resetSpringHold();
-    // A disk under Locations takes a drop as a favorite does.
-    const isShortcut = item.kind === "favorite" || item.kind === "location";
-    const targetSurface = isShortcut ? "favorite" : "tree";
-    const targetSupportsMove =
-      item.kind === "filesystem" ? !item.isSymlink : isShortcut ? item.path !== trashPath : false;
+    const targetSurface = treeItemSurface(item);
     const validity = evaluateDropTarget(event, {
       surface: targetSurface,
       path: item.path,
-      targetSupportsMove,
+      targetSupportsMove: treeItemTakesDrops(item),
     });
     syncTreeDropElementIndicator(event, targetSurface, item.path, validity);
     setDropIndicator(targetSurface, item.path, validity);
@@ -1156,14 +1152,26 @@ export function useExplorerDragAndDrop(args: {
     if (!item.path) {
       return;
     }
-    const isShortcut = item.kind === "favorite" || item.kind === "location";
-    await handleDrop(isShortcut ? "favorite" : "tree", item.path, event, {
-      targetSupportsMove:
-        item.kind === "filesystem" ? !item.isSymlink : isShortcut && item.path !== trashPath,
+    await handleDrop(treeItemSurface(item), item.path, event, {
+      targetSupportsMove: treeItemTakesDrops(item),
       selectTargetInTree:
         item.kind !== "location" && (subview === "tree" || item.kind === "favorite"),
       validateWithItemProperties: true,
     });
+  }
+
+  // A disk under Locations takes a drop as a favorite does.
+  function treeItemSurface(item: TreePresentationItem): InternalDropTargetSurface {
+    return item.kind === "favorite" || item.kind === "location" ? "favorite" : "tree";
+  }
+
+  // A folder in the tree takes drops, a link to one doesn't; a favorite or a disk does,
+  // the Trash doesn't.
+  function treeItemTakesDrops(item: TreePresentationItem): boolean {
+    if (item.kind === "filesystem") {
+      return !item.isSymlink;
+    }
+    return treeItemSurface(item) === "favorite" && item.path !== trashPath;
   }
 
   // ── Tabs ──────────────────────────────────────────────────────────────────────────────
