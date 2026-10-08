@@ -275,6 +275,72 @@ export function flattenVisibleTreePaths(
   return ordered;
 }
 
+// Whether reading a folder failed because it is no longer there (removed, renamed, or
+// replaced by a file), rather than because it can't be read: the error arrives as the
+// message the main process passed on ("ENOENT: no such file or directory, stat '…'").
+export function isFolderGoneError(message: string): boolean {
+  return (
+    message.includes("ENOENT") ||
+    message.includes("ENOTDIR") ||
+    message.toLowerCase().includes("no such file or directory") ||
+    message.toLowerCase().includes("not a directory")
+  );
+}
+
+// Whether two listings of a folder show the same items the same way: each item has the same
+// details, in the same order.
+export function sameDirectoryEntries<T extends object>(
+  left: readonly T[],
+  right: readonly T[],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (!sameFields(left[index] as T, right[index] as T)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Whether two sets of item details, by path, hold the very same details for the same items.
+export function sameDetailsByPath(
+  left: Readonly<Record<string, unknown>>,
+  right: Readonly<Record<string, unknown>>,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  const leftPaths = Object.keys(left);
+  if (leftPaths.length !== Object.keys(right).length) {
+    return false;
+  }
+  return leftPaths.every((path) => path in right && left[path] === right[path]);
+}
+
+function sameFields(left: object, right: object): boolean {
+  if (left === right) {
+    return true;
+  }
+  const leftFields = left as Record<string, unknown>;
+  const rightFields = right as Record<string, unknown>;
+  for (const key in leftFields) {
+    if (leftFields[key] !== rightFields[key]) {
+      return false;
+    }
+  }
+  for (const key in rightFields) {
+    if (!(key in leftFields)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function clampIndex(index: number, itemCount: number): number {
   return Math.max(0, Math.min(itemCount - 1, index));
 }

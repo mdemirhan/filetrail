@@ -30,8 +30,11 @@ import {
   getPageStepItemCount,
   getPagedSelectionIndex,
   getTreeSeedChain,
+  isFolderGoneError,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
+  sameDetailsByPath,
+  sameDirectoryEntries,
   withPackageChild,
 } from "../lib/explorerNavigation";
 import { type ExplorerPane, resolveExplorerPaneRestoreTarget } from "../lib/explorerPaneFocus";
@@ -817,6 +820,8 @@ export function useExplorerNavigationController(args: {
   // Items whose details changed on disk since they were read (see
   // reloadFolderAfterOutsideChange): what is shown for them stays until it is read again.
   const staleMetadataPathsRef = useRef(new Set<string>());
+  // Counts the times items went stale: the details on screen are then looked over again.
+  const [staleDetailsCheck, setStaleDetailsCheck] = useState(0);
 
   function applyEmptyDirectorySnapshot() {
     metadataCacheRef.current = new Map();
@@ -853,7 +858,11 @@ export function useExplorerNavigationController(args: {
     path: string,
     entries: DirectoryEntry[],
     cachedMetadata: Record<string, DirectoryEntryMetadata>,
-    options: { keepSelection?: boolean; keepSearchResults?: boolean } = {},
+    options: {
+      keepSelection?: boolean;
+      keepSearchResults?: boolean;
+      changedPaths?: readonly string[] | null;
+    } = {},
   ) {
     const sameFolder = path === currentPathRef.current;
     if (!sameFolder) {
@@ -865,13 +874,20 @@ export function useExplorerNavigationController(args: {
     // between (a change made outside the app to the folder just left) must hear of this one.
     currentPathRef.current = path;
     setCurrentPath(path);
-    setCurrentEntries(entries);
+    // The same folder read again as it was (a file in it written to, say) keeps the listing
+    // and details on screen as they are, so nothing is drawn again for it. Kept only while
+    // they are still the ones compared to.
+    const sameListing = sameFolder && sameDirectoryEntries(currentEntries, entries);
+    const sameDetails = sameFolder && sameDetailsByPath(metadataByPath, cachedMetadata);
+    setCurrentEntries((shown) => (sameListing && shown === currentEntries ? shown : entries));
     // The same folder read again keeps the rows on screen: the list tells of them again only
     // when they change, and the details of those that changed are read again from them.
     if (!sameFolder) {
       setVisiblePaths([]);
     }
-    setMetadataByPath(cachedMetadata);
+    setMetadataByPath((shown) =>
+      sameDetails && shown === metadataByPath ? shown : cachedMetadata,
+    );
     if (
       searchResultsVisibleRef.current &&
       !keepSearchResultsOnReloadRef.current &&
@@ -914,7 +930,31 @@ export function useExplorerNavigationController(args: {
     }
     // Reloading a folder (a new sort, a change on disk, a paste) keeps what the info views
     // show and asks for it again, instead of blanking them until the selection changes.
-    setInfoRefreshKey((key) => key + 1);
+    // After a change made outside the app, only when what they show may have changed.
+    if (
+      options.changedPaths === undefined ||
+      infoMayHaveChanged(path, options.changedPaths, !sameListing)
+    ) {
+      setInfoRefreshKey((key) => key + 1);
+    }
+  }
+
+  // Whether what the info views show may have changed, after a change made outside the app
+  // to `changedPaths` in the folder at `folderPath` (null: to anything in it).
+  function infoMayHaveChanged(
+    folderPath: string,
+    changedPaths: readonly string[] | null,
+    listingChanged: boolean,
+  ): boolean {
+    if (!infoPanelOpen && !infoRowOpen) {
+      return false;
+    }
+    const shownPath = infoTargetPathOverride ?? contentSelection.leadPath ?? folderPath;
+    if (changedPaths === null) {
+      return true;
+    }
+    // The folder itself changes (its modification time) only when items come or go.
+    return shownPath === folderPath ? listingChanged : changedPaths.includes(shownPath);
   }
 
   // Decides how much each folder opened counts for the Go To box.
@@ -996,7 +1036,9 @@ export function useExplorerNavigationController(args: {
       favoritePath?: string;
       /** The sidebar row to select with "favorite": a location's, when not a favorite's. */
       shortcutItemId?: TreeItemId;
-      persistOnError?: boolean;
+      /** A folder that can't be read is still opened, showing why (true), or is unless it
+       *  is gone ("unlessGone"): then nothing is opened, so the folder above can be. */
+      persistOnError?: boolean | "unlessGone";
       forceTreeReload?: boolean;
       rerootTree?: boolean;
       /** Gone to from the sidebar. A location (Home, Macintosh HD, a disk) is the tree's top:
@@ -1015,6 +1057,9 @@ export function useExplorerNavigationController(args: {
       keepInfoTarget?: boolean;
       /** Back or Forward: the folder comes back as it was left (see FolderViewMemory). */
       restoreView?: boolean;
+      /** Read again after a change made outside the app to these items in it (null: to
+       *  anything in it): the info views ask again only if what they show is among them. */
+      changedPaths?: readonly string[] | null;
     } = {},
   ): Promise<boolean> {
     if (path !== currentPathRef.current) {
@@ -1032,11 +1077,13 @@ export function useExplorerNavigationController(args: {
     if (!options.keepInfoTarget) {
       setInfoTargetPathOverride(null);
     }
+    // A folder checked quietly keeps the error it shows until it is read: an unreadable one
+    // read again would otherwise flash as empty.
     if (!options.quiet) {
       setDirectoryLoading(true);
+      setDirectoryError(null);
+      setLocationError(null);
     }
-    setDirectoryError(null);
-    setLocationError(null);
     try {
       const response = await client.invoke("directory:getSnapshot", {
         path,
@@ -1047,6 +1094,10 @@ export function useExplorerNavigationController(args: {
       });
       if (directoryRequestRef.current !== requestId) {
         return false;
+      }
+      if (options.quiet) {
+        setDirectoryError(null);
+        setLocationError(null);
       }
       const cachedMetadata = Object.fromEntries(
         response.entries.flatMap((entry) => {
@@ -1109,7 +1160,10 @@ export function useExplorerNavigationController(args: {
       const message = error instanceof Error ? error.message : String(error);
       setDirectoryError(message);
       setLocationError(message);
-      if (options.persistOnError) {
+      if (
+        options.persistOnError === true ||
+        (options.persistOnError === "unlessGone" && !isFolderGoneError(message))
+      ) {
         applyDirectorySnapshot(path, [], {}, options);
         // A folder that can't be listed (the Trash, without Full Disk Access) still takes
         // the tree back to its top.
@@ -1859,7 +1913,8 @@ export function useExplorerNavigationController(args: {
     const isSameView = createViewGuard();
     const didOpen = await navigateToNearestExistingFolder(targetPath, "skip", {
       ...getSelectedTreeReloadOptions(targetPath),
-      persistOnError: false,
+      // One that can't be read (the Trash, without Full Disk Access) stays, showing why.
+      persistOnError: "unlessGone",
       forceTreeReload: true,
       keepSelection: true,
       keepSearchResults: true,
@@ -1877,8 +1932,9 @@ export function useExplorerNavigationController(args: {
   // be: the selection, the search results, the tree and what the Info panel shows all stay.
   // `changedPaths` are the items in `folderPath` that changed (null when that isn't known):
   // their details are read again. If the folder is gone, the nearest folder above it is
-  // opened instead. Resolves to false when it has to wait: the folder is being read already,
-  // and that read may have started before the change.
+  // opened instead; one that can't be read stays, showing why. Resolves to false when it has
+  // to wait: the folder is being read already, and that read may have started before the
+  // change.
   async function reloadFolderAfterOutsideChange(
     folderPath: string,
     changedPaths: readonly string[] | null,
@@ -1894,20 +1950,28 @@ export function useExplorerNavigationController(args: {
       return pendingNavigation.path !== targetPath;
     }
     const stalePaths = staleMetadataPathsRef.current;
+    let newlyStale = false;
     for (const path of changedPaths ?? currentEntries.map((entry) => entry.path)) {
-      if (metadataCacheRef.current.has(path)) {
+      if (metadataCacheRef.current.has(path) && !stalePaths.has(path)) {
         stalePaths.add(path);
+        newlyStale = true;
       }
     }
-    await navigateToNearestExistingFolder(targetPath, "skip", {
+    const didOpen = await navigateToNearestExistingFolder(targetPath, "skip", {
       syncTree: false,
       treeSelectionMode: "preserve",
-      persistOnError: false,
+      persistOnError: "unlessGone",
       keepSelection: true,
       keepSearchResults: true,
       keepInfoTarget: true,
       quiet: true,
+      changedPaths,
     });
+    // The listing may be the same as before, which leaves the details on screen as they
+    // were: those of the items that changed are asked for again all the same.
+    if (didOpen && newlyStale) {
+      setStaleDetailsCheck((count) => count + 1);
+    }
     return true;
   }
 
@@ -2086,6 +2150,7 @@ export function useExplorerNavigationController(args: {
 
   // The details of the items on screen in the Details view, which shows them, and of several
   // selected files in any view, whose sizes the Info Row and the Info panel add up.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: staleDetailsCheck looks again at the items whose details went stale.
   useEffect(() => {
     if (isSearchMode || currentPath.length === 0 || directoryLoading) {
       return;
@@ -2207,6 +2272,7 @@ export function useExplorerNavigationController(args: {
     visiblePaths,
     metadataCacheRef,
     metadataInflightRef,
+    staleDetailsCheck,
   ]);
 
   // Properties of recently shown items, so moving back to one shows it at once; it is still

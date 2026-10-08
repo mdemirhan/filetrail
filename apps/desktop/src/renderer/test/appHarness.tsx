@@ -281,6 +281,11 @@ export function createAppHarness(
   ) => void;
   // The folder is gone from disk: reading it fails from now on.
   removeDirectory: (path: string) => void;
+  // The folder is there, but reading it fails with `error` from now on (as macOS refuses to
+  // list the Trash to an app without Full Disk Access, say).
+  refuseDirectory: (path: string, error: string) => void;
+  // The file's size on disk, from now on.
+  setFileSize: (path: string, sizeBytes: number) => void;
   // Holds back the listings of `path` until the returned function is called.
   holdDirectorySnapshot: (path: string) => () => void;
   releaseTreeChildren: () => void;
@@ -332,6 +337,10 @@ export function createAppHarness(
   // What the window reports to the application menu; kept apart from the calls tests count.
   const menuStates: Array<IpcRequestInput<"app:setMenuState">["state"]> = [];
   const heldSnapshots = new Map<string, Promise<void>>();
+  // Folders that are there but can't be read, with the error reading each fails with.
+  const refusedDirectories = new Map<string, string>();
+  // The sizes of the files whose details are read (the details of others aren't answered).
+  const fileSizes = new Map<string, number>();
   let releaseTreeChildren: () => void = () => undefined;
   const heldTreeChildren = new Promise<void>((resolve) => {
     releaseTreeChildren = resolve;
@@ -443,12 +452,37 @@ export function createAppHarness(
       if (channel === "directory:getSnapshot") {
         const snapshotPath = (payload as IpcRequestInput<"directory:getSnapshot">).path;
         await heldSnapshots.get(snapshotPath);
-        return directorySnapshots[snapshotPath] as IpcResponse<C>;
+        const refusal = refusedDirectories.get(snapshotPath);
+        if (refusal !== undefined) {
+          throw new Error(refusal);
+        }
+        const snapshot = directorySnapshots[snapshotPath];
+        if (!snapshot) {
+          // As the main process passes on what reading a folder that isn't there fails with.
+          throw new Error(`ENOENT: no such file or directory, stat '${snapshotPath}'`);
+        }
+        return snapshot as IpcResponse<C>;
       }
       if (channel === "directory:getMetadataBatch") {
+        const request = payload as IpcRequestInput<"directory:getMetadataBatch">;
         return {
-          directoryPath: (payload as IpcRequestInput<"directory:getMetadataBatch">).directoryPath,
-          items: [],
+          directoryPath: request.directoryPath,
+          items: request.paths.flatMap((path) => {
+            const sizeBytes = fileSizes.get(path);
+            return sizeBytes === undefined
+              ? []
+              : [
+                  {
+                    path,
+                    kindLabel: "File",
+                    createdAt: null,
+                    modifiedAt: null,
+                    sizeBytes,
+                    sizeStatus: "ready" as const,
+                    permissionMode: null,
+                  },
+                ];
+          }),
         } satisfies IpcResponse<"directory:getMetadataBatch"> as IpcResponse<C>;
       }
       if (channel === "item:getProperties") {
@@ -900,6 +934,12 @@ export function createAppHarness(
     },
     removeDirectory(path) {
       delete directorySnapshots[path];
+    },
+    refuseDirectory(path, error) {
+      refusedDirectories.set(path, error);
+    },
+    setFileSize(path, sizeBytes) {
+      fileSizes.set(path, sizeBytes);
     },
     holdDirectorySnapshot(path) {
       let release: () => void = () => undefined;

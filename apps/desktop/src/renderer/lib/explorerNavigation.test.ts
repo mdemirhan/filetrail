@@ -7,8 +7,11 @@ import {
   getPageStepItemCount,
   getPagedSelectionIndex,
   getTreeSeedChain,
+  isFolderGoneError,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
+  sameDetailsByPath,
+  sameDirectoryEntries,
   withPackageChild,
 } from "./explorerNavigation";
 
@@ -268,5 +271,47 @@ describe("explorerNavigation", () => {
     expect(next("ArrowUp", "list", 5)).toBe(4);
     expect(next("ArrowRight", "list", 5)).toBe(9);
     expect(next("ArrowLeft", "list", 5)).toBe(1);
+  });
+
+  it("tells a folder that is gone from one that can't be read", () => {
+    expect(isFolderGoneError("ENOENT: no such file or directory, stat '/Users/demo/Old'")).toBe(
+      true,
+    );
+    expect(isFolderGoneError("ENOTDIR: not a directory, stat '/Users/demo/a.txt/b'")).toBe(true);
+    // Replaced by a file of the same name.
+    expect(isFolderGoneError("Path is not a directory: /Users/demo/Old")).toBe(true);
+    expect(isFolderGoneError("EPERM: operation not permitted, scandir '/Users/demo/.Trash'")).toBe(
+      false,
+    );
+    expect(isFolderGoneError("EACCES: permission denied, scandir '/Users/demo/Locked'")).toBe(
+      false,
+    );
+  });
+
+  it("tells whether a folder read again lists the same items the same way", () => {
+    const file = { path: "/a/one.txt", name: "one.txt", kind: "file", isHidden: false };
+    const listing = [file, { path: "/a/B", name: "B", kind: "directory", isHidden: false }];
+    expect(
+      sameDirectoryEntries(
+        listing,
+        listing.map((entry) => ({ ...entry })),
+      ),
+    ).toBe(true);
+    expect(sameDirectoryEntries(listing, [...listing].reverse())).toBe(false);
+    expect(sameDirectoryEntries(listing, [file])).toBe(false);
+    expect(sameDirectoryEntries([file], [{ ...file, isHidden: true }])).toBe(false);
+    // A detail only one of them has (a size, when sorted by size).
+    expect(sameDirectoryEntries<object>([file], [{ ...file, sizeBytes: 5 }])).toBe(false);
+  });
+
+  it("tells whether two sets of item details are the very same", () => {
+    const details = { path: "/a/one.txt", sizeBytes: 5 };
+    expect(sameDetailsByPath({ "/a/one.txt": details }, { "/a/one.txt": details })).toBe(true);
+    // Read again: the same values, but not the details on screen.
+    expect(sameDetailsByPath({ "/a/one.txt": details }, { "/a/one.txt": { ...details } })).toBe(
+      false,
+    );
+    expect(sameDetailsByPath({ "/a/one.txt": details }, {})).toBe(false);
+    expect(sameDetailsByPath({ "/a/one.txt": details }, { "/a/two.txt": details })).toBe(false);
   });
 });

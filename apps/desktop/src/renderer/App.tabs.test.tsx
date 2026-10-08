@@ -363,6 +363,39 @@ describe("App tabs", () => {
     expect(screen.getAllByRole("tab")[0]).toHaveAttribute("aria-selected", "true");
   });
 
+  it("keeps a tab on a folder it can't read when the tab comes back", async () => {
+    const trashPath = "/Users/demo/.Trash";
+    const refused = `EPERM: operation not permitted, scandir '${trashPath}'`;
+    const harness = createAppHarness();
+    harness.refuseDirectory(trashPath, refused);
+    const trashReads = () =>
+      harness.invocations.filter(
+        (call) =>
+          call.channel === "directory:getSnapshot" &&
+          (call.payload as { path: string }).path === trashPath,
+      ).length;
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await act(async () => {
+      fireEvent.click(screen.getByTitle(`location:${trashPath}`));
+    });
+    await waitFor(() => expect(screen.getByTestId("content-error")).toHaveTextContent(refused));
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/),
+    );
+    await pressKey({ key: "Tab", ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(trashReads()).toBe(2));
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent(trashPath);
+    expect(screen.getByTestId("content-error")).toHaveTextContent(refused);
+    expect(tabLabels()).toEqual(["demo", ".Trash"]);
+  });
+
   it("pastes into one tab what was copied in another", async () => {
     const harness = createAppHarness();
     await renderApp(harness);

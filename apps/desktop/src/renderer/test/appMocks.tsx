@@ -42,8 +42,11 @@ export const contentPaneMock = () => ({
     header,
     paneRef,
     statusSummary,
+    error,
   }: {
     isFocused?: boolean;
+    // Why the folder can't be shown, when it can't.
+    error?: string | null;
     // The path bar's right-hand summary: counts, and a size when known.
     statusSummary?: string;
     // Given while the pane shows search results (the search bar).
@@ -168,6 +171,7 @@ export const contentPaneMock = () => ({
       >
         <output data-testid="content-current-path">{currentPath}</output>
         <output data-testid="content-entry-count">{entries.length}</output>
+        <output data-testid="content-error">{error ?? ""}</output>
         <output data-testid="content-focused">{String(isFocused ?? false)}</output>
         <output data-testid="content-status">{statusSummary}</output>
         <label>
