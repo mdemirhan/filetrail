@@ -112,12 +112,13 @@ export function resolveShowInFinderPaths(context: CommandTargetContext): string[
 }
 
 // The folders File > Calculate Size measures: the tree's folder when the tree has the
-// keyboard, the folders among the selection, or with nothing selected the folder on screen.
+// keyboard, the folders among the selection, or with nothing selected the folder on screen
+// (also when the tree's row is a location, Home or a disk, which shows that folder).
 export function resolveCalculateSizePaths(context: CommandTargetContext): string[] {
-  if (context.focusedPane === "tree") {
-    return context.selectedTreeTargetPath ? [context.selectedTreeTargetPath] : [];
+  if (context.focusedPane === "tree" && context.selectedTreeTargetPath) {
+    return [context.selectedTreeTargetPath];
   }
-  if (context.selectedPathsInViewOrder.length > 0) {
+  if (context.focusedPane !== "tree" && context.selectedPathsInViewOrder.length > 0) {
     return resolveSelectedEntries(context.selectedPathsInViewOrder, context.activeContentEntries)
       .filter((entry) => isFolderSizeEligibleKind(entry.kind))
       .map((entry) => entry.path);

@@ -471,6 +471,17 @@ describe("menu commands", () => {
     expect(paths(select(folder, note))).toEqual(["/Users/demo/Projects"]);
     expect(paths(select())).toEqual(["/Users/demo"]);
     expect(paths(treeFocused("/Users"))).toEqual(["/Users"]);
+    // A location row (Home, a disk) in the tree shows its folder: that one is sized, never
+    // what is left selected in the list.
+    expect(paths(treeFocused(null))).toEqual(["/Users/demo"]);
+    expect(
+      paths({
+        ...treeFocused(null),
+        selectedPathsInViewOrder: [folder.path],
+        selectedEntry: folder,
+      }),
+    ).toEqual(["/Users/demo"]);
+    expect(canRunToolbarRendererCommand("calculateSize", treeFocused(null))).toBe(true);
     // Files alone have their size already; search results are no folder on screen.
     expect(paths(select(note))).toEqual([]);
     expect(paths({ ...select(), isSearchMode: true })).toEqual([]);
