@@ -3,7 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import { link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import {
@@ -1684,6 +1694,48 @@ describe("moving to the Trash and deleting", () => {
     coordinator.shutdown();
   });
 
+  // A paste from the clipboard is checked against the items copied, so one put at an item's
+  // path since is left out; a drag or Move To names what is there now.
+  it("gives the analysis the ids of the items copied, for a paste from the clipboard", async () => {
+    const writeService = createWriteServiceStub();
+    const clipboardItemIds = vi.fn(async (paths: readonly string[]) =>
+      Object.fromEntries(paths.map((path) => [path, { dev: 1, ino: 2 }])),
+    );
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
+      clipboardItemIds,
+    });
+    const request = {
+      mode: "copy" as const,
+      sourcePaths: ["/Users/demo/a.txt"],
+      destinationDirectoryPath: "/Users/demo/Folder",
+      action: "paste" as const,
+    };
+
+    await coordinator.handlers["copyPaste:analyzeStart"](request, { sender: createSender() });
+    await coordinator.handlers["copyPaste:analyzeStart"](
+      { ...request, fromClipboard: true },
+      { sender: createSender() },
+    );
+
+    expect(vi.mocked(writeService.startCopyPasteAnalysis).mock.calls.map(([sent]) => sent)).toEqual(
+      [
+        {
+          mode: "copy",
+          sourcePaths: ["/Users/demo/a.txt"],
+          destinationDirectoryPath: "/Users/demo/Folder",
+        },
+        {
+          mode: "copy",
+          sourcePaths: ["/Users/demo/a.txt"],
+          destinationDirectoryPath: "/Users/demo/Folder",
+          expectedSourceIds: { "/Users/demo/a.txt": { dev: 1, ino: 2 } },
+        },
+      ],
+    );
+    expect(clipboardItemIds).toHaveBeenCalledTimes(1);
+    coordinator.shutdown();
+  });
+
   // The home folder it is given, as for everything else it checks.
   it("protects the folders of the home folder it is given", async () => {
     const writeService = createWriteServiceStub();
@@ -2588,6 +2640,7 @@ function createWriteOperationFs(overrides: Partial<WriteOperationFs> = {}): Writ
     rm: overrides.rm ?? vi.fn(async () => undefined),
     trash: overrides.trash ?? vi.fn(async (path: string) => inTrash(path)),
     ...(overrides.itemSize ? { itemSize: overrides.itemSize } : {}),
+    ...(overrides.readdir ? { readdir: overrides.readdir } : {}),
   };
 }
 
@@ -2725,7 +2778,14 @@ describe("the Trash", () => {
       }
       return inTrash(path);
     });
-    const fs = createWriteOperationFs({ trash });
+    // Each item with its own id, so the one asked about is told from any other.
+    const ids = new Map<string, number>();
+    const lstat = vi.fn(async (path: string) => {
+      const ino = ids.get(path) ?? ids.size + 1;
+      ids.set(path, ino);
+      return { ...createStats(false), isSymbolicLink: () => false, dev: 7, ino };
+    });
+    const fs = createWriteOperationFs({ trash, lstat });
     const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
       homePath: home,
     });
@@ -2761,6 +2821,96 @@ describe("the Trash", () => {
     ).resolves.toEqual({ operationId: "write-op-2", status: "queued" });
     await waitForTerminalEvent(sender, "write-op-2");
     expect(fs.rm).toHaveBeenCalledWith("/Volumes/Share/a.txt", { recursive: true, force: true });
+    coordinator.shutdown();
+  });
+
+  // While the question is open, another window (or another Mac on the share) puts a
+  // different item at that path: confirming deletes nothing it wasn't asked about.
+  it("doesn't delete another item put at the path while the no-Trash question was open", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-no-trash-swap-"));
+    try {
+      await writeFile(join(root, "a.txt"), "asked about");
+      await writeFile(join(root, "b.txt"), "asked about too");
+      const noTrash = async () => {
+        throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+      };
+      const coordinator = createWriteOperationCoordinator(
+        createWriteServiceStub(),
+        createRealWriteOperationFs({ trash: vi.fn(noTrash) }),
+        { homePath: home },
+      );
+      const sender = createSender();
+      await coordinator.handlers["writeOperation:trash"](
+        { paths: [join(root, "a.txt"), join(root, "b.txt")] },
+        { sender },
+      );
+      await waitForTerminalEvent(sender, "write-op-1");
+
+      await rename(join(root, "a.txt"), join(root, "moved.txt"));
+      await writeFile(join(root, "a.txt"), "never asked about");
+
+      await expect(
+        coordinator.handlers["writeOperation:deleteImmediately"](
+          { paths: [join(root, "a.txt")] },
+          { sender },
+        ),
+      ).rejects.toThrow("“a.txt” changed after you were asked about it, so it wasn't deleted.");
+      expect(await readFile(join(root, "a.txt"), "utf8")).toBe("never asked about");
+
+      // The item still there is deleted as asked.
+      await coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: [join(root, "b.txt")] },
+        { sender },
+      );
+      await waitForTerminalEvent(sender, "write-op-2");
+      expect((await readdir(root)).sort()).toEqual(["a.txt", "moved.txt"]);
+      coordinator.shutdown();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  // On a disk without usable ids (some network volumes), a folder put in its place holding
+  // as many items isn't taken for it: its date differs.
+  it("tells a folder without an id from another one holding as many items", async () => {
+    let looks = { mtimeMs: 1_000, entries: ["a.txt"] };
+    const fs = createWriteOperationFs({
+      trash: vi.fn(async () => {
+        throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+      }),
+      lstat: vi.fn(async () => ({
+        ...createStats(true),
+        isSymbolicLink: () => false,
+        isFile: () => false,
+        mtimeMs: looks.mtimeMs,
+      })),
+      readdir: vi.fn(async () => looks.entries),
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: home,
+    });
+    const sender = createSender();
+    await coordinator.handlers["writeOperation:trash"](
+      { paths: ["/Volumes/Share/Project"] },
+      { sender },
+    );
+    await waitForTerminalEvent(sender, "write-op-1");
+
+    looks = { mtimeMs: 2_000, entries: ["b.txt"] };
+    await expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Volumes/Share/Project"] },
+        { sender },
+      ),
+    ).rejects.toThrow("“Project” changed after you were asked about it, so it wasn't deleted.");
+
+    looks = { mtimeMs: 1_000, entries: ["a.txt"] };
+    await coordinator.handlers["writeOperation:deleteImmediately"](
+      { paths: ["/Volumes/Share/Project"] },
+      { sender },
+    );
+    await waitForTerminalEvent(sender, "write-op-2");
+    expect(fs.rm).toHaveBeenCalledWith("/Volumes/Share/Project", { recursive: true, force: true });
     coordinator.shutdown();
   });
 

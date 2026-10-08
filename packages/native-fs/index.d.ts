@@ -204,6 +204,17 @@ export function nativeRenameExclusive(from: string, to: string): Promise<void>;
 export function nativeIsCaseSensitive(path: string): Promise<boolean | null>;
 
 /**
+ * Whether the volume holding `path` keeps extended attributes in "._name" files (FAT,
+ * exFAT, some network volumes) rather than natively, from `getattrlist(2)`
+ * `VOL_CAP_INT_EXTENDED_ATTR`. On such a volume macOS reads "._name" as "name"'s own
+ * attributes; on APFS or HFS+ a "._name" file is an ordinary item. Resolves `null` when
+ * the volume doesn't say.
+ *
+ * @throws An error with a `code` property when `path` can't be reached (e.g. `"ENOENT"`).
+ */
+export function nativeUsesAppleDouble(path: string): Promise<boolean | null>;
+
+/**
  * Moves the item at `path` to the Trash of its disk (`-[NSFileManager
  * trashItemAtURL:resultingItemURL:error:]`) and resolves with the path it has there. The
  * Trash renames an item whose name is taken there ("notes 2.txt"), so only this path finds

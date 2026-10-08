@@ -44,7 +44,7 @@ export default defineConfig({
         "apps/desktop/src/main/bootstrap/{preferencesPatch,systemHandlers}.ts",
         // The explorer windows' lives, the menu that follows them, and the IPC that knows
         // which window asks.
-        "apps/desktop/src/main/{explorerWindowController,explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers}.ts",
+        "apps/desktop/src/main/{explorerWindowController,explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers,clipboardItemIds}.ts",
         "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename,useTextEditingFocus}.ts",
         "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,earlyWriteOperationEvents,internalDragAndDrop,undoQuestion}.ts",
         "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField,BatchRenameSheet,UndoQuestionAlert}.tsx",
@@ -70,7 +70,7 @@ export default defineConfig({
           functions: 96,
           lines: 96,
         },
-        "apps/desktop/src/main/{explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers}.ts":
+        "apps/desktop/src/main/{explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers,clipboardItemIds}.ts":
           { statements: 99, branches: 95, functions: 100, lines: 99 },
         // Undo and Redo, a floor for each file: a pattern's floor is for all it matches
         // together, so one file well below it could hide among the others.

@@ -1027,7 +1027,9 @@ describe("App file operations like Finder", () => {
       const verb = key === "x" ? "moved" : "pasted";
       const notice = await screen.findByRole("dialog", { name: `An item couldn’t be ${verb}` });
       expect(notice).toHaveTextContent(
-        `“gone.txt” couldn’t be ${verb} because it no longer exists.`,
+        key === "x"
+          ? "“gone.txt” couldn’t be moved because it was deleted, replaced or moved elsewhere since it was cut."
+          : "“gone.txt” couldn’t be pasted because it was moved, deleted or replaced since it was copied.",
       );
       if (key === "c") {
         // What is gone is taken off the clipboard; the rest stays for more pastes.
@@ -1043,7 +1045,7 @@ describe("App file operations like Finder", () => {
 
       const notice = await screen.findByRole("dialog", { name: "Couldn’t Paste" });
       expect(notice).toHaveTextContent(
-        "“gone.txt” couldn’t be pasted because it no longer exists.",
+        "“gone.txt” couldn’t be pasted because it was moved, deleted or replaced since it was copied.",
       );
       expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
       expect(clipboardButton()).toBeNull();

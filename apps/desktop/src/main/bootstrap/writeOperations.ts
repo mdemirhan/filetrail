@@ -19,6 +19,7 @@ import {
   type CopyPasteProgressEvent,
   type ItemId,
   type ItemKind,
+  type ItemStamp,
   NO_TRASH_ERROR_CODE,
   type UndoLog,
   type UndoStep,
@@ -35,6 +36,7 @@ import {
   readItemId,
   readItemRef,
   readItemStamp,
+  sameItemId,
   stampWithoutId,
 } from "@filetrail/core";
 import { movedItemsOf, runBatchRename } from "./batchRenameExecution";
@@ -156,6 +158,29 @@ type PreparedCreateFolderOperation = {
   destinationPath: string;
 };
 
+// An item a no-Trash question was about: its id, or how it looked when it has none.
+type AskedItem = { id: ItemId | null; stamp: ItemStamp | null };
+
+// Whether the item asked about can be told from another one put at its path: by its id, or
+// with none, by everything `looksTheSame` compares being known.
+function canBeToldApart(asked: AskedItem): boolean {
+  return asked.id !== null || (asked.stamp !== null && looksTheSame(asked.stamp, asked.stamp));
+}
+
+// Without an id, an item is taken for the one asked about only when everything known about
+// it is the same and known: its kind, its date, a file's size, a folder's item count (a
+// folder's date changes whenever an item in it is added, removed or renamed).
+function looksTheSame(asked: ItemStamp, now: ItemStamp): boolean {
+  return (
+    asked.kind === now.kind &&
+    asked.mtimeMs !== null &&
+    asked.mtimeMs === now.mtimeMs &&
+    (asked.kind === "directory"
+      ? asked.entryCount !== null && asked.entryCount === now.entryCount
+      : asked.size === now.size)
+  );
+}
+
 export function createWriteOperationCoordinator(
   writeService: WriteService,
   fs: WriteOperationFs,
@@ -170,6 +195,8 @@ export function createWriteOperationCoordinator(
     diskHasTrash?: (path: string) => boolean;
     // What Undo and Redo work from. Without it there is nothing to undo.
     undoHistory?: UndoHistory;
+    // Which item each of these clipboard paths was when copied (see clipboardItemIds).
+    clipboardItemIds?: (paths: readonly string[]) => Promise<Record<string, ItemId>>;
     // Every window hears how the running operation is doing, so the others know one is
     // running (and refuse to start another) and can follow what it changed. Called with
     // each progress event and the window it was sent to.
@@ -336,11 +363,16 @@ export function createWriteOperationCoordinator(
   // that tried. After asking, that window may delete exactly these immediately (as Finder
   // does on such a disk), whatever another window sends to the Trash meanwhile. Each is let
   // go of once deleted, and all of them when the window's page is loaded again: the page
-  // that asked is gone.
-  const itemsWithoutTrash = new WeakMap<WriteOperationSender, Set<string>>();
+  // that asked is gone. Each is the item that was there, by its id (or, on a disk without
+  // usable ids, how it looked): another item put at its path while the question was open
+  // was never asked about.
+  const itemsWithoutTrash = new WeakMap<WriteOperationSender, Map<string, AskedItem>>();
   const sendersWatchedForReload = new WeakSet<WriteOperationSender>();
 
-  function rememberItemsWithoutTrash(sender: WriteOperationSender, paths: Set<string>): void {
+  function rememberItemsWithoutTrash(
+    sender: WriteOperationSender,
+    paths: Map<string, AskedItem>,
+  ): void {
     itemsWithoutTrash.set(sender, paths);
     const events = sender as SenderLifecycleEvents;
     if (sendersWatchedForReload.has(sender) || typeof events.on !== "function") {
@@ -361,7 +393,9 @@ export function createWriteOperationCoordinator(
     const realHomePath = fs.realpath ? await fs.realpath(homePath).catch(() => homePath) : homePath;
     for (const path of paths) {
       const resolved = resolve(path);
-      if (itemsWithoutTrash.get(sender)?.has(resolved)) {
+      const asked = itemsWithoutTrash.get(sender)?.get(resolved);
+      if (asked !== undefined) {
+        await assertStillAskedItem(resolved, asked);
         continue;
       }
       const folder = fs.realpath
@@ -382,6 +416,34 @@ export function createWriteOperationCoordinator(
         );
       }
     }
+  }
+
+  // The item a no-Trash question was about is still at its path (or nothing is: there is
+  // nothing to delete then). Anything else there was never asked about.
+  async function assertStillAskedItem(
+    path: string,
+    asked: AskedItem,
+  ): Promise<"missing" | "present"> {
+    const now = await lstatUnlessMissing(path, fs.lstat);
+    if (now === "missing") {
+      return "missing";
+    }
+    const id = now === null ? null : itemIdOf(now);
+    const same =
+      asked.id !== null
+        ? sameItemId(asked.id, id)
+        : asked.stamp !== null && id === null
+          ? await readItemStamp(fs, path).then(
+              (stamp) => stamp !== null && looksTheSame(asked.stamp as ItemStamp, stamp),
+              () => false,
+            )
+          : false;
+    if (!same) {
+      throw new Error(
+        `“${basename(path)}” changed after you were asked about it, so it wasn't deleted.`,
+      );
+    }
+    return "present";
   }
 
   const writeServiceUnsubscribe = writeService.subscribe((event) => {
@@ -1260,7 +1322,7 @@ export function createWriteOperationCoordinator(
     let completedItemCount = 0;
     let cancelled = false;
     // Only what this Trash finds without a Trash may be deleted next.
-    const withoutTrash = new Set<string>();
+    const withoutTrash = new Map<string, AskedItem>();
     rememberItemsWithoutTrash(sender, withoutTrash);
     const removedItems: RemovedItem[] = [];
     // One unit per item, so an item put back from the Trash doesn't depend on the others.
@@ -1294,6 +1356,8 @@ export function createWriteOperationCoordinator(
         currentDestinationPath: null,
         result: null,
       });
+      // The item the Trash is asked to take, for a no-Trash question about it.
+      let tried: AskedItem | null = null;
       try {
         const before = fs.itemSize ? await readItemSize(fs.itemSize, path) : undefined;
         // An item that is already gone (deleted or moved since it was chosen) has
@@ -1303,6 +1367,7 @@ export function createWriteOperationCoordinator(
           const id = stats === null ? null : itemIdOf(stats);
           const parentId = await readFolderIdOnce(folderIds, fs.stat, dirname(path));
           const looks = await stampWithoutId(fs, path, id);
+          tried = { id, stamp: looks.stamp ?? null };
           const trashPath = await fs.trash(path);
           if (trashPath === null) {
             // In the Trash, but the Trash didn't say where: it can't be put back.
@@ -1334,9 +1399,12 @@ export function createWriteOperationCoordinator(
           skipReason: null,
         });
       } catch (error) {
-        const noTrash = errorCode(error) === NO_TRASH_ERROR_CODE;
-        if (noTrash) {
-          withoutTrash.add(path);
+        // An item that can't be told apart from another (no id, and how it looked unknown)
+        // is never offered for deletion.
+        const noTrash =
+          errorCode(error) === NO_TRASH_ERROR_CODE && tried !== null && canBeToldApart(tried);
+        if (noTrash && tried !== null) {
+          withoutTrash.set(path, tried);
         }
         items.push({
           sourcePath: path,
@@ -1406,6 +1474,10 @@ export function createWriteOperationCoordinator(
     let completedItemCount = 0;
     let cancelled = false;
     const removedItems: RemovedItem[] = [];
+    // Whether deleting began on any item: anything it began on may be gone for good, even
+    // an item that then failed. One refused before that (it changed after the question)
+    // was never touched.
+    let deletingBegan = false;
     for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
         cancelled = true;
@@ -1428,7 +1500,17 @@ export function createWriteOperationCoordinator(
       });
       try {
         const before = fs.itemSize ? await readItemSize(fs.itemSize, path) : undefined;
-        await fs.rm(path, { recursive: true, force: true });
+        // Checked again just before deleting: the question may have been open a while. An
+        // item gone already has nothing left to delete.
+        const asked = itemsWithoutTrash.get(sender)?.get(path);
+        const gone =
+          asked !== undefined
+            ? (await assertStillAskedItem(path, asked)) === "missing"
+            : (await lstatUnlessMissing(path, fs.lstat)) === "missing";
+        if (!gone) {
+          deletingBegan = true;
+          await fs.rm(path, { recursive: true, force: true });
+        }
         itemsWithoutTrash.get(sender)?.delete(path);
         if (before !== undefined) {
           removedItems.push({
@@ -1499,10 +1581,7 @@ export function createWriteOperationCoordinator(
         result,
       },
       removedItems,
-      // Anything it began to delete may be gone for good, even an item that then failed.
-      items.some((item) => item.status === "completed" || item.status === "failed")
-        ? { undoable: false, reason: "deleted_for_good" }
-        : undefined,
+      deletingBegan ? { undoable: false, reason: "deleted_for_good" } : undefined,
     );
   }
 
@@ -1776,11 +1855,16 @@ export function createWriteOperationCoordinator(
           await assertNotSystemLocation(payload.sourcePaths, "moved", fs, homePath);
         }
         ensureNoWriteOperationInFlight();
+        const expectedSourceIds =
+          payload.fromClipboard && options.clipboardItemIds
+            ? await options.clipboardItemIds(payload.sourcePaths)
+            : undefined;
         const handle = writeService.startCopyPasteAnalysis(
           {
             mode: payload.mode,
             sourcePaths: payload.sourcePaths,
             destinationDirectoryPath: payload.destinationDirectoryPath,
+            ...(expectedSourceIds ? { expectedSourceIds } : {}),
           },
           analysesOfOtherWindows(event.sender),
         );
@@ -2480,6 +2564,7 @@ function toProgressEvent(
           // Without what only the copy engine uses, as checking them took it out.
           items: event.result.items.map(({ sourceKind: _sourceKind, ...item }) => item),
           ...(event.result.trashedPaths ? { trashedPaths: event.result.trashedPaths } : {}),
+          ...(event.result.replacedPaths ? { replacedPaths: event.result.replacedPaths } : {}),
           error: event.result.error,
         }
       : null,

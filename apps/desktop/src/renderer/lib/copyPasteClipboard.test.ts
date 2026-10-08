@@ -3,6 +3,7 @@ import {
   buildPasteRequest,
   clearClipboardAfterSuccessfulPaste,
   clearCopyPasteClipboard,
+  clipboardPathsMovedBy,
   describeClipboard,
   dropClipboardPaths,
   followClipboardThroughWrite,
@@ -320,6 +321,75 @@ describe("copyPasteClipboard", () => {
           mode: "copy",
         }),
       ).toBe(clipboard);
+    });
+
+    // Another item is at a replaced item's path now: a paste would copy that one instead.
+    it("drops copied items a Replace removed, and follows one moved onto their place", () => {
+      expect(
+        followClipboardThroughWrite(clipboard, {
+          ...writeResult("move_to", [
+            {
+              sourcePath: "/Users/demo/other.txt",
+              destinationPath: "/Users/demo/Folder/inner.txt",
+            },
+          ]),
+          replacedPaths: ["/Users/demo/Folder/inner.txt"],
+        }),
+      ).toMatchObject({
+        // inner.txt was replaced; other.txt is followed onto its place.
+        sourcePaths: ["/Users/demo/report.pdf", "/Users/demo/Folder/inner.txt"],
+      });
+      expect(
+        followClipboardThroughWrite(clipboard, {
+          ...writeResult("paste", [
+            { sourcePath: "/tmp/report.pdf", destinationPath: "/Users/demo/report.pdf" },
+          ]),
+          mode: "copy",
+          replacedPaths: ["/Users/demo/report.pdf"],
+        }),
+      ).toMatchObject({
+        sourcePaths: ["/Users/demo/Folder/inner.txt", "/Users/demo/other.txt"],
+      });
+    });
+
+    it("says which of its paths it followed items to", () => {
+      const result = writeResult("move_to", [
+        { sourcePath: "/Users/demo/Folder", destinationPath: "/Volumes/Backup/Folder" },
+        { sourcePath: "/Users/demo/other.txt", destinationPath: "/x/other.txt", status: "failed" },
+      ]);
+      expect(clipboardPathsMovedBy(clipboard, result)).toEqual([
+        "/Volumes/Backup/Folder/inner.txt",
+      ]);
+      expect(clipboardPathsMovedBy(EMPTY_COPY_PASTE_CLIPBOARD, result)).toEqual([]);
+      expect(
+        clipboardPathsMovedBy(
+          clipboard,
+          writeResult("trash", [{ sourcePath: "/a", destinationPath: null }]),
+        ),
+      ).toEqual([]);
+    });
+
+    // "F" is merged into "/dst/F": "y", already there, didn't move, and keeps its id.
+    it("doesn't name an item already in a folder merged into", () => {
+      const copied = setCopyPasteClipboard("copy", ["/src/F/x", "/dst/F/y"], NOW);
+      const result = writeResult("move_to", [{ sourcePath: "/src/F", destinationPath: "/dst/F" }]);
+      expect(followClipboardThroughWrite(copied, result)).toMatchObject({
+        sourcePaths: ["/dst/F/x", "/dst/F/y"],
+      });
+      expect(clipboardPathsMovedBy(copied, result)).toEqual(["/dst/F/x"]);
+    });
+
+    it("cancels a cut when a Replace removes an item in it", () => {
+      const cut = setCopyPasteClipboard("cut", ["/Users/demo/report.pdf"], NOW);
+      expect(
+        followClipboardThroughWrite(cut, {
+          ...writeResult("paste", [
+            { sourcePath: "/tmp/report.pdf", destinationPath: "/Users/demo/report.pdf" },
+          ]),
+          mode: "copy",
+          replacedPaths: ["/Users/demo/report.pdf"],
+        }),
+      ).toEqual(EMPTY_COPY_PASTE_CLIPBOARD);
     });
 
     // Something copied from inside a folder while a paste of the folder's Cut moves it.

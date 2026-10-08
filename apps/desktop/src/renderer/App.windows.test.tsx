@@ -526,6 +526,8 @@ describe("App windows", () => {
             sourcePaths: ["/Users/demo/Folder/source.txt"],
           }),
           follows: copied.clipboard.type === "ready" ? copied.clipboard.capturedAt : "",
+          // Main reads the item where it now is, to tell it from another put there later.
+          followedTo: ["/Users/demo/Folder/source.txt"],
         }),
       );
     });

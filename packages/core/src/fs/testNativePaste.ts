@@ -1,7 +1,7 @@
 // The paste engine as the app runs it, for real-disk tests: the native copy (copyfile(3)),
 // exclusive rename, lock flags, and a Trash that keeps what goes into it.
 
-import { mkdir, rename } from "node:fs/promises";
+import { mkdir, open, rename } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import {
@@ -22,6 +22,7 @@ import {
   DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
   type ReplaceJournal,
   type WriteServiceFileSystem,
+  isAppleDoubleOnItsVolume,
 } from "./writeServiceTypes";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -34,6 +35,7 @@ export const nativeFileSystem: WriteServiceFileSystem = {
   renameExclusive: native.nativeRenameExclusive,
   isCaseSensitive: native.nativeIsCaseSensitive,
   isPackage: native.nativeIsPackage,
+  isAppleDouble: (path) => isAppleDoubleOnItsVolume(native.nativeUsesAppleDouble, open, path),
   getFlags: native.nativeGetFlags,
   setFlags: native.nativeSetFlags,
   copyFile: async (sourcePath, destinationPath, signal) => {

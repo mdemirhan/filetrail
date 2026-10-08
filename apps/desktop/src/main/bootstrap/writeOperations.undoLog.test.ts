@@ -1,11 +1,25 @@
-import { lstatSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
-import { type UndoLog, type WriteService, createWriteService } from "@filetrail/core";
+import {
+  NO_TRASH_ERROR_CODE,
+  type UndoLog,
+  type WriteService,
+  createWriteService,
+} from "@filetrail/core";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
+import type { ItemSize } from "./folderSizeAdjust";
 import { createUndoHistory } from "./undoHistory";
 import {
   type FinishedWrite,
@@ -401,6 +415,74 @@ describe("what the simple operations record", () => {
         log: { undoable: false, reason: "deleted_for_good" },
       }),
     ]);
+    await coordinator.shutdown();
+  });
+
+  // Nothing was deleted: the item had changed after the no-Trash question, and was
+  // refused just before deleting. What can be undone stays undoable.
+  it("leaves the history as it was when Delete Immediately deleted nothing", async () => {
+    const path = join(root, "share.txt");
+    writeFileSync(path, "asked about");
+    let swapWhenMeasured = false;
+    const measure = createOriginalWriteOperationFs(folderTrash()).itemSize;
+    if (!measure) {
+      throw new Error("The disk's sizes can't be read here.");
+    }
+    const { coordinator, finished, sender } = setUp({
+      fs: {
+        trash: async () => {
+          throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+        },
+        // Measured just before deleting: something else is put in its place then.
+        itemSize: async (target): Promise<ItemSize> => {
+          const size = await measure(target);
+          if (swapWhenMeasured && target === path) {
+            swapWhenMeasured = false;
+            renameSync(path, join(root, "moved.txt"));
+            writeFileSync(path, "never asked about");
+          }
+          return size;
+        },
+      },
+    });
+    await coordinator.handlers["writeOperation:trash"]({ paths: [path] }, { sender });
+    await waitForTerminalEvent(sender, "write-op-1");
+
+    swapWhenMeasured = true;
+    await coordinator.handlers["writeOperation:deleteImmediately"]({ paths: [path] }, { sender });
+    const terminal = await waitForTerminalEvent(sender, "write-op-2");
+
+    expect(terminal.result?.items[0]).toMatchObject({
+      status: "failed",
+      error: "“share.txt” changed after you were asked about it, so it wasn't deleted.",
+    });
+    expect(readFileSync(path, "utf8")).toBe("never asked about");
+    expect(finished).toEqual([]);
+    await coordinator.shutdown();
+  });
+
+  // Gone already (moved away while the question was open): nothing is deleted, so what can
+  // be undone stays undoable.
+  it("leaves the history as it was when the item asked about is gone", async () => {
+    const path = join(root, "share.txt");
+    writeFileSync(path, "asked about");
+    const { coordinator, finished, sender } = setUp({
+      fs: {
+        trash: async () => {
+          throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+        },
+      },
+    });
+    await coordinator.handlers["writeOperation:trash"]({ paths: [path] }, { sender });
+    await waitForTerminalEvent(sender, "write-op-1");
+    renameSync(path, join(root, "moved.txt"));
+
+    await coordinator.handlers["writeOperation:deleteImmediately"]({ paths: [path] }, { sender });
+    const terminal = await waitForTerminalEvent(sender, "write-op-2");
+
+    expect(terminal.status).toBe("completed");
+    expect(readFileSync(join(root, "moved.txt"), "utf8")).toBe("asked about");
+    expect(finished).toEqual([]);
     await coordinator.shutdown();
   });
 

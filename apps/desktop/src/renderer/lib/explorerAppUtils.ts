@@ -35,19 +35,22 @@ export function formatQuotedNames(paths: readonly string[], maxShown = 3): strin
   return `${names.slice(0, maxShown).join(", ")} and ${names.length - maxShown} more`;
 }
 
-// Why items on the clipboard were left out of a paste: they were moved, renamed or deleted
-// outside the app since they were copied. A cut is "moved", as everything else about it.
+// Why items on the clipboard were left out of a paste: since they were copied, they were
+// moved, renamed or deleted outside the app, or another item was put in their place. A
+// cut is "moved", as everything else about it.
 export function formatMissingClipboardItemsMessage(
   paths: readonly string[],
   verb: "pasted" | "moved" = "pasted",
 ): string {
-  if (paths.length === 1) {
-    return `${formatQuotedNames(paths)} couldn’t be ${verb} because it no longer exists.`;
-  }
+  const one = paths.length === 1;
+  const why =
+    verb === "moved"
+      ? `${one ? "it was" : "they were"} deleted, replaced or moved elsewhere since ${one ? "it was" : "they were"} cut`
+      : `${one ? "it was" : "they were"} moved, deleted or replaced since ${one ? "it was" : "they were"} copied`;
   if (paths.length <= 3) {
-    return `${formatQuotedNames(paths)} couldn’t be ${verb} because they no longer exist.`;
+    return `${formatQuotedNames(paths)} couldn’t be ${verb} because ${why}.`;
   }
-  return `${paths.length} items couldn’t be ${verb} because they no longer exist: ${formatQuotedNames(paths)}.`;
+  return `${paths.length} items couldn’t be ${verb} because ${why}: ${formatQuotedNames(paths)}.`;
 }
 
 // What to say when Finder did not empty the Trash. The usual reason is that macOS has not
@@ -449,16 +452,21 @@ export function pathsLeftByWrite(result: WriteOperationResult): string[] {
 }
 
 /** What a write took away from where it was: everything a Trash or delete was asked to
- *  remove, or what an Undo moved to the Trash. */
+ *  remove, what an Undo moved to the Trash, and what a Replace removed (another item has
+ *  its path now). */
 export function removedByWrite(result: WriteOperationResult): string[] {
+  const replaced = result.replacedPaths ?? [];
   if (result.action === "trash" || result.action === "delete_immediately") {
     return result.items.flatMap((item) =>
       item.status === "completed" && item.sourcePath ? [item.sourcePath] : [],
     );
   }
   return isUndoOrRedo(result.action)
-    ? onlyRemoved(result).items.flatMap((item) => (item.sourcePath ? [item.sourcePath] : []))
-    : [];
+    ? [
+        ...onlyRemoved(result).items.flatMap((item) => (item.sourcePath ? [item.sourcePath] : [])),
+        ...replaced,
+      ]
+    : [...replaced];
 }
 
 // An Undo's items that went to the Trash: done, and with nowhere else to be.

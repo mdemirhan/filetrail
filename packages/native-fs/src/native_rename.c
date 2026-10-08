@@ -11,7 +11,14 @@
  *     pathconf(2) _PC_CASE_SENSITIVE for the volume holding `path`; null when the
  *     volume doesn't say.
  *
- * Both run on a libuv thread pool thread: network volumes can be slow to answer.
+ *   nativeUsesAppleDouble(path) → Promise<boolean | null>
+ *     Whether the volume holding `path` keeps extended attributes in "._name" files
+ *     (FAT, exFAT, some network volumes) instead of natively: getattrlist(2)
+ *     VOL_CAP_INT_EXTENDED_ATTR. On such a volume macOS reads "._name" as "name"'s own
+ *     attributes; elsewhere (APFS, HFS+) a "._name" file is an ordinary item. null when
+ *     the volume doesn't say.
+ *
+ * All run on a libuv thread pool thread: network volumes can be slow to answer.
  */
 
 #include <node_api.h>
@@ -19,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/attr.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -150,8 +158,9 @@ typedef struct {
   napi_async_work work;
   napi_deferred deferred;
   char *path;
-  long answer; /* 1 case-sensitive, 0 case-insensitive, -1 unknown */
+  long answer; /* 1 yes, 0 no, -1 unknown */
   int errnum;
+  const char *syscall; /* named in the error when the volume can't be reached */
 } case_work_t;
 
 static void execute_case_sensitive(napi_env env, void *data) {
@@ -180,7 +189,7 @@ static void complete_case_sensitive(napi_env env, napi_status status, void *data
     napi_reject_deferred(env, w->deferred, error);
   } else if (w->errnum != 0) {
     napi_reject_deferred(env, w->deferred,
-                         native_errno_error(env, w->errnum, "pathconf", w->path, NULL));
+                         native_errno_error(env, w->errnum, w->syscall, w->path, NULL));
   } else {
     napi_value result;
     if (w->answer < 0) {
@@ -216,12 +225,77 @@ static napi_value native_is_case_sensitive(napi_env env, napi_callback_info info
     return NULL;
   }
   w->path = path;
+  w->syscall = "pathconf";
 
   napi_value promise;
   napi_create_promise(env, &w->deferred, &promise);
   napi_value resource_name;
   napi_create_string_utf8(env, "nativeIsCaseSensitive", NAPI_AUTO_LENGTH, &resource_name);
   napi_create_async_work(env, NULL, resource_name, execute_case_sensitive,
+                         complete_case_sensitive, w, &w->work);
+  napi_queue_async_work(env, w->work);
+  return promise;
+}
+
+/* ── nativeUsesAppleDouble ────────────────────────────────────────── */
+
+typedef struct {
+  u_int32_t length;
+  vol_capabilities_attr_t capabilities;
+} __attribute__((aligned(4), packed)) volume_capabilities_buffer_t;
+
+static void execute_uses_apple_double(napi_env env, void *data) {
+  (void)env;
+  case_work_t *w = (case_work_t *)data;
+
+  struct attrlist request;
+  memset(&request, 0, sizeof(request));
+  request.bitmapcount = ATTR_BIT_MAP_COUNT;
+  request.volattr = ATTR_VOL_INFO | ATTR_VOL_CAPABILITIES;
+  volume_capabilities_buffer_t buffer;
+  if (getattrlist(w->path, &request, &buffer, sizeof(buffer), 0) != 0) {
+    w->answer = -1;
+    w->errnum = errno;
+    return;
+  }
+  u_int32_t valid = buffer.capabilities.valid[VOL_CAPABILITIES_INTERFACES];
+  u_int32_t capabilities = buffer.capabilities.capabilities[VOL_CAPABILITIES_INTERFACES];
+  if (!(valid & VOL_CAP_INT_EXTENDED_ATTR)) {
+    w->answer = -1;
+    return;
+  }
+  /* 1: attributes live in "._name" files; 0: the volume keeps them natively. */
+  w->answer = (capabilities & VOL_CAP_INT_EXTENDED_ATTR) ? 0 : 1;
+}
+
+static napi_value native_uses_apple_double(napi_env env, napi_callback_info info) {
+  size_t argc = 1;
+  napi_value argv[1];
+  napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+  if (argc < 1) {
+    napi_throw_type_error(env, NULL, "nativeUsesAppleDouble requires 1 argument: path");
+    return NULL;
+  }
+
+  char *path = copy_string_argument(env, argv[0], "path");
+  if (!path) {
+    return NULL;
+  }
+  case_work_t *w = (case_work_t *)calloc(1, sizeof(case_work_t));
+  if (!w) {
+    free(path);
+    napi_throw_error(env, NULL, "Out of memory");
+    return NULL;
+  }
+  w->path = path;
+  w->syscall = "getattrlist";
+
+  napi_value promise;
+  napi_create_promise(env, &w->deferred, &promise);
+  napi_value resource_name;
+  napi_create_string_utf8(env, "nativeUsesAppleDouble", NAPI_AUTO_LENGTH, &resource_name);
+  /* The answer has the same shape as nativeIsCaseSensitive's, and so is completed by it. */
+  napi_create_async_work(env, NULL, resource_name, execute_uses_apple_double,
                          complete_case_sensitive, w, &w->work);
   napi_queue_async_work(env, w->work);
   return promise;
@@ -238,5 +312,9 @@ napi_value register_rename(napi_env env, napi_value exports) {
   napi_create_function(env, "nativeIsCaseSensitive", NAPI_AUTO_LENGTH,
                        native_is_case_sensitive, NULL, &fn);
   napi_set_named_property(env, exports, "nativeIsCaseSensitive", fn);
+
+  napi_create_function(env, "nativeUsesAppleDouble", NAPI_AUTO_LENGTH,
+                       native_uses_apple_double, NULL, &fn);
+  napi_set_named_property(env, exports, "nativeUsesAppleDouble", fn);
   return exports;
 }

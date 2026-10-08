@@ -19,7 +19,11 @@ import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 import type { Volume } from "@filetrail/contracts";
-import { createStoppableCopyFile, startsWithAppleDoubleMagic } from "@filetrail/core";
+import {
+  createStoppableCopyFile,
+  isAppleDoubleOnItsVolume,
+  removeEmptyFolder,
+} from "@filetrail/core";
 import type { ExplorerFileSystem } from "@filetrail/core";
 import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core";
 import type { BatchRenameInspectDeps } from "./bootstrap/batchRenameInspect";
@@ -50,6 +54,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeItemSize: (path: string) => Promise<ItemSize>;
   nativeRenameExclusive: (from: string, to: string) => Promise<void>;
   nativeIsCaseSensitive: (path: string) => Promise<boolean | null>;
+  nativeUsesAppleDouble: (path: string) => Promise<boolean | null>;
   nativeIsPackage: (path: string) => Promise<boolean | null>;
   nativeDatesTaken: (paths: string[]) => Promise<Array<string | null>>;
   nativeListVolumes: () => Volume[];
@@ -66,6 +71,7 @@ const {
   nativeItemSize,
   nativeRenameExclusive,
   nativeIsCaseSensitive,
+  nativeUsesAppleDouble,
   nativeIsPackage,
   nativeGetFlags,
   nativeSetFlags,
@@ -122,9 +128,7 @@ export const originalFileSystem: WriteServiceFileSystem = {
   rm: async (path, options) => {
     await rm(path, options);
   },
-  rmdir: async (path) => {
-    await rmdir(path);
-  },
+  rmdir: (path) => removeEmptyFolder(readdir, rmdir, path),
   isCaseSensitive: (path) => nativeIsCaseSensitive(path),
   isPackage: (path) => nativeIsPackage(path),
   symlink: async (target, path) => {
@@ -153,7 +157,7 @@ export const originalFileSystem: WriteServiceFileSystem = {
   canModifyFolder: async (path) => {
     await access(path, fsConstants.W_OK);
   },
-  isAppleDouble: (path) => startsWithAppleDoubleMagic(open, path),
+  isAppleDouble: (path) => isAppleDoubleOnItsVolume(nativeUsesAppleDouble, open, path),
 };
 
 /** ExplorerFileSystem backed by original-fs for directory listings. */

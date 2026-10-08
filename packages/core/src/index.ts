@@ -12,7 +12,7 @@ export {
 } from "./fs/copyPasteErrors";
 export { fileIdOf } from "./fs/copyPasteFingerprint";
 export { unlockForMove } from "./fs/copyPasteExecution";
-export { startsWithAppleDoubleMagic } from "./fs/writeServiceTypes";
+export { isAppleDoubleOnItsVolume, removeEmptyFolder } from "./fs/writeServiceTypes";
 export {
   type ReplaceRecoveryOutcome,
   type RunWriteAlone,

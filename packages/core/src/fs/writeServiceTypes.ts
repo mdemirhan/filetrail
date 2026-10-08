@@ -5,7 +5,7 @@ import {
   lstat,
   lutimes,
   mkdir,
-  open,
+  type open,
   readdir,
   readlink,
   realpath,
@@ -19,7 +19,7 @@ import {
 import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
 
-import type { UndoLog } from "./undoLog";
+import type { ItemId, UndoLog } from "./undoLog";
 
 export type CopyPasteMode = "copy" | "cut";
 export type CopyPasteOperationStatus =
@@ -78,7 +78,8 @@ export type WriteServiceFileSystem = {
   renameExclusive?: (oldPath: string, newPath: string) => Promise<void>;
   mkdir: (path: string, options?: { recursive?: boolean }) => Promise<void>;
   rm: (path: string, options?: { recursive?: boolean; force?: boolean }) => Promise<void>;
-  /** Removes an empty folder; fails (ENOTEMPTY or EEXIST) when anything is inside. */
+  /** Removes an empty folder; fails (ENOTEMPTY or EEXIST) when anything is inside,
+   *  "._name" files included (see `removeEmptyFolder`). */
   rmdir: (path: string) => Promise<void>;
   /** Whether the volume holding `path` tells names apart by letter case (macOS
    *  `pathconf(_PC_CASE_SENSITIVE)`), or null when it doesn't say. Without it, an
@@ -123,9 +124,11 @@ export type WriteServiceFileSystem = {
    *  when not). A move to another disk asks before copying anything, so it never copies
    *  what it then can't remove. Without it, that is found out when removing. */
   canModifyFolder?: (path: string) => Promise<void>;
-  /** Whether a "._name" file is AppleDouble metadata (it starts with the AppleDouble magic
-   *  number): what FAT, exFAT and SMB disks keep beside "name" for its extended attributes,
-   *  which macOS reads as the item's own. Such files aren't copied as items of their own. */
+  /** Whether a "._name" file is AppleDouble metadata that macOS reads as "name"'s own
+   *  attributes: it starts with the AppleDouble magic number, and its disk keeps extended
+   *  attributes in such files (FAT, exFAT, some SMB) rather than natively. Such files
+   *  aren't copied as items of their own. On APFS a "._name" file is an ordinary item,
+   *  whatever it holds. Without it, every "._name" file is an ordinary item. */
   isAppleDouble?: (path: string) => Promise<boolean>;
 };
 
@@ -139,12 +142,16 @@ export type CopyPasteAnalysisRequest = {
   mode: CopyPasteMode;
   sourcePaths: string[];
   destinationDirectoryPath: string;
+  // For items pasted from the clipboard: each item's id when it was copied. Another item at
+  // its path now (the one copied was replaced) is reported missing, never pasted instead.
+  expectedSourceIds?: Readonly<Record<string, ItemId>>;
 };
 
 export type RequiredCopyPasteAnalysisRequest = {
   mode: CopyPasteMode;
   sourcePaths: string[];
   destinationDirectoryPath: string;
+  expectedSourceIds?: Readonly<Record<string, ItemId>>;
 };
 
 // A choice made for one item in the review, overriding the policy for its kind.
@@ -316,6 +323,9 @@ export type CopyPasteOperationResult = {
   items: CopyPasteItemResult[];
   // Where the items a Replace moved out of the way went in the Trash, which they changed.
   trashedPaths?: string[];
+  // Where the items a Replace removed (to the Trash or for good) were: another item is at
+  // each path now, so whatever pointed at the old one there no longer does.
+  replacedPaths?: string[];
   error: string | null;
   // What the paste did, for Undo (main process only: the window's copy leaves it out).
   undoLog?: UndoLog;
@@ -384,9 +394,7 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   rm: async (path, options) => {
     await rm(path, options);
   },
-  rmdir: async (path) => {
-    await rmdir(path);
-  },
+  rmdir: (path) => removeEmptyFolder(readdir, rmdir, path),
   symlink: async (target, path) => {
     await symlink(target, path);
   },
@@ -407,8 +415,37 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   canModifyFolder: async (path) => {
     await access(path, constants.W_OK);
   },
-  isAppleDouble: (path) => startsWithAppleDoubleMagic(open, path),
 };
+
+// rmdir(2) on macOS also removes a folder that holds nothing but "._name" files, deleting
+// them, whatever they hold and on any disk (the kernel takes them for orphaned AppleDouble
+// files). Such a file may be someone's item, so a folder is removed only when it lists
+// nothing at all. One put there between the look and the removal can still go: no call
+// removes a folder only if it is empty of those too.
+export async function removeEmptyFolder(
+  readFolder: (path: string) => Promise<string[]>,
+  removeFolder: (path: string) => Promise<void>,
+  path: string,
+): Promise<void> {
+  if ((await readFolder(path)).length > 0) {
+    throw Object.assign(new Error(`ENOTEMPTY: directory not empty, rmdir '${path}'`), {
+      code: "ENOTEMPTY",
+      path,
+    });
+  }
+  await removeFolder(path);
+}
+
+// A "._name" file that macOS reads as "name"'s attributes: AppleDouble data on a disk that
+// keeps attributes that way. Not when the disk keeps them natively or doesn't say.
+export async function isAppleDoubleOnItsVolume(
+  usesAppleDouble: (path: string) => Promise<boolean | null>,
+  openFile: typeof open,
+  path: string,
+): Promise<boolean> {
+  const answer = await usesAppleDouble(dirname(path)).catch(() => null);
+  return answer === true && (await startsWithAppleDoubleMagic(openFile, path));
+}
 
 // AppleDouble files begin with 0x00051607.
 const APPLE_DOUBLE_MAGIC = [0x00, 0x05, 0x16, 0x07];

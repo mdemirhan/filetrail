@@ -530,6 +530,8 @@ export const copyPasteOperationResultSchema = z.object({
   items: z.array(copyPasteItemResultSchema),
   // Where the items a Replace moved out of the way went in the Trash.
   trashedPaths: z.array(z.string()).optional(),
+  // Where the items a Replace removed were: another item is at each path now.
+  replacedPaths: z.array(z.string()).optional(),
   error: z.string().nullable(),
 });
 export const copyPasteProgressEventSchema = z.object({
@@ -585,6 +587,8 @@ export const writeOperationResultSchema = z.object({
   items: z.array(writeOperationItemResultSchema),
   // Where the items a Replace moved out of the way went in the Trash.
   trashedPaths: z.array(z.string()).optional(),
+  // Where the items a Replace removed were: another item is at each path now.
+  replacedPaths: z.array(z.string()).optional(),
   error: z.string().nullable(),
 });
 export const writeOperationProgressEventSchema = z.object({
@@ -924,6 +928,9 @@ export const ipcContractSchemas = {
       // when that was captured. It applies only while the clipboard still holds that, not
       // over a Copy made since in another window (ok is false then).
       follows: z.string().min(1).optional(),
+      // With `follows`: the paths on it the change followed items to (they were moved
+      // there by the app), so what is there now is the item copied.
+      followedTo: z.array(z.string().min(1)).max(MAX_PATHS_PER_REQUEST).optional(),
     }),
     response: z.object({ ok: z.boolean() }),
   },
@@ -1090,6 +1097,9 @@ export const ipcContractSchemas = {
       action: writeOperationActionSchema
         .extract(["paste", "copy_to", "move_to", "duplicate"])
         .default("paste"),
+      // The items are the clipboard's: one whose path holds another item than the one
+      // copied (it was replaced since) is left out, as one moved away is.
+      fromClipboard: z.boolean().optional(),
     }),
     response: z.object({
       analysisId: z.string().min(1),

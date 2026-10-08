@@ -113,6 +113,7 @@ type ExecutionContext = {
   // Where the items a Replace moved out of the way went in the Trash, which they changed.
   // Shared by every step, like `progress`.
   trashedPaths: string[];
+  replacedPaths: string[];
 };
 
 // Steps are kept only for the items the person picked: undoing one undoes everything
@@ -213,6 +214,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     folderIds: new Map(),
     recordsUndo: true,
     trashedPaths: [],
+    replacedPaths: [],
   };
   const itemResults: CopyPasteItemResult[] = [];
   let encounteredError: Error | null = null;
@@ -299,6 +301,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     result: {
       ...result,
       ...(context.trashedPaths.length > 0 ? { trashedPaths: context.trashedPaths } : {}),
+      ...(context.replacedPaths.length > 0 ? { replacedPaths: context.replacedPaths } : {}),
       undoLog,
     },
   });
@@ -1006,6 +1009,9 @@ async function executeDirectoryNode(
   }
   let hasChildFailure = false;
   const bubbledChildItems: ItemList = [];
+  // Items this folder's move leaves where they are (skipped, failed): never cleared away
+  // with the folder, whatever their names.
+  const keptNames = new Set<string>();
   for (const child of currentNode.children) {
     if (context.signal.aborted) {
       // Keep what was already done inside this folder in the result.
@@ -1037,6 +1043,9 @@ async function executeDirectoryNode(
     if (childResult.itemStatus === "failed") {
       hasChildFailure = true;
     }
+    if (childResult.itemStatus !== "completed") {
+      keptNames.add(basename(child.node.sourcePath));
+    }
     // Bubble up file items, and folders that failed themselves, into the result.
     if (child.node.sourceKind !== "directory" || childResult.error !== null) {
       bubbledChildItems.push(outcomeItemResult(child, childResult));
@@ -1054,8 +1063,11 @@ async function executeDirectoryNode(
   }
   let dirDeleteError: string | null = null;
   if (context.mode === "cut") {
-    dirDeleteError = await tryRemoveEmptySourceDirectory(currentNode, context.fileSystem, () =>
-      noteChanged(context),
+    dirDeleteError = await tryRemoveEmptySourceDirectory(
+      currentNode,
+      context.fileSystem,
+      keptNames,
+      () => noteChanged(context),
     );
   } else {
     dirDeleteError = await describeAddedDuringCopy(currentNode, context.fileSystem);
@@ -1122,10 +1134,17 @@ async function executeReplace(
   if (await isLocked(fileSystem, finalPath)) {
     throw new Error(lockedMessage(finalPath));
   }
+  // What the old item holds now (an answer to a question about it may have taken in a
+  // change), to tell when it is about to go whether anything was added to it since.
+  const replaced: ReplacedItem = {
+    fingerprint: destination,
+    itemCount:
+      destination.kind === "directory" ? await countItemsInside(fileSystem, finalPath) : null,
+  };
 
   if (!fileSystem.rename) {
     // Nothing can be swapped into place without rename: clear the way first instead.
-    if ((await removeReplacedItem(context, currentNode, destination)) === "skipped") {
+    if ((await removeReplacedItem(context, currentNode, replaced)) === "skipped") {
       return skippedOutcome("runtime_conflict_resolution", finalPath);
     }
     return performNode(context, { ...currentNode, action: "create" }, source);
@@ -1169,10 +1188,15 @@ async function executeReplace(
     }
     await journal?.add(journalEntry);
   }
+  // What the swap takes off the staged item to move it (its lock, a read-only folder's
+  // mode), put back wherever it ends up.
+  let stagedFlags: number | null = null;
+  let stagedMode: number | null = null;
   // Puts things back the way they were before this item started.
   const undoStaging = async () => {
     if (movedByRename) {
       await moveExclusive(fileSystem, temporaryPath, currentNode.node.sourcePath);
+      await restoreAfterMove(fileSystem, currentNode.node.sourcePath, stagedMode, stagedFlags);
     } else {
       await removeStagedItem(fileSystem, temporaryPath);
     }
@@ -1259,9 +1283,9 @@ async function executeReplace(
   try {
     // A copy of a locked item is locked too, and a locked item can't be renamed: it is
     // unlocked for the swap and locked again after. Done before the old item goes.
-    const stagedFlags = await unlockForMove(fileSystem, temporaryPath);
-    const stagedMode = await openForMove(fileSystem, temporaryPath);
-    if ((await removeReplacedItem(context, currentNode, destination)) === "skipped") {
+    stagedFlags = await unlockForMove(fileSystem, temporaryPath);
+    stagedMode = await openForMove(fileSystem, temporaryPath);
+    if ((await removeReplacedItem(context, currentNode, replaced)) === "skipped") {
       await undoStaging();
       return skippedOutcome("runtime_conflict_resolution", finalPath);
     }
@@ -1382,13 +1406,17 @@ async function removeMovedSources(
       }
       return error;
     }
+    const keptNames = new Set<string>();
     for (const child of current.children) {
       const childError = await removeTree(child);
-      if (childError !== null && child.node.sourceKind === "directory") {
-        nestedFolderFailures.push(itemResult(child, "failed", childError));
+      if (childError !== null) {
+        keptNames.add(basename(child.node.sourcePath));
+        if (child.node.sourceKind === "directory") {
+          nestedFolderFailures.push(itemResult(child, "failed", childError));
+        }
       }
     }
-    return tryRemoveEmptySourceDirectory(current, context.fileSystem);
+    return tryRemoveEmptySourceDirectory(current, context.fileSystem, keptNames);
   };
   const error = await removeTree(node);
   return {
@@ -1405,24 +1433,29 @@ async function removeMovedSources(
 async function removeReplacedItem(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
-  destination: NodeFingerprint,
+  replaced: ReplacedItem,
 ): Promise<"removed" | "skipped"> {
   const { fileSystem } = context;
+  const destination = replaced.fingerprint;
   if (fileSystem.trash) {
     try {
+      // Staging a large copy takes a while: the item replaced must still be the one that
+      // was there, never one an app saved in its place meanwhile.
+      const current = await assertReplacedItemUnchanged(context, node, replaced);
       // On a disk that ignores case, "X.TXT" may have found "x.txt": Undo puts the old item
       // back under the name it really had.
       const records = context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id);
       const from = records
-        ? await spelledAsOnDisk(context, node.destinationPath, destination)
+        ? await spelledAsOnDisk(context, node.destinationPath, current)
         : node.destinationPath;
       const id =
-        destination.dev !== null && destination.ino !== null
-          ? itemIdOf({ dev: destination.dev, ino: destination.ino })
+        current.dev !== null && current.ino !== null
+          ? itemIdOf({ dev: current.dev, ino: current.ino })
           : null;
       const looks = records ? await stampWithoutId(fileSystem, node.destinationPath, id) : {};
       const trashPath = await fileSystem.trash(node.destinationPath);
       noteChanged(context);
+      context.replacedPaths.push(node.destinationPath);
       if (trashPath !== null) {
         context.trashedPaths.push(trashPath);
       }
@@ -1474,6 +1507,7 @@ async function removeReplacedItem(
   if (resolution !== "overwrite") {
     return "skipped";
   }
+  // The question may have been open a while: what is deleted is what it was about.
   // Deleting a folder for good stops at the first locked item inside, leaving it half
   // deleted: one is looked for first, and then nothing is deleted.
   if (destination.kind === "directory") {
@@ -1482,13 +1516,55 @@ async function removeReplacedItem(
       throw new Error(lockedMessage(locked));
     }
   }
+  // Last, after the long look inside: the question may have been open a while, and what
+  // is deleted is what it was about.
+  await assertReplacedItemUnchanged(context, node, replaced);
   markCantUndo(context, "deleted_for_good");
   noteChanged(context);
+  // Named before deleting: a delete that fails part way has still removed some of it.
+  context.replacedPaths.push(node.destinationPath);
   await fileSystem.rm(node.destinationPath, {
     recursive: destination.kind === "directory",
     force: true,
   });
   return "removed";
+}
+
+// The item a Replace removes, as it was when the Replace began: `itemCount` is how many
+// items a folder held at every depth (null for a file, or when it couldn't be counted).
+type ReplacedItem = { fingerprint: NodeFingerprint; itemCount: number | null };
+
+// The item a Replace is about to remove is still the one it began with: the same file
+// unchanged, or the same folder holding as many items. Throws (nothing removed) when
+// another item is there or it changed; returns what is there.
+async function assertReplacedItemUnchanged(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  replaced: ReplacedItem,
+): Promise<NodeFingerprint> {
+  const destination = replaced.fingerprint;
+  const current = await captureFingerprint(context.fileSystem, node.destinationPath);
+  let unchanged: boolean;
+  if (destination.kind === "directory" && current.kind === "directory") {
+    // Counting a large folder takes a while: it must still be the same folder once counted.
+    unchanged =
+      sameItemIdentity(destination, current) &&
+      (replaced.itemCount === null ||
+        (await countItemsInside(context.fileSystem, node.destinationPath)) ===
+          replaced.itemCount) &&
+      sameItemIdentity(
+        destination,
+        await captureFingerprint(context.fileSystem, node.destinationPath),
+      );
+  } else {
+    unchanged = current.exists && fingerprintsEqual(destination, current);
+  }
+  if (!unchanged) {
+    throw new Error(
+      `“${basename(node.destinationPath)}” changed while it was being replaced, so it was kept and nothing was replaced.`,
+    );
+  }
+  return current;
 }
 
 // `path` as its folder spells the item `fingerprint` describes ("x.txt" for "X.TXT" on a
@@ -2138,10 +2214,12 @@ async function tryDeleteMovedSource(
 
 /** Attempts to remove an empty source directory after its children were moved.
  *  Returns null on success or intentional skip, or an error message if removal failed.
- *  `onRemoved` is told when this removed it. */
+ *  `keptNames` are the planned items the move left in it; `onRemoved` is told when this
+ *  removed it. */
 async function tryRemoveEmptySourceDirectory(
   node: ResolvedCopyPasteNode,
   fileSystem: WriteServiceFileSystem,
+  keptNames: ReadonlySet<string>,
   onRemoved: () => void = () => undefined,
 ): Promise<string | null> {
   const sourcePath = node.node.sourcePath;
@@ -2166,7 +2244,7 @@ async function tryRemoveEmptySourceDirectory(
       return null;
     }
     if (code === "ENOTEMPTY" || code === "EEXIST") {
-      return describeLeftInMovedFolder(node, fileSystem, onRemoved);
+      return describeLeftInMovedFolder(node, fileSystem, keptNames, onRemoved);
     }
     return `Its items were moved, but the original folder couldn't be removed. ${describeCopyPasteError(error)}`;
   }
@@ -2178,14 +2256,30 @@ async function tryRemoveEmptySourceDirectory(
 async function describeLeftInMovedFolder(
   node: ResolvedCopyPasteNode,
   fileSystem: WriteServiceFileSystem,
+  keptNames: ReadonlySet<string>,
   onRemoved: () => void,
 ): Promise<string | null> {
   const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
   const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
   // Nobody's items: what Finder wrote to show the folder, and the AppleDouble files of
-  // items that were moved (FAT, exFAT, SMB).
-  const isLeftover = (entry: string) =>
-    isFolderViewFile(entry) || isAppleDoubleCompanionName(entry, plannedNames);
+  // items that were moved, on a disk that keeps attributes in them (FAT, exFAT, SMB). An
+  // item the move left on purpose is never one, nor is a "._name" file that is an item of
+  // its own (on APFS, or one that isn't AppleDouble data).
+  const leftovers = new Set<string>();
+  for (const entry of entries) {
+    if (keptNames.has(entry)) {
+      continue;
+    }
+    if (
+      isFolderViewFile(entry) ||
+      (isAppleDoubleCompanionName(entry, plannedNames) &&
+        !plannedNames.has(entry) &&
+        (await isAppleDoubleFile(fileSystem, join(node.node.sourcePath, entry))))
+    ) {
+      leftovers.add(entry);
+    }
+  }
+  const isLeftover = (entry: string) => leftovers.has(entry);
   if (entries.length > 0 && entries.every(isLeftover)) {
     // They go with the folder. Only when nothing else keeps it: a folder that stays
     // (skipped or failed items in it) keeps its view settings too.
@@ -2221,6 +2315,17 @@ async function describeAddedDuringCopy(
   return `${named} added to “${folder}” after the copy began, so ${newItems.length === 1 ? "it wasn't" : "they weren't"} copied.`;
 }
 
+async function isAppleDoubleFile(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<boolean> {
+  try {
+    return (await fileSystem.isAppleDouble?.(path)) ?? false;
+  } catch {
+    return false;
+  }
+}
+
 async function findItemsAddedSinceReview(
   node: ResolvedCopyPasteNode,
   fileSystem: WriteServiceFileSystem,
@@ -2231,12 +2336,22 @@ async function findItemsAddedSinceReview(
   }
   const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
   const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
-  return entries.filter(
-    (entry) =>
-      !plannedNames.has(entry) &&
-      !isFolderViewFile(entry) &&
-      !isAppleDoubleCompanionName(entry, plannedNames),
-  );
+  const added: string[] = [];
+  for (const entry of entries) {
+    if (plannedNames.has(entry) || isFolderViewFile(entry)) {
+      continue;
+    }
+    // A planned item's attributes on a disk that keeps them in "._name" files went with
+    // the item; any other "._name" file is an item of its own.
+    if (
+      isAppleDoubleCompanionName(entry, plannedNames) &&
+      (await isAppleDoubleFile(fileSystem, join(node.node.sourcePath, entry)))
+    ) {
+      continue;
+    }
+    added.push(entry);
+  }
+  return added;
 }
 
 function canRemoveMovedSourceDirectory(

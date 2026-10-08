@@ -99,6 +99,7 @@ module.exports = {
   nativeItemSize: binding.nativeItemSize,
   nativeRenameExclusive: binding.nativeRenameExclusive,
   nativeIsCaseSensitive: binding.nativeIsCaseSensitive,
+  nativeUsesAppleDouble: binding.nativeUsesAppleDouble,
   nativeIsPackage: binding.nativeIsPackage,
   nativeGetFlags: binding.nativeGetFlags,
   nativeSetFlags: binding.nativeSetFlags,

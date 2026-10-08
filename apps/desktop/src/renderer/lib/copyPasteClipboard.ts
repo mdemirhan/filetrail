@@ -112,14 +112,7 @@ export function remapClipboardPaths(
   if (clipboard.type !== "ready" || moves.length === 0) {
     return clipboard;
   }
-  const remap = (path: string) => {
-    // The deepest move that holds the path decides, in case a folder and an item inside it
-    // were both moved.
-    const move = moves
-      .filter(({ from }) => path === from || path.startsWith(`${from}/`))
-      .sort((left, right) => right.from.length - left.from.length)[0];
-    return move ? replacePathPrefix(path, move.from, move.to) : path;
-  };
+  const remap = (path: string) => remappedPath(path, moves) ?? path;
   let changed = false;
   const sourcePaths: string[] = [];
   const keptPaths = new Set<string>();
@@ -140,6 +133,18 @@ export function remapClipboardPaths(
   return changed ? { ...clipboard, sourcePaths, sourceEntries } : clipboard;
 }
 
+// Where `path` is after `moves`, or null when none of them moved it. The deepest move that
+// holds the path decides, in case a folder and an item inside it were both moved.
+function remappedPath(
+  path: string,
+  moves: ReadonlyArray<{ from: string; to: string }>,
+): string | null {
+  const move = moves
+    .filter(({ from }) => path === from || path.startsWith(`${from}/`))
+    .sort((left, right) => right.from.length - left.from.length)[0];
+  return move ? replacePathPrefix(path, move.from, move.to) : null;
+}
+
 // What a finished write did to the items on the clipboard. Copied items that were renamed
 // or moved are followed to where they are now, as Finder does, and those put in the Trash
 // or deleted are taken off. A cut is a move not made yet: once any item in it is renamed,
@@ -153,6 +158,26 @@ export function followClipboardThroughWrite(
 ): CopyPasteClipboardState {
   const moves = movedItems(result) ? collectFollowedMoves(result) : [];
   return followClipboard(clipboard, moves, removedByWrite(result));
+}
+
+// The paths `followClipboardThroughWrite` takes items on `clipboard` to: where the write
+// moved them. Only items on it that moved, not others already where they went (a folder
+// merged into).
+export function clipboardPathsMovedBy(
+  clipboard: CopyPasteClipboardState,
+  result: WriteOperationResult,
+): string[] {
+  if (clipboard.type !== "ready" || !movedItems(result)) {
+    return [];
+  }
+  const moves = collectFollowedMoves(result);
+  const kept = dropClipboardPaths(clipboard, removedByWrite(result));
+  return kept.type === "ready"
+    ? kept.sourcePaths.flatMap((path) => {
+        const moved = remappedPath(path, moves);
+        return moved === null ? [] : [moved];
+      })
+    : [];
 }
 
 // What another app moving items away, or putting them in the Trash, did to the clipboard:
@@ -179,7 +204,9 @@ function followClipboard(
     );
     return changesAnItem ? EMPTY_COPY_PASTE_CLIPBOARD : clipboard;
   }
-  return dropClipboardPaths(remapClipboardPaths(clipboard, moves), removedPaths);
+  // What was removed first: an item moved onto a removed item's path (a Replace) is
+  // followed there, and isn't taken for the item it replaced.
+  return remapClipboardPaths(dropClipboardPaths(clipboard, removedPaths), moves);
 }
 
 export function clearCopyPasteClipboard(): CopyPasteClipboardState {

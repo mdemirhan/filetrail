@@ -937,7 +937,7 @@ describe("deleting immediately what a disk without a Trash couldn't take", () =>
     const coordinator = createWriteOperationCoordinator(
       createWriteServiceStub().writeService,
       {
-        lstat: async () => ({ isDirectory: () => false }),
+        lstat: async () => ({ isDirectory: () => false, dev: 1, ino: 7 }),
         stat: async () => ({ isDirectory: () => true }),
         mkdir: async () => undefined,
         rename: async () => undefined,

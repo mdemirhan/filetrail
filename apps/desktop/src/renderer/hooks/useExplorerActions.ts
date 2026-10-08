@@ -48,6 +48,7 @@ import {
   type CopyPasteClipboardState,
   buildPasteRequest,
   clearCopyPasteClipboard,
+  clipboardPathsMovedBy,
   describeClipboard,
   dropClipboardPaths,
   followClipboardThroughRemoval,
@@ -1017,7 +1018,11 @@ export function useExplorerActions(args: {
           const clipboard = copyPasteClipboardRef.current;
           const followedClipboard = followClipboardThroughWrite(clipboard, event.result);
           if (followedClipboard !== clipboard) {
-            applyCopyPasteClipboardState(followedClipboard, clipboard);
+            applyCopyPasteClipboardState(
+              followedClipboard,
+              clipboard,
+              clipboardPathsMovedBy(clipboard, event.result),
+            );
           }
         }
         // The folder made in its row may have been given the next free name.
@@ -1406,9 +1411,11 @@ export function useExplorerActions(args: {
   // the other windows. A change that only follows what the clipboard held (an item on it
   // moved or deleted) says what it follows, so main doesn't let it replace something copied
   // in another window meanwhile; that window's change then reaches this one too.
+  // `followedTo` are the paths the change followed items to, which main reads again.
   function applyCopyPasteClipboardState(
     nextClipboard: CopyPasteClipboardState,
     follows: CopyPasteClipboardState | null = null,
+    followedTo: readonly string[] = [],
   ) {
     copyPasteClipboardRef.current = nextClipboard;
     setCopyPasteClipboardState(nextClipboard);
@@ -1416,6 +1423,9 @@ export function useExplorerActions(args: {
       client.invoke("app:setClipboard", {
         clipboard: nextClipboard,
         ...(follows?.type === "ready" ? { follows: follows.capturedAt } : {}),
+        ...(follows?.type === "ready" && followedTo.length > 0
+          ? { followedTo: [...followedTo] }
+          : {}),
       }),
     ).catch(() => undefined);
   }
@@ -1840,7 +1850,9 @@ export function useExplorerActions(args: {
   }
 
   function removeClipboardPath(path: string) {
-    applyCopyPasteClipboardState(removeClipboardItem(copyPasteClipboardRef.current, path));
+    // What is left was copied when it was: it follows the clipboard, not a new Copy.
+    const clipboard = copyPasteClipboardRef.current;
+    applyCopyPasteClipboardState(removeClipboardItem(clipboard, path), clipboard);
   }
 
   function clearClipboard() {
@@ -2064,6 +2076,7 @@ export function useExplorerActions(args: {
         sourcePaths: args.sourcePaths,
         destinationDirectoryPath: args.destinationDirectoryPath,
         action: args.action,
+        ...(args.initiator === "clipboard" ? { fromClipboard: true } : {}),
       });
       activeAnalysisIdRef.current = handle.analysisId;
       setCopyPasteDialogState({

@@ -2,6 +2,7 @@
 // review and the paste, on the real disk.
 
 import { execFileSync } from "node:child_process";
+import { lstatSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -17,6 +18,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  buildCopyPasteAnalysisReport,
+  normalizeCopyPasteAnalysisRequest,
+} from "./copyPasteAnalysis";
 import { NO_TRASH_ERROR_CODE } from "./copyPasteErrors";
 import {
   KEEP_EXISTING,
@@ -32,6 +37,14 @@ function withoutRenameAtAll(): WriteServiceFileSystem {
   const { rename: _rename, ...rest } = nativeFileSystem;
   return rest;
 }
+
+function idOf(path: string) {
+  const stats = lstatSync(path);
+  return { dev: stats.dev, ino: stats.ino };
+}
+
+// The start of an AppleDouble file (its magic number and version).
+const APPLE_DOUBLE_DATA = Buffer.from([0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00]);
 
 let testDir: string;
 let src: string;
@@ -114,6 +127,8 @@ describe("Replace never destroys another item of the same paste", () => {
     expect(result?.status).toBe("completed");
     expect(await readFile(join(dst, "keep.txt"), "utf8")).toBe("keep");
     expect(await readdir(join(dst, "a"))).toEqual(["new.txt"]);
+    // The old "a" is gone from there: whatever pointed at it no longer does.
+    expect(result?.replacedPaths).toEqual([join(dst, "a")]);
   });
 });
 
@@ -564,6 +579,169 @@ describe("the folder pasted into goes away during the paste", () => {
   });
 });
 
+describe("an item copied that was replaced before the paste", () => {
+  it("is left out as missing, while one renamed into place by the app is pasted", async () => {
+    await writeFile(join(src, "a.txt"), "copied");
+    await writeFile(join(src, "b.txt"), "copied too");
+    const copiedIds = {
+      [join(src, "a.txt")]: idOf(join(src, "a.txt")),
+      [join(src, "b.txt")]: idOf(join(src, "b.txt")),
+    };
+    // An app saves a new a.txt in its place (a new file renamed over it).
+    await writeFile(join(testDir, "new.tmp"), "saved since");
+    await rename(join(testDir, "new.tmp"), join(src, "a.txt"));
+
+    const report = await buildCopyPasteAnalysisReport({
+      analysisId: "analysis-test",
+      request: normalizeCopyPasteAnalysisRequest({
+        mode: "copy",
+        sourcePaths: [join(src, "a.txt"), join(src, "b.txt")],
+        destinationDirectoryPath: dst,
+        expectedSourceIds: copiedIds,
+      }),
+      fileSystem: nativeFileSystem,
+      thresholds: { largeBatchItemThreshold: 100_000, largeBatchByteThreshold: 1e12 },
+    });
+
+    expect(report.issues).toEqual([
+      expect.objectContaining({ code: "source_missing", sourcePath: join(src, "a.txt") }),
+    ]);
+    expect(report.nodes.map((node) => node.sourcePath)).toEqual([join(src, "b.txt")]);
+  });
+});
+
+describe("the item a Replace removes is the one that was there", () => {
+  // An app saves a new version of "a.txt" (a new file put in its place) while the copy
+  // replacing it is being written.
+  it("keeps an item saved in its place while the new one was being copied", async () => {
+    await writeFile(join(src, "a.txt"), "pasted");
+    await writeFile(join(dst, "a.txt"), "old");
+    const withTrash = nativeFileSystemWithTrash(trash);
+    const fileSystem: WriteServiceFileSystem = {
+      ...withTrash,
+      copyFile: async (from, to, signal) => {
+        await withTrash.copyFile?.(from, to, signal);
+        await writeFile(join(testDir, "saved.tmp"), "saved meanwhile");
+        await rename(join(testDir, "saved.tmp"), join(dst, "a.txt"));
+      },
+    };
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.items[0]?.error).toBe(
+      "“a.txt” changed while it was being replaced, so it was kept and nothing was replaced.",
+    );
+    expect(await readFile(join(dst, "a.txt"), "utf8")).toBe("saved meanwhile");
+    expect(await readdir(dst)).toEqual(["a.txt"]);
+    expect(await readdir(trash)).toEqual([]);
+  });
+
+  it("keeps a folder that got a new item while the new one was being copied", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "x.txt"), "pasted");
+    await mkdir(join(dst, "F"));
+    await writeFile(join(dst, "F", "old.txt"), "old");
+    const withTrash = nativeFileSystemWithTrash(trash);
+    const fileSystem: WriteServiceFileSystem = {
+      ...withTrash,
+      copyFile: async (from, to, signal) => {
+        await withTrash.copyFile?.(from, to, signal);
+        await writeFile(join(dst, "F", "new work.txt"), "unsaved elsewhere");
+      },
+    };
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect((await readdir(join(dst, "F"))).sort()).toEqual(["new work.txt", "old.txt"]);
+    expect(await readdir(dst)).toEqual(["F"]);
+    expect(await readdir(trash)).toEqual([]);
+  });
+
+  // Looking for a locked item inside a large folder takes a while: one swapped in for it
+  // meanwhile isn't deleted.
+  it("doesn't delete a folder swapped in while it was looked through for locked items", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "x.txt"), "pasted");
+    await mkdir(join(dst, "F"));
+    await writeFile(join(dst, "F", "old.txt"), "old");
+    let swapped = false;
+    const fileSystem: WriteServiceFileSystem = {
+      ...nativeFileSystem,
+      trash: async () => {
+        throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+      },
+      getFlags: async (path) => {
+        if (!swapped && path === join(dst, "F", "old.txt")) {
+          swapped = true;
+          renameSync(join(dst, "F"), join(testDir, "F asked about"));
+          mkdirSync(join(dst, "F"));
+          writeFileSync(join(dst, "F", "old.txt"), "never asked about");
+        }
+        return (await nativeFileSystem.getFlags?.(path)) ?? 0;
+      },
+    };
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem,
+      resolve: () => "overwrite",
+    });
+
+    expect(swapped).toBe(true);
+    expect(result?.status).toBe("failed");
+    expect(await readFile(join(dst, "F", "old.txt"), "utf8")).toBe("never asked about");
+    expect(await readdir(dst)).toEqual(["F"]);
+  });
+
+  // On a disk with no Trash the person is asked first; another item put there while the
+  // question was open is never deleted on that answer.
+  it("doesn't delete for good an item put in place while the no-Trash question was open", async () => {
+    await writeFile(join(src, "a.txt"), "pasted");
+    await writeFile(join(dst, "a.txt"), "old");
+    const fileSystem: WriteServiceFileSystem = {
+      ...nativeFileSystem,
+      trash: async () => {
+        throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+      },
+    };
+
+    const { result, conflicts } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem,
+      resolve: () => {
+        writeFileSync(join(testDir, "other.tmp"), "never asked about");
+        renameSync(join(testDir, "other.tmp"), join(dst, "a.txt"));
+        return "overwrite";
+      },
+    });
+
+    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
+    expect(result?.status).toBe("failed");
+    expect(await readFile(join(dst, "a.txt"), "utf8")).toBe("never asked about");
+    expect(await readdir(dst)).toEqual(["a.txt"]);
+  });
+});
+
 describe("files that look like AppleDouble files", () => {
   // On APFS a "._name" file is an ordinary file unless it really is AppleDouble data.
   it("copies a ._ file that isn't AppleDouble data, and one without its item", async () => {
@@ -580,6 +758,97 @@ describe("files that look like AppleDouble files", () => {
 
     expect(result?.status).toBe("completed");
     expect((await readdir(join(dst, "F"))).sort()).toEqual(["._a.txt", "._alone", "a.txt"]);
+  });
+
+  // APFS keeps attributes natively, so AppleDouble data in "._a.txt" (left by rsync, tar or
+  // a NAS) isn't "a.txt"'s attributes: copying "a.txt" wouldn't carry it.
+  it("copies AppleDouble data beside its item on APFS, and moves it", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    await writeFile(join(src, "F", "._a.txt"), APPLE_DOUBLE_DATA);
+
+    const copy = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+    });
+    expect(copy.report.summary.totalNodeCount).toBe(3);
+    expect((await readdir(join(dst, "F"))).sort()).toEqual(["._a.txt", "a.txt"]);
+
+    await rm(join(dst, "F"), { recursive: true });
+    const move = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: withoutRenameAtAll(),
+    });
+    expect(move.result?.status).toBe("completed");
+    expect((await readdir(join(dst, "F"))).sort()).toEqual(["._a.txt", "a.txt"]);
+    expect(await readFile(join(dst, "F", "._a.txt"))).toEqual(APPLE_DOUBLE_DATA);
+  });
+
+  // On APFS "._a.txt" is never "a.txt"'s attributes, even when it holds AppleDouble data:
+  // one put in the folder while it was being moved stays there, and is named.
+  it("keeps a ._ file added to a moved folder on APFS, and names it", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: withoutRenameAtAll(),
+      beforeExecute: () => writeFile(join(src, "F", "._a.txt"), APPLE_DOUBLE_DATA),
+    });
+
+    expect(result?.items.find((item) => item.sourcePath === join(src, "F"))?.error).toBe(
+      "“._a.txt” was added to “F” while it was being moved, so it was left in the original “F”.",
+    );
+    expect(await readdir(join(src, "F"))).toEqual(["._a.txt"]);
+    expect(await readdir(join(dst, "F"))).toEqual(["a.txt"]);
+  });
+
+  it("names a ._ file added to a folder while it was copied on APFS", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "new"), "n");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      beforeExecute: () => writeFile(join(src, "F", "._new"), "an ordinary file"),
+    });
+
+    expect(result?.items.find((item) => item.sourcePath === join(src, "F"))?.error).toBe(
+      "“._new” was added to “F” after the copy began, so it wasn't copied.",
+    );
+  });
+
+  // The move empties "F" but for the "._a.txt" the person chose to keep: it isn't cleared
+  // away with the folder as if it were "a.txt"'s attributes.
+  it("keeps a ._ file the move skipped, in a folder it otherwise emptied", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    await writeFile(join(src, "F", "._a.txt"), APPLE_DOUBLE_DATA);
+    await mkdir(join(dst, "F"));
+    await writeFile(join(dst, "F", "._a.txt"), "theirs");
+
+    for (const fileSystem of [nativeFileSystem, withoutRenameAtAll()]) {
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "F")],
+        destinationDirectoryPath: dst,
+        fileSystem,
+        policy: KEEP_EXISTING,
+      });
+
+      expect(result?.status).toBe("partial");
+      expect(await readdir(join(src, "F"))).toEqual(["._a.txt"]);
+      expect(await readFile(join(src, "F", "._a.txt"))).toEqual(APPLE_DOUBLE_DATA);
+      expect(await readFile(join(dst, "F", "._a.txt"), "utf8")).toBe("theirs");
+      // Back where it started, for the next way of moving it.
+      await rename(join(dst, "F", "a.txt"), join(src, "F", "a.txt"));
+    }
   });
 });
 
