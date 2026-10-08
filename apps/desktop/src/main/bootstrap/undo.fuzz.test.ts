@@ -29,7 +29,11 @@ import { createWriteOperationCoordinator } from "./writeOperations";
 // - With nothing changed in between, Undo gets back every item as it was (path, kind and
 //   file id), and Redo gets back the end.
 // - With random changes made outside the app between them, no item is ever lost or
-//   replaced, every item left as it was says why, and nothing stays under a hidden name.
+//   replaced, every item left as it was says why, and nothing stays under a hidden name;
+//   and the same for Redo after more changes.
+// - With writes that fail (no permission) and Undos stopped part way, trying again gets
+//   back to the start and Redo to the end; with failures that look like changes outside
+//   (a name taken, an item gone), nothing is lost or replaced.
 // The cases come from seeds, so a failure names the seed that makes it again:
 //   UNDO_FUZZ_SEED=1234 UNDO_FUZZ_CASES=1 bun ./apps/desktop/scripts/runVitest.ts run undo.fuzz
 const FIRST_SEED = Number(process.env.UNDO_FUZZ_SEED ?? 1);
@@ -45,6 +49,9 @@ const KEEP_BOTH: CopyPastePolicy = {
 
 type Item = { path: string; isFolder: boolean };
 
+// Writes that fail on their own, with these error codes, and Undos stopped after a write.
+type Failures = { codes: string[]; chance: number; stopChance: number };
+
 class Case {
   readonly root = mkdtempSync(join(tmpdir(), "filetrail-undo-fuzz-"));
   readonly trashDir = join(this.root, ".Trash");
@@ -58,6 +65,9 @@ class Case {
   private names = 0;
   private outsideNames = 0;
   private trashed = 0;
+  // While set, the app's writes fail and stop at random (the operations themselves run
+  // before it is set, so only Undo and Redo meet it).
+  failures: Failures | null = null;
 
   constructor(readonly random: Random) {
     mkdirSync(this.trashDir);
@@ -74,14 +84,44 @@ class Case {
       renameSync(path, destination);
       return destination;
     };
+    const fs = createOriginalWriteOperationFs(trash);
     this.coordinator = createWriteOperationCoordinator(
       {
         subscribe: () => () => undefined,
         cancelOperation: () => ({ ok: true }),
       } as unknown as WriteService,
-      createOriginalWriteOperationFs(trash),
+      {
+        ...fs,
+        renameExclusive: (from, to) => this.failOrStop(from, () => fs.renameExclusive(from, to)),
+        rename: (from, to) => this.failOrStop(from, () => fs.rename(from, to)),
+        trash: (path) => this.failOrStop(path, () => fs.trash(path)),
+      },
       { homePath: this.root, recordUndo: this.history.record, undoHistory: this.history },
     );
+  }
+
+  // A write that may fail before it starts, or stop the operation once it is done. An item
+  // waiting under a batch rename's hidden name always gets out of it: a failure there is
+  // left to the batch rename's own fuzz test.
+  private async failOrStop<T>(path: string, write: () => Promise<T>): Promise<T> {
+    const failures = this.failures;
+    if (
+      failures &&
+      !basename(path).startsWith(".filetrail") &&
+      this.random.chance(failures.chance)
+    ) {
+      const code = this.random.pick(failures.codes);
+      throw Object.assign(new Error(`${code}: failed on purpose`), { code });
+    }
+    const written = await write();
+    const running = this.coordinator.getActiveOperation();
+    if (failures && running && this.random.chance(failures.stopChance)) {
+      this.coordinator.handlers["writeOperation:cancel"](
+        { operationId: running.operationId },
+        { sender: this.sender },
+      );
+    }
+    return written;
   }
 
   dispose(): void {
@@ -369,9 +409,11 @@ class Case {
     }
   }
 
-  async undoAll(direction: "undo" | "redo") {
+  // Undoes (or redoes) until there is nothing left, as many times as it takes: what failed
+  // or was stopped stays on the list for the next try.
+  async undoAll(direction: "undo" | "redo", tries = 50) {
     const results: WriteOperationProgressEvent[] = [];
-    for (let step = 0; step < 50; step += 1) {
+    for (let step = 0; step < tries; step += 1) {
       const prepared = await this.coordinator.handlers["undo:prepare"]({ direction });
       if (prepared.ticket === null) {
         return results;
@@ -480,13 +522,126 @@ describe("Undo, fuzzed on a real disk", () => {
             fail(seed, testCase, `An item (id ${id}) was lost by Undo.`);
           }
         }
-        for (const result of undone) {
-          for (const item of result.result?.items ?? []) {
-            if ((item.status === "skipped" || item.status === "failed") && !item.error) {
-              fail(seed, testCase, `An item was left without saying why: ${JSON.stringify(item)}`);
-            }
+        checkSaidWhy(seed, testCase, undone);
+        if (testCase.hiddenLeftovers().length > 0) {
+          fail(seed, testCase, `Hidden items left: ${testCase.hiddenLeftovers().join(", ")}`);
+        }
+        // And Redo of what was undone, after more changes outside.
+        for (let index = testCase.random.integer(0, 2); index > 0; index -= 1) {
+          for (const id of testCase.changeOutside()) {
+            removedOutside.add(id);
           }
         }
+        const redone = await testCase.undoAll("redo");
+        const afterRedo = testCase.ids();
+        for (const id of before) {
+          if (!removedOutside.has(id) && !afterRedo.has(id)) {
+            fail(seed, testCase, `An item (id ${id}) was lost by Redo.`);
+          }
+        }
+        checkSaidWhy(seed, testCase, redone);
+        if (testCase.hiddenLeftovers().length > 0) {
+          fail(seed, testCase, `Hidden items left: ${testCase.hiddenLeftovers().join(", ")}`);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Reproduce:")) {
+          throw error;
+        }
+        fail(seed, testCase, `Stopped: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        testCase.dispose();
+      }
+    }
+  }, 120_000);
+
+  it("gets back to the start, and Redo to the end, through failed writes and stops", async () => {
+    let failed = 0;
+    let stopped = 0;
+    for (let seed = FIRST_SEED; seed < FIRST_SEED + CASES; seed += 1) {
+      const testCase = new Case(random(seed));
+      try {
+        const start = testCase.snapshot();
+        const operations = testCase.random.integer(1, 6);
+        for (let index = 0; index < operations; index += 1) {
+          await testCase.operate();
+        }
+        const end = testCase.snapshot();
+        const fullyUndoable = !testCase.history.menu().cantUndo;
+        // No permission, or the Trash refusing, now and then: what failed stays on the list
+        // and is tried again by the next Undo.
+        testCase.failures = { codes: ["EACCES", "EPERM"], chance: 0.2, stopChance: 0.1 };
+        const undone = await testCase.undoAll("undo", 500);
+        if (fullyUndoable && testCase.snapshot().join("\n") !== start.join("\n")) {
+          fail(
+            seed,
+            testCase,
+            `Undo didn't get back to the start.\nStart:\n${start.join("\n")}\nNow:\n${testCase.snapshot().join("\n")}`,
+          );
+        }
+        const redone = await testCase.undoAll("redo", 500);
+        if (testCase.snapshot().join("\n") !== end.join("\n")) {
+          fail(
+            seed,
+            testCase,
+            `Redo didn't get back to the end.\nEnd:\n${end.join("\n")}\nNow:\n${testCase.snapshot().join("\n")}`,
+          );
+        }
+        for (const result of [...undone, ...redone]) {
+          if (result.result?.items.some((item) => item.status === "failed")) {
+            failed += 1;
+          }
+          if (result.status === "partial" && result.result?.error?.startsWith("Stopped")) {
+            stopped += 1;
+          }
+          // Only what failed is left, never anything skipped: nothing changed outside.
+          if (result.result?.items.some((item) => item.status === "skipped")) {
+            fail(seed, testCase, `An item was skipped: ${JSON.stringify(result.result?.items)}`);
+          }
+        }
+        checkSaidWhy(seed, testCase, [...undone, ...redone]);
+        if (testCase.hiddenLeftovers().length > 0) {
+          fail(seed, testCase, `Hidden items left: ${testCase.hiddenLeftovers().join(", ")}`);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Reproduce:")) {
+          throw error;
+        }
+        fail(seed, testCase, `Stopped: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        testCase.dispose();
+      }
+    }
+    if (CASES >= 50) {
+      expect(failed).toBeGreaterThan(0);
+      expect(stopped).toBeGreaterThan(0);
+    }
+  }, 120_000);
+
+  it("loses and replaces nothing when writes fail as if things changed outside", async () => {
+    for (let seed = FIRST_SEED; seed < FIRST_SEED + CASES; seed += 1) {
+      const testCase = new Case(random(seed));
+      try {
+        const operations = testCase.random.integer(1, 6);
+        for (let index = 0; index < operations; index += 1) {
+          await testCase.operate();
+        }
+        const before = testCase.ids();
+        testCase.failures = {
+          codes: ["EACCES", "EPERM", "ENOENT", "EEXIST"],
+          chance: 0.2,
+          stopChance: 0.1,
+        };
+        const undone = await testCase.undoAll("undo", 500);
+        const redone = await testCase.undoAll("redo", 500);
+        // Nothing was deleted, and nothing taken a name from another item: every id is
+        // still somewhere.
+        const after = testCase.ids();
+        for (const id of before) {
+          if (!after.has(id)) {
+            fail(seed, testCase, `An item (id ${id}) was lost.`);
+          }
+        }
+        checkSaidWhy(seed, testCase, [...undone, ...redone]);
         if (testCase.hiddenLeftovers().length > 0) {
           fail(seed, testCase, `Hidden items left: ${testCase.hiddenLeftovers().join(", ")}`);
         }
@@ -501,3 +656,14 @@ describe("Undo, fuzzed on a real disk", () => {
     }
   }, 120_000);
 });
+
+// Every item left as it was says why.
+function checkSaidWhy(seed: number, testCase: Case, results: WriteOperationProgressEvent[]): void {
+  for (const result of results) {
+    for (const item of result.result?.items ?? []) {
+      if ((item.status === "skipped" || item.status === "failed") && !item.error) {
+        fail(seed, testCase, `An item was left without saying why: ${JSON.stringify(item)}`);
+      }
+    }
+  }
+}
