@@ -26,6 +26,8 @@ export type WindowHost = {
   // Closes the other explorer windows and returns their tabs.
   mergeExplorerWindows: (senderId: number | null) => OpenTabPreference[];
   explorerWindowCount: () => number;
+  // Closes the explorer window as its close button does; false when it isn't one.
+  closeExplorerWindow: (senderId: number | null) => boolean;
   // Sends to every window of the app but the one asking.
   sendToOtherWindows: (senderId: number | null, channel: string, payload: unknown) => void;
 };
@@ -38,6 +40,7 @@ export const WINDOW_IPC_CHANNELS = [
   "app:getLaunchContext",
   "app:openWindow",
   "app:getExplorerWindowCount",
+  "app:closeWindow",
   "app:mergeAllWindows",
   "app:getClipboard",
   "app:setClipboard",
@@ -90,6 +93,9 @@ export function createWindowIpcHandlers(deps: {
       ),
     }),
     "app:getExplorerWindowCount": () => ({ count: windows.explorerWindowCount() }),
+    "app:closeWindow": (_payload, event) => ({
+      ok: windows.closeExplorerWindow(senderIdOf(event)),
+    }),
     "app:mergeAllWindows": (_payload, event) => ({
       tabs: windows.mergeExplorerWindows(senderIdOf(event)),
     }),

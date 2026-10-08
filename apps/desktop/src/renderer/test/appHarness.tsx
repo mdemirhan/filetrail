@@ -429,7 +429,11 @@ export function createAppHarness(
       if (channel === "app:getClipboard") {
         return { clipboard: args.clipboard ?? { type: "empty" } } as IpcResponse<C>;
       }
-      if (channel === "app:setClipboard" || channel === "app:openWindow") {
+      if (
+        channel === "app:setClipboard" ||
+        channel === "app:openWindow" ||
+        channel === "app:closeWindow"
+      ) {
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "app:getExplorerWindowCount") {

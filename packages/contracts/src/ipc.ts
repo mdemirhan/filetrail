@@ -868,6 +868,12 @@ export const ipcContractSchemas = {
     }),
     response: z.object({ ok: z.boolean() }),
   },
+  // Closes the explorer window asking (⌘W on its last tab), as its close button does: the
+  // main process asks first when closing it would stop a copy, and records where it was.
+  "app:closeWindow": {
+    request: emptyRequestSchema,
+    response: z.object({ ok: z.boolean() }),
+  },
   // How many explorer windows are open: Merge All Windows needs two.
   "app:getExplorerWindowCount": {
     request: emptyRequestSchema,

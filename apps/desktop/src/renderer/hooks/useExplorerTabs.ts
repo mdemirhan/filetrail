@@ -496,8 +496,10 @@ export function useExplorerTabs(args: {
     }
   }
 
-  // ⌘W: closes a tab. The last view left closes the window with it. A tab moved to another
-  // window isn't offered by Reopen Closed Tab (`remember: false`).
+  // ⌘W: closes a tab. The last view left closes the window with it, through the main
+  // process: a page closing itself would skip the question asked before closing the last
+  // window stops a copy. A tab moved to another window isn't offered by Reopen Closed Tab
+  // (`remember: false`).
   function closeTab(
     tabId: string = stateRef.current.activeTabId,
     options: { remember?: boolean } = {},
@@ -512,7 +514,7 @@ export function useExplorerTabs(args: {
       return;
     }
     if (current.tabs.length === 1) {
-      window.close();
+      void client.invoke("app:closeWindow", {}).catch(() => undefined);
       return;
     }
     if (!preferences.preferencesReady) {

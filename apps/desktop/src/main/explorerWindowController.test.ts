@@ -488,6 +488,36 @@ describe("ExplorerWindowController closing", () => {
     expect(controller.windows.count).toBe(0);
   });
 
+  it("asks the same when ⌘W closes the last tab of the last window", async () => {
+    vi.useFakeTimers();
+    try {
+      const { controller, windows, questions, runOperation, store } = setUpWithWindows(1);
+      runOperation("copy");
+      const [window] = windows;
+      if (!window) {
+        throw new Error("No window.");
+      }
+      // Moved just before ⌘W, before the place was recorded.
+      window.bounds = { x: 321, y: 123, width: 1000, height: 700 };
+      window.emit("move");
+
+      expect(controller.closeWindowOf(window.webContents.id)).toBe(true);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(store.getExplorerWindows()[0]?.bounds).toMatchObject({ x: 321, y: 123 });
+      expect(questions.map((asked) => asked.question.buttons)).toEqual([
+        ["Keep Working", "Stop and Close"],
+      ]);
+      questions[0]?.answer(KEEP_WORKING_BUTTON_INDEX);
+      await vi.advanceTimersByTimeAsync(0);
+      // The window stays, and so the copy keeps running in it.
+      expect(window.destroyed).toBe(false);
+      expect(controller.closeWindowOf(12_345)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("closes the last window without asking when nothing worth asking about runs", async () => {
     const { windows, questions, runOperation } = setUpWithWindows(1);
     runOperation("rename");

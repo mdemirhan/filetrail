@@ -306,6 +306,17 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     return successor?.window.webContents ?? null;
   }
 
+  // ⌘W on a window's last tab: closed as its close button closes it, so the question
+  // before stopping a copy is asked and its place is recorded.
+  closeWindowOf(webContentsId: number | null): boolean {
+    const entry = this.list.byWebContentsId(webContentsId);
+    if (!entry || entry.window.isDestroyed()) {
+      return false;
+    }
+    entry.window.close();
+    return true;
+  }
+
   // A second launch, or a click on the Dock icon with no explorer window open.
   bringToFront(): void {
     const window = this.list.front()?.window ?? null;

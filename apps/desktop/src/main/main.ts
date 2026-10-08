@@ -172,6 +172,7 @@ if (hasSingleInstanceLock) {
             explorerWindows.openWindowFrom(senderId, tabs, activeTabIndex),
           mergeExplorerWindows: (senderId) => explorerWindows.mergeInto(senderId),
           explorerWindowCount: () => explorerWindows.windows.count,
+          closeExplorerWindow: (senderId) => explorerWindows.closeWindowOf(senderId),
           successorWindowOf: (senderId) => explorerWindows.successorOf(senderId),
           sendToOtherWindows: (senderId, channel, payload) => {
             for (const window of BrowserWindow.getAllWindows()) {

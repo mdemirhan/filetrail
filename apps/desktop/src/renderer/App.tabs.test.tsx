@@ -102,7 +102,10 @@ describe("App tabs", () => {
 
     await pressKey({ key: "w", metaKey: true });
 
-    expect(closeWindow).toHaveBeenCalledTimes(1);
+    // Through the main process, which asks first when closing stops a copy: the page closing
+    // itself would skip the question.
+    expect(harness.invocations.map((call) => call.channel)).toContain("app:closeWindow");
+    expect(closeWindow).not.toHaveBeenCalled();
     closeWindow.mockRestore();
   });
 

@@ -46,6 +46,7 @@ function setUp() {
     openExplorerWindow: vi.fn(() => true),
     mergeExplorerWindows: vi.fn(() => [tab("/Users/demo/merged")]),
     explorerWindowCount: () => 2,
+    closeExplorerWindow: vi.fn((senderId: number | null) => senderId === 1),
     sendToOtherWindows: vi.fn(),
   } satisfies WindowHost;
   const onPreferencesChanged = vi.fn();
@@ -106,6 +107,8 @@ describe("createWindowIpcHandlers", () => {
       tabs: [tab("/Users/demo/merged")],
     });
     expect(windows.mergeExplorerWindows).toHaveBeenCalledWith(1);
+    expect(await handlers["app:closeWindow"]({}, from(1))).toEqual({ ok: true });
+    expect(windows.closeExplorerWindow).toHaveBeenCalledWith(1);
   });
 
   it("keeps one clipboard for every window, and tells the others of a change", async () => {
