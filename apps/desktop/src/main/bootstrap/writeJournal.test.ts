@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, lstatSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ReplaceJournalEntry, RunWriteAlone } from "@filetrail/core";
+import { nativeFileSystem } from "@filetrail/core/fs/testNativePaste";
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
@@ -410,6 +412,73 @@ describe("recoverWrites", () => {
       "[filetrail] an interrupted copy wasn't removed",
       expect.objectContaining({ partialPath: unreachable }),
     );
+  });
+
+  // A copy of a locked file is locked as it is finished, before it takes its name.
+  it("removes a locked part of a large file", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const partial = join(testDir, ".movie.mov.filetrail-0a1b2c3d");
+    await writeFile(partial, "all of it");
+    execFileSync("chflags", ["uchg", partial]);
+    await journal.add({ kind: "partial_file", id: "p", partialPath: partial, finalPath: "x" });
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    await recoverWrites(journal, nativeFileSystem, logger);
+
+    expect(existsSync(partial)).toBe(false);
+    expect(journal.entries()).toEqual([]);
+  });
+
+  // A large file being copied inside a folder a paste was building: both go, and neither
+  // record stays.
+  it("clears the part of a large file inside a hidden folder that goes too", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const staging = join(testDir, ".F.filetrail-0a1b2c3d");
+    await mkdir(staging);
+    const partial = join(staging, ".movie.mov.filetrail-11111111");
+    await writeFile(partial, "part of it");
+    const stats = lstatSync(staging);
+    await journal.add(
+      createEntry("folder", {
+        stagingPath: staging,
+        finalPath: join(testDir, "F"),
+        sourcePath: join(testDir, "source", "F"),
+        staged: false,
+        stagingId: { dev: stats.dev, ino: stats.ino },
+      }),
+    );
+    await journal.add({ kind: "partial_file", id: "p", partialPath: partial, finalPath: "x" });
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    await recoverWrites(journal, nativeFileSystem, logger);
+
+    expect(existsSync(staging)).toBe(false);
+    expect(journal.entries()).toEqual([]);
+  });
+
+  // An external disk connected again gets another device number: the folder is still the
+  // one the paste made, by its number on the disk.
+  it("removes its hidden folder from a disk connected again since", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const staging = join(testDir, ".F.filetrail-0a1b2c3d");
+    await mkdir(staging);
+    await writeFile(join(staging, "a.txt"), "a");
+    const stats = lstatSync(staging);
+    await journal.add(
+      createEntry("folder", {
+        stagingPath: staging,
+        finalPath: join(testDir, "F"),
+        sourcePath: join(testDir, "source", "F"),
+        staged: false,
+        stagingId: { dev: stats.dev + 1, ino: stats.ino },
+      }),
+    );
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    await recoverWrites(journal, nativeFileSystem, logger);
+
+    expect(existsSync(staging)).toBe(false);
+    expect(journal.entries()).toEqual([]);
   });
 
   // A rename of several ("1" becomes "2", "2" becomes "3") stops dead as the first item

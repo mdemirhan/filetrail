@@ -91,11 +91,13 @@ export async function recoverWrites(
     ...(options.answerWithinMs === undefined ? {} : { answerWithinMs: options.answerWithinMs }),
     ...(options.runWriteAlone === undefined ? {} : { runWriteAlone: options.runWriteAlone }),
   };
-  if (replaces.length > 0) {
-    await recoverReplaces(journal, replaces, fileSystem, logger, recoveryOptions, options, report);
-  }
+  // Parts of large files first: one inside a folder a paste was building goes with it, and
+  // would then look like one on a disk that isn't connected, kept for ever.
   if (partialFiles.length > 0) {
     await removePartialFiles(journal, partialFiles, fileSystem, logger, recoveryOptions);
+  }
+  if (replaces.length > 0) {
+    await recoverReplaces(journal, replaces, fileSystem, logger, recoveryOptions, options, report);
   }
   for (const entry of batchRenames) {
     await putBackRenamedItems(journal, entry, fileSystem, logger, recoveryOptions, report);

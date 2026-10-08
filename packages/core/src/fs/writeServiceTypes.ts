@@ -96,6 +96,10 @@ export type WriteServiceFileSystem = {
   getFlags?: (path: string) => Promise<number>;
   /** Sets the item's BSD flags (a symlink not followed). */
   setFlags?: (path: string, flags: number) => Promise<void>;
+  /** Gives the item the access control list `acl` (acl_to_text(3) text), or none at all
+   *  for null (a symlink not followed). A hidden copy that can't be removed has its rules
+   *  against deleting it taken off with it. */
+  setAcl?: (path: string, acl: string | null) => Promise<void>;
   /** Copies a folder's own metadata (mode, flags, dates, xattrs such as Finder tags, ACLs)
    *  onto an existing folder, without its contents. Applied once the folder's items are
    *  in, since a read-only or locked folder can't be written into afterwards. Without it,

@@ -4,6 +4,7 @@ import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
 import { moveExclusive, removeStagedItem, unlockForMove } from "./copyPasteExecution";
 import { captureFingerprint } from "./copyPasteFingerprint";
 import { isPackageFolder, resolveDuplicateName } from "./copyPasteNames";
+import type { ItemId } from "./undoLog";
 import type {
   PartialFileJournalEntry,
   ReplaceJournalEntry,
@@ -120,7 +121,9 @@ async function removePartialFile(
   if (!isFile || !/^\..*\.filetrail-[0-9a-f]{8}$/su.test(basename(entry.partialPath))) {
     return { entry, outcome: "nothing_left" };
   }
-  await fileSystem.rm(entry.partialPath, { recursive: false, force: true });
+  // A copy is locked, or carries a rule against deleting it, as its original does: those
+  // go on as it is finished, and come off for it to be removed.
+  await removeStagedItem(fileSystem, entry.partialPath);
   return { entry, outcome: "removed_copy" };
 }
 
@@ -159,7 +162,7 @@ async function recoverEntry(
       // it is in place (the same folder, by its id), and gets it now.
       if (entry.staged && entry.stagingId !== undefined) {
         const placed = await captureFingerprint(fileSystem, entry.finalPath);
-        if (placed.dev === entry.stagingId.dev && placed.ino === entry.stagingId.ino) {
+        if (isSameItem(placed, entry.stagingId)) {
           await applyFolderMetadata(fileSystem, entry);
           return { entry, outcome: "finished", path: entry.finalPath };
         }
@@ -171,10 +174,7 @@ async function recoverEntry(
   const staged = await captureFingerprint(fileSystem, entry.stagingPath);
   // A folder made there for the item to be built in is known by its id: another item that
   // took the name since isn't this paste's, and is left alone.
-  if (
-    entry.stagingId !== undefined &&
-    (staged.dev !== entry.stagingId.dev || staged.ino !== entry.stagingId.ino)
-  ) {
+  if (entry.stagingId !== undefined && !isSameItem(staged, entry.stagingId)) {
     return { entry, outcome: "nothing_left" };
   }
   const finalTaken = (await captureFingerprint(fileSystem, entry.finalPath)).exists;
@@ -228,12 +228,17 @@ async function applyFolderMetadata(
   if (
     !fileSystem.copyMetadata ||
     entry.sourceId === undefined ||
-    source.dev !== entry.sourceId.dev ||
-    source.ino !== entry.sourceId.ino
+    !isSameItem(source, entry.sourceId)
   ) {
     return;
   }
   await fileSystem.copyMetadata(entry.sourcePath, entry.finalPath).catch(() => undefined);
+}
+
+// Whether `found` is the item `id` was read from. Its disk may have been connected again
+// since, under another device number: the item's number on it says.
+function isSameItem(found: { ino: number | null }, id: ItemId): boolean {
+  return found.ino === id.ino;
 }
 
 async function folderIsThere(fileSystem: WriteServiceFileSystem, path: string): Promise<boolean> {

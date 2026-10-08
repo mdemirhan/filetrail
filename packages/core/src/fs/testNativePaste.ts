@@ -38,6 +38,7 @@ export const nativeFileSystem: WriteServiceFileSystem = {
   isAppleDouble: (path) => isAppleDoubleOnItsVolume(native.nativeUsesAppleDouble, open, path),
   getFlags: native.nativeGetFlags,
   setFlags: native.nativeSetFlags,
+  setAcl: native.nativeSetAcl,
   copyFile: async (sourcePath, destinationPath, signal) => {
     await nativeCopy(sourcePath, destinationPath, signal);
   },

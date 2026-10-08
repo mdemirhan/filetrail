@@ -143,6 +143,7 @@ export const originalFileSystem: WriteServiceFileSystem = {
   },
   getFlags: (path) => nativeGetFlags(path),
   setFlags: (path, flags) => nativeSetFlags(path, flags),
+  setAcl: (path, acl) => nativeSetAcl(path, acl),
   copyMetadata: nativeCopyMetadata,
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     // "wx": never truncate an item that appeared at the destination in the meantime.

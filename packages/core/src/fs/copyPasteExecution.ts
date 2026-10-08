@@ -946,6 +946,18 @@ async function executeStagedDirectory(
     };
   }
 
+  // Another app could have put something else under the hidden name: only the copy this
+  // paste built is put in place, and only then are originals removed.
+  if (!(await isStillOurs(fileSystem, temporaryPath, reserved.id))) {
+    await discard();
+    return {
+      itemStatus: "failed",
+      skipReason: null,
+      error: hiddenCopyChangedMessage(name, context.mode),
+      destinationPath: finalPath,
+      childItems: [],
+    };
+  }
   try {
     // Complete now: a crash from here on puts it in place at the next start.
     await journal?.add({ ...journalEntry, staged: true });
@@ -971,7 +983,9 @@ async function executeStagedDirectory(
 
   let error = outcome.error;
   let items = childItems;
-  if (context.mode === "cut") {
+  if (context.mode === "cut" && !(await isStillOurs(fileSystem, finalPath, reserved.id))) {
+    error = hiddenCopyChangedMessage(name, context.mode);
+  } else if (context.mode === "cut") {
     const cleanup = await removeMovedSources(context, currentNode, childItems);
     error = cleanup.error;
     items = cleanup.childItems;
@@ -1534,6 +1548,16 @@ async function executeReplace(
   try {
     // A copy of a locked item is locked too, and a locked item can't be renamed: it is
     // unlocked for the swap and locked again after. Done before the old item goes.
+    if (!movedByRename && !(await isStillOurs(fileSystem, temporaryPath, stagingId))) {
+      await undoStaging();
+      return {
+        itemStatus: "failed",
+        skipReason: null,
+        error: hiddenCopyChangedMessage(basename(finalPath), context.mode),
+        destinationPath: finalPath,
+        childItems: [],
+      };
+    }
     stagedFlags = await unlockForMove(fileSystem, temporaryPath);
     stagedMode = await openForMove(fileSystem, temporaryPath);
     if ((await removeReplacedItem(context, currentNode, replaced)) === "skipped") {
@@ -1593,7 +1617,13 @@ async function executeReplace(
 
   let ownError: string | null = null;
   let childItems = stagedChildItems;
-  if (context.mode === "cut" && !movedByRename) {
+  if (
+    context.mode === "cut" &&
+    !movedByRename &&
+    !(await isStillOurs(fileSystem, finalPath, stagingId))
+  ) {
+    ownError = hiddenCopyChangedMessage(basename(finalPath), context.mode);
+  } else if (context.mode === "cut" && !movedByRename) {
     const cleanup = await removeMovedSources(context, currentNode, stagedChildItems);
     ownError = cleanup.error;
     childItems = cleanup.childItems;
@@ -2027,7 +2057,10 @@ export async function removeStagedItem(
     return;
   } catch (error) {
     const code = errorCode(error);
-    if ((code !== "EACCES" && code !== "EPERM") || (!fileSystem.chmod && !fileSystem.setFlags)) {
+    if (
+      (code !== "EACCES" && code !== "EPERM") ||
+      (!fileSystem.chmod && !fileSystem.setFlags && !fileSystem.setAcl)
+    ) {
       throw error;
     }
   }
@@ -2036,7 +2069,8 @@ export async function removeStagedItem(
 }
 
 // Opens up a hidden copy so it can be removed: locked items (a copy of a locked item is
-// locked too) are unlocked and read-only folders made writable.
+// locked too) are unlocked, rules against deleting them (a copy of ~/Documents has one)
+// taken off, and read-only folders made writable.
 async function makeFoldersWritable(fileSystem: WriteServiceFileSystem, path: string) {
   if (fileSystem.getFlags && fileSystem.setFlags) {
     const flags = await fileSystem.getFlags(path).catch(() => 0);
@@ -2044,6 +2078,7 @@ async function makeFoldersWritable(fileSystem: WriteServiceFileSystem, path: str
       await fileSystem.setFlags(path, flags & ~USER_LOCK_FLAGS).catch(() => undefined);
     }
   }
+  await fileSystem.setAcl?.(path, null).catch(() => undefined);
   const fingerprint = await captureFingerprint(fileSystem, path);
   if (fingerprint.kind !== "directory") {
     return;
@@ -2252,6 +2287,26 @@ async function reserveStagingFolder(
     };
   }
   throw new Error(`Couldn't find a free temporary name next to “${basename(finalPath)}”.`);
+}
+
+// Whether the item at `path` is still the folder a paste built under a hidden name (`id`,
+// when the disk gives one), found by its id: renaming it into place keeps it.
+async function isStillOurs(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  id: ItemId | null,
+): Promise<boolean> {
+  if (id === null) {
+    return true;
+  }
+  const there = await captureFingerprint(fileSystem, path);
+  return there.dev === id.dev && there.ino === id.ino;
+}
+
+function hiddenCopyChangedMessage(name: string, mode: CopyPasteMode): string {
+  return mode === "cut"
+    ? `“${name}” wasn't moved because another app changed its copy while it was being made. The original is where it was.`
+    : `“${name}” wasn't copied because another app changed the copy while it was being made.`;
 }
 
 // Removes what a paste built under a hidden name, only when the item there is still the one

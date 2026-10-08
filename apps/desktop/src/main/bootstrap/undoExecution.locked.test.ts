@@ -277,6 +277,11 @@ describe("undoing a copy the Trash would refuse", () => {
 
     expect((await t.undo("redo")).status).toBe("completed");
     expect(aclOf(join(root, "Documents copy"))).toContain("deny delete");
+
+    // And again: the copy Redo put back is still the operation's own.
+    expect((await t.undo()).status).toBe("completed");
+    expect(existsSync(join(root, "Documents copy"))).toBe(false);
+    expect(aclOf(join(trashDir, "2-Documents copy"))).toContain("deny delete");
     await t.coordinator.shutdown();
   });
 
@@ -301,6 +306,14 @@ describe("undoing a copy the Trash would refuse", () => {
     expect((await t.undo("redo")).status).toBe("completed");
     expect(
       execFileSync("stat", ["-f", "%Lp", join(root, "cache copy")])
+        .toString()
+        .trim(),
+    ).toBe("555");
+
+    expect((await t.undo()).status).toBe("completed");
+    expect(existsSync(join(root, "cache copy"))).toBe(false);
+    expect(
+      execFileSync("stat", ["-f", "%Lp", join(trashDir, "2-cache copy")])
         .toString()
         .trim(),
     ).toBe("555");

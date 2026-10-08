@@ -402,7 +402,7 @@ async function moveBack(
     itemKind: check.kind,
     parentId: await args.folderIdOf(dirname(planned.from)),
     ...(planned.putBack ? { fromTrash: true, stamp: await readItemStamp(fs, target) } : {}),
-    ...(lifted.flags !== null && restored ? { locked: true } : {}),
+    ...(liftedAny(lifted) && restored ? { locked: true } : {}),
   };
   return {
     status: "done",
@@ -419,6 +419,10 @@ async function moveBack(
 type Lifted = { flags: number | null; mode: number | null; acl: string | null };
 
 const NOTHING_LIFTED: Lifted = { flags: null, mode: null, acl: null };
+
+function liftedAny(lifted: Lifted): boolean {
+  return lifted.flags !== null || lifted.mode !== null || lifted.acl !== null;
+}
 
 async function liftRestrictions(fs: WriteOperationFs, path: string): Promise<Lifted> {
   // A locked item's mode and access rules can't be changed: its lock comes off first.
