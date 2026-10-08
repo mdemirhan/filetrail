@@ -19,8 +19,9 @@ import {
 } from "@filetrail/core/fs/testNativePaste";
 
 import { originalRenameExclusive } from "../originalFileSystem";
-import { classifyUndoWriteError } from "./undoExecution";
+import { classifyUndoWriteError, runUndo } from "./undoExecution";
 import { folderTrash, paste, setUpUndo, snapshotOf } from "./undoRealDisk.testkit";
+import type { WriteOperationFs } from "./writeOperations";
 
 // What an Undo leaves to do: a step whose write failed stays on the Undo list to be tried
 // again, a stopped Undo goes on from where it stopped, and what changed outside the app is
@@ -688,6 +689,58 @@ describe("the Trash not saying where an item went", () => {
     expect(existsSync(join(root, "F"))).toBe(false);
     expect(t.history.menu()).toEqual({ undo: null, redo: null, cantUndo: false });
     await t.coordinator.shutdown();
+  });
+
+  it("leaves nothing to redo of a Replace whose new item went there", async () => {
+    mkdirSync(join(root, "src"));
+    mkdirSync(join(root, "dst"));
+    mkdirSync(join(root, "paste-trash"));
+    writeFileSync(join(root, "src", "a.txt"), "new");
+    writeFileSync(join(root, "dst", "a.txt"), "old");
+    const toTrash = folderTrash(trashDir);
+    const t = setUpUndo(root, trashDir, {
+      // The new item goes to the Trash without it saying where; the old one comes back.
+      trash: (path) => (path === join(root, "dst", "a.txt") ? silentTrash(path) : toTrash(path)),
+    });
+    await paste(t.history, {
+      mode: "copy",
+      sourcePaths: [join(root, "src", "a.txt")],
+      destinationDirectoryPath: join(root, "dst"),
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(join(root, "paste-trash")),
+    });
+
+    expect((await t.undo()).status).toBe("completed");
+
+    expect(readFileSync(join(root, "dst", "a.txt"), "utf8")).toBe("old");
+    // Redo could only move the old item to the Trash again, with nothing in its place.
+    expect(t.history.menu()).toEqual({ undo: null, redo: null, cantUndo: false });
+    await t.coordinator.shutdown();
+  });
+});
+
+describe("an Undo of very many items", () => {
+  it("reports each of them, more than a call can take at once", async () => {
+    const count = 130_000;
+    const items = Array.from({ length: count }, (_unused, index) => ({
+      from: `/D/a${index}`,
+      to: `/D/b${index}`,
+      id: { dev: 1, ino: index + 10 },
+      itemKind: "file" as const,
+    }));
+    const gone = async () => {
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    };
+    const run = await runUndo({
+      direction: "undo",
+      units: [{ steps: [{ kind: "batchRenamed", items }] }],
+      fs: { ...nativeFileSystem, lstat: gone, stat: gone } as unknown as WriteOperationFs,
+      signal: new AbortController().signal,
+      homeDev: null,
+    });
+
+    expect(run.items).toHaveLength(count);
+    expect(run.items[0]).toMatchObject({ status: "skipped" });
   });
 });
 

@@ -113,25 +113,35 @@ export async function runUndo(args: {
     // Once a step can't be undone, the ones before it in the unit aren't either: the old
     // item of a Replace isn't put back where the new one still is.
     let blocked = false;
+    // A step done that can't be done again (the Trash didn't say where it put the item):
+    // the unit's other steps aren't redone either, so Redo never does only part of it (a
+    // Replace's old item moved to the Trash again with no new item in its place).
+    let unrecorded = false;
     for (let stepIndex = unit.steps.length - 1; stepIndex >= 0; stepIndex -= 1) {
       const step = unit.steps[stepIndex] as UndoStep;
       const planned = reverseStep(step);
       if (blocked) {
-        run.items.push(...blockedItems(planned, args.direction));
+        pushAll(run.items, blockedItems(planned, args.direction));
         continue;
       }
       if (args.signal.aborted) {
         run.cancelled = true;
         notReached = [...units.slice(0, unitIndex), { steps: unit.steps.slice(0, stepIndex + 1) }];
-        pushDone(run, doneSteps);
+        pushDone(run, doneSteps, unrecorded);
         break eachUnit;
       }
       args.onStepStart?.(firstPathOf(planned), run.completedItemCount);
       const outcome = await runStep(planned, step, args);
-      run.items.push(...outcome.items);
-      run.completedItemCount += outcome.items.filter((item) => item.status === "completed").length;
+      pushAll(run.items, outcome.items);
+      for (const item of outcome.items) {
+        if (item.status === "completed") {
+          run.completedItemCount += 1;
+        }
+      }
       if (outcome.status !== "skipped" && outcome.produced) {
         doneSteps.push(outcome.produced);
+      } else if (outcome.status === "done") {
+        unrecorded = true;
       }
       if (outcome.status === "stopped") {
         run.cancelled = true;
@@ -139,7 +149,7 @@ export async function runUndo(args: {
           ...units.slice(0, unitIndex),
           { steps: [...unit.steps.slice(0, stepIndex), outcome.leftover] },
         ];
-        pushDone(run, doneSteps);
+        pushDone(run, doneSteps, unrecorded);
         break eachUnit;
       }
       if (outcome.status === "failed") {
@@ -155,16 +165,24 @@ export async function runUndo(args: {
         blocked = true;
       }
     }
-    pushDone(run, doneSteps);
+    pushDone(run, doneSteps, unrecorded);
   }
   run.leftover = [...notReached, ...failed.reverse()];
   return run;
 }
 
-function pushDone(run: UndoRun, steps: UndoStep[]): void {
-  if (steps.length > 0) {
+// What a unit did goes to the other list, unless part of it can't be done again.
+function pushDone(run: UndoRun, steps: UndoStep[], unrecorded: boolean): void {
+  if (steps.length > 0 && !unrecorded) {
     run.done.push({ steps: [...steps] });
-    steps.length = 0;
+  }
+}
+
+// `items` added to the end of `target`, one by one: spread into a call, a batch of more
+// than about 120,000 items would overflow the stack.
+function pushAll<T>(target: T[], items: readonly T[]): void {
+  for (const item of items) {
+    target.push(item);
   }
 }
 
