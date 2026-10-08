@@ -3,7 +3,12 @@
 // Several windows: opening one, moving tabs between them, and what they share (the
 // clipboard, the one file operation that can run at a time).
 
-import type { IpcChannel, IpcRequestInput, IpcResponse } from "@filetrail/contracts";
+import type {
+  IpcChannel,
+  IpcRequestInput,
+  IpcResponse,
+  WriteOperationProgressEvent,
+} from "@filetrail/contracts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("./components/ContentPane", async () =>
@@ -45,6 +50,7 @@ import {
   pressKey,
   renderApp,
   selectItem,
+  toWindowProgressEvent,
 } from "./test/appHarness";
 
 afterEach(expectNoRefusedRequests);
@@ -533,6 +539,99 @@ describe("App windows", () => {
           true,
         ),
       );
+    });
+
+    // The window that ran it closed while this one's page was still loading, so the message
+    // that hands it over came before anything listened: the window asks for it.
+    it("takes it over when it was handed over before the window listened", async () => {
+      const harness = createAppHarness({
+        adoption: {
+          operationId: "other-op",
+          event: toWindowProgressEvent({ ...otherWindowsCopy("running"), action: "paste" }),
+        },
+      });
+      await ready(harness);
+
+      expect(await screen.findByRole("region", { name: "Pasting…" })).toBeInTheDocument();
+      await act(async () => {
+        harness.emitProgress({ ...otherWindowsCopy("completed"), action: "paste" });
+      });
+      await waitFor(() =>
+        expect(screen.queryByRole("region", { name: "Pasting…" })).not.toBeInTheDocument(),
+      );
+      // It is over: this window may start the next one.
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "Backspace", metaKey: true });
+      await waitFor(() =>
+        expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
+          true,
+        ),
+      );
+    });
+
+    it("shows how it went, and clears its cut, when it ended before the window listened", async () => {
+      const finished = toWindowProgressEvent({
+        ...finishedResultEvent("cut", "completed", [
+          { sourcePath: "/Users/demo/elsewhere.txt", status: "completed", error: null },
+          { sourcePath: "/Users/demo/locked.txt", status: "failed", error: "The disk is full." },
+        ]),
+        operationId: "other-op",
+        action: "paste",
+      });
+      // One item moved, one didn't.
+      const ended: WriteOperationProgressEvent = {
+        ...finished,
+        status: "partial",
+        result: finished.result && { ...finished.result, status: "partial" },
+      };
+      const harness = createAppHarness({
+        clipboard: {
+          type: "ready",
+          mode: "cut",
+          sourcePaths: ["/Users/demo/elsewhere.txt", "/Users/demo/locked.txt"],
+          sourceEntries: {},
+          capturedAt: "2026-10-08T10:00:00.000Z",
+        },
+        adoption: {
+          operationId: "other-op",
+          event: ended,
+          clearsCutClipboard: "2026-10-08T10:00:00.000Z",
+        },
+      });
+      await ready(harness);
+
+      const dialog = await screen.findByRole("dialog");
+      expect(dialog).toHaveTextContent("The disk is full.");
+      await waitFor(() => expect(clipboardButton()).toBeNull());
+    });
+
+    it("takes an operation it hears of twice once", async () => {
+      const ended = {
+        ...finishedResultEvent("copy", "failed", [
+          { sourcePath: "/Users/demo/elsewhere.txt", status: "failed", error: "The disk is full." },
+        ]),
+        operationId: "other-op",
+        action: "paste" as const,
+      };
+      const harness = createAppHarness();
+      await ready(harness);
+
+      // Asked after the message, main still has it, ended by then.
+      harness.holdAdoption({ operationId: "other-op", event: toWindowProgressEvent(ended) });
+      await act(async () => {
+        harness.emitWriteOperationAdopted({
+          operationId: "other-op",
+          event: toWindowProgressEvent({ ...otherWindowsCopy("running"), action: "paste" }),
+        });
+      });
+      expect(await screen.findByRole("region", { name: "Pasting…" })).toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+      // Its end comes as any other progress does, and is shown once.
+      await act(async () => {
+        harness.emitProgress(ended);
+      });
+      expect(await screen.findAllByRole("dialog")).toHaveLength(1);
     });
 
     it("shows it here once this window takes it over, and leaves the selection alone", async () => {

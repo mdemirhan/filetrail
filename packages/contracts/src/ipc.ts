@@ -595,6 +595,16 @@ export const writeOperationProgressEventSchema = z.object({
   result: writeOperationResultSchema.nullable(),
 });
 
+// A running operation handed to a window because the one that started it closed, with its
+// latest progress (null before any was reported; its end, when it ended before the window
+// heard of it), and the cut it clears from the clipboard when it is done, if any (see
+// "copyPaste:start").
+export const writeOperationAdoptionSchema = z.object({
+  operationId: z.string().min(1),
+  event: writeOperationProgressEventSchema.nullable(),
+  clearsCutClipboard: z.string().min(1).optional(),
+});
+
 export const launchContextSchema = z.object({
   startupFolderPath: z.string().min(1).nullable(),
   // A window opened while the app runs opens the tabs it was given, whatever the "reopen
@@ -1266,6 +1276,13 @@ export const ipcContractSchemas = {
       status: z.literal("queued"),
     }),
   },
+  // The operation handed to this window when the one that started it closed, if the window
+  // hasn't heard of it yet: its page may still have been loading when it was told. Each
+  // hand-over is answered once; asking again answers null.
+  "writeOperation:getAdopted": {
+    request: emptyRequestSchema,
+    response: z.object({ adoption: writeOperationAdoptionSchema.nullable() }),
+  },
   "writeOperation:cancel": {
     request: z.object({
       operationId: z.string().min(1),
@@ -1555,14 +1572,7 @@ export type UndoDirection = z.output<typeof undoDirectionSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
 export type CopyPasteClipboard = z.output<typeof copyPasteClipboardSchema>;
-// A running operation handed to this window because the one that started it closed, with
-// its latest progress (null before any was reported), and the cut it clears from the
-// clipboard when it is done, if any (see "copyPaste:start").
-export type WriteOperationAdoption = {
-  operationId: string;
-  event: WriteOperationProgressEvent | null;
-  clearsCutClipboard?: string;
-};
+export type WriteOperationAdoption = z.output<typeof writeOperationAdoptionSchema>;
 // Items a drag out of another window took away (another app moved them, or the Dock's Trash
 // took them), as `system:findDraggedAway` found them gone.
 export type DraggedAway = { gone: string[]; intoTrash: boolean };

@@ -368,6 +368,108 @@ describe("a window taking over an operation", () => {
   });
 });
 
+// A window opened just before the one running an operation closed: its page may still be
+// loading, and miss the message that hands the operation over. It asks once it listens.
+describe("a window asking for the operation handed to it", () => {
+  function getAdopted(coordinator: Coordinator, window: Window) {
+    return coordinator.handlers["writeOperation:getAdopted"]({}, { sender: window });
+  }
+
+  async function handedOver(clearsCutClipboard?: string) {
+    const { writeService, emit } = createWriteServiceStub();
+    const successor = createWindow();
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { successorOf: () => successor },
+    );
+    const owner = createWindow();
+    await analyze(coordinator, owner);
+    await coordinator.handlers["copyPaste:start"](
+      {
+        analysisId: "analysis-1",
+        action: "paste",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        ...(clearsCutClipboard ? { clearsCutClipboard } : {}),
+      },
+      { sender: owner },
+    );
+    return { coordinator, emit, owner, successor };
+  }
+
+  it("is told it, with the question it waits on, once", async () => {
+    const { coordinator, emit, owner, successor } = await handedOver("2026-10-08T10:00:00.000Z");
+    emit(copyEvent("awaiting_resolution", { runtimeConflict: conflict("conflict-1") }));
+    close(owner);
+
+    expect(getAdopted(coordinator, successor)).toEqual({
+      adoption: {
+        operationId: "copy-op-1",
+        event: expect.objectContaining({
+          status: "awaiting_resolution",
+          runtimeConflict: expect.objectContaining({ conflictId: "conflict-1" }),
+        }),
+        clearsCutClipboard: "2026-10-08T10:00:00.000Z",
+      },
+    });
+    expect(getAdopted(coordinator, successor)).toEqual({ adoption: null });
+    // It is the operation's window now: it answers the question.
+    expect(
+      coordinator.handlers["copyPaste:resolveConflict"](
+        { operationId: "copy-op-1", conflictId: "conflict-1", resolution: "skip" },
+        { sender: successor },
+      ),
+    ).toEqual({ ok: true });
+    emit(copyEvent("cancelled"));
+    await coordinator.shutdown();
+  });
+
+  it("is told how it ended when it ended before the window asked", async () => {
+    const { coordinator, emit, owner, successor } = await handedOver();
+    close(owner);
+    emit(copiedEvent());
+
+    expect(coordinator.getActiveOperation()).toBeNull();
+    expect(getAdopted(coordinator, successor)).toEqual({
+      adoption: {
+        operationId: "copy-op-1",
+        event: expect.objectContaining({
+          status: "completed",
+          result: expect.objectContaining({ status: "completed" }),
+        }),
+      },
+    });
+    await coordinator.shutdown();
+  });
+
+  it("is told nothing when nothing was handed to it, or it was handed on again", async () => {
+    const { writeService, emit } = createWriteServiceStub();
+    const second = createWindow();
+    const third = createWindow();
+    let successor = second;
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { successorOf: () => successor },
+    );
+    const owner = createWindow();
+    await analyze(coordinator, owner);
+    await paste(coordinator, owner);
+    expect(getAdopted(coordinator, second)).toEqual({ adoption: null });
+
+    close(owner);
+    successor = third;
+    close(second);
+
+    expect(getAdopted(coordinator, second)).toEqual({ adoption: null });
+    expect(getAdopted(coordinator, third)).toEqual({
+      adoption: { operationId: "copy-op-1", event: null },
+    });
+    emit(copyEvent("cancelled"));
+    await coordinator.shutdown();
+  });
+});
+
 describe("copy analyses and their windows", () => {
   it.each(["destroyed", "render-process-gone"] as const)(
     "cancels an analysis when its window is %s",

@@ -171,6 +171,13 @@ export function createWriteOperationCoordinator(
   const senderDetachers = new Map<string, () => void>();
   // The last progress sent for each running operation, for a window that takes it over.
   const latestProgress = new Map<string, WriteOperationProgressEvent>();
+  // The operation handed to each window, until the window asks for it: one whose page is
+  // still loading misses the message that hands it over (see "writeOperation:getAdopted").
+  // Its end is kept with it when it ends first, so the window still shows how it went.
+  const pendingAdoptions = new WeakMap<
+    WriteOperationSender,
+    { operationId: string; clearsCutClipboard?: string; end: WriteOperationProgressEvent | null }
+  >();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
   // Whether each running copy-paste copies or moves, from the write service's own events.
   const copyPasteModes = new Map<string, CopyPasteProgressEvent["mode"]>();
@@ -561,10 +568,19 @@ export function createWriteOperationCoordinator(
   // Makes `successor` the window an operation answers to: its progress, Stop and conflict
   // questions go there from now on.
   function handOver(operationId: string, successor: WriteOperationSender): void {
+    const previous = writeOperationSenders.get(operationId);
+    if (previous && pendingAdoptions.get(previous)?.operationId === operationId) {
+      pendingAdoptions.delete(previous);
+    }
     senderDetachers.get(operationId)?.();
     senderDetachers.delete(operationId);
     attachSender(operationId, successor);
     const clearsCutClipboard = copyPasteRequests.get(operationId)?.clearsCutClipboard;
+    pendingAdoptions.set(successor, {
+      operationId,
+      ...(clearsCutClipboard ? { clearsCutClipboard } : {}),
+      end: null,
+    });
     try {
       successor.send(WRITE_OPERATION_ADOPTED_CHANNEL, {
         operationId,
@@ -596,6 +612,10 @@ export function createWriteOperationCoordinator(
   function sendProgress(sender: WriteOperationSender, payload: WriteOperationProgressEvent): void {
     if (!isTerminalStatus(payload.status) && writeOperationSenders.has(payload.operationId)) {
       latestProgress.set(payload.operationId, payload);
+    }
+    const adoption = pendingAdoptions.get(sender);
+    if (isTerminalStatus(payload.status) && adoption?.operationId === payload.operationId) {
+      adoption.end = payload;
     }
     broadcast(payload, sender);
     if (isSenderDestroyed(sender)) {
@@ -1970,6 +1990,30 @@ export function createWriteOperationCoordinator(
               controller,
             ),
         });
+      },
+      // The operation handed to the window asking, if it hasn't heard of it yet, with where
+      // it is now or how it ended. Each hand-over is told once; asking again answers null.
+      "writeOperation:getAdopted": (
+        _payload: IpcRequest<"writeOperation:getAdopted">,
+        event: { sender: WriteOperationSender },
+      ) => {
+        const pending = pendingAdoptions.get(event.sender);
+        pendingAdoptions.delete(event.sender);
+        if (
+          !pending ||
+          (pending.end === null && writeOperationSenders.get(pending.operationId) !== event.sender)
+        ) {
+          return { adoption: null };
+        }
+        return {
+          adoption: {
+            operationId: pending.operationId,
+            event: pending.end ?? latestProgress.get(pending.operationId) ?? null,
+            ...(pending.clearsCutClipboard
+              ? { clearsCutClipboard: pending.clearsCutClipboard }
+              : {}),
+          },
+        };
       },
       "writeOperation:cancel": (
         payload: IpcRequest<"writeOperation:cancel">,

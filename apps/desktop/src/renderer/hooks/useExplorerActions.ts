@@ -13,6 +13,7 @@ import type {
   CopyPasteChoice,
   IpcRequest,
   IpcResponse,
+  WriteOperationAdoption,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import { getItemNameError } from "@filetrail/contracts/itemName";
@@ -862,6 +863,9 @@ export function useExplorerActions(args: {
   const earlyWriteOperationEventsRef = useRef(new Map<string, WriteOperationProgressEvent[]>());
   // What was selected, and in which folder, when the running operation started.
   const selectionAtWriteStartRef = useRef<{ directoryPath: string; paths: string[] } | null>(null);
+  // The operations this page took over from a window that closed.
+  const adoptedOperationIdsRef = useRef(new Set<string>());
+  const takeAdoptionRef = useRef<((adoption: WriteOperationAdoption) => void) | null>(null);
   const writeOperationProgressHandlerRef = useRef<
     ((event: WriteOperationProgressEvent) => void) | null
   >(null);
@@ -1056,9 +1060,14 @@ export function useExplorerActions(args: {
     writeOperationProgressHandlerRef.current = handleProgress;
     const unsubscribeProgress = client.onWriteOperationProgress(handleProgress);
     // The window that started an operation closed and this one has it now: its card, Stop
-    // and questions are here from now on.
-    const unsubscribeAdopted = client.onWriteOperationAdopted?.((adoption) => {
+    // and questions are here from now on. It may hear of it twice (see askForAdoption), and
+    // takes it once.
+    const takeAdoption = (adoption: WriteOperationAdoption) => {
       const { operationId, event } = adoption;
+      if (adoptedOperationIdsRef.current.has(operationId)) {
+        return;
+      }
+      adoptedOperationIdsRef.current.add(operationId);
       noteForeignWriteOperation(null);
       earlyWriteOperationEventsRef.current.delete(operationId);
       activeWriteOperationIdRef.current = operationId;
@@ -1074,12 +1083,34 @@ export function useExplorerActions(args: {
       if (event) {
         handleProgress(event);
       }
+    };
+    takeAdoptionRef.current = takeAdoption;
+    const unsubscribeAdopted = client.onWriteOperationAdopted?.((adoption) => {
+      takeAdoption(adoption);
+      askForAdoption();
     });
     return () => {
       unsubscribeProgress();
       unsubscribeAdopted?.();
     };
   }, [client, refreshDirectory, setWriteOperationProgressEvent]);
+
+  // An operation handed over while this page was still loading was told before anything
+  // listened, so it is asked for once the window listens. Main tells each hand-over once:
+  // asking after the message also lets go of its copy (and of the end it may keep for it).
+  const askForAdoption = () => {
+    void Promise.resolve(client.invoke("writeOperation:getAdopted", {}))
+      .then((response) => {
+        if (response?.adoption) {
+          takeAdoptionRef.current?.(response.adoption);
+        }
+      })
+      .catch(() => undefined);
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asked once per client; the answer goes through a ref.
+  useEffect(() => {
+    askForAdoption();
+  }, [client]);
 
   function closeContextMenu() {
     setContextMenuState(null);

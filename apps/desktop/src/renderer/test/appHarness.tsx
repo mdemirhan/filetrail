@@ -27,6 +27,38 @@ export type TestProgressEvent =
     })
   | WriteOperationProgressEvent;
 
+// A progress event as the window hears it, as main sends a paste's.
+export function toWindowProgressEvent(event: TestProgressEvent): WriteOperationProgressEvent {
+  if (!("mode" in event)) {
+    return event;
+  }
+  const action = event.action ?? (event.mode === "cut" ? "move_to" : "paste");
+  return {
+    operationId: event.operationId,
+    action,
+    status: event.status,
+    completedItemCount: event.completedItemCount,
+    totalItemCount: event.totalItemCount,
+    completedByteCount: event.completedByteCount,
+    totalBytes: event.totalBytes,
+    currentSourcePath: event.currentSourcePath,
+    currentDestinationPath: event.currentDestinationPath,
+    result: event.result
+      ? {
+          operationId: event.result.operationId,
+          action,
+          status: event.result.status,
+          targetPath: event.result.destinationDirectoryPath,
+          startedAt: event.result.startedAt,
+          finishedAt: event.result.finishedAt,
+          summary: event.result.summary,
+          items: event.result.items,
+          error: event.result.error,
+        }
+      : null,
+  };
+}
+
 // Requests the window sent that the main process's checks would refuse (see the harness).
 const refusedRequests: string[] = [];
 
@@ -275,6 +307,9 @@ export function createAppHarness(
     explorerWindowCount?: number;
     // How the main process says the window was opened (see app:getLaunchContext).
     launchContext?: IpcResponse<"app:getLaunchContext">;
+    // An operation handed to the window while its page was loading, which main keeps until
+    // the window asks for it.
+    adoption?: WriteOperationAdoption;
   } = {},
 ): {
   client: FiletrailClient;
@@ -286,6 +321,8 @@ export function createAppHarness(
   emitClipboardChanged: (clipboard: CopyPasteClipboard) => void;
   // The window that ran an operation closed and this one takes it over.
   emitWriteOperationAdopted: (adoption: WriteOperationAdoption) => void;
+  // Main keeps an operation handed to the window until the window asks for it.
+  holdAdoption: (adoption: WriteOperationAdoption) => void;
   // Merge All Windows in another window asks for this window's tabs.
   emitMergeRequest: (requestId: string) => void;
   // Preferences changed in another window (Settings), as main passes them on.
@@ -412,6 +449,7 @@ export function createAppHarness(
     : toAnalysisReport(defaultPlanResponse());
   let lastAnalyzeRequest: IpcRequestInput<"copyPaste:analyzeStart"> | null = null;
 
+  let heldAdoption = args.adoption ?? null;
   const client: FiletrailClient = {
     async invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>) {
       // What the main process accepts, checked as it checks it: a request it would refuse
@@ -430,6 +468,11 @@ export function createAppHarness(
       if (channel === "folder:watch") {
         watchedPath = (payload as IpcRequestInput<"folder:watch">).path;
         return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "writeOperation:getAdopted") {
+        const adoption = heldAdoption;
+        heldAdoption = null;
+        return { adoption } as IpcResponse<C>;
       }
       const recordedPayload =
         channel === "copyPaste:start" && "analysisId" in (payload as Record<string, unknown>)
@@ -954,6 +997,9 @@ export function createAppHarness(
     emitWriteOperationAdopted(adoption) {
       adoptionListener?.(adoption);
     },
+    holdAdoption(adoption) {
+      heldAdoption = adoption;
+    },
     emitMergeRequest(requestId) {
       mergeRequestListener?.({ requestId });
     },
@@ -968,31 +1014,7 @@ export function createAppHarness(
     },
     emitProgress(event) {
       if ("mode" in event) {
-        const action = event.action ?? (event.mode === "cut" ? "move_to" : "paste");
-        const normalizedEvent: WriteOperationProgressEvent = {
-          operationId: event.operationId,
-          action,
-          status: event.status,
-          completedItemCount: event.completedItemCount,
-          totalItemCount: event.totalItemCount,
-          completedByteCount: event.completedByteCount,
-          totalBytes: event.totalBytes,
-          currentSourcePath: event.currentSourcePath,
-          currentDestinationPath: event.currentDestinationPath,
-          result: event.result
-            ? {
-                operationId: event.result.operationId,
-                action,
-                status: event.result.status,
-                targetPath: event.result.destinationDirectoryPath,
-                startedAt: event.result.startedAt,
-                finishedAt: event.result.finishedAt,
-                summary: event.result.summary,
-                items: event.result.items,
-                error: event.result.error,
-              }
-            : null,
-        };
+        const normalizedEvent = toWindowProgressEvent(event);
         for (const listener of writeOperationProgressListeners) {
           listener(normalizedEvent);
         }
