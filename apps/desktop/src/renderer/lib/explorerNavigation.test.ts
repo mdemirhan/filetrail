@@ -289,6 +289,24 @@ describe("explorerNavigation", () => {
     );
   });
 
+  // A folder that can't be read was taken for gone when its path had the words in it.
+  it("looks for why a folder couldn't be read in the reason, not in its path", () => {
+    for (const path of [
+      "/Users/demo/ENOENT",
+      "/Users/demo/ENOTDIR logs",
+      "/Users/demo/no such file or directory",
+      "/Users/demo/Not a Directory",
+    ]) {
+      expect(isFolderGoneError(`EACCES: permission denied, scandir '${path}'`), path).toBe(false);
+      expect(isFolderGoneError(`EPERM: operation not permitted, scandir '${path}'`), path).toBe(
+        false,
+      );
+      expect(isFolderGoneError(`ENOENT: no such file or directory, stat '${path}'`), path).toBe(
+        true,
+      );
+    }
+  });
+
   it("tells whether a folder read again lists the same items the same way", () => {
     const file = { path: "/a/one.txt", name: "one.txt", kind: "file", isHidden: false };
     const listing = [file, { path: "/a/B", name: "B", kind: "directory", isHidden: false }];

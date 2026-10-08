@@ -277,14 +277,11 @@ export function flattenVisibleTreePaths(
 
 // Whether reading a folder failed because it is no longer there (removed, renamed, or
 // replaced by a file), rather than because it can't be read: the error arrives as the
-// message the main process passed on ("ENOENT: no such file or directory, stat '…'").
+// message the main process passed on, its code first ("ENOENT: no such file or directory,
+// stat '…'"), or as the listing's own ("Path is not a directory: …"). Only the start is
+// looked at: the path the message ends with may have any of these words in it.
 export function isFolderGoneError(message: string): boolean {
-  return (
-    message.includes("ENOENT") ||
-    message.includes("ENOTDIR") ||
-    message.toLowerCase().includes("no such file or directory") ||
-    message.toLowerCase().includes("not a directory")
-  );
+  return /^(?:ENOENT|ENOTDIR):/u.test(message) || message.startsWith("Path is not a directory: ");
 }
 
 // Whether two listings of a folder show the same items the same way: each item has the same
