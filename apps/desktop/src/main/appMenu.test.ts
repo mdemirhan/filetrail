@@ -679,15 +679,23 @@ describe("resolveApplicationMenuItemStates", () => {
   });
 
   it("shows a text field's own Undo and Redo in place of the files' while one is edited", () => {
-    const edit = submenuOf(createApplicationMenuTemplate({ send: vi.fn() }), "Edit");
+    const send = vi.fn();
+    const edit = submenuOf(createApplicationMenuTemplate({ send }), "Edit");
     const textUndo = edit.find((item) => item.id === "undo:text");
     expect(textUndo).toMatchObject({
-      role: "undo",
+      label: "Undo",
       accelerator: "Command+Z",
       acceleratorWorksWhenHidden: false,
       visible: false,
     });
-    expect(edit.find((item) => item.id === "redo:text")?.role).toBe("redo");
+    // Each goes to the window as the files' does, which sends it on to the text field.
+    const textRedo = edit.find((item) => item.id === "redo:text");
+    choose(textUndo ?? {});
+    choose(textRedo ?? {});
+    expect(send.mock.calls).toEqual([
+      ["filetrail:command", { type: "undo" }],
+      ["filetrail:command", { type: "redo" }],
+    ]);
 
     const typing = { ...INITIAL_APPLICATION_MENU_STATE, textEditing: true };
     expect(stateOf("undo", typing).visible).toBe(false);

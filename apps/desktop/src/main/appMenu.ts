@@ -84,7 +84,7 @@ const FAVORITE_REMOVE_ITEM_ID = "toggleFavorite:remove";
 const FOLDER_TREE_HIDE_ITEM_ID = "toggleFolderTree:hide";
 const FOLDER_TREE_SHOW_ITEM_ID = "toggleFolderTree:show";
 // Undo and Redo are two items each: the files' ("Undo Move of “a.txt”"), and a text
-// field's own (the "undo" and "redo" roles), shown while a text field or another window
+// field's own (plain "Undo" and "Redo", sending the same command), shown while a text field or another window
 // has the keyboard. Switching between them only shows one and hides the other; the menu is
 // built again only when the files' items should say something else.
 const TEXT_UNDO_ITEM_ID = "undo:text";
@@ -263,26 +263,22 @@ export function createApplicationMenuTemplate(
           accelerator: fixedAccelerator("undo"),
           acceleratorWorksWhenHidden: false,
         }),
-        {
+        command("undo", "Undo", {
           id: TEXT_UNDO_ITEM_ID,
-          role: "undo",
-          label: "Undo",
           accelerator: fixedAccelerator("undo"),
           acceleratorWorksWhenHidden: false,
           visible: false,
-        },
+        }),
         command("redo", options.undoLabels?.redo ?? "Redo", {
           accelerator: fixedAccelerator("redo"),
           acceleratorWorksWhenHidden: false,
         }),
-        {
+        command("redo", "Redo", {
           id: TEXT_REDO_ITEM_ID,
-          role: "redo",
-          label: "Redo",
           accelerator: fixedAccelerator("redo"),
           acceleratorWorksWhenHidden: false,
           visible: false,
-        },
+        }),
         separator,
         command("editCut", "Cut", { accelerator: fixedAccelerator("cut") }),
         command("editCopy", "Copy", { accelerator: fixedAccelerator("copy") }),

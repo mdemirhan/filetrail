@@ -87,18 +87,25 @@ function namesOnDisk(): string[] {
     .sort();
 }
 
-// What an item of the Edit menu says, and whether it can be chosen.
+// What Undo or Redo in the Edit menu says, and whether it can be chosen: of its two items
+// (the files' and a text field's own, "undo:text"), the one shown.
 function menuItem(id: "undo" | "redo"): Promise<{ label: string; enabled: boolean } | null> {
   return electronApp.evaluate(({ Menu }, itemId) => {
-    const found = Menu.getApplicationMenu()?.getMenuItemById(itemId);
+    const menu = Menu.getApplicationMenu();
+    const found = [itemId, `${itemId}:text`]
+      .map((candidate) => menu?.getMenuItemById(candidate))
+      .find((candidate) => candidate?.visible);
     return found ? { label: found.label, enabled: found.enabled } : null;
   }, id);
 }
 
-// Chooses the item as a click on it in the menu bar does.
+// Chooses the item shown as a click on it in the menu bar does.
 async function choose(id: "undo" | "redo"): Promise<void> {
   await electronApp.evaluate(({ BrowserWindow, Menu }, itemId) => {
-    const found = Menu.getApplicationMenu()?.getMenuItemById(itemId);
+    const menu = Menu.getApplicationMenu();
+    const found = [itemId, `${itemId}:text`]
+      .map((candidate) => menu?.getMenuItemById(candidate))
+      .find((candidate) => candidate?.visible);
     const focused = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed());
     found?.click(undefined, focused, focused?.webContents);
   }, id);
