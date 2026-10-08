@@ -15,7 +15,7 @@ import {
   unlockForMove,
 } from "@filetrail/core";
 
-import { numberedName, runBatchRename } from "./batchRenameExecution";
+import { movedItemsOf, numberedName, runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import {
   type MoveCheck,
@@ -452,7 +452,7 @@ async function renameBack(
       });
     }
   }
-  const renamed: Extract<UndoStep, { kind: "batchRenamed" }>["items"] = [];
+  let renamed: Extract<UndoStep, { kind: "batchRenamed" }>["items"] = [];
   let cancelled = false;
   if (toRename.length > 0) {
     const batch = await runBatchRename({
@@ -465,23 +465,8 @@ async function renameBack(
       signal: args.signal,
     });
     cancelled = batch.cancelled;
-    for (const item of batch.items) {
-      items.push(item);
-      if (
-        item.status === "completed" &&
-        item.sourcePath !== null &&
-        item.destinationPath !== null &&
-        item.destinationPath !== item.sourcePath
-      ) {
-        const now = await readItemRef(fs.lstat, item.destinationPath);
-        renamed.push({
-          from: item.sourcePath,
-          to: item.destinationPath,
-          id: now.id,
-          itemKind: now.kind,
-        });
-      }
-    }
+    items.push(...batch.items);
+    renamed = await movedItemsOf(fs.lstat, batch.items);
   }
   const produced: UndoStep | null =
     renamed.length > 0 ? { kind: "batchRenamed", items: renamed } : null;
@@ -506,8 +491,12 @@ async function renameBack(
   }
   if (cancelled) {
     // The items not reached keep their place in the history, as the operation named them.
+    // (An item not reached that still had to be moved aside is somewhere else now: it is
+    // in what was done.)
     const reached = new Set(
-      items.filter((item) => item.status !== "cancelled").map((item) => item.sourcePath),
+      items
+        .filter((item) => item.status !== "cancelled" || item.destinationPath !== null)
+        .map((item) => item.sourcePath),
     );
     return {
       status: "stopped",

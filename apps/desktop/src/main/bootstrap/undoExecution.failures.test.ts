@@ -13,6 +13,7 @@ import { join } from "node:path";
 
 import { REPLACE_ALL, nativeFileSystemWithTrash } from "@filetrail/core/fs/testNativePaste";
 
+import { originalRenameExclusive } from "../originalFileSystem";
 import { paste, setUpUndo, snapshotOf } from "./undoRealDisk.testkit";
 
 // What an Undo leaves to do: a step whose write failed stays on the Undo list to be tried
@@ -279,6 +280,49 @@ describe("a stop inside a Replace", () => {
     await t.undo();
     expect(snapshot()).toEqual(before);
     expect(t.history.menu().undo).toBeNull();
+    await t.coordinator.shutdown();
+  });
+});
+
+describe("a batch rename another app got in the way of", () => {
+  it("renames back an item left under a numbered name", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    const t = setUpUndo(root, trashDir, {
+      renameExclusive: async (from, to) => {
+        await originalRenameExclusive(from, to);
+        // Once "a" has taken "b.txt", another app makes a new "a.txt": "b" can't take it,
+        // and its own old name is taken, so it is left as "b 2.txt".
+        if (to === join(root, "b.txt")) {
+          writeFileSync(join(root, "a.txt"), "outside");
+        }
+      },
+    });
+    const renamed = await t.finish(
+      t.coordinator.handlers["writeOperation:batchRename"](
+        {
+          items: [
+            { sourcePath: join(root, "a.txt"), destinationName: "b.txt", isFolder: false },
+            { sourcePath: join(root, "b.txt"), destinationName: "a.txt", isFolder: false },
+          ],
+          onConflict: "skip",
+          numberSeparator: " ",
+        },
+        { sender: t.sender },
+      ),
+    );
+    expect(renamed.result?.items.map((item) => [item.status, item.destinationPath])).toEqual([
+      ["completed", join(root, "b.txt")],
+      ["failed", join(root, "b 2.txt")],
+    ]);
+
+    expect(await t.prepare()).toMatchObject({ nameTaken: ["a.txt"] });
+    await t.undo();
+
+    expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("outside");
+    expect(readFileSync(join(root, "a 2.txt"), "utf8")).toBe("a");
+    expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("b");
+    expect(existsSync(join(root, "b 2.txt"))).toBe(false);
     await t.coordinator.shutdown();
   });
 });

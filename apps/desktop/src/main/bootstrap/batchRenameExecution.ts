@@ -2,7 +2,14 @@ import { randomBytes } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { IpcRequest, WriteOperationResult } from "@filetrail/contracts";
-import { describeCopyPasteError, errorCode, fileIdOf, findLockedRefusal } from "@filetrail/core";
+import {
+  type UndoStep,
+  describeCopyPasteError,
+  errorCode,
+  fileIdOf,
+  findLockedRefusal,
+  readItemRef,
+} from "@filetrail/core";
 
 import { addNumberToName } from "../../shared/batchRename";
 
@@ -348,6 +355,37 @@ async function renamesItself(fs: BatchRenameFs, item: PlannedItem): Promise<bool
   }
   const entries = fs.readdir ? await fs.readdir(item.folder).catch(() => null) : null;
   return !(entries?.includes(item.destinationName) ?? false);
+}
+
+/**
+ * What a batch rename moved, for Undo: each item that is somewhere else than it was, and
+ * still there. That is every item renamed, and an item that couldn't take its new name and
+ * was left under another name than its own ("b 2", or the hidden name it waited under).
+ */
+export async function movedItemsOf(
+  lstat: BatchRenameFs["lstat"],
+  items: readonly ResultItem[],
+): Promise<Extract<UndoStep, { kind: "batchRenamed" }>["items"]> {
+  const moved: Extract<UndoStep, { kind: "batchRenamed" }>["items"] = [];
+  for (const item of items) {
+    if (
+      item.sourcePath === null ||
+      item.destinationPath === null ||
+      item.destinationPath === item.sourcePath
+    ) {
+      continue;
+    }
+    const now = await readItemRef(lstat, item.destinationPath);
+    if (now.kind !== null) {
+      moved.push({
+        from: item.sourcePath,
+        to: item.destinationPath,
+        id: now.id,
+        itemKind: now.kind,
+      });
+    }
+  }
+  return moved;
 }
 
 /** "Lisbon 2.jpg": the number before the extension, or at the end of a folder's name. */

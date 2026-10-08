@@ -32,7 +32,7 @@ import {
   readItemRef,
   readItemStamp,
 } from "@filetrail/core";
-import { runBatchRename } from "./batchRenameExecution";
+import { movedItemsOf, runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import { clearResponseCaches, noteWriteStarting } from "./responseCache";
 import { runUndo } from "./undoExecution";
@@ -1022,28 +1022,7 @@ export function createWriteOperationCoordinator(
           ? (run.items.find((item) => item.status === "failed")?.error ?? "Rename failed.")
           : null,
     });
-    const renamedItems: Array<{
-      from: string;
-      to: string;
-      id: ItemId | null;
-      itemKind: ItemKind | null;
-    }> = [];
-    for (const item of run.items) {
-      if (
-        item.status === "completed" &&
-        item.sourcePath !== null &&
-        item.destinationPath !== null &&
-        item.destinationPath !== item.sourcePath
-      ) {
-        const renamedItem = await readItemRef(fs.lstat, item.destinationPath);
-        renamedItems.push({
-          from: item.sourcePath,
-          to: item.destinationPath,
-          id: renamedItem.id,
-          itemKind: renamedItem.kind,
-        });
-      }
-    }
+    const renamedItems = await movedItemsOf(fs.lstat, run.items);
     const batchStep: UndoStep = { kind: "batchRenamed", items: renamedItems };
     emitLocalWriteOperationEvent(
       {
