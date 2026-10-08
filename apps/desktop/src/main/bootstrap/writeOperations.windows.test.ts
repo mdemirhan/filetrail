@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
-import { ANALYSIS_BUSY_ERROR, type WriteService, createWriteService } from "@filetrail/core";
+import {
+  ANALYSIS_BUSY_ERROR,
+  NO_TRASH_ERROR_CODE,
+  type WriteService,
+  createWriteService,
+} from "@filetrail/core";
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
@@ -500,6 +505,60 @@ describe("an operation that stops unexpectedly", () => {
       "[filetrail] couldn't record an Undo in the history",
       expect.any(Error),
     );
+    await coordinator.shutdown();
+  });
+});
+
+describe("deleting immediately what a disk without a Trash couldn't take", () => {
+  it("is up to the window that was told, whatever another window sends to the Trash", async () => {
+    const rm = vi.fn(async () => undefined);
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub().writeService,
+      {
+        lstat: async () => ({ isDirectory: () => false }),
+        stat: async () => ({ isDirectory: () => true }),
+        mkdir: async () => undefined,
+        rename: async () => undefined,
+        renameExclusive: async () => undefined,
+        rm,
+        trash: async (path) => {
+          if (path.startsWith("/Volumes/Share/")) {
+            throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+          }
+          return `/Users/demo/.Trash/${path.split("/").at(-1)}`;
+        },
+      },
+      { homePath: "/Users/demo" },
+    );
+    const first = createWindow();
+    const second = createWindow();
+    const trash = async (window: Window, path: string) => {
+      const { operationId } = await coordinator.handlers["writeOperation:trash"](
+        { paths: [path] },
+        { sender: window },
+      );
+      return waitForEnd(window, operationId);
+    };
+    const deleteImmediately = (window: Window, path: string) =>
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: [path] },
+        { sender: window },
+      );
+
+    expect((await trash(first, "/Volumes/Share/a.txt")).result?.items[0]).toMatchObject({
+      noTrash: true,
+    });
+    // While the first window asks whether to delete it, the second one moves something
+    // to the Trash.
+    expect((await trash(second, "/Users/demo/b.txt")).status).toBe("completed");
+
+    // Only the window that was told may delete it.
+    await expect(deleteImmediately(second, "/Volumes/Share/a.txt")).rejects.toThrow(
+      "isn't in the Trash",
+    );
+    const { operationId } = await deleteImmediately(first, "/Volumes/Share/a.txt");
+    expect((await waitForEnd(first, operationId)).status).toBe("completed");
+    expect(rm).toHaveBeenCalledWith("/Volumes/Share/a.txt", { recursive: true, force: true });
     await coordinator.shutdown();
   });
 });

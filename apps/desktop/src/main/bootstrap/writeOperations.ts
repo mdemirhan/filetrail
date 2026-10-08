@@ -255,19 +255,23 @@ export function createWriteOperationCoordinator(
     }
   }
 
-  // Items that just couldn't go to the Trash because their disk has none. After asking,
-  // the window may delete exactly these immediately (as Finder does on such a disk).
-  const itemsWithoutTrash = new Set<string>();
+  // Items that just couldn't go to the Trash because their disk has none, by the window
+  // that tried. After asking, that window may delete exactly these immediately (as Finder
+  // does on such a disk), whatever another window sends to the Trash meanwhile.
+  const itemsWithoutTrash = new WeakMap<WriteOperationSender, Set<string>>();
 
   // Delete Immediately deletes only what is in a Trash, or what was just found to have no
   // Trash to go to. The folder an item is in is looked up through any symlinks, so a link
   // inside the Trash can't lead the deletion out of it.
-  async function assertDeletableImmediately(paths: readonly string[]): Promise<void> {
+  async function assertDeletableImmediately(
+    paths: readonly string[],
+    sender: WriteOperationSender,
+  ): Promise<void> {
     // The home folder as it really is, to compare real paths with.
     const realHomePath = fs.realpath ? await fs.realpath(homePath).catch(() => homePath) : homePath;
     for (const path of paths) {
       const resolved = resolve(path);
-      if (itemsWithoutTrash.has(resolved)) {
+      if (itemsWithoutTrash.get(sender)?.has(resolved)) {
         continue;
       }
       const folder = fs.realpath
@@ -1149,6 +1153,7 @@ export function createWriteOperationCoordinator(
 
   async function executeTrashOperation(
     payload: IpcRequest<"writeOperation:trash">,
+    sender: WriteOperationSender,
     operationId: string,
     controller: AbortController,
   ): Promise<void> {
@@ -1159,7 +1164,8 @@ export function createWriteOperationCoordinator(
     let completedItemCount = 0;
     let cancelled = false;
     // Only what this Trash finds without a Trash may be deleted next.
-    itemsWithoutTrash.clear();
+    const withoutTrash = new Set<string>();
+    itemsWithoutTrash.set(sender, withoutTrash);
     const removedItems: RemovedItem[] = [];
     // One unit per item, so an item put back from the Trash doesn't depend on the others.
     const trashedUnits: UndoUnit[] = [];
@@ -1219,7 +1225,7 @@ export function createWriteOperationCoordinator(
       } catch (error) {
         const noTrash = errorCode(error) === NO_TRASH_ERROR_CODE;
         if (noTrash) {
-          itemsWithoutTrash.add(path);
+          withoutTrash.add(path);
         }
         items.push({
           sourcePath: path,
@@ -1803,7 +1809,7 @@ export function createWriteOperationCoordinator(
           action: "trash",
           sender: event.sender,
           execute: (operationId, controller) =>
-            executeTrashOperation(payload, operationId, controller),
+            executeTrashOperation(payload, event.sender, operationId, controller),
         });
       },
       "writeOperation:deleteImmediately": async (
@@ -1813,7 +1819,7 @@ export function createWriteOperationCoordinator(
         assertNotProtectedPath(payload.paths);
         await prepareWithReservedSlot(async () => {
           await assertNotSystemLocation(payload.paths, "deleted", fs);
-          await assertDeletableImmediately(payload.paths);
+          await assertDeletableImmediately(payload.paths, event.sender);
         });
         return queueLocalWriteOperation({
           action: "delete_immediately",
