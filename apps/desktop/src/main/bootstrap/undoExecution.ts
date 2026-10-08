@@ -2,6 +2,7 @@ import { basename, dirname, join } from "node:path";
 
 import type { UndoDirection, WriteOperationResult } from "@filetrail/contracts";
 import {
+  type ItemId,
   LOCK_FLAGS,
   NO_TRASH_ERROR_CODE,
   USER_LOCK_FLAGS,
@@ -11,7 +12,6 @@ import {
   errorCode,
   findLockedRefusal,
   readFolderId,
-  readItemId,
   readItemRef,
   readItemStamp,
   stampWithoutId,
@@ -104,6 +104,19 @@ export async function runUndo(args: {
     cancelled: false,
   };
   const units = [...args.units];
+  // The folders items are taken out of, by path: a run takes many items out of one folder.
+  const folderIds = new Map<string, Promise<ItemId | null>>();
+  const context: RunContext = {
+    ...args,
+    folderIdOf: (path) => {
+      let id = folderIds.get(path);
+      if (id === undefined) {
+        id = readFolderId(args.fs.stat, path);
+        folderIds.set(path, id);
+      }
+      return id;
+    },
+  };
   // What a stop didn't reach, and the units whose write failed, newest first.
   let notReached: UndoUnit[] = [];
   const failed: UndoUnit[] = [];
@@ -131,7 +144,7 @@ export async function runUndo(args: {
         break eachUnit;
       }
       args.onStepStart?.(firstPathOf(planned), run.completedItemCount);
-      const outcome = await runStep(planned, step, args);
+      const outcome = await runStep(planned, step, context);
       pushAll(run.items, outcome.items);
       for (const item of outcome.items) {
         if (item.status === "completed") {
@@ -172,6 +185,12 @@ export async function runUndo(args: {
 }
 
 // What a unit did goes to the other list, unless part of it can't be done again.
+// What each step of a run is given: the run's arguments, and the id of a folder an item
+// is taken out of, read once per run.
+type RunContext = Parameters<typeof runUndo>[0] & {
+  folderIdOf: (path: string) => Promise<ItemId | null>;
+};
+
 function pushDone(run: UndoRun, steps: UndoStep[], unrecorded: boolean): void {
   if (steps.length > 0 && !unrecorded) {
     run.done.push({ steps: [...steps] });
@@ -197,11 +216,7 @@ function firstPathOf(planned: PlannedStep): string {
   }
 }
 
-function runStep(
-  planned: PlannedStep,
-  original: UndoStep,
-  args: Parameters<typeof runUndo>[0],
-): Promise<StepOutcome> {
+function runStep(planned: PlannedStep, original: UndoStep, args: RunContext): Promise<StepOutcome> {
   switch (planned.kind) {
     case "move":
       return moveBack(planned, original, args);
@@ -316,7 +331,7 @@ function permanentReason(code: string | undefined, path: string): string {
 async function writeFailed(
   error: unknown,
   step: { original: UndoStep; from: string; to: string | null; around: string[] },
-  args: Parameters<typeof runUndo>[0],
+  args: RunContext,
 ): Promise<StepOutcome> {
   const { fs } = args;
   const code = await failureCode(fs, error, step.from, args.diskHasTrash);
@@ -338,7 +353,7 @@ async function writeFailed(
 async function moveBack(
   planned: Extract<PlannedStep, { kind: "move" }>,
   original: UndoStep,
-  args: Parameters<typeof runUndo>[0],
+  args: RunContext,
 ): Promise<StepOutcome> {
   const { fs } = args;
   const check = await checkMove(fs, planned);
@@ -368,14 +383,14 @@ async function moveBack(
     return lockedAgain ? renamed : { ...renamed, items: notLockedAgain(renamed.items) };
   }
   const target = renamed.target;
-  const moved = await readItemRef(fs.lstat, target);
+  // A rename keeps the item's id: it is the one the check just read.
   const produced: UndoStep = {
     kind: "moved",
     from: planned.from,
     to: target,
-    id: moved.id,
-    itemKind: moved.kind,
-    parentId: await readFolderId(fs.stat, dirname(planned.from)),
+    id: check.id,
+    itemKind: check.kind,
+    parentId: await args.folderIdOf(dirname(planned.from)),
     ...(planned.putBack ? { fromTrash: true, stamp: await readItemStamp(fs, target) } : {}),
     ...(flags !== null && lockedAgain ? { locked: true } : {}),
   };
@@ -434,7 +449,7 @@ async function renameInto(
   planned: Extract<PlannedStep, { kind: "move" }>,
   check: Extract<MoveCheck, { ok: true }>,
   original: UndoStep,
-  args: Parameters<typeof runUndo>[0],
+  args: RunContext,
 ): Promise<{ status: "renamed"; target: string } | StepOutcome> {
   const { fs } = args;
   let target = planned.to;
@@ -506,7 +521,7 @@ async function freeNumberedPath(
 async function moveToTrash(
   planned: Extract<PlannedStep, { kind: "trash" }>,
   original: UndoStep,
-  args: Parameters<typeof runUndo>[0],
+  args: RunContext,
 ): Promise<StepOutcome> {
   const { fs } = args;
   const check = await checkTrash(fs, planned);
@@ -521,8 +536,8 @@ async function moveToTrash(
     const reason = `“${basename(planned.path)}” was changed after ${args.direction === "undo" ? "Undo" : "Redo"} was chosen, so it was left as it is.`;
     return failedStep(original, planned.path, null, reason);
   }
-  const id = await readItemId(fs.lstat, planned.path);
-  const parentId = await readFolderId(fs.stat, dirname(planned.path));
+  const id = check.id;
+  const parentId = await args.folderIdOf(dirname(planned.path));
   const looks = await stampWithoutId(fs, planned.path, id);
   const before: ItemSize | null = fs.itemSize
     ? await fs.itemSize(planned.path).catch(() => null)
@@ -588,7 +603,7 @@ async function moveToTrash(
 // then left to do where they were, and are tried again together.
 async function renameBack(
   planned: Extract<PlannedStep, { kind: "batch" }>,
-  args: Parameters<typeof runUndo>[0],
+  args: RunContext,
 ): Promise<StepOutcome> {
   const { fs } = args;
   const items: ResultItem[] = [];

@@ -126,7 +126,14 @@ export type Refusal = { reason: string; missing: boolean };
 
 // `id` is the item's id now, when it has one.
 export type MoveCheck =
-  | { ok: true; nameTaken: boolean; renamesItself: boolean; isFolder: boolean; id: ItemId | null }
+  | {
+      ok: true;
+      nameTaken: boolean;
+      renamesItself: boolean;
+      isFolder: boolean;
+      id: ItemId | null;
+      kind: ItemKind;
+    }
   | ({ ok: false } & Refusal);
 
 export type TrashCheck =
@@ -268,16 +275,17 @@ export async function checkMove(
       missing: false,
     };
   }
-  const isFolder = kindOfStats(item) === "directory";
+  const kind = kindOfStats(item);
+  const isFolder = kind === "directory";
   const itemId = itemIdOf(item);
   const there = await lstatOrNull(fs, step.to);
   if (there === null || leavesBefore(there, step.to, changes)) {
     // Free by then, unless a step before puts another item there.
     const nameTaken = changes.filledPlaces.has(placeKey(step.to));
-    return { ok: true, nameTaken, renamesItself: false, isFolder, id: itemId };
+    return { ok: true, nameTaken, renamesItself: false, isFolder, id: itemId, kind };
   }
   const renamesItself = await findsItself(fs, step, itemId, itemIdOf(there));
-  return { ok: true, nameTaken: !renamesItself, renamesItself, isFolder, id: itemId };
+  return { ok: true, nameTaken: !renamesItself, renamesItself, isFolder, id: itemId, kind };
 }
 
 // On a disk that ignores case, "notes.txt" finds "Notes.txt": the item itself, not another
