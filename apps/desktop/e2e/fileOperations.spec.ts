@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ElectronApplication, type Page, _electron as electron } from "playwright";
 import { expect, test } from "playwright/test";
+import { quitApp } from "./quitApp";
 
 // File operations in the built app, from the keyboard, with what happens checked on disk:
 // what the unit tests check against mocks and the main process's tests check against the
@@ -56,26 +57,8 @@ test.afterEach(async () => {
   }
 });
 
-// Quitting should take a moment. When it doesn't (a question left open, an operation that
-// never ends), the test fails with the app's log, rather than at the test's time limit
-// with nothing to go on.
 async function closeApp(): Promise<void> {
-  const closed = electronApp.close().then(() => true);
-  const waited = new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000));
-  if (await Promise.race([closed, waited])) {
-    return;
-  }
-  let log: string;
-  try {
-    log = readFileSync(join(userDataDir, "logs", "app.log"), "utf8")
-      .split("\n")
-      .slice(-60)
-      .join("\n");
-  } catch (error) {
-    log = `(no log: ${String(error)})`;
-  }
-  electronApp.process().kill("SIGKILL");
-  throw new Error(`The app didn't quit within 15 seconds. The end of its log:\n${log}`);
+  await quitApp(electronApp, userDataDir);
 }
 
 function item(name: string) {

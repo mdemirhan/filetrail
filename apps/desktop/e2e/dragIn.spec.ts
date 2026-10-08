@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ElectronApplication, type Page, _electron as electron } from "playwright";
 import { expect, test } from "playwright/test";
+import { quitApp } from "./quitApp";
 
 // Files dragged in from another app, in the built app, with what happens checked on disk.
 // A test can't move the mouse, so the other app's drag is played in two halves: what it
@@ -55,7 +56,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   try {
-    await electronApp.close();
+    await quitApp(electronApp, userDataDir);
   } finally {
     rmSync(userDataDir, { recursive: true, force: true });
     rmSync(folder, { recursive: true, force: true });

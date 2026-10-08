@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ElectronApplication, type Page, _electron as electron } from "playwright";
 import { expect, test } from "playwright/test";
+import { quitApp } from "./quitApp";
 
 // Renaming several items in the built app, through the Rename sheet, with what happens
 // checked on disk.
@@ -42,7 +43,9 @@ async function launch(): Promise<void> {
 }
 
 async function quit(): Promise<void> {
-  await electronApp?.close();
+  if (electronApp) {
+    await quitApp(electronApp, userDataDir);
+  }
   electronApp = null;
 }
 

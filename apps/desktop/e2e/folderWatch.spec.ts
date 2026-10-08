@@ -1,7 +1,6 @@
 import {
   appendFileSync,
   mkdtempSync,
-  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -14,6 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ElectronApplication, type Page, _electron as electron } from "playwright";
 import { expect, test } from "playwright/test";
+import { quitApp } from "./quitApp";
 
 // Changes made outside the app to the folder on screen show without a refresh: the folder
 // is changed on disk by the test, as another app would change it.
@@ -55,22 +55,7 @@ test.afterEach(async () => {
 });
 
 async function closeApp(): Promise<void> {
-  const closed = electronApp.close().then(() => true);
-  const waited = new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000));
-  if (await Promise.race([closed, waited])) {
-    return;
-  }
-  let log: string;
-  try {
-    log = readFileSync(join(userDataDir, "logs", "app.log"), "utf8")
-      .split("\n")
-      .slice(-60)
-      .join("\n");
-  } catch (error) {
-    log = `(no log: ${String(error)})`;
-  }
-  electronApp.process().kill("SIGKILL");
-  throw new Error(`The app didn't quit within 15 seconds. The end of its log:\n${log}`);
+  await quitApp(electronApp, userDataDir);
 }
 
 function item(name: string) {

@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron } from "playwright";
 import { expect, test } from "playwright/test";
+import { quitApp } from "./quitApp";
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -27,7 +28,7 @@ test("built app launches, shows the File Trail window, and renders the explorer 
     // A window goes by its front tab's folder, the home folder on a first launch.
     await expect(window).toHaveTitle(basename(homedir()), { timeout: 30_000 });
   } finally {
-    await electronApp.close();
+    await quitApp(electronApp, userDataDir);
     rmSync(userDataDir, { recursive: true, force: true });
   }
 });

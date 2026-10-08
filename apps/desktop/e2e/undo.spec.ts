@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ElectronApplication, type Page, _electron as electron } from "playwright";
 import { expect, test } from "playwright/test";
+import { quitApp } from "./quitApp";
 
 // Undo and Redo in the built app, chosen from the real Edit menu, with what happens checked
 // on disk. The keys themselves can't be pressed here: the test's keys reach the page, not
@@ -47,12 +48,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   try {
-    const closed = electronApp.close().then(() => true);
-    const waited = new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000));
-    if (!(await Promise.race([closed, waited]))) {
-      electronApp.process().kill("SIGKILL");
-      throw new Error("The app didn't quit within 15 seconds.");
-    }
+    await quitApp(electronApp, userDataDir);
   } finally {
     rmSync(userDataDir, { recursive: true, force: true });
     rmSync(folder, { recursive: true, force: true });

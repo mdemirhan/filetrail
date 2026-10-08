@@ -13,6 +13,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ElectronApplication, type Page, _electron as electron } from "playwright";
 import { expect, test } from "playwright/test";
+import { quitApp } from "./quitApp";
 
 // Several windows in the built app: opening them, what comes back at the next launch,
 // moving tabs between them, and the clipboard they share.
@@ -53,13 +54,7 @@ async function launch(extraArgs: string[] = []): Promise<ElectronApplication> {
 }
 
 async function closeApp(): Promise<void> {
-  const closed = electronApp.close().then(() => true);
-  const waited = new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000));
-  if (await Promise.race([closed, waited])) {
-    return;
-  }
-  electronApp.process().kill("SIGKILL");
-  throw new Error("The app didn't quit within 15 seconds.");
+  await quitApp(electronApp, userDataDir);
 }
 
 // Waits by reading the page, not with the locator's own waiting, which stalls while the
