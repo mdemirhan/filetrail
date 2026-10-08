@@ -33,6 +33,10 @@ export type ExplorerWindowLike = {
   readonly webContents: {
     readonly id: number;
     send(channel: string, ...args: unknown[]): void;
+    on(
+      event: "did-start-navigation",
+      listener: (details: { isMainFrame: boolean; isSameDocument: boolean }) => void,
+    ): unknown;
   };
   isDestroyed(): boolean;
   close(): void;
@@ -135,6 +139,9 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   private shuttingDown = false;
   // True while the "a copy is still in progress" question is on screen.
   private stopQuestionOpen = false;
+  // Windows whose page has been given its launch folder and command: they are for that
+  // page only, not for it loaded again.
+  private readonly launchContextGiven = new WeakSet<ExplorerWindowEntry<W>>();
 
   constructor(private readonly host: ExplorerWindowHost<W>) {}
 
@@ -325,6 +332,9 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     initialCommand?: string;
   } {
     const entry = this.list.byWebContentsId(senderId);
+    if (entry) {
+      this.launchContextGiven.add(entry);
+    }
     return {
       startupFolderPath: entry?.launchFolderPath ?? null,
       restoreTabs: entry?.restoreTabs ?? false,
@@ -446,6 +456,14 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       initialCommand: options.initialCommand ?? null,
     };
     this.list.add(entry, options.place);
+    // The page loaded again (reloaded) opens as a window's page does, not on the launch
+    // folder or with the command it was opened for once more.
+    window.webContents.on("did-start-navigation", (details) => {
+      if (details.isMainFrame && !details.isSameDocument && this.launchContextGiven.has(entry)) {
+        entry.launchFolderPath = null;
+        entry.initialCommand = null;
+      }
+    });
     this.saveWindowOrder();
 
     const recordBounds = () => {

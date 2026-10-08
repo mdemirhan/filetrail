@@ -27,9 +27,13 @@ let nextWebContentsId = 1;
 // A stand-in for a BrowserWindow: its events are fired by hand, and closing it goes as
 // Electron's does, "close" at once (which can be prevented) and "closed" a moment later.
 class FakeWindow {
+  private readonly contentsListeners = new Map<string, Listener[]>();
   readonly webContents = {
     id: nextWebContentsId++,
     send: vi.fn(),
+    on: (event: string, listener: Listener) => {
+      this.contentsListeners.set(event, [...(this.contentsListeners.get(event) ?? []), listener]);
+    },
   };
   destroyed = false;
   bounds = { x: 100, y: 80, width: 900, height: 600 };
@@ -63,6 +67,13 @@ class FakeWindow {
   emit(event: string, ...args: unknown[]): void {
     for (const listener of [...(this.listeners.get(event) ?? [])]) {
       (listener as (...values: unknown[]) => void)(...args);
+    }
+  }
+
+  // The page starts loading: the first time, or again (reloaded).
+  startNavigation(details: { isMainFrame: boolean; isSameDocument: boolean }): void {
+    for (const listener of this.contentsListeners.get("did-start-navigation") ?? []) {
+      (listener as (value: unknown) => void)(details);
     }
   }
 
@@ -358,6 +369,41 @@ describe("ExplorerWindowController opening windows", () => {
       restoreTabs: false,
       initialCommand: "goDesktop",
     });
+  });
+
+  it("gives the launch folder and the command to the page once, not again when it reloads", () => {
+    const store = createStore();
+    store.addExplorerWindow(storedWindow(store, "window-a", ["/Users/demo/a"]));
+    const { controller, windowFor } = setUp(store);
+    controller.openStartupWindows("/Users/demo/launched");
+    const window = windowFor("window-a");
+    const launchContext = () => controller.launchContextFor(window.webContents.id);
+    window.startNavigation({ isMainFrame: true, isSameDocument: false });
+
+    // Asked twice by the same page (React runs its first effects twice in development).
+    expect(launchContext().startupFolderPath).toBe("/Users/demo/launched");
+    expect(launchContext().startupFolderPath).toBe("/Users/demo/launched");
+    window.startNavigation({ isMainFrame: true, isSameDocument: true });
+    window.startNavigation({ isMainFrame: false, isSameDocument: false });
+    expect(launchContext().startupFolderPath).toBe("/Users/demo/launched");
+
+    window.startNavigation({ isMainFrame: true, isSameDocument: false });
+    expect(launchContext()).toEqual({ startupFolderPath: null, restoreTabs: false });
+  });
+
+  it("doesn't run the Go menu's command again when the page reloads", () => {
+    const { controller, windows } = setUp();
+    controller.openDefaultWindow("goDesktop");
+    const [window] = windows;
+    expect(controller.launchContextFor(window?.webContents.id ?? null).initialCommand).toBe(
+      "goDesktop",
+    );
+
+    window?.startNavigation({ isMainFrame: true, isSameDocument: false });
+
+    expect(controller.launchContextFor(window?.webContents.id ?? null).initialCommand).toBe(
+      undefined,
+    );
   });
 
   it("opens New Window from the Dock on the front window's tab, or one where the last closed", () => {
