@@ -356,9 +356,9 @@ export const ANALYSIS_BUSY_ERROR = "Another copy/paste analysis is already runni
 
 export type WriteServiceDependencies = {
   fileSystem?: WriteServiceFileSystem;
-  // Remembers Replaces in progress so an interrupted one can be finished or undone at the
-  // next start (see `recoverInterruptedReplaces`).
-  replaceJournal?: ReplaceJournal;
+  // Remembers Replaces and large file copies in progress, so an interrupted one can be
+  // finished or undone at the next start (see `recoverInterruptedWrites`).
+  writeJournal?: WriteJournal;
   now?: () => Date;
   createOperationId?: () => string;
   createAnalysisId?: () => string;
@@ -477,6 +477,8 @@ export async function startsWithAppleDoubleMagic(
  * `stagingPath` is complete.
  */
 export type ReplaceJournalEntry = {
+  // Entries written before the journal held anything else have no kind.
+  kind?: "replace";
   id: string;
   stagingPath: string;
   finalPath: string;
@@ -485,10 +487,28 @@ export type ReplaceJournalEntry = {
   staged: boolean;
 };
 
-/** Where Replaces in progress are written down, so a crash can't strand an item under a
- *  hidden name. `add` replaces an entry with the same id. Writes must be durable before
- *  they resolve. */
-export type ReplaceJournal = {
-  add: (entry: ReplaceJournalEntry) => Promise<void>;
+/**
+ * A large file being copied under `partialPath`, a hidden name of its own next to
+ * `finalPath`, until it is complete. Cut short, it is only part of a copy (the original is
+ * where it was): the next start removes it, so it doesn't take up space unseen.
+ */
+export type PartialFileJournalEntry = {
+  kind: "partial_file";
+  id: string;
+  partialPath: string;
+  finalPath: string;
+};
+
+export type WriteJournalEntry = ReplaceJournalEntry | PartialFileJournalEntry;
+
+/** Where writes that leave items under hidden names while they run are written down, so a
+ *  crash can't strand one there: the next start finishes or undoes each. `add` replaces an
+ *  entry with the same id. Writes must be durable before they resolve. */
+export type WriteJournal = {
+  add: (entry: WriteJournalEntry) => Promise<void>;
   remove: (id: string) => Promise<void>;
 };
+
+export function isReplaceJournalEntry(entry: WriteJournalEntry): entry is ReplaceJournalEntry {
+  return entry.kind === undefined || entry.kind === "replace";
+}

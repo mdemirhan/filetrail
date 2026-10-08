@@ -62,7 +62,7 @@ import type {
   CopyPasteRuntimeConflict,
   CopyPasteRuntimeResolutionAction,
   NodeFingerprint,
-  ReplaceJournal,
+  WriteJournal,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
 
@@ -100,7 +100,7 @@ type ExecutionContext = {
   // Maps a path being written to the path people know it by: while a Replace builds its
   // new item under a hidden name, progress and questions still show the final name.
   displayPath?: (path: string) => string;
-  replaceJournal: ReplaceJournal | null;
+  writeJournal: WriteJournal | null;
   // Folder listings read once per paste (see readFolderListing).
   folderListings: Map<string, FolderListing>;
   // What this paste did, for Undo. Shared by every step, like `progress`.
@@ -176,7 +176,7 @@ export async function executeCopyPasteFromAnalysis(args: {
   ) => Promise<CopyPasteRuntimeResolutionAction | null>;
   // An answer already given for "the rest of this operation", used without asking again.
   autoResolve?: (conflict: CopyPasteRuntimeConflict) => CopyPasteRuntimeResolutionAction | null;
-  replaceJournal?: ReplaceJournal;
+  writeJournal?: WriteJournal;
 }): Promise<void> {
   const startedAt = args.now().toISOString();
   const destinationFingerprint = await captureFolderFingerprint(
@@ -202,7 +202,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     totalItemCount: countExecutableSteps(args.resolvedNodes),
     totalBytes: args.report.summary.totalBytes,
     progress: { completedItemCount: 0, completedByteCount: 0 },
-    replaceJournal: args.replaceJournal ?? null,
+    writeJournal: args.writeJournal ?? null,
     folderListings: new Map(),
     undo: {
       topLevelNodeIds: new Set(args.resolvedNodes.map((node) => node.node.id)),
@@ -1160,7 +1160,7 @@ async function executeReplace(
   const temporaryPath = await temporarySiblingPath(fileSystem, finalPath);
   // Written down before anything is staged, so a crash can't leave the item under the
   // hidden name: the next start finishes or undoes the Replace.
-  const journal = context.replaceJournal;
+  const journal = context.writeJournal;
   const journalEntry = {
     id: randomBytes(8).toString("hex"),
     stagingPath: temporaryPath,
@@ -1867,21 +1867,44 @@ async function copyFileContents(
     );
   }
   const partialPath = await temporarySiblingPath(fileSystem, targetPath);
-  await writeFileContents(context, sourcePath, partialPath);
+  // A large file is written down first: cut short by a crash, the part copied would take
+  // up space under a hidden name, unseen, until the next start removes it. Small ones
+  // aren't, for speed (two writes to the journal for each file).
+  const journal = context.writeJournal;
+  const journalId =
+    journal !== null &&
+    ((await fileSystem.lstat(sourcePath).catch(() => null))?.size ?? 0) >= JOURNALED_FILE_BYTES
+      ? randomBytes(8).toString("hex")
+      : null;
+  if (journal !== null && journalId !== null) {
+    await journal.add({ kind: "partial_file", id: journalId, partialPath, finalPath: targetPath });
+  }
   try {
-    // A copy of a locked file is locked too, and a locked file can't be renamed.
-    const flags = await unlockForMove(fileSystem, partialPath);
-    await moveExclusive(fileSystem, partialPath, targetPath);
-    if (flags !== null) {
-      await fileSystem.setFlags?.(targetPath, flags).catch(() => undefined);
+    await writeFileContents(context, sourcePath, partialPath);
+    try {
+      // A copy of a locked file is locked too, and a locked file can't be renamed.
+      const flags = await unlockForMove(fileSystem, partialPath);
+      await moveExclusive(fileSystem, partialPath, targetPath);
+      if (flags !== null) {
+        await fileSystem.setFlags?.(targetPath, flags).catch(() => undefined);
+      }
+    } catch (error) {
+      await removeStagedItem(fileSystem, partialPath).catch(() => undefined);
+      throw errorCode(error) === "EEXIST"
+        ? new DestinationTakenError(error)
+        : await explainMissingFolder(fileSystem, targetPath, error);
     }
-  } catch (error) {
-    await removeStagedItem(fileSystem, partialPath).catch(() => undefined);
-    throw errorCode(error) === "EEXIST"
-      ? new DestinationTakenError(error)
-      : await explainMissingFolder(fileSystem, targetPath, error);
+  } finally {
+    // Complete under its name, or cleared away: nothing is left to recover. Should the
+    // entry stay (its journal can't be written), the next start finds nothing there.
+    if (journal !== null && journalId !== null) {
+      await journal.remove(journalId).catch(() => undefined);
+    }
   }
 }
+
+// Files at least this large are written down in the journal while they are copied.
+export const JOURNALED_FILE_BYTES = 32 * 1024 * 1024;
 
 async function writeFileContents(
   context: ExecutionContext,

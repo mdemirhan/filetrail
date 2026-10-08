@@ -31,11 +31,7 @@ import {
   startFileDrag,
 } from "./bootstrap/fileDrag";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
-import {
-  openReplaceJournal,
-  recoverReplaces,
-  retryReplaceRecovery,
-} from "./bootstrap/replaceJournal";
+import { openWriteJournal, recoverWrites, retryRecovery } from "./bootstrap/writeJournal";
 
 // How long a disk may take to answer while Replaces are recovered: a network share that
 // doesn't answer is tried again later instead of holding up the window.
@@ -215,16 +211,16 @@ export async function bootstrapMainProcess(
   });
   const writeFileSystem = { ...originalFileSystem, trash: trashItem };
   // A Replace cut short by a crash is finished or undone before anything else is written.
-  const replaceJournal = await openReplaceJournal(
+  const writeJournal = await openWriteJournal(
     join(app.getPath("userData"), "replace-journal.json"),
   );
-  const recovery = await recoverReplaces(replaceJournal, writeFileSystem, logger, {
+  const recovery = await recoverWrites(writeJournal, writeFileSystem, logger, {
     answerWithinMs: RECOVERY_ANSWER_WITHIN_MS,
   });
   if (recovery.notices.length > 0) {
     windows.showStartupNotices(recovery.notices);
   }
-  const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
+  const writeService = createWriteService({ fileSystem: writeFileSystem, writeJournal });
   // What Undo and Redo work from, for as long as the app runs.
   const undoHistory = createUndoHistory();
   undoHistory.onChange(() => windows.onUndoHistoryChanged(undoHistory.menu()));
@@ -269,16 +265,16 @@ export async function bootstrapMainProcess(
   );
   // What couldn't be reached at start (its disk wasn't connected, or didn't answer) is
   // tried again now and then, while nothing else is being written, until it is done.
-  retryReplaceRecovery({
-    leftoverIds: new Set(replaceJournal.entries().map((entry) => entry.id)),
+  retryRecovery({
+    leftoverIds: new Set(writeJournal.entries().map((entry) => entry.id)),
     recover: (entryIds) =>
-      recoverReplaces(replaceJournal, writeFileSystem, logger, {
+      recoverWrites(writeJournal, writeFileSystem, logger, {
         entryIds,
         answerWithinMs: RECOVERY_ANSWER_WITHIN_MS,
         retry: true,
         runWriteAlone: writeCoordinator.runWriteAlone,
       }),
-    remainingIds: () => new Set(replaceJournal.entries().map((entry) => entry.id)),
+    remainingIds: () => new Set(writeJournal.entries().map((entry) => entry.id)),
     isBusy: () => writeCoordinator.getActiveOperation() !== null,
     onFinished: (messages) => windows.showRecoveryNotices(messages),
   });

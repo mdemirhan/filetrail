@@ -9,6 +9,7 @@ import type {
   CopyPasteProgressEvent,
   ReplaceJournalEntry,
 } from "./writeServiceTypes";
+import { type WriteJournalEntry, isReplaceJournalEntry } from "./writeServiceTypes";
 
 function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
   expect(value).toBeDefined();
@@ -4307,7 +4308,7 @@ describe("copyPasteExecution", () => {
       mode: "copy" | "cut";
       sourcePaths: string[];
       policy?: Parameters<typeof createResolvedOperation>[0]["policy"];
-      replaceJournal?: Parameters<typeof executeCopyPasteFromAnalysis>[0]["replaceJournal"];
+      writeJournal?: Parameters<typeof executeCopyPasteFromAnalysis>[0]["writeJournal"];
     }): Promise<CopyPasteOperationResult> {
       const policy = args.policy ?? { file: "skip", directory: "merge", mismatch: "skip" };
       const { report, resolvedNodes } = await createResolvedOperation({
@@ -4329,7 +4330,7 @@ describe("copyPasteExecution", () => {
         resolvedNodes,
         emit: (event) => events.push(event),
         requestResolution: async () => null,
-        ...(args.replaceJournal ? { replaceJournal: args.replaceJournal } : {}),
+        ...(args.writeJournal ? { writeJournal: args.writeJournal } : {}),
       });
       return expectDefined(expectLastEvent(events).result);
     }
@@ -4426,9 +4427,11 @@ describe("copyPasteExecution", () => {
         live,
         added,
         journal: {
-          add: async (entry: ReplaceJournalEntry) => {
-            live.set(entry.id, entry);
-            added.push(entry);
+          add: async (entry: WriteJournalEntry) => {
+            if (isReplaceJournalEntry(entry)) {
+              live.set(entry.id, entry);
+              added.push(entry);
+            }
           },
           remove: async (id: string) => {
             live.delete(id);
@@ -4456,7 +4459,7 @@ describe("copyPasteExecution", () => {
         mode: "copy",
         sourcePaths: ["/source/a.txt"],
         policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
-        replaceJournal: journal,
+        writeJournal: journal,
       });
 
       expect(result.status).toBe("failed");
@@ -4485,7 +4488,7 @@ describe("copyPasteExecution", () => {
         mode: "cut",
         sourcePaths: ["/source/a.txt"],
         policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
-        replaceJournal: journal,
+        writeJournal: journal,
       });
 
       expect(result.status).toBe("failed");

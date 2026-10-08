@@ -4,7 +4,11 @@ import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
 import { moveExclusive, removeStagedItem, unlockForMove } from "./copyPasteExecution";
 import { captureFingerprint } from "./copyPasteFingerprint";
 import { resolveDuplicateName } from "./copyPasteNames";
-import type { ReplaceJournalEntry, WriteServiceFileSystem } from "./writeServiceTypes";
+import type {
+  PartialFileJournalEntry,
+  ReplaceJournalEntry,
+  WriteServiceFileSystem,
+} from "./writeServiceTypes";
 
 export type ReplaceRecoveryOutcome =
   // The Replace had finished, or had been undone: nothing was left behind.
@@ -63,6 +67,61 @@ export async function recoverInterruptedReplaces(
     }
   }
   return outcomes;
+}
+
+export type PartialFileRecoveryOutcome =
+  | { entry: PartialFileJournalEntry; outcome: "nothing_left" | "removed_copy" | "deferred" }
+  | { entry: PartialFileJournalEntry; outcome: "unreachable" | "failed"; error: string };
+
+// Removes the parts of large files a crash cut short (see PartialFileJournalEntry). Each is
+// a hidden file of this app's own naming; anything else found there is left alone.
+export async function recoverPartialFiles(
+  entries: PartialFileJournalEntry[],
+  fileSystem: WriteServiceFileSystem,
+  options: { answerWithinMs?: number; runWriteAlone?: RunWriteAlone } = {},
+): Promise<PartialFileRecoveryOutcome[]> {
+  const outcomes: PartialFileRecoveryOutcome[] = [];
+  for (const entry of entries) {
+    try {
+      if (
+        options.answerWithinMs !== undefined &&
+        !(await answersWithin(fileSystem, dirname(entry.partialPath), options.answerWithinMs))
+      ) {
+        outcomes.push({ entry, outcome: "unreachable", error: "The disk didn't answer." });
+        continue;
+      }
+      if (options.runWriteAlone === undefined) {
+        outcomes.push(await removePartialFile(entry, fileSystem));
+        continue;
+      }
+      const run = await options.runWriteAlone(() => removePartialFile(entry, fileSystem));
+      outcomes.push(run.ran ? run.value : { entry, outcome: "deferred" });
+    } catch (error) {
+      outcomes.push({ entry, outcome: "failed", error: describeCopyPasteError(error) });
+    }
+  }
+  return outcomes;
+}
+
+async function removePartialFile(
+  entry: PartialFileJournalEntry,
+  fileSystem: WriteServiceFileSystem,
+): Promise<PartialFileRecoveryOutcome> {
+  let isFile: boolean;
+  try {
+    isFile = (await fileSystem.lstat(entry.partialPath)).isFile();
+  } catch (error) {
+    if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, entry.partialPath))) {
+      return { entry, outcome: "nothing_left" };
+    }
+    return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
+  }
+  // Only what this app names its partial files: "."+name+".filetrail-" and 8 hex digits.
+  if (!isFile || !/^\..*\.filetrail-[0-9a-f]{8}$/su.test(basename(entry.partialPath))) {
+    return { entry, outcome: "nothing_left" };
+  }
+  await fileSystem.rm(entry.partialPath, { recursive: false, force: true });
+  return { entry, outcome: "removed_copy" };
 }
 
 // Whether looking up `path` comes back (found or not) within `ms`.

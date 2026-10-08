@@ -12,6 +12,7 @@ import {
   rename,
   rm,
   symlink,
+  truncate,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -23,6 +24,7 @@ import {
   normalizeCopyPasteAnalysisRequest,
 } from "./copyPasteAnalysis";
 import { NO_TRASH_ERROR_CODE } from "./copyPasteErrors";
+import { JOURNALED_FILE_BYTES } from "./copyPasteExecution";
 import {
   KEEP_EXISTING,
   REPLACE_ALL,
@@ -30,7 +32,12 @@ import {
   nativeFileSystemWithTrash,
   runPaste,
 } from "./testNativePaste";
-import type { ReplaceJournalEntry, WriteServiceFileSystem } from "./writeServiceTypes";
+import {
+  type ReplaceJournalEntry,
+  type WriteJournalEntry,
+  type WriteServiceFileSystem,
+  isReplaceJournalEntry,
+} from "./writeServiceTypes";
 
 // As on a move to another disk: no rename, so items are copied and the originals removed.
 function withoutRenameAtAll(): WriteServiceFileSystem {
@@ -202,9 +209,11 @@ describe("the swap at the end of a Replace", () => {
       destinationDirectoryPath: dst,
       policy: REPLACE_ALL,
       fileSystem,
-      replaceJournal: {
+      writeJournal: {
         add: async (entry) => {
-          journal.splice(0, journal.length, entry);
+          if (isReplaceJournalEntry(entry)) {
+            journal.splice(0, journal.length, entry);
+          }
         },
         remove: async () => {
           journal.splice(0);
@@ -576,6 +585,77 @@ describe("the folder pasted into goes away during the paste", () => {
       "The folder “dst” no longer exists.",
     ]);
     expect(await readdir(testDir)).not.toContain("dst");
+  });
+});
+
+describe("a large file being copied", () => {
+  // A crash part way would leave the part copied under a hidden name: it is written down
+  // first, and let go of once the file has its name, or once the copy failed.
+  it("is written down in the journal while it is copied", async () => {
+    // Sparse: as large as that, written in no time.
+    await writeFile(join(src, "movie.mov"), "");
+    await truncate(join(src, "movie.mov"), JOURNALED_FILE_BYTES);
+    await writeFile(join(src, "small.txt"), "small");
+    const recorded: WriteJournalEntry[] = [];
+    const live = new Map<string, WriteJournalEntry>();
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "movie.mov"), join(src, "small.txt")],
+      destinationDirectoryPath: dst,
+      writeJournal: {
+        add: async (entry) => {
+          recorded.push(entry);
+          live.set(entry.id, entry);
+        },
+        remove: async (id) => {
+          live.delete(id);
+        },
+      },
+    });
+
+    expect(result?.status).toBe("completed");
+    expect(recorded).toEqual([
+      {
+        kind: "partial_file",
+        id: expect.any(String),
+        partialPath: expect.stringMatching(/\/\.movie\.mov\.filetrail-[0-9a-f]{8}$/u),
+        finalPath: join(dst, "movie.mov"),
+      },
+    ]);
+    expect(live.size).toBe(0);
+    expect((await readdir(dst)).sort()).toEqual(["movie.mov", "small.txt"]);
+  });
+
+  it("lets go of the entry when the copy fails", async () => {
+    // Sparse: as large as that, written in no time.
+    await writeFile(join(src, "movie.mov"), "");
+    await truncate(join(src, "movie.mov"), JOURNALED_FILE_BYTES);
+    const live = new Map<string, WriteJournalEntry>();
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "movie.mov")],
+      destinationDirectoryPath: dst,
+      fileSystem: {
+        ...nativeFileSystem,
+        copyFile: async () => {
+          throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+        },
+      },
+      writeJournal: {
+        add: async (entry) => {
+          live.set(entry.id, entry);
+        },
+        remove: async (id) => {
+          live.delete(id);
+        },
+      },
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(live.size).toBe(0);
+    expect(await readdir(dst)).toEqual([]);
   });
 });
 
@@ -965,9 +1045,9 @@ describe("smaller cases a Replace and a copy get right", () => {
   it("removes the hidden copy when the Replace can't be written down", async () => {
     await writeFile(join(src, "a.txt"), "new");
     await writeFile(join(dst, "a.txt"), "old");
-    const replaceJournal = {
-      add: async (entry: ReplaceJournalEntry) => {
-        if (entry.staged) {
+    const writeJournal = {
+      add: async (entry: WriteJournalEntry) => {
+        if (isReplaceJournalEntry(entry) && entry.staged) {
           throw new Error("The disk is full.");
         }
       },
@@ -980,7 +1060,7 @@ describe("smaller cases a Replace and a copy get right", () => {
       destinationDirectoryPath: dst,
       policy: REPLACE_ALL,
       fileSystem: nativeFileSystemWithTrash(trash),
-      replaceJournal,
+      writeJournal,
     });
 
     expect(result?.status).toBe("failed");

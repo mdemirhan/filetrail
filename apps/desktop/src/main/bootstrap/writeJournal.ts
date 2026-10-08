@@ -2,24 +2,29 @@ import { open, readFile, rename } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 
 import {
-  type ReplaceJournal,
+  type PartialFileJournalEntry,
   type ReplaceJournalEntry,
   type RunWriteAlone,
+  type WriteJournal,
+  type WriteJournalEntry,
   type WriteServiceFileSystem,
+  isReplaceJournalEntry,
   recoverInterruptedReplaces,
+  recoverPartialFiles,
 } from "@filetrail/core";
 
 import type { AppLogger } from "../appLog";
 import { clearResponseCaches } from "./responseCache";
 
-export type FileReplaceJournal = ReplaceJournal & {
-  entries: () => ReplaceJournalEntry[];
+export type FileWriteJournal = WriteJournal & {
+  entries: () => WriteJournalEntry[];
 };
 
-// Keeps the Replaces in progress in a small file, so the next start can finish or undo one
-// that a crash or power cut interrupted. Each change is on disk before the paste goes on.
-export async function openReplaceJournal(filePath: string): Promise<FileReplaceJournal> {
-  const entries = new Map<string, ReplaceJournalEntry>();
+// Keeps the writes in progress that leave items under hidden names (Replaces, large file
+// copies) in a small file, so the next start can finish or undo one that a crash or power
+// cut interrupted. Each change is on disk before the write goes on.
+export async function openWriteJournal(filePath: string): Promise<FileWriteJournal> {
+  const entries = new Map<string, WriteJournalEntry>();
   for (const entry of await readEntries(filePath)) {
     entries.set(entry.id, entry);
   }
@@ -45,7 +50,7 @@ export async function openReplaceJournal(filePath: string): Promise<FileReplaceJ
   };
 }
 
-export type ReplaceRecoveryReport = {
+export type RecoveryReport = {
   // What the person must know: items left under a hidden name, or waiting for their disk.
   notices: string[];
   // Items that waited for their disk and are in place now.
@@ -57,8 +62,8 @@ export type ReplaceRecoveryReport = {
 // the app from starting. `entryIds` limits it to those entries (a retry of what was left
 // at start, never a Replace running now). A retry passes `runWriteAlone`, so its changes
 // never happen alongside an operation the person started.
-export async function recoverReplaces(
-  journal: FileReplaceJournal,
+export async function recoverWrites(
+  journal: FileWriteJournal,
   fileSystem: WriteServiceFileSystem,
   logger: Pick<AppLogger, "info" | "error">,
   options: {
@@ -67,23 +72,83 @@ export async function recoverReplaces(
     retry?: boolean;
     runWriteAlone?: RunWriteAlone;
   } = {},
-): Promise<ReplaceRecoveryReport> {
-  const report: ReplaceRecoveryReport = { notices: [], finished: [] };
+): Promise<RecoveryReport> {
+  const report: RecoveryReport = { notices: [], finished: [] };
   const entries = journal
     .entries()
     .filter((entry) => options.entryIds === undefined || options.entryIds.has(entry.id));
-  if (entries.length === 0) {
-    return report;
+  const replaces = entries.filter(isReplaceJournalEntry);
+  const partialFiles = entries.filter(
+    (entry): entry is PartialFileJournalEntry => entry.kind === "partial_file",
+  );
+  const recoveryOptions = {
+    ...(options.answerWithinMs === undefined ? {} : { answerWithinMs: options.answerWithinMs }),
+    ...(options.runWriteAlone === undefined ? {} : { runWriteAlone: options.runWriteAlone }),
+  };
+  if (replaces.length > 0) {
+    await recoverReplaces(journal, replaces, fileSystem, logger, recoveryOptions, options, report);
   }
+  if (partialFiles.length > 0) {
+    await removePartialFiles(journal, partialFiles, fileSystem, logger, recoveryOptions);
+  }
+  return report;
+}
+
+// What a crash left of large files being copied: only part of a copy, its original in
+// place. Removed quietly; one that can't be reached yet waits for the retry.
+async function removePartialFiles(
+  journal: FileWriteJournal,
+  entries: PartialFileJournalEntry[],
+  fileSystem: WriteServiceFileSystem,
+  logger: Pick<AppLogger, "info" | "error">,
+  options: { answerWithinMs?: number; runWriteAlone?: RunWriteAlone },
+): Promise<void> {
+  let outcomes: Awaited<ReturnType<typeof recoverPartialFiles>>;
+  try {
+    outcomes = await recoverPartialFiles(entries, fileSystem, options);
+  } catch (error) {
+    logger.error("[filetrail] couldn't remove interrupted copies", error);
+    return;
+  }
+  const removed = outcomes.filter((outcome) => outcome.outcome === "removed_copy");
+  if (removed.length > 0) {
+    clearResponseCaches(removed.map((outcome) => outcome.entry.partialPath));
+  }
+  for (const outcome of outcomes) {
+    if (outcome.outcome === "unreachable" || outcome.outcome === "failed") {
+      logger.info("[filetrail] an interrupted copy wasn't removed", {
+        partialPath: outcome.entry.partialPath,
+        error: outcome.error,
+      });
+      continue;
+    }
+    if (outcome.outcome === "deferred") {
+      continue;
+    }
+    try {
+      await journal.remove(outcome.entry.id);
+    } catch (error) {
+      logger.error("[filetrail] couldn't update the write journal", error);
+    }
+  }
+}
+
+// Replaces a crash cut short: finished or undone, and what the person must know is said.
+async function recoverReplaces(
+  journal: FileWriteJournal,
+  entries: ReplaceJournalEntry[],
+  fileSystem: WriteServiceFileSystem,
+  logger: Pick<AppLogger, "info" | "error">,
+  recoveryOptions: { answerWithinMs?: number; runWriteAlone?: RunWriteAlone },
+  options: { retry?: boolean },
+  report: RecoveryReport,
+): Promise<void> {
   let outcomes: Awaited<ReturnType<typeof recoverInterruptedReplaces>>;
   try {
-    outcomes = await recoverInterruptedReplaces(entries, fileSystem, {
-      ...(options.answerWithinMs === undefined ? {} : { answerWithinMs: options.answerWithinMs }),
-      ...(options.runWriteAlone === undefined ? {} : { runWriteAlone: options.runWriteAlone }),
-    });
+    outcomes = await recoverInterruptedReplaces(entries, fileSystem, recoveryOptions);
   } catch (error) {
     logger.error("[filetrail] couldn't recover interrupted replaces", error);
-    return report;
+    return;
   }
   // Where items were put in place, back, or taken away: folder listings and sizes read
   // before (a retry runs while the app is in use) are out of date there.
@@ -141,19 +206,18 @@ export async function recoverReplaces(
       await journal.remove(outcome.entry.id);
     } catch (error) {
       // The item was dealt with; the next start finds nothing left for this entry.
-      logger.error("[filetrail] couldn't update the replace journal", error);
+      logger.error("[filetrail] couldn't update the write journal", error);
     }
   }
-  return report;
 }
 
 export const RECOVERY_RETRY_INTERVAL_MS = 60_000;
 
 // Tries the entries left at start again every minute, while no operation runs, until none
 // of them is left. Tells what was put in place.
-export function retryReplaceRecovery(args: {
+export function retryRecovery(args: {
   leftoverIds: ReadonlySet<string>;
-  recover: (entryIds: ReadonlySet<string>) => Promise<ReplaceRecoveryReport>;
+  recover: (entryIds: ReadonlySet<string>) => Promise<RecoveryReport>;
   remainingIds: () => ReadonlySet<string>;
   isBusy: () => boolean;
   onFinished: (messages: string[]) => void;
@@ -195,7 +259,7 @@ function diskName(path: string): string {
   return match?.[1] ?? basename(dirname(path));
 }
 
-async function readEntries(filePath: string): Promise<ReplaceJournalEntry[]> {
+async function readEntries(filePath: string): Promise<WriteJournalEntry[]> {
   let text: string;
   try {
     text = await readFile(filePath, "utf8");
@@ -214,15 +278,20 @@ async function readEntries(filePath: string): Promise<ReplaceJournalEntry[]> {
   return [];
 }
 
-function isEntry(value: unknown): value is ReplaceJournalEntry {
+function isEntry(value: unknown): value is WriteJournalEntry {
   if (typeof value !== "object" || value === null) {
     return false;
   }
   const entry = value as Record<string, unknown>;
+  if (typeof entry.id !== "string" || typeof entry.finalPath !== "string") {
+    return false;
+  }
+  if (entry.kind === "partial_file") {
+    return typeof entry.partialPath === "string";
+  }
   return (
-    typeof entry.id === "string" &&
+    (entry.kind === undefined || entry.kind === "replace") &&
     typeof entry.stagingPath === "string" &&
-    typeof entry.finalPath === "string" &&
     typeof entry.sourcePath === "string" &&
     typeof entry.moved === "boolean" &&
     typeof entry.staged === "boolean"

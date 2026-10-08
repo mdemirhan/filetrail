@@ -34,7 +34,7 @@ One such item makes the whole operation Can't Undo. Undo never reverses only par
 
 ## One write at a time
 
-Rule: the app never makes two changes to the user's files at once. The app's own files (settings, logs, the Replace journal) aren't covered by this rule.
+Rule: the app never makes two changes to the user's files at once. The app's own files (settings, logs, the write journal) aren't covered by this rule.
 
 **How it works today:**
 
@@ -49,7 +49,7 @@ Rule: the app never makes two changes to the user's files at once. The app's own
 - Crash recovery at startup finishes before the coordinator exists (`bootstrap.ts:150`).
 - Search, folder sizes and listings only read.
 
-**The one gap:** `retryReplaceRecovery` (`replaceJournal.ts:132`, wired at `bootstrap.ts:163`). It checks `isBusy()` before each try, but doesn't hold the slot while it runs, so an operation started meanwhile runs alongside it. It only touches the journal's paths and moves with `moveExclusive`, so it can't overwrite anything. It still breaks the rule.
+**The one gap:** `retryRecovery` (`writeJournal.ts:132`, wired at `bootstrap.ts:163`). It checks `isBusy()` before each try, but doesn't hold the slot while it runs, so an operation started meanwhile runs alongside it. It only touches the journal's paths and moves with `moveExclusive`, so it can't overwrite anything. It still breaks the rule.
 
 **What Undo adds:**
 
@@ -64,12 +64,12 @@ Rule: the app never makes two changes to the user's files at once. The app's own
 
 This fixes an existing gap and is separate from Undo.
 
-- `retryReplaceRecovery` first checks whether each entry's disk answers (`answersWithin`), without holding the slot, because it can wait on a network disk.
+- `retryRecovery` first checks whether each entry's disk answers (`answersWithin`), without holding the slot, because it can wait on a network disk.
 - It then runs the write part through a new coordinator method, `runWriteAlone(write)`, built on `prepareWithReservedSlot`. If the slot is busy, that entry is put off (`deferred`) until the next minute.
 - An operation the user starts during that short write is refused like any busy case. That should be very rare.
 
 **Tests:**
-- In `replaceJournal.test.ts`, starting an operation while a retry is writing is refused.
+- In `writeJournal.test.ts`, starting an operation while a retry is writing is refused.
 - A retry never runs while an operation holds the slot, including one that starts during the reachability check.
 
 ## Phase 1: Moving to the Trash returns where the item went

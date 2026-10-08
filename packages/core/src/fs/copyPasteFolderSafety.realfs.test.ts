@@ -24,6 +24,7 @@ import {
   type ReplaceJournalEntry,
   type WriteServiceFileSystem,
 } from "./writeServiceTypes";
+import { type WriteJournalEntry, isReplaceJournalEntry } from "./writeServiceTypes";
 
 // Folders that can't be read are readable anyway when running as root.
 const runsAsRoot = process.getuid?.() === 0;
@@ -46,7 +47,7 @@ async function paste(args: {
   destinationDirectoryPath: string;
   policy?: CopyPastePolicy;
   fileSystem?: WriteServiceFileSystem;
-  replaceJournal?: Parameters<typeof executeCopyPasteFromAnalysis>[0]["replaceJournal"];
+  writeJournal?: Parameters<typeof executeCopyPasteFromAnalysis>[0]["writeJournal"];
 }): Promise<CopyPasteOperationResult> {
   const fileSystem = args.fileSystem ?? DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
   const policy = args.policy ?? { file: "skip", directory: "merge", mismatch: "skip" };
@@ -76,7 +77,7 @@ async function paste(args: {
       result = event.result ?? result;
     },
     requestResolution: async () => null,
-    ...(args.replaceJournal ? { replaceJournal: args.replaceJournal } : {}),
+    ...(args.writeJournal ? { writeJournal: args.writeJournal } : {}),
   });
   if (!result) {
     throw new Error("The paste reported no result.");
@@ -215,9 +216,11 @@ describe("Replace journal", () => {
       live,
       history,
       journal: {
-        add: async (entry: ReplaceJournalEntry) => {
-          live.set(entry.id, entry);
-          history.push(entry);
+        add: async (entry: WriteJournalEntry) => {
+          if (isReplaceJournalEntry(entry)) {
+            live.set(entry.id, entry);
+            history.push(entry);
+          }
         },
         remove: async (id: string) => {
           live.delete(id);
@@ -246,7 +249,7 @@ describe("Replace journal", () => {
       destinationDirectoryPath: join(testDir, "dst"),
       policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
       fileSystem,
-      replaceJournal: journal,
+      writeJournal: journal,
     });
 
     expect(result.status).toBe("completed");
@@ -279,9 +282,11 @@ describe("Replace journal", () => {
       destinationDirectoryPath: join(testDir, "dst"),
       policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
       fileSystem,
-      replaceJournal: {
+      writeJournal: {
         add: async (entry) => {
-          sourceSeenWhenRecorded.push(await exists(entry.sourcePath));
+          if (isReplaceJournalEntry(entry)) {
+            sourceSeenWhenRecorded.push(await exists(entry.sourcePath));
+          }
           await journal.add(entry);
         },
         remove: journal.remove,

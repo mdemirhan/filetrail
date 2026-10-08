@@ -23,9 +23,9 @@ import {
   type CopyPasteRuntimeResolutionAction,
   DEFAULT_COPY_PASTE_POLICY,
   DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-  type ReplaceJournal,
   type RequiredCopyPasteAnalysisRequest,
   WRITE_OPERATION_BUSY_ERROR,
+  type WriteJournal,
   type WriteServiceDependencies,
   type WriteServiceFileSystem,
 } from "./writeServiceTypes";
@@ -58,8 +58,10 @@ export {
   type CopyPasteRuntimeConflict,
   type CopyPasteRuntimeResolutionAction,
   type NodeFingerprint,
-  type ReplaceJournal,
+  type PartialFileJournalEntry,
   type ReplaceJournalEntry,
+  type WriteJournal,
+  type WriteJournalEntry,
   type WriteServiceDependencies,
   type WriteServiceFileSystem,
   type WriteServiceStats,
@@ -100,7 +102,7 @@ function runtimeConflictScope(conflict: CopyPasteRuntimeConflict): string {
 
 export class WriteService {
   private readonly fileSystem: WriteServiceFileSystem;
-  private readonly replaceJournal: ReplaceJournal | null;
+  private readonly writeJournal: WriteJournal | null;
   private readonly now: () => Date;
   private readonly createOperationId: () => string;
   private readonly createAnalysisId: () => string;
@@ -122,7 +124,7 @@ export class WriteService {
 
   constructor(dependencies: WriteServiceDependencies = {}) {
     this.fileSystem = dependencies.fileSystem ?? DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
-    this.replaceJournal = dependencies.replaceJournal ?? null;
+    this.writeJournal = dependencies.writeJournal ?? null;
     this.now = dependencies.now ?? (() => new Date());
     this.largeBatchItemThreshold = dependencies.largeBatchItemThreshold ?? 100;
     this.largeBatchByteThreshold = dependencies.largeBatchByteThreshold ?? 1024 * 1024 * 1024;
@@ -334,7 +336,7 @@ export class WriteService {
         now: this.now,
         signal: controller.signal,
         resolvedNodes,
-        ...(this.replaceJournal ? { replaceJournal: this.replaceJournal } : {}),
+        ...(this.writeJournal ? { writeJournal: this.writeJournal } : {}),
         emit: (event) => this.emit(event),
         // Only an answer given for the same kind of conflict, and one that makes sense
         // for this conflict, is reused.

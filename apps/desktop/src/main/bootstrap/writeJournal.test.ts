@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReplaceJournalEntry, RunWriteAlone } from "@filetrail/core";
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
-import { openReplaceJournal, recoverReplaces, retryReplaceRecovery } from "./replaceJournal";
 import { getCachedResponse, getResponseCacheSizes, resetResponseCacheState } from "./responseCache";
+import { openWriteJournal, recoverWrites, retryRecovery } from "./writeJournal";
 
 let testDir: string;
 
@@ -35,14 +35,14 @@ function createEntry(
   };
 }
 
-describe("openReplaceJournal", () => {
+describe("openWriteJournal", () => {
   it("keeps its entries across a reopen", async () => {
     const filePath = join(testDir, "replace-journal.json");
-    const journal = await openReplaceJournal(filePath);
+    const journal = await openWriteJournal(filePath);
     await journal.add(createEntry("a"));
     await journal.add(createEntry("b"));
 
-    const reopened = await openReplaceJournal(filePath);
+    const reopened = await openWriteJournal(filePath);
 
     expect(reopened.entries()).toEqual([createEntry("a"), createEntry("b")]);
     // Written in one piece: no temporary file is left next to it.
@@ -51,19 +51,19 @@ describe("openReplaceJournal", () => {
 
   it("replaces an entry added again with the same id", async () => {
     const filePath = join(testDir, "replace-journal.json");
-    const journal = await openReplaceJournal(filePath);
+    const journal = await openWriteJournal(filePath);
     await journal.add(createEntry("a", { staged: false }));
     await journal.add(createEntry("a", { staged: true }));
 
     expect(journal.entries()).toEqual([createEntry("a", { staged: true })]);
-    expect((await openReplaceJournal(filePath)).entries()).toEqual([
+    expect((await openWriteJournal(filePath)).entries()).toEqual([
       createEntry("a", { staged: true }),
     ]);
   });
 
   it("takes out a removed entry, on disk too", async () => {
     const filePath = join(testDir, "replace-journal.json");
-    const journal = await openReplaceJournal(filePath);
+    const journal = await openWriteJournal(filePath);
     await journal.add(createEntry("a"));
     await journal.add(createEntry("b"));
     await journal.remove("a");
@@ -71,15 +71,15 @@ describe("openReplaceJournal", () => {
     await journal.remove("missing");
 
     expect(journal.entries()).toEqual([createEntry("b")]);
-    expect((await openReplaceJournal(filePath)).entries()).toEqual([createEntry("b")]);
+    expect((await openWriteJournal(filePath)).entries()).toEqual([createEntry("b")]);
   });
 
   it("opens empty when the file is missing, unreadable as JSON, or not a list of entries", async () => {
-    expect((await openReplaceJournal(join(testDir, "missing.json"))).entries()).toEqual([]);
+    expect((await openWriteJournal(join(testDir, "missing.json"))).entries()).toEqual([]);
 
     const corrupt = join(testDir, "corrupt.json");
     await writeFile(corrupt, '[{"id": "a", "stagingPa');
-    expect((await openReplaceJournal(corrupt)).entries()).toEqual([]);
+    expect((await openWriteJournal(corrupt)).entries()).toEqual([]);
     // What it may still say is kept aside, not written over by the next Replace.
     const keptAside = (await readdir(testDir)).filter((name) =>
       name.startsWith("corrupt.json.unreadable-"),
@@ -91,19 +91,19 @@ describe("openReplaceJournal", () => {
 
     const notAList = join(testDir, "object.json");
     await writeFile(notAList, JSON.stringify({ id: "a" }));
-    expect((await openReplaceJournal(notAList)).entries()).toEqual([]);
+    expect((await openWriteJournal(notAList)).entries()).toEqual([]);
 
     // Entries of the wrong shape are dropped; good ones next to them are kept.
     const mixed = join(testDir, "mixed.json");
     await writeFile(mixed, JSON.stringify([{ id: "broken" }, createEntry("good")]));
-    expect((await openReplaceJournal(mixed)).entries()).toEqual([createEntry("good")]);
+    expect((await openWriteJournal(mixed)).entries()).toEqual([createEntry("good")]);
   });
 });
 
-describe("recoverReplaces", () => {
+describe("recoverWrites", () => {
   it("removes the entries it recovered and keeps the ones it couldn't", async () => {
     const filePath = join(testDir, "replace-journal.json");
-    const journal = await openReplaceJournal(filePath);
+    const journal = await openWriteJournal(filePath);
     // A complete copy whose old item already went to the Trash: it is put in place.
     const finished = createEntry("finished");
     await writeFile(finished.stagingPath, "new contents");
@@ -119,12 +119,12 @@ describe("recoverReplaces", () => {
     }
     const logger = { info: vi.fn(), error: vi.fn() };
 
-    const { notices } = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
+    const { notices } = await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
 
     expect(await readFile(finished.finalPath, "utf8")).toBe("new contents");
     expect(existsSync(finished.stagingPath)).toBe(false);
     expect(journal.entries()).toEqual([failing]);
-    expect((await openReplaceJournal(filePath)).entries()).toEqual([failing]);
+    expect((await openWriteJournal(filePath)).entries()).toEqual([failing]);
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.info).toHaveBeenCalledTimes(2);
     // The person is told where the item that couldn't be put right is.
@@ -138,7 +138,7 @@ describe("recoverReplaces", () => {
   // Its disk isn't connected now: the item may be the only copy of something, so the entry
   // stays until it can be dealt with, and the person is told where the item waits.
   it("keeps an entry whose hidden item can't be reached, and says where it waits", async () => {
-    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
     const unreachable = createEntry("unreachable", {
       stagingPath: "/Volumes/FileTrailNotConnected/.moved.filetrail-1",
       finalPath: "/Volumes/FileTrailNotConnected/report.txt",
@@ -150,7 +150,7 @@ describe("recoverReplaces", () => {
     await journal.add(unreachable);
     await journal.add(unfinishedCopy);
 
-    const { notices } = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, {
+    const { notices } = await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, {
       info: vi.fn(),
       error: vi.fn(),
     });
@@ -164,7 +164,7 @@ describe("recoverReplaces", () => {
 
   // A network share that doesn't answer mustn't hold up the window.
   it("leaves for later an entry whose disk doesn't answer in time", async () => {
-    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
     const hanging = createEntry("hanging", { moved: true });
     await journal.add(hanging);
     const fileSystem = {
@@ -173,7 +173,7 @@ describe("recoverReplaces", () => {
     };
 
     const startedAt = Date.now();
-    const { notices } = await recoverReplaces(
+    const { notices } = await recoverWrites(
       journal,
       fileSystem,
       { info: vi.fn(), error: vi.fn() },
@@ -189,12 +189,12 @@ describe("recoverReplaces", () => {
 
   // Once the disk is back the item is put in place, and the person told.
   it("finishes a waiting entry on a retry, and says so", async () => {
-    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
     const waiting = createEntry("waiting", { moved: true });
     await writeFile(waiting.stagingPath, "moved contents");
     await journal.add(waiting);
 
-    const report = await recoverReplaces(
+    const report = await recoverWrites(
       journal,
       DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
       { info: vi.fn(), error: vi.fn() },
@@ -207,7 +207,7 @@ describe("recoverReplaces", () => {
   });
 
   it("forgets the folder listings read before a retry put an item in place", async () => {
-    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
     const waiting = createEntry("waiting", { moved: true });
     await writeFile(waiting.stagingPath, "moved contents");
     await journal.add(waiting);
@@ -215,7 +215,7 @@ describe("recoverReplaces", () => {
     await getCachedResponse("directory", { path: testDir }, async () => "listing before");
     expect(getResponseCacheSizes().directorySnapshots).toBe(1);
 
-    await recoverReplaces(
+    await recoverWrites(
       journal,
       DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
       { info: vi.fn(), error: vi.fn() },
@@ -232,14 +232,14 @@ describe("recoverReplaces", () => {
   });
 
   it("keeps the folder listings when a retry changed nothing", async () => {
-    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
     const waiting = createEntry("waiting", { moved: true });
     await writeFile(waiting.stagingPath, "moved contents");
     await journal.add(waiting);
     resetResponseCacheState();
     await getCachedResponse("directory", { path: testDir }, async () => "listing before");
 
-    await recoverReplaces(
+    await recoverWrites(
       journal,
       DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
       { info: vi.fn(), error: vi.fn() },
@@ -257,14 +257,14 @@ describe("recoverReplaces", () => {
   // A retry runs while the app is in use: it waits for a moment when nothing else writes,
   // and touches nothing while an operation runs.
   it("leaves a waiting entry alone while another operation writes, and finishes it after", async () => {
-    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
     const waiting = createEntry("waiting", { moved: true });
     await writeFile(waiting.stagingPath, "moved contents");
     await journal.add(waiting);
     const logger = { info: vi.fn(), error: vi.fn() };
     const busy = vi.fn(async () => ({ ran: false as const }));
 
-    const report = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger, {
+    const report = await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger, {
       entryIds: new Set([waiting.id]),
       retry: true,
       runWriteAlone: busy,
@@ -295,7 +295,7 @@ describe("recoverReplaces", () => {
         return lstat(path);
       },
     };
-    const retried = await recoverReplaces(journal, watchingFileSystem, logger, {
+    const retried = await recoverWrites(journal, watchingFileSystem, logger, {
       entryIds: new Set([waiting.id]),
       retry: true,
       answerWithinMs: 1_000,
@@ -318,7 +318,7 @@ describe("recoverReplaces", () => {
       });
       const onFinished = vi.fn();
       let busy = true;
-      retryReplaceRecovery({
+      retryRecovery({
         leftoverIds: new Set(["a"]),
         recover,
         remainingIds: () => left,
@@ -341,7 +341,7 @@ describe("recoverReplaces", () => {
 
   // A crash during a Replace that filled the disk must not keep the app from starting.
   it("never throws when the journal can't be written", async () => {
-    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
     const finished = createEntry("finished");
     await writeFile(finished.stagingPath, "new contents");
     await journal.add(finished);
@@ -354,21 +354,91 @@ describe("recoverReplaces", () => {
     };
 
     await expect(
-      recoverReplaces(failingJournal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger),
+      recoverWrites(failingJournal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger),
     ).resolves.toEqual({ notices: [], finished: [] });
     expect(await readFile(finished.finalPath, "utf8")).toBe("new contents");
     expect(logger.error).toHaveBeenCalledWith(
-      "[filetrail] couldn't update the replace journal",
+      "[filetrail] couldn't update the write journal",
       expect.any(Error),
     );
   });
 
-  it("does nothing when there is nothing to recover", async () => {
-    const filePath = join(testDir, "replace-journal.json");
-    const journal = await openReplaceJournal(filePath);
+  // A large file a crash cut short while it was being copied: only part of a copy, its
+  // original in place. It is removed; anything else at that path, or of another name, stays.
+  it("removes the part of a large file left by a crash, and nothing else", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const partial = join(testDir, ".movie.mov.filetrail-0a1b2c3d");
+    await writeFile(partial, "part of it");
+    const notOurs = join(testDir, "notes.txt");
+    await writeFile(notOurs, "someone's notes");
+    const folder = join(testDir, ".shot.mov.filetrail-99999999");
+    await mkdir(folder);
+    for (const [id, partialPath] of [
+      ["partial", partial],
+      ["not-ours", notOurs],
+      ["folder", folder],
+      ["gone", join(testDir, ".gone.mov.filetrail-11111111")],
+    ] as const) {
+      await journal.add({ kind: "partial_file", id, partialPath, finalPath: join(testDir, id) });
+    }
     const logger = { info: vi.fn(), error: vi.fn() };
 
-    await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
+    expect(await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger)).toEqual({
+      notices: [],
+      finished: [],
+    });
+
+    expect((await readdir(testDir)).sort()).toEqual([
+      ".shot.mov.filetrail-99999999",
+      "notes.txt",
+      "replace-journal.json",
+    ]);
+    expect(journal.entries()).toEqual([]);
+    // Kept for a later try when its disk can't be read.
+    const unreachable = join(testDir, "gone-disk", ".big.filetrail-22222222");
+    await journal.add({
+      kind: "partial_file",
+      id: "away",
+      partialPath: unreachable,
+      finalPath: "x",
+    });
+    await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
+    expect(journal.entries().map((entry) => entry.id)).toEqual(["away"]);
+    expect(logger.info).toHaveBeenCalledWith(
+      "[filetrail] an interrupted copy wasn't removed",
+      expect.objectContaining({ partialPath: unreachable }),
+    );
+  });
+
+  it("reads both kinds of entry back, and leaves out what it can't read", async () => {
+    const filePath = join(testDir, "replace-journal.json");
+    await writeFile(
+      filePath,
+      JSON.stringify([
+        createEntry("old"),
+        {
+          kind: "partial_file",
+          id: "p",
+          partialPath: "/a/.b.filetrail-00000000",
+          finalPath: "/a/b",
+        },
+        { kind: "partial_file", id: "broken" },
+        { kind: "something_newer", id: "n", finalPath: "/x" },
+      ]),
+    );
+
+    expect((await openWriteJournal(filePath)).entries().map((entry) => entry.id)).toEqual([
+      "old",
+      "p",
+    ]);
+  });
+
+  it("does nothing when there is nothing to recover", async () => {
+    const filePath = join(testDir, "replace-journal.json");
+    const journal = await openWriteJournal(filePath);
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
 
     expect(logger.info).not.toHaveBeenCalled();
     expect(existsSync(filePath)).toBe(false);

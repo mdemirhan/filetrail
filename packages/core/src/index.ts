@@ -12,11 +12,17 @@ export {
 } from "./fs/copyPasteErrors";
 export { fileIdOf } from "./fs/copyPasteFingerprint";
 export { unlockForMove } from "./fs/copyPasteExecution";
-export { isAppleDoubleOnItsVolume, removeEmptyFolder } from "./fs/writeServiceTypes";
 export {
+  isAppleDoubleOnItsVolume,
+  isReplaceJournalEntry,
+  removeEmptyFolder,
+} from "./fs/writeServiceTypes";
+export {
+  type PartialFileRecoveryOutcome,
   type ReplaceRecoveryOutcome,
   type RunWriteAlone,
   recoverInterruptedReplaces,
+  recoverPartialFiles,
 } from "./fs/copyPasteRecovery";
 export { createStoppableCopyFile, type NativeCopyFile } from "./fs/stoppableCopy";
 export {

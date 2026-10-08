@@ -20,7 +20,7 @@ import {
   type CopyPasteRuntimeConflict,
   type CopyPasteRuntimeResolutionAction,
   DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-  type ReplaceJournal,
+  type WriteJournal,
   type WriteServiceFileSystem,
   isAppleDoubleOnItsVolume,
 } from "./writeServiceTypes";
@@ -85,7 +85,7 @@ export async function runPaste(args: {
   policy?: CopyPastePolicy;
   fileSystem?: WriteServiceFileSystem;
   signal?: AbortSignal;
-  replaceJournal?: ReplaceJournal;
+  writeJournal?: WriteJournal;
   // Runs after the review and before the paste: what changes on disk in between.
   beforeExecute?: () => Promise<void>;
   resolve?: (conflict: CopyPasteRuntimeConflict) => CopyPasteRuntimeResolutionAction | null;
@@ -121,7 +121,7 @@ export async function runPaste(args: {
     now: () => new Date(),
     signal: args.signal ?? new AbortController().signal,
     resolvedNodes,
-    ...(args.replaceJournal ? { replaceJournal: args.replaceJournal } : {}),
+    ...(args.writeJournal ? { writeJournal: args.writeJournal } : {}),
     emit: (event) => {
       events.push(event);
       result = event.result ?? result;

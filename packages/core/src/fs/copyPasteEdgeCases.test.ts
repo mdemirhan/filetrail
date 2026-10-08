@@ -20,6 +20,7 @@ import type {
   ReplaceJournalEntry,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
+import { type WriteJournalEntry, isReplaceJournalEntry } from "./writeServiceTypes";
 
 const REPLACE_ALL: CopyPastePolicy = {
   file: "overwrite",
@@ -41,8 +42,10 @@ function recordingJournal() {
   return {
     live,
     journal: {
-      add: async (entry: ReplaceJournalEntry) => {
-        live.set(entry.id, entry);
+      add: async (entry: WriteJournalEntry) => {
+        if (isReplaceJournalEntry(entry)) {
+          live.set(entry.id, entry);
+        }
       },
       remove: async (id: string) => {
         live.delete(id);
@@ -60,7 +63,7 @@ async function paste(args: {
   controller?: AbortController;
   beforeExecute?: () => void;
   resolve?: (conflict: CopyPasteRuntimeConflict) => CopyPasteRuntimeResolutionAction | null;
-  replaceJournal?: ReturnType<typeof recordingJournal>["journal"];
+  writeJournal?: ReturnType<typeof recordingJournal>["journal"];
 }) {
   const mode = args.mode ?? "copy";
   const policy = args.policy ?? MERGE;
@@ -91,7 +94,7 @@ async function paste(args: {
     now: () => new Date("2026-10-03T00:00:00.000Z"),
     signal: (args.controller ?? new AbortController()).signal,
     resolvedNodes,
-    ...(args.replaceJournal ? { replaceJournal: args.replaceJournal } : {}),
+    ...(args.writeJournal ? { writeJournal: args.writeJournal } : {}),
     emit: (event) => {
       result = event.result ?? result;
     },
@@ -315,7 +318,7 @@ describe("stopping part way", () => {
       sourcePaths: ["/source/Docs"],
       policy: REPLACE_ALL,
       controller,
-      replaceJournal: journal,
+      writeJournal: journal,
     });
 
     expect(result.status).toBe("cancelled");
@@ -385,7 +388,7 @@ describe("the last step of a Replace", () => {
       fileSystem,
       sourcePaths: ["/source/a.txt"],
       policy: REPLACE_ALL,
-      replaceJournal: journal,
+      writeJournal: journal,
     });
 
     expect(itemFor(result, "/source/a.txt")?.error).toBe(

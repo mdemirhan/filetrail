@@ -34,7 +34,7 @@ export default defineConfig({
         "packages/core/src/fs/stoppableCopy.ts",
         "packages/core/src/fs/undoLog.ts",
         "packages/contracts/src/{copyPasteChoices,itemName,paths,trash,writeEffects}.ts",
-        "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds,diskHasTrash,batchRenameExecution,batchRenameInspect,undoHistory,undoPlan,undoExecution}.ts",
+        "apps/desktop/src/main/bootstrap/{writeOperations,writeJournal,trashItem,diskIds,diskHasTrash,batchRenameExecution,batchRenameInspect,undoHistory,undoPlan,undoExecution}.ts",
         // Folder sizes: what a write does to the sizes shown, and how they are measured.
         "apps/desktop/src/main/bootstrap/{responseCache,folderSizeAdjust,folderSizeCache}.ts",
         "apps/desktop/src/renderer/hooks/{useFolderSizeCache,useAutoFolderSize}.ts",
