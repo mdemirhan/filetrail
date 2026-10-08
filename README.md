@@ -14,8 +14,8 @@ Finder covers the basics. File Trail is for the things it gets wrong or leaves o
 - **Search that keeps up with your typing.** By name or full path, in plain text, glob or regex, with nothing to index first.
 - **Rename a batch and see every new name first.** Replace, add, number, date or change case, with a preview of each name and presets for the renames you repeat.
 - **A folder tree, not just a sidebar.** You see where you are and what is around it.
-- **Tabs that keep their place, and a clipboard you can see.** What you copied stays marked until you paste it.
-- **Folder sizes when you ask.** One click measures a folder and everything in it.
+- **Tabs and windows that keep their place, and a clipboard you can see.** What you copied stays marked until you paste it.
+- **Folder sizes when you want them.** Select a folder with the Info panel open and it is measured; one click measures any other, and everything in it.
 - **Yours to arrange.** The toolbar, the keyboard shortcuts and the accent color are up to you.
 
 Everything else works the way you expect a Mac app to.
@@ -50,9 +50,9 @@ Find and replace can use regular expressions. Photos can be named by the date th
 
 Ask for a folder's size and File Trail measures it, and every folder inside it, in one pass. Sort the List view by Size and each row gets a bar, so the heavy folders stand out before you read a number. The first screenshot on this page shows it.
 
-Sizes are worked out when you ask, not while you browse, so opening a large folder stays instant.
+Sizes are worked out for the folder you select or ask about, never for everything you pass while browsing, so opening a large folder stays instant. With the Info panel open, a folder you select in your home folder is measured by itself; Settings can turn that off.
 
-## Tabs, and a clipboard you can see
+## Tabs, windows, and a clipboard you can see
 
 <p align="center">
   <img src="docs/screenshots/clipboard.png" alt="Four files copied in one tab, with the toolbar's clipboard list open" width="900">
@@ -60,11 +60,13 @@ Sizes are worked out when you ask, not while you browse, so opening a large fold
 
 Every tab has its own folder, history, folder tree, view, sort order and search. Copy in one tab and paste in another, or drag items onto a tab to move them there.
 
+Open as many windows as you like (⌘N), each with its own tabs, folder tree and Info panel. Move a tab into a window of its own, or merge every window back into one. Copy in one window and paste in another, or drag items between them. Close the last window and File Trail stays open, as Finder does, and the windows you had open come back at the next launch.
+
 Copying a folder by mistake is easy to do and annoying to discover later, so File Trail makes the clipboard visible. Copied and cut items stay marked until they are pasted. A button in the toolbar counts them, and opens a list where you can jump to an item, take one off, or clear the lot.
 
 When a paste would overwrite something, you decide what happens: Skip, Keep Both, Replace, or for folders, Add Missing, which copies only what the folder there lacks. Anything replaced goes to the Trash.
 
-Changed your mind? Edit › Undo (⌘Z) takes back renames, moves, Move to Trash, New Folder, copies, duplicates and Replace, one at a time, and Redo (⇧⌘Z) does them again. Each item is checked before anything moves, and Undo asks first if you have changed something since. Nothing is overwritten or deleted: what Undo takes away goes to the Trash. Merging folders, moving to another disk and deleting for good can't be undone, and File Trail tells you before you merge.
+Changed your mind? Edit › Undo (⌘Z) takes back renames, moves, Move to Trash, New Folder, copies, duplicates and Replace, one at a time, and Redo (⇧⌘Z) does them again. Each item is checked before anything moves, and Undo asks first if you have changed something since. Nothing is overwritten or deleted: what Undo takes away goes to the Trash. Merging folders, moving to another disk, copying onto a network share and deleting for good can't be undone, and File Trail tells you before you merge.
 
 ## Three views, with real previews
 
@@ -83,6 +85,7 @@ Dates read the way you would say them ("24 min ago", "Yesterday, 6:03 PM"), and 
 </p>
 
 - **The sidebar** has your favorites, and Locations as in Finder: Home, Macintosh HD, any other disks, and the Trash.
+- **The Go menu** takes you to Home, Documents, Desktop, Downloads, Library, Macintosh HD, Applications or the Trash, as Finder's does. Each place can have a shortcut of its own.
 - **The folder tree** shows the folder you are in and the ones around it. Open a folder's arrow to look inside without leaving where you are, or make one folder the top of the tree while you work inside a project. Hide the tree when you want the room.
 - **Go To (⌘K)** finds any folder you have opened before, or a favorite, from a few letters of its name. The folders you use most come first. Start with `/` or `~` to type a path, and Tab completes it.
 - **Type in the file list** to narrow it to the names containing what you typed. There is no field to click first: the best match is selected, Backspace edits what you typed, and Esc brings the rest back. Press ⌘F and the same text becomes a search of the subfolders.
@@ -116,7 +119,8 @@ Settings also covers the everyday choices: which app edits text files and which 
 - Favorites in the sidebar, with an icon of your choice for each, in the order you drag them to
 - Open in Terminal and Copy Path on a key, and Open With for the apps you choose
 - Duplicate, Move To, New Folder and Move to Trash, with the Info panel and Quick Look a key away
-- Drag items out to Finder, the desktop or any app, as from Finder
+- Drag items in from Finder or other apps, and out to Finder, the desktop or any app, as from Finder
+- The folder on screen stays current: what other apps add, rename or remove there shows up as it happens
 - Hidden files on a key (⇧⌘.), and folders kept first when you want them
 - Every command on a keyboard shortcut, shown in the menus and listed in the built-in Help
 
