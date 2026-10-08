@@ -1,4 +1,10 @@
-import { createChangeMatcher, isAffectedByChange, pathsChangedByWrite } from "./writeEffects";
+import {
+  createChangeMatcher,
+  isAffectedByChange,
+  isFollowedMove,
+  itemsForOtherWindows,
+  pathsChangedByWrite,
+} from "./writeEffects";
 
 describe("pathsChangedByWrite", () => {
   it("lists the folder written into and every item moved, made or removed", () => {
@@ -116,5 +122,46 @@ describe("createChangeMatcher", () => {
     // Well under 100 ms on a laptop; the bound only catches going back to every pair.
     expect(performance.now() - started).toBeLessThan(2_000);
     expect(affected).toEqual([]);
+  });
+});
+
+describe("itemsForOtherWindows", () => {
+  const item = (
+    sourcePath: string | null,
+    destinationPath: string | null,
+    status = "completed",
+  ) => ({
+    sourcePath,
+    destinationPath,
+    status,
+  });
+
+  it("leaves out an item in a folder already known to hold what changed", () => {
+    const items = [
+      item("/a/F", "/b/F"),
+      item("/a/F/x", "/b/F/x"),
+      item("/a/F/y", "/b/F/y"),
+      item("/a/F/z", null),
+    ];
+    expect(itemsForOtherWindows({ action: "paste", targetPath: "/b", items })).toEqual(
+      items.slice(0, 2),
+    );
+  });
+
+  it("takes a change written with a trailing slash as holding what is inside it", () => {
+    const items = [item("/b/x", null), item("/b/y", null)];
+    expect(itemsForOtherWindows({ action: "trash", targetPath: "/b/", items })).toEqual([]);
+  });
+
+  it("keeps an item a tab would follow on its own", () => {
+    const items = [item("/a/F", "/b/F", "failed"), item("/a/F/x", "/b/F/x")];
+    expect(itemsForOtherWindows({ action: "move_to", items })).toEqual(items);
+    expect(isFollowedMove(items[0] as (typeof items)[number], "batch_rename")).toBe(true);
+    expect(isFollowedMove(item("/a", "/a"), "rename")).toBe(false);
+  });
+
+  it("goes by the names alone for paths that aren't absolute", () => {
+    const items = [item("x", null), item("x", null), item("y", "")];
+    expect(itemsForOtherWindows({ action: "trash", items })).toEqual([items[0], items[2]]);
   });
 });

@@ -10,6 +10,7 @@ import {
   isAbortError,
   isInsideTrash,
   isTrashFolder,
+  itemsForOtherWindows,
   pathsChangedByWrite,
   withoutNestedPaths,
   writeOperationProgressEventSchema,
@@ -654,7 +655,7 @@ export function createWriteOperationCoordinator(
 
   function broadcast(payload: WriteOperationProgressEvent, owner: WriteOperationSender): void {
     try {
-      options.broadcastProgress?.(payload, owner);
+      options.broadcastProgress?.(forOtherWindows(payload), owner);
     } catch (error) {
       // The other windows miss this update; the operation, and its own window, go on.
       console.error("[filetrail] couldn't tell the other windows about an operation", error);
@@ -2385,6 +2386,14 @@ function parseOwnProgressEvent(event: WriteOperationProgressEvent): WriteOperati
     result: { ...event.result, items: [] },
   });
   return { ...parsed, result: parsed.result && { ...parsed.result, items } };
+}
+
+// What the other windows are told of an operation: all of it but the result's items they
+// don't need (see itemsForOtherWindows). Its own window gets everything.
+function forOtherWindows(event: WriteOperationProgressEvent): WriteOperationProgressEvent {
+  return event.result === null
+    ? event
+    : { ...event, result: { ...event.result, items: itemsForOtherWindows(event.result) } };
 }
 
 // The window's view of a write service event.

@@ -301,6 +301,71 @@ describe("a paste ending", () => {
   });
 });
 
+describe("the other windows", () => {
+  // A paste of a large folder lists every file in it: each other window used to be sent
+  // them all, and went through them all.
+  it("are told of the items a paste worked on, but not of every item inside them", async () => {
+    const { writeService, emit } = createWriteServiceStub();
+    const broadcastProgress = vi.fn();
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { broadcastProgress },
+    );
+    const owner = createWindow();
+    await analyze(coordinator, owner, ["/Users/demo/Folder"]);
+    await paste(coordinator, owner);
+    const item = (path: string, sourceKind: string) => ({
+      sourcePath: `/Users/demo/${path}`,
+      destinationPath: `/Users/demo/b/${path}`,
+      sourceKind,
+      status: "completed",
+      error: null,
+      skipReason: null,
+    });
+    const items = [
+      item("Folder", "directory"),
+      ...["a", "b", "c"].map((name) => item(`Folder/${name}.txt`, "file")),
+    ];
+    emit(
+      copyEvent("completed", {
+        result: {
+          operationId: "copy-op-1",
+          mode: "copy",
+          status: "completed",
+          destinationDirectoryPath: "/Users/demo/b",
+          startedAt: "2026-10-08T10:00:00.000Z",
+          finishedAt: "2026-10-08T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 4,
+            completedItemCount: 4,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 2,
+            totalBytes: 2,
+          },
+          items,
+          error: null,
+        },
+      }),
+    );
+
+    const ownView = items.map(({ sourceKind: _sourceKind, ...rest }) => rest);
+    expect((await waitForEnd(owner, "copy-op-1")).result?.items).toEqual(ownView);
+    const toOthers = broadcastProgress.mock.calls
+      .map(([event]) => event as WriteOperationProgressEvent)
+      .find((event) => event.status === "completed");
+    // The folder, and one item in it, so the folder is seen to hold what changed.
+    expect(toOthers?.result).toMatchObject({
+      targetPath: "/Users/demo/b",
+      items: ownView.slice(0, 2),
+    });
+    await coordinator.shutdown();
+  });
+});
+
 describe("a window taking over an operation", () => {
   it("is told the cut a paste clears from the clipboard when it is done", async () => {
     const { writeService, emit } = createWriteServiceStub();

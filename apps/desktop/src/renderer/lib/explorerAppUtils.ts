@@ -1,6 +1,7 @@
 import {
   type WriteOperationAction,
   type WriteOperationProgressEvent,
+  isFollowedMove,
   isInsideTrash,
 } from "@filetrail/contracts";
 
@@ -458,10 +459,7 @@ export function collectFollowedMoves(
   result: WriteOperationResult,
 ): Array<{ from: string; to: string }> {
   return result.items.flatMap((item) =>
-    item.sourcePath &&
-    item.destinationPath &&
-    item.destinationPath !== item.sourcePath &&
-    (item.status === "completed" || result.action === "batch_rename")
+    isFollowedMove(item, result.action) && item.sourcePath && item.destinationPath
       ? [{ from: item.sourcePath, to: item.destinationPath }]
       : [],
   );
