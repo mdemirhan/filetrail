@@ -25,6 +25,7 @@ import {
   checkMove,
   checkTrash,
   missingReason,
+  placeKey,
   reverseStep,
 } from "./undoPlan";
 import type { WriteOperationFs } from "./writeOperations";
@@ -456,6 +457,12 @@ async function renameBack(
   }
   let renamed: Extract<UndoStep, { kind: "batchRenamed" }>["items"] = [];
   let cancelled = false;
+  // Items whose rename failed, or that a stop reached part way, and where each is now:
+  // still where it was, or under another name than its own when another item had taken
+  // its name meanwhile ("b 2", or the hidden name it waited under). They are tried again.
+  const again = new Map<string, string>();
+  // Items a stop didn't reach at all.
+  const notReached = new Set<string>();
   if (toRename.length > 0) {
     const batch = await runBatchRename({
       request: {
@@ -467,53 +474,78 @@ async function renameBack(
       signal: args.signal,
     });
     cancelled = batch.cancelled;
-    items.push(...batch.items);
-    renamed = await movedItemsOf(fs.lstat, batch.items);
+    items.push(...batch.items.filter((item) => item.status !== "cancelled"));
+    for (const item of batch.items) {
+      if (item.sourcePath === null || item.status === "completed") {
+        continue;
+      }
+      if (item.status === "cancelled" && item.destinationPath === null) {
+        notReached.add(item.sourcePath);
+        continue;
+      }
+      const at = item.destinationPath ?? item.sourcePath;
+      if ((await readItemRef(fs.lstat, at)).kind !== null) {
+        again.set(item.sourcePath, at);
+      }
+    }
+    // An item that took a number because the name it goes back to is held by an item of
+    // the batch tried again (two that swap names, one of them locked): it waits for that
+    // one too, rather than keep the number.
+    const held = new Set([...again.values()].map(placeKey));
+    const wanted = new Map(
+      toRename.map((item) => [
+        item.sourcePath,
+        join(dirname(item.sourcePath), item.destinationName),
+      ]),
+    );
+    const done: ResultItem[] = [];
+    for (const item of batch.items) {
+      if (item.status !== "completed" || item.sourcePath === null) {
+        continue;
+      }
+      const target = wanted.get(item.sourcePath);
+      if (
+        item.destinationPath !== null &&
+        target !== undefined &&
+        item.destinationPath !== target &&
+        held.has(placeKey(target))
+      ) {
+        again.set(item.sourcePath, item.destinationPath);
+      } else {
+        done.push(item);
+      }
+    }
+    // An item an earlier try left part way goes back, on Redo, to where it was before that.
+    const wasAt = new Map(planned.items.map((item) => [item.from, item.wasAt ?? item.from]));
+    renamed = (await movedItemsOf(fs.lstat, done)).map((item) => ({
+      ...item,
+      from: wasAt.get(item.from) ?? item.from,
+    }));
   }
   const produced: UndoStep | null =
     renamed.length > 0 ? { kind: "batchRenamed", items: renamed } : null;
-  // What is left of the step, as the operation named it: the items `keep` takes.
-  const leftOf = (keep: (from: string) => boolean): UndoStep => ({
+  // What is left of the step, as the operation named it, each item where it is now.
+  const leftover: UndoStep = {
     kind: "batchRenamed",
     items: planned.items
-      .filter((item) => keep(item.from))
-      .map((item) => ({ from: item.to, to: item.from, id: item.id, itemKind: item.itemKind })),
-  });
-  // Items whose rename failed and which are still where they were: they are tried again.
-  const failedInPlace = new Set<string>();
-  for (const item of items) {
-    if (
-      item.status === "failed" &&
-      item.sourcePath !== null &&
-      item.destinationPath === null &&
-      (await readItemRef(fs.lstat, item.sourcePath)).kind !== null
-    ) {
-      failedInPlace.add(item.sourcePath);
-    }
-  }
+      .filter((item) => notReached.has(item.from) || again.has(item.from))
+      .map((item) => {
+        const at = again.get(item.from) ?? item.from;
+        const wasAt = at === item.from ? item.wasAt : (item.wasAt ?? item.from);
+        return {
+          from: item.to,
+          to: at,
+          id: item.id,
+          itemKind: item.itemKind,
+          ...(wasAt ? { wasAt } : {}),
+        };
+      }),
+  };
   if (cancelled) {
-    // The items not reached keep their place in the history, as the operation named them.
-    // (An item not reached that still had to be moved aside is somewhere else now: it is
-    // in what was done.)
-    const reached = new Set(
-      items
-        .filter((item) => item.status !== "cancelled" || item.destinationPath !== null)
-        .map((item) => item.sourcePath),
-    );
-    return {
-      status: "stopped",
-      produced,
-      items: items.filter((item) => item.status !== "cancelled"),
-      leftover: leftOf((from) => !reached.has(from) || failedInPlace.has(from)),
-    };
+    return { status: "stopped", produced, items, leftover };
   }
-  if (failedInPlace.size > 0) {
-    return {
-      status: "failed",
-      produced,
-      items,
-      leftover: leftOf((from) => failedInPlace.has(from)),
-    };
+  if (again.size > 0) {
+    return { status: "failed", produced, items, leftover };
   }
   return produced
     ? { status: "done", produced, items, removed: null }

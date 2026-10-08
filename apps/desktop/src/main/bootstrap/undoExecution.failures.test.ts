@@ -189,6 +189,43 @@ describe("a write that fails", () => {
     await t.coordinator.shutdown();
   });
 
+  it("swaps two names back in two tries when one item failed the first time", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    let failOnce = false;
+    const t = setUpUndo(root, trashDir, {
+      renameExclusive: async (from, to) => {
+        // The item now named "a.txt" can't be moved aside, once.
+        if (failOnce && from === join(root, "a.txt")) {
+          failOnce = false;
+          throw permissionDenied();
+        }
+        await originalRenameExclusive(from, to);
+      },
+    });
+    const before = snapshot();
+    await t.batchRename([
+      [join(root, "a.txt"), "b.txt"],
+      [join(root, "b.txt"), "a.txt"],
+    ]);
+    const after = snapshot();
+    failOnce = true;
+
+    expect((await t.undo()).status).toBe("partial");
+    // The other one took a number rather than wait, and waits now under it: nothing is
+    // undone yet, both are tried again.
+    expect(readFileSync(join(root, "a 2.txt"), "utf8")).toBe("a");
+    expect(t.history.menu()).toEqual({ undo: "Rename of 2 Items", redo: null, cantUndo: false });
+
+    expect((await t.undo()).status).toBe("completed");
+    expect(snapshot()).toEqual(before);
+    expect(t.history.menu()).toEqual({ undo: null, redo: "Rename of 2 Items", cantUndo: false });
+
+    expect((await t.undo("redo")).status).toBe("completed");
+    expect(snapshot()).toEqual(after);
+    await t.coordinator.shutdown();
+  });
+
   it("keeps a copy on a disk without a Trash on the Undo list, and says why", async () => {
     const t = setUpUndo(root, trashDir, {
       trash: async () => {

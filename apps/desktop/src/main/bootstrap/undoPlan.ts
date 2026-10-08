@@ -36,7 +36,13 @@ export type PlannedStep =
   // Renames each item at `from` back to the name in `to`, as one batch.
   | {
       kind: "batch";
-      items: Array<{ from: string; to: string; id: ItemId | null; itemKind: ItemKind | null }>;
+      items: Array<{
+        from: string;
+        to: string;
+        id: ItemId | null;
+        itemKind: ItemKind | null;
+        wasAt?: string;
+      }>;
     };
 
 export function reverseStep(step: UndoStep): PlannedStep {
@@ -76,6 +82,7 @@ export function reverseStep(step: UndoStep): PlannedStep {
           to: item.from,
           id: item.id,
           itemKind: item.itemKind,
+          ...(item.wasAt ? { wasAt: item.wasAt } : {}),
         })),
       };
   }
@@ -132,7 +139,7 @@ function idKey(id: ItemId): string {
 // A place compared as a disk that ignores case and accent encoding does, as the Mac's disks
 // do: on one that minds case, two names that differ only in case are at worst asked about
 // though only one of them is taken.
-function placeKey(path: string): string {
+export function placeKey(path: string): string {
   return path.normalize("NFD").toLowerCase();
 }
 

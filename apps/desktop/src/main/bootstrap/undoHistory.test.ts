@@ -134,6 +134,50 @@ describe("createUndoHistory", () => {
   });
 });
 
+describe("an Undo done in two tries", () => {
+  const renamed = (from: string, to: string): UndoStep => ({
+    kind: "batchRenamed",
+    items: [{ from, to, id: ID, itemKind: "file" }],
+  });
+
+  it("redoes the two parts of a batch rename as one batch", () => {
+    const history = createUndoHistory();
+    history.record(undoable("batch_rename", [renamed("/a", "/b"), renamed("/b", "/a")]));
+    const entry = history.top("undo");
+    history.finish("undo", entry?.id ?? -1, {
+      done: units([renamed("/b", "/a")]),
+      leftover: units([renamed("/a", "/b")]),
+    });
+    history.finish("undo", entry?.id ?? -1, { done: units([renamed("/a", "/b")]), leftover: [] });
+
+    expect(history.top("redo")?.units).toEqual(
+      units([
+        {
+          kind: "batchRenamed",
+          items: [
+            { from: "/b", to: "/a", id: ID, itemKind: "file" },
+            { from: "/a", to: "/b", id: ID, itemKind: "file" },
+          ],
+        },
+      ]),
+    );
+    expect(history.menu().redo).toBe("Rename of 2 Items");
+  });
+
+  it("keeps other parts apart, each to redo on its own", () => {
+    const history = createUndoHistory();
+    history.record(undoable("trash", [trashed("/a")], [trashed("/b")]));
+    const entry = history.top("undo");
+    history.finish("undo", entry?.id ?? -1, {
+      done: units([moved("/T/b", "/b")]),
+      leftover: units([trashed("/a")]),
+    });
+    history.finish("undo", entry?.id ?? -1, { done: units([moved("/T/a", "/a")]), leftover: [] });
+
+    expect(history.top("redo")?.units).toEqual(units([moved("/T/a", "/a")]));
+  });
+});
+
 describe("an entry's name", () => {
   it("stays a Move when what is left of a moving Replace is its trip to the Trash", () => {
     const history = createUndoHistory();
