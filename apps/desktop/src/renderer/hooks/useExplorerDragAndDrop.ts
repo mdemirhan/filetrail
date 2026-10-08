@@ -104,10 +104,11 @@ export type SpringLoading = {
 };
 
 // The drag that sprang into folders, and, for each tab it sprang in, where that tab was
-// before its first spring and whether a folder has opened in it yet.
+// before its first spring, whether a folder has opened in it yet, and how many folders are
+// still opening in it.
 type Springs = {
   session: InternalDragSession;
-  tabs: Map<string, { start: unknown; opened: boolean }>;
+  tabs: Map<string, { start: unknown; opened: boolean; opening: number }>;
 };
 
 // The window's own system drag, from its start until its end is heard (or found to have
@@ -1241,14 +1242,17 @@ export function useExplorerDragAndDrop(args: {
     const { tabId } = springLoading;
     let tab = springs.tabs.get(tabId);
     if (!tab) {
-      tab = { start: springLoading.remember(), opened: false };
+      tab = { start: springLoading.remember(), opened: false, opening: 0 };
       springs.tabs.set(tabId, tab);
     }
+    tab.opening += 1;
     const opened = await openFolder(path).catch(() => false);
+    tab.opening -= 1;
     if (opened) {
       tab.opened = true;
-    } else if (!tab.opened) {
-      // Nothing opened in the tab: it is where it was.
+    } else if (!tab.opened && tab.opening === 0 && springs.tabs.get(tabId) === tab) {
+      // Nothing opened in the tab: it is where it was. (One overtaken by a later spring in
+      // the tab answers that it didn't open; the later one decides.)
       springs.tabs.delete(tabId);
     }
   }

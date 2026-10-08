@@ -231,6 +231,36 @@ describe("springing in several tabs", () => {
   });
 });
 
+describe("two springs in one tab, the second before the first has opened", () => {
+  it("still bring the tab back when the drag ends without a drop", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    // Both folders are slow to read.
+    const releaseFolder = harness.holdDirectorySnapshot(folder);
+    const releaseOther = harness.holdDirectorySnapshot(other);
+    await holdOver(folder, 1600, dataTransfer);
+    await holdOver(other, 1600, dataTransfer, { clientX: 60, clientY: 60 });
+    await act(async () => {
+      releaseFolder();
+    });
+    await act(async () => {
+      releaseOther();
+    });
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(other);
+    });
+    await endDrag(harness, "none");
+
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(home);
+    });
+  });
+});
+
 describe("a folder that can't be sprung into", () => {
   it("leaves the drag as it was: the folder on screen still takes no drop on its empty space", async () => {
     const harness = harnessWithFolders();
