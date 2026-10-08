@@ -87,6 +87,39 @@ describe("starting an Undo", () => {
     await t.coordinator.shutdown();
   });
 
+  it("starts each window's Undo with what that window was asked", async () => {
+    writeFileSync(join(root, "x.txt"), "x");
+    writeFileSync(join(root, "y.txt"), "y");
+    mkdirSync(join(root, "D"));
+    const t = setUpUndo(root, trashDir);
+    await paste(t.history, {
+      mode: "copy",
+      sourcePaths: [join(root, "x.txt"), join(root, "y.txt")],
+      destinationDirectoryPath: join(root, "D"),
+    });
+    writeFileSync(join(root, "D", "x.txt"), "edited x");
+    const first = await t.prepare();
+    expect(first.changed.map((item) => item.name)).toEqual(["x.txt"]);
+    // While the first window asks about "x.txt", "y.txt" is edited, and a second window
+    // looks at the same Undo.
+    writeFileSync(join(root, "D", "y.txt"), "edited y");
+    const second = await t.prepare();
+    expect(second.changed.map((item) => item.name)).toEqual(["y.txt", "x.txt"]);
+
+    // The first window's answer covers only "x.txt".
+    await expect(
+      t.coordinator.handlers["undo:start"]({ ticket: first.ticket ?? "" }, { sender: t.sender }),
+    ).rejects.toThrow("“y.txt” was changed after Undo was chosen. Choose Undo again.");
+    expect(readFileSync(join(root, "D", "y.txt"), "utf8")).toBe("edited y");
+
+    const undone = await t.finish(
+      t.coordinator.handlers["undo:start"]({ ticket: second.ticket ?? "" }, { sender: t.sender }),
+    );
+    expect(undone.status).toBe("completed");
+    expect(existsSync(join(root, "D", "y.txt"))).toBe(false);
+    await t.coordinator.shutdown();
+  });
+
   it("starts one Undo for two windows that chose it at once, and refuses the other", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     let holdRename: (() => void) | null = null;
@@ -104,7 +137,7 @@ describe("starting an Undo", () => {
     const otherWindow = { send: vi.fn() };
     const first = await t.prepare();
     const second = await t.coordinator.handlers["undo:prepare"]({ direction: "undo" });
-    expect(second.ticket).toBe(first.ticket);
+    expect(second.ticket).not.toBe(first.ticket);
 
     const started = await t.coordinator.handlers["undo:start"](
       { ticket: first.ticket ?? "" },

@@ -214,8 +214,18 @@ export function createWriteOperationCoordinator(
   // Set once the app starts quitting; no new operation may begin after that.
   let closing = false;
   // What each Undo or Redo looked at asked, by its ticket: starting it is refused when
-  // there is something to ask now that wasn't asked then.
-  const undoQuestionsAsked = new Map<string, Awaited<ReturnType<typeof findQuestions>>>();
+  // there is something to ask now that wasn't asked then. Each look gets a ticket of its
+  // own, so two windows looking at one Undo each start it with what they were asked.
+  const undoQuestionsAsked = new Map<
+    string,
+    {
+      direction: UndoDirection;
+      entryId: number;
+      generation: number;
+      questions: Awaited<ReturnType<typeof findQuestions>>;
+    }
+  >();
+  let undoTicketCount = 0;
 
   // ~/.Trash is a protected system directory — it must never be deleted, renamed,
   // moved, or trashed.  Items *inside* Trash are fine; this only guards the
@@ -1962,15 +1972,21 @@ export function createWriteOperationCoordinator(
           );
         }
         const generation = history.generation();
-        const ticket = `${payload.direction}:${entry.id}:${generation}`;
+        undoTicketCount += 1;
+        const ticket = `${payload.direction}:${entry.id}:${generation}:${undoTicketCount}`;
         const questions = await findQuestions(fs, entry.units);
         // Only tickets for the history as it is now can still be started.
-        for (const asked of undoQuestionsAsked.keys()) {
-          if (!asked.endsWith(`:${generation}`)) {
+        for (const [asked, look] of undoQuestionsAsked) {
+          if (look.generation !== history.generation()) {
             undoQuestionsAsked.delete(asked);
           }
         }
-        undoQuestionsAsked.set(ticket, questions);
+        undoQuestionsAsked.set(ticket, {
+          direction: payload.direction,
+          entryId: entry.id,
+          generation,
+          questions,
+        });
         return {
           ticket,
           refusal: null,
@@ -1983,29 +1999,26 @@ export function createWriteOperationCoordinator(
         payload: IpcRequest<"undo:start">,
         event: { sender: WriteOperationSender },
       ) => {
-        const [givenDirection, entryId, generation] = payload.ticket.split(":");
-        const direction: UndoDirection | null =
-          givenDirection === "undo" || givenDirection === "redo" ? givenDirection : null;
+        const look = undoQuestionsAsked.get(payload.ticket);
         const history = options.undoHistory;
         // Another operation, or another Undo, came in between: what was asked about may not
         // be what would be done now.
         const entryAsked = () => {
-          const entry = direction === null ? null : (history?.top(direction) ?? null);
+          const entry = look && history ? history.top(look.direction) : null;
           if (
             !history ||
+            !look ||
             !entry ||
-            direction === null ||
-            String(entry.id) !== entryId ||
-            String(history.generation()) !== generation
+            entry.id !== look.entryId ||
+            history.generation() !== look.generation
           ) {
             throw new Error("Something changed since Undo was chosen. Choose it again.");
           }
-          return { history, direction, entry };
+          return { history, direction: look.direction, entry, asked: look.questions };
         };
-        entryAsked();
         // Things may have changed on disk while the questions were open: what would be asked
         // now must have been asked and agreed to (each question is all or nothing).
-        const asked = undoQuestionsAsked.get(payload.ticket) ?? { nameTaken: [], changed: [] };
+        const { asked } = entryAsked();
         const now = await prepareWithReservedSlot(() =>
           findQuestions(fs, entryAsked().entry.units),
         );
