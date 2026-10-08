@@ -93,12 +93,16 @@ describe("useAutoFolderSize", () => {
       initialProps: { path: "/Users/demo/a" as string | null },
     });
     await waitOutDelay();
-    expect(sizes.calculateFolderSize).toHaveBeenCalledWith("/Users/demo/a");
+    expect(sizes.calculateFolderSize).toHaveBeenCalledWith("/Users/demo/a", false, {
+      automatic: true,
+    });
 
     rerender({ path: "/Users/demo/b" });
     expect(sizes.cancelFolderSize).toHaveBeenCalledWith("/Users/demo/a");
     await waitOutDelay();
-    expect(sizes.calculateFolderSize).toHaveBeenLastCalledWith("/Users/demo/b");
+    expect(sizes.calculateFolderSize).toHaveBeenLastCalledWith("/Users/demo/b", false, {
+      automatic: true,
+    });
 
     // The Info panel closed.
     rerender({ path: null });
@@ -115,7 +119,9 @@ describe("useAutoFolderSize", () => {
     });
     rerender({ path: "/Users/demo/b" });
     await waitOutDelay();
-    expect(sizes.calculateFolderSize.mock.calls).toEqual([["/Users/demo/b"]]);
+    expect(sizes.calculateFolderSize.mock.calls).toEqual([
+      ["/Users/demo/b", false, { automatic: true }],
+    ]);
   });
 
   it("leaves known sizes, failures and other calculations alone", async () => {

@@ -31,7 +31,11 @@ export function getAutoFolderSizePath(args: {
 type FolderSizes = {
   getEntry: (path: string) => FolderSizeEntry;
   isCalculating: () => boolean;
-  calculateFolderSize: (path: string) => Promise<void>;
+  calculateFolderSize: (
+    path: string,
+    recalculate: boolean,
+    options: { automatic: boolean },
+  ) => Promise<void>;
   cancelFolderSize: (path: string) => Promise<void>;
 };
 
@@ -60,7 +64,7 @@ export function useAutoFolderSize(path: string | null, folderSizes: FolderSizes)
       if (sizes.isCalculating() || sizes.getEntry(path).status !== "idle") {
         return;
       }
-      void sizes.calculateFolderSize(path).then(() => {
+      void sizes.calculateFolderSize(path, false, { automatic: true }).then(() => {
         const entry = folderSizesRef.current.getEntry(path);
         if (entry.status !== "calculating" || entry.jobId.length === 0) {
           return;

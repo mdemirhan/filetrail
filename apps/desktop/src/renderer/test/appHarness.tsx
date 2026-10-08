@@ -799,12 +799,12 @@ export function createAppHarness(
         } as IpcResponse<C>;
       }
       if (channel === "folderSize:start" && args.folderSizes) {
+        const { path } = payload as IpcRequestInput<"folderSize:start">;
+        return { jobId: `folder-size:${path}`, status: "ready" } as IpcResponse<C>;
+      }
+      if (channel === "folderSize:probeMany" && args.folderSizes) {
         // Nothing is known before it is calculated: a probe of the cache finds nothing.
-        const { path, probeOnly } = payload as IpcRequestInput<"folderSize:start">;
-        return {
-          jobId: `folder-size:${path}`,
-          status: probeOnly ? "deferred" : "ready",
-        } as IpcResponse<C>;
+        return { sizes: [] } as IpcResponse<C>;
       }
       if (channel === "folderSize:getStatus" && args.folderSizes) {
         const { jobId } = payload as IpcRequestInput<"folderSize:getStatus">;
