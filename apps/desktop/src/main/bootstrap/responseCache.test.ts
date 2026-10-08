@@ -595,6 +595,49 @@ describe("createFolderSizeHandlers", () => {
     });
   });
 
+  describe("the app quitting", () => {
+    it("stops the walk under way, and runs none of those waiting", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+      const running = handlers.start({ path: "/test/a" }, 1);
+      const waiting = handlers.start({ path: "/test/b" }, 2);
+
+      handlers.stopAll();
+      expect(native.cancelFolderSize).toHaveBeenCalledTimes(1);
+      native.rejectActive(Object.assign(new Error("cancelled"), { code: "ECANCELLED" }));
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(native.getFolderSize).toHaveBeenCalledTimes(1);
+      expect(handlers.getStatus({ jobId: running.jobId }).status).toBe("cancelled");
+      expect(handlers.getStatus({ jobId: waiting.jobId }).status).toBe("cancelled");
+    });
+
+    it("doesn't measure again a walk a write outdated", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+      handlers.start({ path: "/test" }, 1);
+      clearResponseCaches(["/test/new.txt"]);
+
+      handlers.stopAll();
+      native.rejectActive(Object.assign(new Error("cancelled"), { code: "ECANCELLED" }));
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(native.getFolderSize).toHaveBeenCalledTimes(1);
+    });
+
+    it("measures nothing asked for afterwards", () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+
+      handlers.stopAll();
+      const late = handlers.start({ path: "/test" }, 1);
+
+      expect(late.status).toBe("cancelled");
+      expect(native.getFolderSize).not.toHaveBeenCalled();
+      expect(native.cancelFolderSize).not.toHaveBeenCalled();
+    });
+  });
+
   describe("folders finished while measuring", () => {
     const tick = () => new Promise((r) => setTimeout(r, 0));
 

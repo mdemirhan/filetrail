@@ -33,6 +33,13 @@ type WorkerResponse<C extends WorkerSupportedChannel> =
       error: string;
     };
 
+// The worker's answer once it has stopped its searches, before it is ended.
+type WorkerClosed = { closed: true };
+
+// How long ending the worker waits for it to stop its searches: a worker busy in a
+// synchronous call answers late, and is ended anyway.
+export const WORKER_CLOSE_ANSWER_WITHIN_MS = 1_000;
+
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
@@ -42,10 +49,16 @@ export class ExplorerWorkerClient {
   private readonly worker: Worker;
   private readonly pending = new Map<string, PendingRequest>();
   private sequence = 0;
+  private onClosed: (() => void) | null = null;
+  private exited = false;
 
   constructor(workerUrl: URL, workerData?: unknown) {
     this.worker = new Worker(workerUrl, workerData === undefined ? undefined : { workerData });
-    this.worker.on("message", (message: WorkerResponse<WorkerSupportedChannel>) => {
+    this.worker.on("message", (message: WorkerResponse<WorkerSupportedChannel> | WorkerClosed) => {
+      if ("closed" in message) {
+        this.onClosed?.();
+        return;
+      }
       const pending = this.pending.get(message.id);
       if (!pending) {
         return;
@@ -64,6 +77,8 @@ export class ExplorerWorkerClient {
       this.pending.clear();
     });
     this.worker.on("exit", (code) => {
+      this.exited = true;
+      this.onClosed?.();
       if (code === 0) {
         return;
       }
@@ -92,7 +107,21 @@ export class ExplorerWorkerClient {
     });
   }
 
+  // The worker stops its searches first: their fd processes aren't ended with it, and
+  // would go on searching the disk after the app has quit.
   async close(): Promise<void> {
+    if (!this.exited) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(done, WORKER_CLOSE_ANSWER_WITHIN_MS);
+        function done(): void {
+          clearTimeout(timer);
+          resolve();
+        }
+        this.onClosed = done;
+        this.worker.postMessage({ close: true });
+      });
+      this.onClosed = null;
+    }
     await this.worker.terminate();
   }
 }

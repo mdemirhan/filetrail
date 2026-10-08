@@ -63,6 +63,10 @@ type WorkerRequest = {
   payload: unknown;
 };
 
+// Sent by the client before it ends the worker.
+type WorkerCloseRequest = { close: true };
+type WorkerClosed = { closed: true };
+
 type WorkerResponse =
   | {
       id: string;
@@ -92,7 +96,14 @@ const normalPriorityQueue: WorkerRequest[] = [];
 const lowPriorityQueue: WorkerRequest[] = [];
 let processing = false;
 
-parentPort.on("message", (message: WorkerRequest) => {
+parentPort.on("message", (message: WorkerRequest | WorkerCloseRequest) => {
+  // Answered at once, ahead of the queue: the searches' fd processes are stopped before
+  // the worker is, as they would otherwise go on searching after the app has quit.
+  if ("close" in message) {
+    void searchRuntime.close();
+    parentPort?.postMessage({ closed: true } satisfies WorkerClosed);
+    return;
+  }
   getQueue(message.channel).push(message);
   if (!processing) {
     void processQueue();

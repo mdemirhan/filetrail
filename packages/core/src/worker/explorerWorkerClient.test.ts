@@ -115,13 +115,48 @@ describe("ExplorerWorkerClient", () => {
     await expect(third).rejects.toThrow("Explorer worker exited with code 2.");
   });
 
-  it("terminates the worker during close", async () => {
+  it("has the worker stop its searches before ending it", async () => {
     const { ExplorerWorkerClient } = await import("./explorerWorkerClient");
     const client = new ExplorerWorkerClient(new URL("file:///worker.js"));
     const worker = workerThreadsMock.instances[0];
 
+    const closed = client.close();
+    expect(worker?.postMessage).toHaveBeenCalledWith({ close: true });
+    expect(worker?.terminate).not.toHaveBeenCalled();
+    worker?.emit("message", { closed: true });
+    await closed;
+
+    expect(worker?.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("ends a worker that doesn't answer in time", async () => {
+    vi.useFakeTimers();
+    try {
+      const { ExplorerWorkerClient, WORKER_CLOSE_ANSWER_WITHIN_MS } = await import(
+        "./explorerWorkerClient"
+      );
+      const client = new ExplorerWorkerClient(new URL("file:///worker.js"));
+      const worker = workerThreadsMock.instances[0];
+
+      const closed = client.close();
+      await vi.advanceTimersByTimeAsync(WORKER_CLOSE_ANSWER_WITHIN_MS);
+      await closed;
+
+      expect(worker?.terminate).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("doesn't wait on a worker that has already ended", async () => {
+    const { ExplorerWorkerClient } = await import("./explorerWorkerClient");
+    const client = new ExplorerWorkerClient(new URL("file:///worker.js"));
+    const worker = workerThreadsMock.instances[0];
+    worker?.emit("exit", 1);
+
     await client.close();
 
+    expect(worker?.postMessage).not.toHaveBeenCalled();
     expect(worker?.terminate).toHaveBeenCalledTimes(1);
   });
 });

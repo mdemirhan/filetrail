@@ -85,6 +85,7 @@ let activeWorkerClient: ExplorerWorkerClient | null = null;
 let activeWriteCoordinator: ReturnType<typeof createWriteOperationCoordinator> | null = null;
 let activeVolumeWatcher: VolumeWatcher | null = null;
 let activeFolderWatches: FolderWatches | null = null;
+let activeFolderSizeHandlers: ReturnType<typeof createFolderSizeHandlers> | null = null;
 
 // The windows, as the main process's work sees them. The host (main.ts) makes and keeps
 // them.
@@ -271,6 +272,8 @@ export async function bootstrapMainProcess(
     onFinished: (messages) => windows.showRecoveryNotices(messages),
   });
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
+  activeFolderSizeHandlers?.stopAll();
+  activeFolderSizeHandlers = folderSizeHandlers;
   // The windows that have asked for a measurement, so each is let go of when it closes.
   const measuringSenders = new WeakSet<WebContents>();
   activeWorkerClient = workerClient;
@@ -484,6 +487,8 @@ export async function shutdownMainProcess(): Promise<void> {
   activeVolumeWatcher = null;
   activeFolderWatches?.stopAll();
   activeFolderWatches = null;
+  activeFolderSizeHandlers?.stopAll();
+  activeFolderSizeHandlers = null;
   if (!activeWorkerClient) {
     return;
   }

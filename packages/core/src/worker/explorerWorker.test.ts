@@ -30,6 +30,7 @@ const searchRuntimeMock = vi.hoisted(() => {
     startSearch: vi.fn(),
     getUpdate: vi.fn(),
     cancelSearch: vi.fn(),
+    close: vi.fn(),
   };
   return {
     FdSearchRuntime: vi.fn(() => instance),
@@ -104,6 +105,7 @@ describe("explorerWorker", () => {
     searchRuntimeMock.instance.startSearch.mockReset();
     searchRuntimeMock.instance.getUpdate.mockReset();
     searchRuntimeMock.instance.cancelSearch.mockReset();
+    searchRuntimeMock.instance.close.mockReset();
   });
 
   it("registers the worker message loop and routes filesystem requests", async () => {
@@ -218,6 +220,25 @@ describe("explorerWorker", () => {
     });
     await flushWorkerQueue();
     expect(searchRuntimeMock.instance.cancelSearch).toHaveBeenCalledWith("job-1");
+  });
+
+  it("stops its searches when asked to close, ahead of the queued work", async () => {
+    let finishListing: (value: unknown) => void = () => undefined;
+    explorerServiceMock.listTreeChildren.mockReturnValue(
+      new Promise((resolve) => {
+        finishListing = resolve;
+      }),
+    );
+    const onMessage = await importWorkerModule();
+    onMessage?.({ id: "req-1", channel: "tree:getChildren", payload: { path: "/" } });
+    await flushWorkerQueue();
+
+    onMessage?.({ close: true });
+
+    expect(searchRuntimeMock.instance.close).toHaveBeenCalledTimes(1);
+    expect(workerModuleMock.parentPort.postMessage).toHaveBeenCalledWith({ closed: true });
+    finishListing({ path: "/", children: [] });
+    await flushWorkerQueue();
   });
 
   it("returns an error envelope when request handling throws", async () => {

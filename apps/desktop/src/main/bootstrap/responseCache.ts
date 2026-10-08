@@ -282,6 +282,8 @@ export function createFolderSizeHandlers(native: {
   const jobOwners = new Map<string, number | null>();
   // The jobs the app started itself, which walk at a lower priority.
   const backgroundJobIds = new Set<string>();
+  // Set when the app quits: nothing more is measured.
+  let stopped = false;
 
   function cancelQueuedJobsOf(owner: number | null): void {
     queuedJobIds = queuedJobIds.filter((queuedId) => {
@@ -474,6 +476,10 @@ export function createFolderSizeHandlers(native: {
         // or after the measurements other windows asked for meanwhile. One this window asked
         // for meanwhile has taken its place (and cancelled it).
         const job = folderSizeJobs.get(jobId);
+        if (stopped) {
+          forgetJob(jobId);
+          return;
+        }
         if (runAgain && job?.status === "running") {
           if (queuedJobIds.length === 0) {
             pruneFinishedFolderSizeJobs();
@@ -519,6 +525,21 @@ export function createFolderSizeHandlers(native: {
       }
 
       const jobId = generateJobId();
+
+      if (stopped) {
+        setFolderSizeJob(jobId, {
+          jobId,
+          path: payload.path,
+          status: "cancelled",
+          sizeBytes: null,
+          diskBytes: null,
+          fileCount: null,
+          folderCount: null,
+          measuredFolderCount: 0,
+          error: null,
+        });
+        return { jobId, status: "cancelled" };
+      }
 
       jobOwners.set(jobId, owner);
       if (payload.automatic) {
@@ -615,6 +636,28 @@ export function createFolderSizeHandlers(native: {
       const activeJob = activeJobId ? folderSizeJobs.get(activeJobId) : undefined;
       if (activeJob?.status === "running" && jobOwners.get(activeJob.jobId) === owner) {
         setFolderSizeJob(activeJob.jobId, { ...activeJob, status: "cancelled" });
+        native.cancelFolderSize();
+      }
+    },
+
+    // The app quits: the walk under way is stopped, and nothing waiting or measured again
+    // runs after it. A walk left running would keep the app's process alive with no window
+    // until it finished, as Node waits for it before the process can end.
+    stopAll(): void {
+      stopped = true;
+      for (const queuedId of queuedJobIds) {
+        const queued = folderSizeJobs.get(queuedId);
+        if (queued) {
+          setFolderSizeJob(queuedId, { ...queued, status: "cancelled" });
+        }
+        forgetJob(queuedId);
+      }
+      queuedJobIds = [];
+      const activeJob = activeJobId ? folderSizeJobs.get(activeJobId) : undefined;
+      if (activeJob?.status === "running") {
+        setFolderSizeJob(activeJob.jobId, { ...activeJob, status: "cancelled" });
+      }
+      if (activeJobId) {
         native.cancelFolderSize();
       }
     },
