@@ -1,10 +1,11 @@
 /**
  * N-API async wrapper for the Trash that tells where the item went.
  *
- *   nativeTrashItem(path) → Promise<string>
+ *   nativeTrashItem(path) → Promise<string | null>
  *     Moves the item to the Trash of its disk, as Finder's Move to Trash does, and resolves
  *     with the path it has there: the Trash renames it when its name is taken there
- *     ("notes 2.txt"), so the path is the only way to find it again. Rejects with an Error
+ *     ("notes 2.txt"), so the path is the only way to find it again. Resolves with null when
+ *     the item went to the Trash but the Trash didn't say where. Rejects with an Error
  *     carrying the Trash's own sentence as its message and, when it can be told, an errno
  *     `code` ("EACCES", "ENOENT", "ENOTSUP" for a disk without a Trash).
  *
@@ -24,8 +25,10 @@ typedef struct {
   napi_async_work work;
   napi_deferred deferred;
   char *path;
-  /* The item's path in the Trash. */
+  /* The item's path in the Trash; NULL when it went there but the Trash didn't say where. */
   char *result;
+  /* Set once the item is in the Trash. */
+  int trashed;
   /* On failure: the Trash's sentence, and the errno it stands for (0 when unknown). */
   char *message;
   int errnum;
@@ -80,12 +83,10 @@ static void execute_trash_item(napi_env env, void *data) {
     if ([[NSFileManager defaultManager] trashItemAtURL:url
                                       resultingItemURL:&resulting
                                                  error:&error]) {
+      /* Moved, even when where to wasn't said: then it can't be found again, but it is in
+       * the Trash all the same, which is no failure. */
+      w->trashed = 1;
       w->result = resulting ? copy_utf8(resulting.path) : NULL;
-      if (!w->result) {
-        /* Moved, but where to wasn't said: nothing can find it again. */
-        w->message = strdup("The Trash didn't say where the item went.");
-        w->errnum = EIO;
-      }
       return;
     }
     w->errnum = error ? errno_of(error) : 0;
@@ -132,9 +133,13 @@ static void complete_trash_item(napi_env env, napi_status status, void *data) {
   if (status != napi_ok) {
     napi_value error = native_errno_error(env, EIO, "trash", w->path, NULL);
     napi_reject_deferred(env, w->deferred, error);
-  } else if (w->result) {
+  } else if (w->trashed) {
     napi_value result;
-    napi_create_string_utf8(env, w->result, NAPI_AUTO_LENGTH, &result);
+    if (w->result) {
+      napi_create_string_utf8(env, w->result, NAPI_AUTO_LENGTH, &result);
+    } else {
+      napi_get_null(env, &result);
+    }
     napi_resolve_deferred(env, w->deferred, result);
   } else {
     napi_reject_deferred(env, w->deferred, trash_error(env, w));

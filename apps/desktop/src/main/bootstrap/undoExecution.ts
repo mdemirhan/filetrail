@@ -62,7 +62,7 @@ const KEEP_BOTH_ATTEMPTS = 3;
 const MAX_ADDED_NUMBER = 10_000;
 
 type StepOutcome =
-  | { status: "done"; produced: UndoStep; items: ResultItem[]; removed: RemovedItem | null }
+  | { status: "done"; produced: UndoStep | null; items: ResultItem[]; removed: RemovedItem | null }
   // Refused by the disk check, or something outside the app got in the way.
   | { status: "skipped"; items: ResultItem[]; missing: boolean }
   // The write failed: what it did (a batch may have renamed some of its items), and what
@@ -120,10 +120,10 @@ export async function runUndo(args: {
       const outcome = await runStep(planned, step, args);
       run.items.push(...outcome.items);
       run.completedItemCount += outcome.items.filter((item) => item.status === "completed").length;
+      if (outcome.status !== "skipped" && outcome.produced) {
+        doneSteps.push(outcome.produced);
+      }
       if (outcome.status === "stopped") {
-        if (outcome.produced) {
-          doneSteps.push(outcome.produced);
-        }
         run.cancelled = true;
         notReached = [
           ...units.slice(0, unitIndex),
@@ -134,14 +134,10 @@ export async function runUndo(args: {
       }
       if (outcome.status === "failed") {
         // It and the steps before it in the unit wait for the next try.
-        if (outcome.produced) {
-          doneSteps.push(outcome.produced);
-        }
         failed.push({ steps: [...unit.steps.slice(0, stepIndex), outcome.leftover] });
         break;
       }
       if (outcome.status === "done") {
-        doneSteps.push(outcome.produced);
         if (outcome.removed) {
           run.removedItems.push(outcome.removed);
         }
@@ -396,7 +392,7 @@ async function moveToTrash(
       return failedStep(original, planned.path, null, await describeFailure(fs, error, []));
     }
   }
-  let trashPath: string;
+  let trashPath: string | null;
   try {
     trashPath = await fs.trash(planned.path);
   } catch (error) {
@@ -409,12 +405,14 @@ async function moveToTrash(
         : await describeFailure(fs, error, [planned.path, dirname(planned.path)]);
     return failedStep(original, planned.path, null, reason);
   }
-  if (flags !== null) {
+  if (flags !== null && trashPath !== null) {
     await fs.setFlags?.(trashPath, flags).catch(() => undefined);
   }
   return {
     status: "done",
-    produced: { kind: "trashed", from: planned.path, trashPath, id, parentId },
+    // In the Trash, but the Trash didn't say where: done, and nothing to do it again from.
+    produced:
+      trashPath === null ? null : { kind: "trashed", from: planned.path, trashPath, id, parentId },
     items: [
       {
         sourcePath: planned.path,

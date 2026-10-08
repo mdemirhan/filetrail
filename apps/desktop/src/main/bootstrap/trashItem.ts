@@ -7,8 +7,8 @@ type TrashFs = {
   getFlags?: (path: string) => Promise<number>;
 };
 
-// Moves an item to the Trash and resolves with the path it has there (nativeTrashItem),
-// with a failure that says why.
+// Moves an item to the Trash and resolves with the path it has there (nativeTrashItem; null
+// when the Trash didn't say), with a failure that says why.
 // The Trash gives its reason as a sentence, with the errno it stands for when that can be
 // told (see native_trash.m). A locked item says so. A disk without a Trash (a network
 // share, some USB drives) answers ENOTSUP, or gives no code at all: on a disk other than
@@ -17,10 +17,10 @@ type TrashFs = {
 // Trash's own sentence, and nothing is offered for permanent deletion; nor is anything on
 // the startup disk ever.
 export function createTrashItem(args: {
-  trash: (path: string) => Promise<string>;
+  trash: (path: string) => Promise<string | null>;
   fs: TrashFs;
   homePath: string;
-}): (path: string) => Promise<string> {
+}): (path: string) => Promise<string | null> {
   return async (path) => {
     try {
       return await args.trash(path);

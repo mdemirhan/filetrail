@@ -65,7 +65,9 @@ export type CantUndoReason =
   // Copies were made on a disk without a Trash: undoing them would mean deleting them.
   | "no_trash"
   // A move to another disk (copied there, then the original deleted).
-  | "other_disk_move";
+  | "other_disk_move"
+  // An item went to the Trash, but the Trash didn't say where: it can't be put back.
+  | "trash_location_unknown";
 
 export type UndoLog =
   | { undoable: true; units: UndoUnit[] }

@@ -52,7 +52,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeIsPackage: (path: string) => Promise<boolean | null>;
   nativeDatesTaken: (paths: string[]) => Promise<Array<string | null>>;
   nativeListVolumes: () => Volume[];
-  nativeTrashItem: (path: string) => Promise<string>;
+  nativeTrashItem: (path: string) => Promise<string | null>;
 };
 const {
   nativeCopyFile,
@@ -169,7 +169,7 @@ export const originalRename = (oldPath: string, newPath: string): Promise<void> 
 
 /** Moves an item to its disk's Trash and resolves with the path it has there (the Trash
  *  may give it another name). Wrapped by createTrashItem, which says why one failed. */
-export const originalTrashItem = (path: string): Promise<string> => nativeTrashItem(path);
+export const originalTrashItem = (path: string): Promise<string | null> => nativeTrashItem(path);
 
 /** Rename that fails with EEXIST instead of replacing an item at `newPath`. */
 export const originalRenameExclusive = (oldPath: string, newPath: string): Promise<void> =>
@@ -178,7 +178,7 @@ export const originalRenameExclusive = (oldPath: string, newPath: string): Promi
 /** What rename, New Folder, Trash and Delete Immediately work with, backed by original-fs.
  *  `trash` moves an item to the Trash and says where it went (see createTrashItem). */
 export function createOriginalWriteOperationFs(
-  trash: (path: string) => Promise<string>,
+  trash: (path: string) => Promise<string | null>,
 ): WriteOperationFs {
   return {
     lstat: originalFileSystem.lstat,

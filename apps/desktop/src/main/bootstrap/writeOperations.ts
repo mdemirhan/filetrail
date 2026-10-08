@@ -62,8 +62,8 @@ export type WriteOperationFs = {
   rename: (oldPath: string, newPath: string) => Promise<void>;
   rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
   // Moves an item to the Trash and resolves with the path it has there (createTrashItem in
-  // the app).
-  trash: (path: string) => Promise<string>;
+  // the app), or null when the Trash didn't say where it went.
+  trash: (path: string) => Promise<string | null>;
   // The item's BSD flags, to tell a locked item from a lack of permission, and to unlock
   // an operation's own locked copy for Undo to move it to the Trash.
   getFlags?: (path: string) => Promise<number>;
@@ -1170,6 +1170,9 @@ export function createWriteOperationCoordinator(
     const removedItems: RemovedItem[] = [];
     // One unit per item, so an item put back from the Trash doesn't depend on the others.
     const trashedUnits: UndoUnit[] = [];
+    // Set when an item went to the Trash where it can't be found again: the operation
+    // can't be undone then, as undoing only part of it would.
+    let trashLocationUnknown = false;
     // What's on the home folder's disk goes to the home folder's Trash.
     const home = fs.itemSize ? await readItemSize(fs.itemSize, homePath) : null;
     const homeDev = home && home !== "missing" ? home.dev : null;
@@ -1201,7 +1204,14 @@ export function createWriteOperationCoordinator(
           const id = await readItemId(fs.lstat, path);
           const parentId = await readFolderId(fs.stat, dirname(path));
           const trashPath = await fs.trash(path);
-          trashedUnits.push({ steps: [{ kind: "trashed", from: path, trashPath, id, parentId }] });
+          if (trashPath === null) {
+            // In the Trash, but the Trash didn't say where: it can't be put back.
+            trashLocationUnknown = true;
+          } else {
+            trashedUnits.push({
+              steps: [{ kind: "trashed", from: path, trashPath, id, parentId }],
+            });
+          }
         }
         if (before !== undefined) {
           removedItems.push(
@@ -1275,7 +1285,11 @@ export function createWriteOperationCoordinator(
         result,
       },
       removedItems,
-      trashedUnits.length > 0 ? { undoable: true, units: trashedUnits } : undefined,
+      trashLocationUnknown
+        ? { undoable: false, reason: "trash_location_unknown" }
+        : trashedUnits.length > 0
+          ? { undoable: true, units: trashedUnits }
+          : undefined,
     );
   }
 

@@ -11,10 +11,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { REPLACE_ALL, nativeFileSystemWithTrash } from "@filetrail/core/fs/testNativePaste";
+import {
+  REPLACE_ALL,
+  nativeFileSystem,
+  nativeFileSystemWithTrash,
+  runPaste,
+} from "@filetrail/core/fs/testNativePaste";
 
 import { originalRenameExclusive } from "../originalFileSystem";
-import { paste, setUpUndo, snapshotOf } from "./undoRealDisk.testkit";
+import { folderTrash, paste, setUpUndo, snapshotOf } from "./undoRealDisk.testkit";
 
 // What an Undo leaves to do: a step whose write failed stays on the Undo list to be tried
 // again, a stopped Undo goes on from where it stopped, and what changed outside the app is
@@ -323,6 +328,57 @@ describe("a batch rename another app got in the way of", () => {
     expect(readFileSync(join(root, "a 2.txt"), "utf8")).toBe("a");
     expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("b");
     expect(existsSync(join(root, "b 2.txt"))).toBe(false);
+    await t.coordinator.shutdown();
+  });
+});
+
+describe("the Trash not saying where an item went", () => {
+  // A Trash that takes the item and says nothing of where it put it.
+  function silentTrash(path: string): Promise<null> {
+    renameSync(path, join(trashDir, `somewhere-${Date.now()}-${Math.random()}`));
+    return Promise.resolve(null);
+  }
+
+  it("makes a Move to Trash one that can't be undone", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    const toTrash = folderTrash(trashDir);
+    const t = setUpUndo(root, trashDir, {
+      trash: (path) => (path.endsWith("b.txt") ? silentTrash(path) : toTrash(path)),
+    });
+
+    expect((await t.trash(join(root, "a.txt"), join(root, "b.txt"))).status).toBe("completed");
+
+    expect(t.history.menu()).toEqual({ undo: null, redo: null, cantUndo: true });
+    await t.coordinator.shutdown();
+  });
+
+  it("makes a paste whose Replace put the old item there one that can't be undone", async () => {
+    mkdirSync(join(root, "src"));
+    mkdirSync(join(root, "dst"));
+    writeFileSync(join(root, "src", "a.txt"), "new");
+    writeFileSync(join(root, "dst", "a.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(root, "src", "a.txt")],
+      destinationDirectoryPath: join(root, "dst"),
+      policy: REPLACE_ALL,
+      fileSystem: { ...nativeFileSystem, trash: silentTrash },
+    });
+
+    expect(result?.status).toBe("completed");
+    expect(result?.undoLog).toEqual({ undoable: false, reason: "trash_location_unknown" });
+  });
+
+  it("counts an Undo's trip to the Trash as done, with nothing to redo", async () => {
+    const t = setUpUndo(root, trashDir, { trash: silentTrash });
+    await t.newFolder(root, "F");
+
+    expect((await t.undo()).status).toBe("completed");
+
+    expect(existsSync(join(root, "F"))).toBe(false);
+    expect(t.history.menu()).toEqual({ undo: null, redo: null, cantUndo: false });
     await t.coordinator.shutdown();
   });
 });

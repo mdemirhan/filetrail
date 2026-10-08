@@ -207,13 +207,13 @@ export function nativeIsCaseSensitive(path: string): Promise<boolean | null>;
  * Moves the item at `path` to the Trash of its disk (`-[NSFileManager
  * trashItemAtURL:resultingItemURL:error:]`) and resolves with the path it has there. The
  * Trash renames an item whose name is taken there ("notes 2.txt"), so only this path finds
- * it again.
+ * it again. Resolves `null` when the item went to the Trash but the Trash didn't say where.
  *
  * @throws An error whose message is the Trash's own sentence, with `code: "ENOTSUP"` when
  *   the disk has no Trash, `"ENOENT"`, `"EACCES"`, or another errno name when it can be
  *   told (no `code` otherwise).
  */
-export function nativeTrashItem(path: string): Promise<string>;
+export function nativeTrashItem(path: string): Promise<string | null>;
 
 /** A disk mounted under /Volumes (see `nativeListVolumes`). */
 export type NativeVolume = {

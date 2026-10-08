@@ -1051,8 +1051,14 @@ describe("nativeTrashItem", () => {
         const fileIno = statSync(file).ino;
         const folderIno = statSync(folder).ino;
 
-        const fileInTrash = await wrapper.nativeTrashItem(file);
-        const folderInTrash = await addon.nativeTrashItem(folder);
+        const located = (path: string | null): string => {
+          if (path === null) {
+            throw new Error("The Trash didn't say where the item went.");
+          }
+          return path;
+        };
+        const fileInTrash = located(await wrapper.nativeTrashItem(file));
+        const folderInTrash = located(await addon.nativeTrashItem(folder));
 
         expect(fileInTrash.startsWith(join(volume.mountPath, ".Trashes"))).toBe(true);
         expect(existsSync(file)).toBe(false);
@@ -1062,7 +1068,7 @@ describe("nativeTrashItem", () => {
 
         // A second "a.txt" can't take the first one's name in the Trash.
         writeFileSync(file, "second");
-        const secondInTrash = await wrapper.nativeTrashItem(file);
+        const secondInTrash = located(await wrapper.nativeTrashItem(file));
         expect(secondInTrash).not.toBe(fileInTrash);
         expect(readFileSync(secondInTrash, "utf8")).toBe("second");
         expect(readFileSync(fileInTrash, "utf8")).toBe("first");

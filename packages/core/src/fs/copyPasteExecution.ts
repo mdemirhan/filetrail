@@ -1354,7 +1354,10 @@ async function removeReplacedItem(
           : node.destinationPath;
       const trashPath = await fileSystem.trash(node.destinationPath);
       noteChanged(context);
-      if (context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)) {
+      if (trashPath === null) {
+        // In the Trash, but the Trash didn't say where: it can't be put back.
+        markCantUndo(context, "trash_location_unknown");
+      } else if (context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)) {
         recordUndoStep(context, node, {
           kind: "trashed",
           from,

@@ -214,7 +214,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
   readonly trashed: string[] = [];
   trashImpl: NonNullable<WriteServiceFileSystem["trash"]> | null = null;
   enableTrash(): void {
-    const trashFn = async (path: string): Promise<string> => {
+    const trashFn = async (path: string): Promise<string | null> => {
       if (this.trashImpl) {
         return this.trashImpl(path);
       }
