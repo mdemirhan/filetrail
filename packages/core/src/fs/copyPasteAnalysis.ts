@@ -146,12 +146,17 @@ export async function buildCopyPasteAnalysisReport(args: {
     if (request.mode === "copy" && pastingIntoSourceFolder) {
       // Duplicating "a.txt" and "a copy.txt" together gives "a copy 2.txt" and
       // "a copy 3.txt": a name an earlier item took is skipped, like Finder.
+      const isDirectory = sourceFingerprint.kind === "directory";
       destinationPath = await resolveDuplicateName(
         basename(sourcePath),
         request.destinationDirectoryPath,
         fileSystem,
         plannedDestinationKeys,
-        { isDirectory: sourceFingerprint.kind === "directory", caseSensitive },
+        {
+          isDirectory,
+          isPackage: isDirectory && (await isPackageFolder(fileSystem, sourcePath)),
+          caseSensitive,
+        },
       );
     }
 
@@ -617,12 +622,17 @@ async function annotateKeepBothNames(
   for (const node of nodes) {
     signal?.throwIfAborted();
     if (node.conflictClass !== null) {
+      const isDirectory = node.sourceKind === "directory";
       node.keepBothDestinationPath = await resolveDuplicateName(
         basename(node.sourcePath),
         dirname(node.destinationPath),
         fileSystem,
         reservedPaths,
-        { isDirectory: node.sourceKind === "directory", caseSensitive },
+        {
+          isDirectory,
+          isPackage: isDirectory && (await isPackageFolder(fileSystem, node.sourcePath)),
+          caseSensitive,
+        },
       );
       reservedPaths.add(destinationPathKey(node.keepBothDestinationPath, caseSensitive));
     }

@@ -11,6 +11,7 @@ export {
   lockedMessage,
 } from "./fs/copyPasteErrors";
 export { fileIdOf } from "./fs/copyPasteFingerprint";
+export { isPackageName } from "./fs/copyPasteNames";
 export { unlockForMove } from "./fs/copyPasteExecution";
 export {
   isAppleDoubleOnItsVolume,

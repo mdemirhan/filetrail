@@ -85,6 +85,9 @@ export type WriteOperationFs = {
   // An item as a folder's measurement counts it (nativeItemSize), read just before a delete
   // removes it, so the measured folders that held it can have it taken off their sizes.
   itemSize?: (path: string) => Promise<ItemSize>;
+  // Whether macOS shows a folder as one item (nativeIsPackage), null when it can't say: a
+  // package's number goes before its extension ("Tool 2.app"), as a file's does.
+  isPackage?: (path: string) => Promise<boolean | null>;
 };
 
 // What a finished operation did, for Undo: its steps (or why it can't be undone), and its

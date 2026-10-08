@@ -2,7 +2,7 @@ import { basename, dirname } from "node:path";
 
 import { isChoiceAllowedForConflict } from "@filetrail/contracts";
 
-import { destinationPathKey, resolveDuplicateName } from "./copyPasteNames";
+import { destinationPathKey, isPackageFolder, resolveDuplicateName } from "./copyPasteNames";
 import type {
   CopyPasteAnalysisNode,
   CopyPasteAnalysisReport,
@@ -169,12 +169,17 @@ async function resolveNode(
   }
   let destinationPath = baseDestinationPath;
   if (action === "keep_both") {
+    const isDirectory = node.sourceKind === "directory";
     destinationPath = await resolveDuplicateName(
       basename(node.sourcePath),
       dirname(baseDestinationPath),
       context.fileSystem,
       reservedPaths,
-      { isDirectory: node.sourceKind === "directory", caseSensitive: context.caseSensitive },
+      {
+        isDirectory,
+        isPackage: isDirectory && (await isPackageFolder(context.fileSystem, node.sourcePath)),
+        caseSensitive: context.caseSensitive,
+      },
     );
     reservedPaths.add(destinationPathKey(destinationPath, context.caseSensitive));
   }

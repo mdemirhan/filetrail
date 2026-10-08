@@ -1534,6 +1534,9 @@ async function executeReplace(
         context.reservedPaths,
         {
           isDirectory: currentNode.node.sourceKind === "directory",
+          isPackage:
+            currentNode.node.sourceKind === "directory" &&
+            (await isPackageFolder(fileSystem, currentNode.node.sourcePath)),
           caseSensitive: context.caseSensitive,
         },
       );

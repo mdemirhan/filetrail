@@ -169,6 +169,57 @@ describe("a package that clashes with one already there", () => {
   });
 });
 
+// Like Finder, a copy of a package keeps its extension at the end, whichever packages macOS
+// knows: "Backup copy.sparsebundle", never "Backup.sparsebundle copy".
+describe("the name of a package's copy", () => {
+  const PACKAGES = ["Backup.sparsebundle", "Flow.workflow", "Foo.app"];
+
+  it("has “copy” before the extension when duplicated", async () => {
+    for (const name of PACKAGES) {
+      await mkdir(join(src, name));
+    }
+    await mkdir(join(src, "Notes.v2"));
+
+    await runPaste({
+      mode: "copy",
+      sourcePaths: [...PACKAGES, "Notes.v2"].map((name) => join(src, name)),
+      destinationDirectoryPath: src,
+    });
+
+    expect((await readdir(src)).sort()).toEqual([
+      "Backup copy.sparsebundle",
+      "Backup.sparsebundle",
+      "Flow copy.workflow",
+      "Flow.workflow",
+      "Foo copy.app",
+      "Foo.app",
+      "Notes.v2",
+      "Notes.v2 copy",
+    ]);
+  });
+
+  it("has “copy” before the extension when Keep Both keeps it beside the old one", async () => {
+    await mkdir(join(src, "Model.custompkg"));
+    await mkdir(join(dst, "Model.custompkg"));
+    // A package by its package bit or an app's document type, not by a known extension.
+    const fileSystem: WriteServiceFileSystem = {
+      ...nativeFileSystem,
+      isPackage: async (path) => path.endsWith(".custompkg"),
+    };
+
+    const { report } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Model.custompkg")],
+      destinationDirectoryPath: dst,
+      policy: KEEP_ALL,
+      fileSystem,
+    });
+
+    expect(report.nodes[0]?.keepBothDestinationPath).toBe(join(dst, "Model copy.custompkg"));
+    expect((await readdir(dst)).sort()).toEqual(["Model copy.custompkg", "Model.custompkg"]);
+  });
+});
+
 describe("isPackageFolder", () => {
   it("asks macOS, and knows a folder without a package extension isn't one", async () => {
     await mkdir(join(src, "Foo.app"));

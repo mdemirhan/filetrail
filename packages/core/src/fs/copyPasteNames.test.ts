@@ -112,6 +112,28 @@ describe("copyPasteNames", () => {
     ).resolves.toBe("/target/Trip copy.photoslibrary");
   });
 
+  it("goes by what it is told about a folder being a package before its extension", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({ "/target": { kind: "directory" } });
+
+    await expect(
+      resolveDuplicateName("Model.custompkg", "/target", fileSystem, undefined, {
+        isDirectory: true,
+        isPackage: true,
+      }),
+    ).resolves.toBe("/target/Model copy.custompkg");
+    await expect(
+      resolveDuplicateName("Movie.fcpxbundle", "/target", fileSystem, undefined, {
+        isDirectory: true,
+        isPackage: false,
+      }),
+    ).resolves.toBe("/target/Movie.fcpxbundle copy");
+    await expect(
+      resolveDuplicateName("Backup.sparsebundle", "/target", fileSystem, undefined, {
+        isDirectory: true,
+      }),
+    ).resolves.toBe("/target/Backup copy.sparsebundle");
+  });
+
   it("treats compressed tar archives as having one extension", async () => {
     const fileSystem = new MockWriteServiceFileSystem({ "/target": { kind: "directory" } });
 

@@ -12,6 +12,7 @@ import {
   describeCopyPasteError,
   errorCode,
   findLockedRefusal,
+  isPackageName,
   readFolderId,
   readItemRef,
   readItemStamp,
@@ -531,9 +532,11 @@ async function renameInto(
 ): Promise<{ status: "renamed"; target: string } | StepOutcome> {
   const { fs } = args;
   let target = planned.to;
+  let numberedAsFolder: boolean | null = null;
   for (let attempt = 1; ; attempt += 1) {
     if (check.nameTaken || attempt > 1) {
-      target = await freeNumberedPath(fs, planned.to, check.isFolder);
+      numberedAsFolder ??= await numbersAsFolder(fs, planned.from, check.isFolder);
+      target = await freeNumberedPath(fs, planned.to, numberedAsFolder);
     }
     try {
       if (check.renamesItself && target === planned.to) {
@@ -576,15 +579,29 @@ function failedStep(
   };
 }
 
+// Whether the item at `path` takes a number at the end of its whole name ("Photos 2"): a
+// folder does, a package ("Tool.app") takes it before its extension, as a file does.
+async function numbersAsFolder(
+  fs: WriteOperationFs,
+  path: string,
+  isFolder: boolean,
+): Promise<boolean> {
+  if (!isFolder) {
+    return false;
+  }
+  const isPackage = fs.isPackage ? await fs.isPackage(path).catch(() => null) : null;
+  return !(isPackage ?? isPackageName(basename(path)));
+}
+
 // "a 2.txt", "a 3.txt"… next to `path`: the first name that is free.
 async function freeNumberedPath(
   fs: WriteOperationFs,
   path: string,
-  isFolder: boolean,
+  numberedAsFolder: boolean,
 ): Promise<string> {
   const folder = dirname(path);
   for (let number = 2; number <= MAX_ADDED_NUMBER; number += 1) {
-    const candidate = join(folder, numberedName(basename(path), isFolder, " ", number));
+    const candidate = join(folder, numberedName(basename(path), numberedAsFolder, " ", number));
     try {
       await fs.lstat(candidate);
     } catch {
@@ -710,7 +727,8 @@ async function renameBack(
       toRename.push({
         sourcePath: check.item.from,
         destinationName: basename(check.item.to),
-        isFolder: check.isFolder,
+        // Says where a number goes when the name is taken: a package's before its extension.
+        isFolder: await numbersAsFolder(fs, check.item.from, check.isFolder),
       });
     }
   }

@@ -207,6 +207,7 @@ export function createOriginalWriteOperationFs(
     getAcl: (path) => nativeGetAcl(path),
     setAcl: (path, acl) => nativeSetAcl(path, acl),
     itemSize: (path) => nativeItemSize(path),
+    isPackage: (path) => nativeIsPackage(path),
   };
 }
 

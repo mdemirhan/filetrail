@@ -14,17 +14,23 @@ const MULTI_PART_EXTENSIONS = [".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst"];
 // when macOS can't be asked (`isPackageFolder`). Like Finder, their copies keep the
 // extension at the end ("Tool copy.app"); any other folder gets " copy" after its whole name.
 const PACKAGE_EXTENSIONS = new Set([
+  ".action",
   ".app",
   ".appex",
   ".band",
   ".bundle",
+  ".component",
   ".docset",
   ".fcpbundle",
+  ".fcpxbundle",
   ".framework",
   ".imovielibrary",
   ".kext",
   ".key",
   ".logicx",
+  ".mdimporter",
+  ".mlmodelc",
+  ".mlpackage",
   ".mpkg",
   ".musiclibrary",
   ".numbers",
@@ -34,9 +40,13 @@ const PACKAGE_EXTENSIONS = new Set([
   ".playground",
   ".plugin",
   ".prefpane",
+  ".qlgenerator",
   ".rtfd",
+  ".saver",
   ".scriv",
+  ".sparsebundle",
   ".textbundle",
+  ".workflow",
   ".xcarchive",
   ".xcodeproj",
   ".xcworkspace",
@@ -49,6 +59,9 @@ const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme
 export type DuplicateNameOptions = {
   // Folders don't have an extension to keep at the end (packages aside).
   isDirectory?: boolean;
+  // Whether the folder is a package, as macOS says (`isPackageFolder`): "Backup.sparsebundle"
+  // gets "Backup copy.sparsebundle". Left out, the extension tells (`PACKAGE_EXTENSIONS`).
+  isPackage?: boolean;
   // Whether the destination volume tells "a" and "A" apart (see `destinationPathKey`).
   caseSensitive?: boolean;
 };
@@ -61,7 +74,13 @@ export async function resolveKeepBothDestinationPath(
 ): Promise<string> {
   const sourceName = basename(sourcePath);
   const destinationDirectoryPath = dirname(destinationPath);
-  return resolveDuplicateName(sourceName, destinationDirectoryPath, fileSystem, undefined, options);
+  const isPackage =
+    options.isPackage ??
+    (options.isDirectory === true && (await isPackageFolder(fileSystem, sourcePath)));
+  return resolveDuplicateName(sourceName, destinationDirectoryPath, fileSystem, undefined, {
+    ...options,
+    isPackage,
+  });
 }
 
 // Finder-style "name copy.ext", "name copy 2.ext", … that is free on disk and not
@@ -74,7 +93,11 @@ export async function resolveDuplicateName(
   reservedPaths?: ReadonlySet<string>,
   options: DuplicateNameOptions = {},
 ): Promise<string> {
-  const [fullBaseName, extension] = splitNameExtension(sourceName, options.isDirectory ?? false);
+  const [fullBaseName, extension] = splitNameExtension(
+    sourceName,
+    options.isDirectory ?? false,
+    options.isPackage,
+  );
   // Like Finder, a copy of "report copy" is "report copy 2", not "report copy copy".
   const existingCopy = COPY_SUFFIX_PATTERN.exec(fullBaseName);
   const baseName = existingCopy?.[1] ?? fullBaseName;
@@ -132,8 +155,13 @@ export function destinationPathKey(path: string, caseSensitive = false): string 
 }
 
 // Splits "name.ext" into ["name", ".ext"], keeping multi-part extensions together and
-// leaving folder names (other than packages) whole.
-export function splitNameExtension(name: string, isDirectory: boolean): [string, string] {
+// leaving folder names (other than packages) whole. `isPackage` says whether a folder is a
+// package; left out, its extension tells.
+export function splitNameExtension(
+  name: string,
+  isDirectory: boolean,
+  isPackage?: boolean,
+): [string, string] {
   if (!isDirectory) {
     const lowerName = name.toLowerCase();
     for (const extension of MULTI_PART_EXTENSIONS) {
@@ -146,7 +174,7 @@ export function splitNameExtension(name: string, isDirectory: boolean): [string,
   if (extension.length <= 1) {
     return [name, ""];
   }
-  if (isDirectory && !PACKAGE_EXTENSIONS.has(extension.toLowerCase())) {
+  if (isDirectory && !(isPackage ?? PACKAGE_EXTENSIONS.has(extension.toLowerCase()))) {
     return [name, ""];
   }
   return [name.slice(0, -extension.length), extension];

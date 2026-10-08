@@ -149,3 +149,59 @@ describe("undoing a rename of several that changed the case of a name", () => {
     ).toEqual(["B", "a", "dst", "paste-trash", "src"]);
   });
 });
+
+// A package (an app, a Pages document, a disk image bundle) takes its number before its
+// extension, as Finder numbers it: "Tool 2.app", never "Tool.app 2". Any other folder takes
+// it at the end of its whole name.
+describe("putting a package back where its name is taken", () => {
+  it("numbers it before its extension, and a plain folder after its name", async () => {
+    for (const name of ["Tool.app", "Backup.sparsebundle", "Photos.v2"]) {
+      mkdirSync(join(root, name));
+    }
+    const t = setUpUndo(root, trashDir);
+    await t.trash(
+      join(root, "Tool.app"),
+      join(root, "Backup.sparsebundle"),
+      join(root, "Photos.v2"),
+    );
+    for (const name of ["Tool.app", "Backup.sparsebundle", "Photos.v2"]) {
+      mkdirSync(join(root, name));
+    }
+
+    expect((await t.undo()).status).toBe("completed");
+
+    expect(readdirSync(root).filter((name) => name.includes(" 2"))).toEqual([
+      "Backup 2.sparsebundle",
+      "Photos.v2 2",
+      "Tool 2.app",
+    ]);
+    await t.coordinator.shutdown();
+  });
+
+  it("goes by its extension when macOS can't say", async () => {
+    mkdirSync(join(root, "Talk.key"));
+    const t = setUpUndo(root, trashDir, { isPackage: async () => null });
+    await t.trash(join(root, "Talk.key"));
+    mkdirSync(join(root, "Talk.key"));
+
+    expect((await t.undo()).status).toBe("completed");
+
+    expect(readdirSync(root)).toContain("Talk 2.key");
+    await t.coordinator.shutdown();
+  });
+
+  it("numbers it before its extension when a rename of several is undone", async () => {
+    mkdirSync(join(root, "Report.pages"));
+    const t = setUpUndo(root, trashDir);
+    await t.batchRename([[join(root, "Report.pages"), "Draft.pages", true]]);
+    mkdirSync(join(root, "Report.pages"));
+
+    expect((await t.undo()).status).toBe("completed");
+
+    expect(readdirSync(root).filter((name) => name.endsWith(".pages"))).toEqual([
+      "Report 2.pages",
+      "Report.pages",
+    ]);
+    await t.coordinator.shutdown();
+  });
+});

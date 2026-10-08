@@ -3,7 +3,7 @@ import { basename, dirname } from "node:path";
 import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
 import { moveExclusive, removeStagedItem, unlockForMove } from "./copyPasteExecution";
 import { captureFingerprint } from "./copyPasteFingerprint";
-import { resolveDuplicateName } from "./copyPasteNames";
+import { isPackageFolder, resolveDuplicateName } from "./copyPasteNames";
 import type {
   PartialFileJournalEntry,
   ReplaceJournalEntry,
@@ -184,7 +184,12 @@ async function recoverEntry(
       dirname(entry.finalPath),
       fileSystem,
       undefined,
-      { isDirectory: staged.kind === "directory" },
+      {
+        isDirectory: staged.kind === "directory",
+        // The staged item's hidden name has no package extension: its source tells.
+        isPackage:
+          staged.kind === "directory" && (await isPackageFolder(fileSystem, entry.sourcePath)),
+      },
     );
     await moveUnlocked(fileSystem, entry.stagingPath, visiblePath);
     return { entry, outcome: "kept_visible", path: visiblePath };
