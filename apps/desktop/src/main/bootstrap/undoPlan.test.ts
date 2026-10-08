@@ -355,8 +355,8 @@ describe("findQuestions", () => {
     ];
 
     expect(await findQuestions(fs, units)).toEqual({
-      nameTaken: ["x"],
-      changed: [{ name: "abc", putBack: false, replaced: false }],
+      nameTaken: [{ name: "x", path: "/D/x" }],
+      changed: [{ name: "abc", path: "/D/abc", putBack: false, replaced: false }],
     });
   });
 
@@ -396,8 +396,8 @@ describe("findQuestions", () => {
     ).toEqual({
       nameTaken: [],
       changed: [
-        { name: "back", putBack: true, replaced: false },
-        { name: "new", putBack: false, replaced: true },
+        { name: "back", path: "/D/back", putBack: true, replaced: false },
+        { name: "new", path: "/D/new", putBack: false, replaced: true },
       ],
     });
   });
@@ -439,7 +439,7 @@ describe("findQuestions", () => {
           ],
         },
       ]),
-    ).toEqual({ nameTaken: ["x"], changed: [] });
+    ).toEqual({ nameTaken: [{ name: "x", path: "/D/x" }], changed: [] });
   });
 
   it("finds the old item's name free once the new item spelled otherwise moves away", async () => {
@@ -480,7 +480,7 @@ describe("findQuestions", () => {
           ],
         },
       ]),
-    ).toEqual({ nameTaken: ["a"], changed: [] });
+    ).toEqual({ nameTaken: [{ name: "a", path: "/D/a" }], changed: [] });
   });
 
   it("looks at several units at once, and answers in their order", async () => {
@@ -524,7 +524,7 @@ describe("findQuestions", () => {
 
     const questions = await findQuestions(slow, units);
 
-    expect(questions.nameTaken).toEqual(
+    expect(questions.nameTaken.map((taken) => taken.name)).toEqual(
       units
         .map((_unit, index) => index)
         .filter((index) => index % 3 === 0)

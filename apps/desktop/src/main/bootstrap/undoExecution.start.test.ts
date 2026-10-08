@@ -87,6 +87,34 @@ describe("starting an Undo", () => {
     await t.coordinator.shutdown();
   });
 
+  it("tells apart two items of one name in two folders", async () => {
+    writeFileSync(join(root, "x.txt"), "x");
+    mkdirSync(join(root, "A"));
+    mkdirSync(join(root, "B"));
+    const t = setUpUndo(root, trashDir);
+    const copies = [];
+    for (const folder of ["A", "B"]) {
+      const result = await paste(t.history, {
+        mode: "copy",
+        sourcePaths: [join(root, "x.txt")],
+        destinationDirectoryPath: join(root, folder),
+      });
+      copies.push(...(result.undoLog?.undoable ? result.undoLog.units : []));
+    }
+    t.history.record({ action: "paste", log: { undoable: true, units: copies }, items: [] });
+    writeFileSync(join(root, "A", "x.txt"), "edited");
+    const prepared = await t.prepare();
+    expect(prepared.changed).toEqual([{ name: "x.txt", putBack: false, replaced: false }]);
+    // While the copy in A is asked about, the one in B is edited too.
+    writeFileSync(join(root, "B", "x.txt"), "edited");
+
+    await expect(
+      t.coordinator.handlers["undo:start"]({ ticket: prepared.ticket ?? "" }, { sender: t.sender }),
+    ).rejects.toThrow("“x.txt” was changed after Undo was chosen. Choose Undo again.");
+    expect(existsSync(join(root, "B", "x.txt"))).toBe(true);
+    await t.coordinator.shutdown();
+  });
+
   it("starts each window's Undo with what that window was asked", async () => {
     writeFileSync(join(root, "x.txt"), "x");
     writeFileSync(join(root, "y.txt"), "y");

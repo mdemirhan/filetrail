@@ -42,7 +42,7 @@ import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import { clearResponseCaches, noteWriteStarting } from "./responseCache";
 import { runUndo } from "./undoExecution";
 import type { UndoEntry, UndoHistory } from "./undoHistory";
-import { findQuestions } from "./undoPlan";
+import { type UndoQuestions, findQuestions } from "./undoPlan";
 
 type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
 
@@ -222,7 +222,7 @@ export function createWriteOperationCoordinator(
       direction: UndoDirection;
       entryId: number;
       generation: number;
-      questions: Awaited<ReturnType<typeof findQuestions>>;
+      questions: UndoQuestions;
     }
   >();
   let undoTicketCount = 0;
@@ -1994,7 +1994,13 @@ export function createWriteOperationCoordinator(
           refusal: null,
           label: history.menu()[payload.direction],
           action: entry.action,
-          ...questions,
+          // The window names the items; their paths stay here.
+          nameTaken: questions.nameTaken.map((taken) => taken.name),
+          changed: questions.changed.map(({ name, putBack, replaced }) => ({
+            name,
+            putBack,
+            replaced,
+          })),
         };
       },
       "undo:start": async (
@@ -2319,8 +2325,8 @@ function namesMatchIgnoringCase(left: string, right: string): boolean {
 // What an Undo (or Redo) would ask now that it didn't ask when it was chosen, as the
 // sentence that refuses to start it; null when everything was asked.
 function describeUnaskedQuestion(
-  asked: Awaited<ReturnType<typeof findQuestions>>,
-  now: Awaited<ReturnType<typeof findQuestions>>,
+  asked: UndoQuestions,
+  now: UndoQuestions,
   direction: UndoDirection,
 ): string | null {
   const command = direction === "undo" ? "Undo" : "Redo";
@@ -2328,7 +2334,7 @@ function describeUnaskedQuestion(
     (item) =>
       !asked.changed.some(
         (other) =>
-          other.name === item.name &&
+          other.path === item.path &&
           other.putBack === item.putBack &&
           other.replaced === item.replaced,
       ),
@@ -2336,9 +2342,11 @@ function describeUnaskedQuestion(
   if (changed) {
     return `“${changed.name}” was changed after ${command} was chosen. Choose ${command} again.`;
   }
-  const taken = now.nameTaken.find((name) => !asked.nameTaken.includes(name));
+  const taken = now.nameTaken.find(
+    (item) => !asked.nameTaken.some((other) => other.path === item.path),
+  );
   if (taken !== undefined) {
-    return `Another item took the name “${taken}” after ${command} was chosen. Choose ${command} again.`;
+    return `Another item took the name “${taken.name}” after ${command} was chosen. Choose ${command} again.`;
   }
   return null;
 }

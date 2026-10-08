@@ -1,4 +1,4 @@
-import { basename, dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import {
   type ItemId,
@@ -370,8 +370,14 @@ export async function checkBatch(
 }
 
 // An item an Undo would move to the Trash though it changed since: one that was put back
-// from the Trash, the new item of a Replace, or one the operation made.
-export type ChangedItem = { name: string; putBack: boolean; replaced: boolean };
+// from the Trash, the new item of a Replace, or one the operation made. The window is told
+// its name; `path` tells it from another item of that name in another folder.
+export type ChangedItem = { name: string; path: string; putBack: boolean; replaced: boolean };
+
+// A place an item goes back to that another item has taken.
+export type TakenName = { name: string; path: string };
+
+export type UndoQuestions = { nameTaken: TakenName[]; changed: ChangedItem[] };
 
 // What to ask before undoing `units`: the names that are taken where items would go back,
 // and the items that would go to the Trash though they changed since. Checked as things
@@ -380,7 +386,7 @@ export type ChangedItem = { name: string; putBack: boolean; replaced: boolean };
 export async function findQuestions(
   fs: PlanFs,
   units: readonly UndoUnit[],
-): Promise<{ nameTaken: string[]; changed: ChangedItem[] }> {
+): Promise<UndoQuestions> {
   // Units don't depend on each other, so several are looked at at once: an Undo of
   // thousands of items would otherwise wait for each item's disk reads in turn.
   const perUnit = await mapAtMost(QUESTION_CHECKS_AT_ONCE, [...units].reverse(), (unit) =>
@@ -414,11 +420,8 @@ export async function mapAtMost<T, R>(
   return results;
 }
 
-async function unitQuestions(
-  fs: PlanFs,
-  unit: UndoUnit,
-): Promise<{ nameTaken: string[]; changed: ChangedItem[] }> {
-  const nameTaken: string[] = [];
+async function unitQuestions(fs: PlanFs, unit: UndoUnit): Promise<UndoQuestions> {
+  const nameTaken: TakenName[] = [];
   const changed: ChangedItem[] = [];
   const changes = noUnitChanges();
   for (const step of [...unit.steps].reverse()) {
@@ -432,7 +435,7 @@ async function unitQuestions(
         break;
       }
       if (check.nameTaken) {
-        nameTaken.push(basename(planned.to));
+        nameTaken.push({ name: basename(planned.to), path: planned.to });
       }
       noteMovedAway(changes, planned.from, check.id);
       changes.filledPlaces.add(placeKey(planned.to));
@@ -447,6 +450,7 @@ async function unitQuestions(
       if (check.changed) {
         changed.push({
           name: basename(planned.path),
+          path: planned.path,
           putBack: planned.putBack,
           // A Replace's unit also has its old item's trip to the Trash.
           replaced: !planned.putBack && unit.steps.some((other) => other.kind === "trashed"),
@@ -456,7 +460,8 @@ async function unitQuestions(
     } else {
       for (const check of await checkBatch(fs, planned)) {
         if (check.nameTaken) {
-          nameTaken.push(basename(check.item.to));
+          const target = join(dirname(check.item.from), basename(check.item.to));
+          nameTaken.push({ name: basename(target), path: target });
         }
       }
     }
