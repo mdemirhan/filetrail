@@ -212,8 +212,19 @@ export async function missingReason(fs: PlanFs, path: string): Promise<string> {
   return `“${basename(path)}” is no longer in “${basename(dirname(path))}”.`;
 }
 
-function replacedReason(path: string): string {
+// The item at `path` isn't the one a step was about (`expected`): another item, or the
+// same one on a disk that was ejected and connected again, which gives it another device
+// number (and Undo can't tell it is the same disk).
+function replacedReason(path: string, expected: ItemId | null, stats: PlanStats): string {
+  if (reconnected(expected, itemIdOf(stats))) {
+    return `“${basename(path)}” is on a disk that was disconnected since, so it is left as it is.`;
+  }
   return `The “${basename(path)}” in “${basename(dirname(path))}” is another item now.`;
+}
+
+// The same file id on another device number: the disk was ejected and connected again.
+function reconnected(expected: ItemId | null, now: ItemId | null): boolean {
+  return expected !== null && now !== null && expected.dev !== now.dev && expected.ino === now.ino;
 }
 
 // Whether `step` can be done now, or once the steps before it in the same unit have made
@@ -228,13 +239,13 @@ export async function checkMove(
     return { ok: false, reason: await missingReason(fs, step.from), missing: true };
   }
   if (!isExpectedItem(item, step.id, step.itemKind, !step.putBack)) {
-    return { ok: false, reason: replacedReason(step.from), missing: false };
+    return { ok: false, reason: replacedReason(step.from, step.id, item), missing: false };
   }
   // In the Trash without an id to go by: only an item that looks as it did is taken.
   if (step.stamp && (step.id === null || itemIdOf(item) === null)) {
     const now = await readItemStamp(fs, step.from);
     if (now === null || !sameStamp(step.stamp, now)) {
-      return { ok: false, reason: replacedReason(step.from), missing: false };
+      return { ok: false, reason: replacedReason(step.from, null, item), missing: false };
     }
   }
   const folderPath = dirname(step.to);
@@ -251,7 +262,9 @@ export async function checkMove(
   if (step.parentId !== null && folderId !== null && !sameItemId(step.parentId, folderId)) {
     return {
       ok: false,
-      reason: `Its folder “${basename(folderPath)}” was replaced by another folder.`,
+      reason: reconnected(step.parentId, folderId)
+        ? `Its folder “${basename(folderPath)}” is on a disk that was disconnected since, so it is left as it is.`
+        : `Its folder “${basename(folderPath)}” was replaced by another folder.`,
       missing: false,
     };
   }
@@ -296,7 +309,7 @@ export async function checkTrash(
     return { ok: false, reason: await missingReason(fs, step.path), missing: true };
   }
   if (!isExpectedItem(item, step.id, step.stamp?.kind ?? null, false)) {
-    return { ok: false, reason: replacedReason(step.path), missing: false };
+    return { ok: false, reason: replacedReason(step.path, step.id, item), missing: false };
   }
   const id = itemIdOf(item);
   if (step.stamp === null) {
@@ -348,7 +361,7 @@ export async function checkBatch(
     if (!isExpectedItem(stats, item.id, item.itemKind, true)) {
       checks.push({
         item,
-        refusal: { reason: replacedReason(item.from), missing: false },
+        refusal: { reason: replacedReason(item.from, item.id, stats), missing: false },
         nameTaken: false,
         isFolder: false,
       });

@@ -151,6 +151,37 @@ describe("checkMove", () => {
     ).toMatchObject({ ok: true });
   });
 
+  it("says the disk was disconnected when the same ids come back on another device", async () => {
+    // Recorded on device 2; the disk was ejected and is device 1 now.
+    const ejected = (ino: number) => ({ dev: 2, ino });
+    const files = { ...docs, "/Docs/b.txt": { kind: "file" as const, ino: 10 } };
+    expect(
+      await checkMove(disk(files), moveBack({ id: ejected(10), parentId: ejected(1) })),
+    ).toEqual({
+      ok: false,
+      reason: "Its folder “Docs” is on a disk that was disconnected since, so it is left as it is.",
+      missing: false,
+    });
+    const trash = { ...docs, "/T": { kind: "dir" as const, ino: 2 } };
+    expect(
+      await checkMove(
+        disk({ ...trash, "/T/b.txt": { kind: "file", ino: 10 } }),
+        moveBack({ from: "/T/b.txt", putBack: true, id: ejected(10), parentId: ejected(1) }),
+      ),
+    ).toEqual({
+      ok: false,
+      reason: "“b.txt” is on a disk that was disconnected since, so it is left as it is.",
+      missing: false,
+    });
+    // Another item on another disk is just another item.
+    expect(
+      await checkMove(
+        disk({ ...trash, "/T/b.txt": { kind: "file", ino: 11 } }),
+        moveBack({ from: "/T/b.txt", putBack: true, id: ejected(10) }),
+      ),
+    ).toMatchObject({ reason: "The “b.txt” in “T” is another item now." });
+  });
+
   it("goes by the kind alone on a disk without usable ids", async () => {
     const fat = disk({ ...docs, "/Docs/b.txt": { kind: "file", ino: null } });
     expect(await checkMove(fat, moveBack())).toMatchObject({ ok: true });
