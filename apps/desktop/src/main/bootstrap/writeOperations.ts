@@ -548,7 +548,12 @@ export function createWriteOperationCoordinator(
     if (!isTerminalStatus(payload.status) && writeOperationSenders.has(payload.operationId)) {
       latestProgress.set(payload.operationId, payload);
     }
-    options.broadcastProgress?.(payload, sender);
+    try {
+      options.broadcastProgress?.(payload, sender);
+    } catch (error) {
+      // The other windows miss this update; the operation, and its own window, go on.
+      console.error("[filetrail] couldn't tell the other windows about an operation", error);
+    }
     if (isSenderDestroyed(sender)) {
       return;
     }
@@ -589,6 +594,12 @@ export function createWriteOperationCoordinator(
       .execute(operationId, controller)
       .catch((error: unknown) => {
         console.error("[filetrail] local write operation failed unexpectedly", error);
+        // Normally the operation's end was sent already. Should it have stopped before,
+        // every window is told it failed: each would otherwise wait for it, refusing to
+        // start anything else.
+        if (localWriteOperationActions.has(operationId)) {
+          emitUnexpectedEnd(operationId, args.action, error);
+        }
       })
       .finally(() => {
         // Normally the terminal event already released everything; this only matters if
@@ -599,6 +610,40 @@ export function createWriteOperationCoordinator(
       operationId,
       status: "queued",
     };
+  }
+
+  function emitUnexpectedEnd(
+    operationId: string,
+    action: WriteOperationAction,
+    error: unknown,
+  ): void {
+    const now = new Date().toISOString();
+    const message = `The operation stopped unexpectedly: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+    emitLocalWriteOperationEvent({
+      operationId,
+      action,
+      status: "failed",
+      completedItemCount: 0,
+      totalItemCount: 0,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: null,
+      currentDestinationPath: null,
+      result: createLocalWriteOperationResult({
+        operationId,
+        action,
+        targetPath: null,
+        startedAt: now,
+        finishedAt: now,
+        totalItemCount: 0,
+        completedItemCount: 0,
+        items: [],
+        status: "failed",
+        error: message,
+      }),
+    });
   }
 
   function releaseLocalWriteOperation(operationId: string): void {
@@ -1389,7 +1434,13 @@ export function createWriteOperationCoordinator(
       });
     }
     // Before the write slot is freed, so the next operation is recorded after this one.
-    history.finish(direction, entry.id, { done: run.done, leftover: run.leftover });
+    // A mistake in keeping the history (or in the menu rebuilt from it) must not keep the
+    // end of the Undo from being sent.
+    try {
+      history.finish(direction, entry.id, { done: run.done, leftover: run.leftover });
+    } catch (error) {
+      console.error("[filetrail] couldn't record an Undo in the history", error);
+    }
     const problems = run.items.filter(
       (item) => item.status === "failed" || (item.status === "skipped" && item.error !== null),
     );

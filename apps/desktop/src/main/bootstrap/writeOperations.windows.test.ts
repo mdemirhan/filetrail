@@ -12,6 +12,7 @@ import {
 } from "@filetrail/core";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
+import { createUndoHistory } from "./undoHistory";
 import { createWriteOperationCoordinator } from "./writeOperations";
 
 // Operations and copy analyses with several windows open: each belongs to the window that
@@ -352,6 +353,126 @@ describe("copy analyses and their windows", () => {
     expect((await waitForEnd(first, firstPaste.operationId)).status).toBe("completed");
     expect(await readFile(join(root, "one", "a.txt"), "utf8")).toBe("a");
     expect(await readFile(join(root, "two", "a.txt"), "utf8")).toBe("a");
+    await coordinator.shutdown();
+  });
+});
+
+// Every window refuses to start an operation while one runs, until it hears the end.
+describe("an operation that stops unexpectedly", () => {
+  let errors: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    errors.mockRestore();
+  });
+
+  it("tells every window it failed when it stopped without saying so", async () => {
+    const folder = join(root, "New");
+    const realFs = createOriginalWriteOperationFs(async (path) => path);
+    const broadcastProgress = vi.fn();
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub().writeService,
+      {
+        ...realFs,
+        // Reading the new folder back goes wrong in a way nothing expects.
+        lstat: async (path) => {
+          const stats = await realFs.lstat(path);
+          return path === folder
+            ? {
+                ...stats,
+                isDirectory: () => {
+                  throw new Error("The disk went away.");
+                },
+              }
+            : stats;
+        },
+      },
+      { homePath: root, broadcastProgress },
+    );
+    const window = createWindow();
+
+    const { operationId } = await coordinator.handlers["writeOperation:createFolder"](
+      { parentDirectoryPath: root, folderName: "New" },
+      { sender: window },
+    );
+    const end = await waitForEnd(window, operationId);
+
+    expect(end).toMatchObject({
+      status: "failed",
+      result: { error: "The operation stopped unexpectedly: The disk went away." },
+    });
+    expect(broadcastProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId, status: "failed" }),
+      window,
+    );
+    expect(coordinator.getActiveOperation()).toBeNull();
+    await coordinator.shutdown();
+  });
+
+  it("goes on when the other windows can't be told", async () => {
+    await writeFile(join(root, "a.txt"), "a");
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub().writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      {
+        homePath: root,
+        broadcastProgress: () => {
+          throw new Error("A window broke.");
+        },
+      },
+    );
+    const window = createWindow();
+
+    const { operationId } = await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: join(root, "a.txt"), destinationName: "b.txt" },
+      { sender: window },
+    );
+
+    expect((await waitForEnd(window, operationId)).status).toBe("completed");
+    expect(await readFile(join(root, "b.txt"), "utf8")).toBe("a");
+    expect(coordinator.getActiveOperation()).toBeNull();
+    expect(errors).toHaveBeenCalledWith(
+      "[filetrail] couldn't tell the other windows about an operation",
+      expect.any(Error),
+    );
+    await coordinator.shutdown();
+  });
+
+  it("sends the end of an Undo when keeping the history goes wrong", async () => {
+    await writeFile(join(root, "a.txt"), "a");
+    const history = createUndoHistory();
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub().writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { homePath: root, recordUndo: history.record, undoHistory: history },
+    );
+    const window = createWindow();
+    const rename = await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: join(root, "a.txt"), destinationName: "b.txt" },
+      { sender: window },
+    );
+    await waitForEnd(window, rename.operationId);
+    // Rebuilding the menu from the history fails, for one.
+    vi.spyOn(history, "finish").mockImplementation(() => {
+      throw new Error("The menu broke.");
+    });
+
+    const { ticket } = await coordinator.handlers["undo:prepare"]({ direction: "undo" });
+    if (ticket === null) {
+      throw new Error("Expected something to undo.");
+    }
+    const undo = await coordinator.handlers["undo:start"]({ ticket }, { sender: window });
+
+    expect((await waitForEnd(window, undo.operationId)).status).toBe("completed");
+    expect(await readFile(join(root, "a.txt"), "utf8")).toBe("a");
+    expect(coordinator.getActiveOperation()).toBeNull();
+    expect(errors).toHaveBeenCalledWith(
+      "[filetrail] couldn't record an Undo in the history",
+      expect.any(Error),
+    );
     await coordinator.shutdown();
   });
 });
