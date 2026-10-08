@@ -2212,6 +2212,39 @@ describe("Delete Immediately and Empty Trash", () => {
     });
   });
 
+  // What was in the Trash is gone for good: copied Trash items stayed "copied".
+  it("lets go of clipboard items that were in the Trash once it is emptied", async () => {
+    const harness = createAppHarness({
+      clipboard: {
+        type: "ready",
+        mode: "copy",
+        sourcePaths: ["/Users/demo/.Trash/old.txt", "/Users/demo/source.txt"],
+        sourceEntries: {},
+        capturedAt: "2026-10-07T10:00:00.000Z",
+      },
+    });
+    renderApp(harness);
+    await screen.findByTitle("/Users/demo/source.txt");
+    await vi.waitFor(() => {
+      expect(clipboardButton()).toHaveAccessibleName("Clipboard: 2 items copied");
+    });
+
+    await pressKey({ key: "Backspace", metaKey: true, shiftKey: true });
+    const dialog = await screen.findByRole("dialog", { name: emptyQuestion });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Empty Trash" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
+    });
+    expect(
+      harness.invocations.filter((call) => call.channel === "app:setClipboard").at(-1)?.payload,
+    ).toMatchObject({
+      clipboard: { type: "ready", mode: "copy", sourcePaths: ["/Users/demo/source.txt"] },
+    });
+  });
+
   it("empties the Trash from its menu under Locations", async () => {
     const harness = createAppHarness();
     renderApp(harness);

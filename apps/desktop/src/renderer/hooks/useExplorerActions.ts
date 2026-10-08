@@ -3056,6 +3056,16 @@ export function useExplorerActions(args: {
       return;
     }
     if (await emptyTrash()) {
+      // Finder empties every Trash: items on the clipboard from one are gone, and the
+      // clipboard lets go of them (a cut of any is cancelled).
+      const clipboard = copyPasteClipboardRef.current;
+      const goneFromClipboard =
+        clipboard.type === "ready"
+          ? clipboard.sourcePaths.filter((path) => isPathInsideTrash(path, homePath))
+          : [];
+      if (goneFromClipboard.length > 0) {
+        followItemsGoneElsewhere(goneFromClipboard);
+      }
       // The Trash, or a folder in it, may be on screen: it is read again.
       if (isPathInsideTrash(currentPathRef.current, homePath)) {
         void refreshDirectory({});
