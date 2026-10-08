@@ -299,12 +299,19 @@ describe("ipc contracts", () => {
     expect(
       ipcContractSchemas["folderSize:start"].response.parse({
         jobId: "job-1",
-        status: "deferred",
+        status: "queued",
       }),
     ).toEqual({
       jobId: "job-1",
-      status: "deferred",
+      status: "queued",
     });
+    // Nothing sets it, and a window would wait on it for good.
+    expect(
+      ipcContractSchemas["folderSize:start"].response.safeParse({
+        jobId: "job-1",
+        status: "deferred",
+      }).success,
+    ).toBe(false);
 
     expect(
       ipcContractSchemas["folderSize:getStatus"].response.parse({
