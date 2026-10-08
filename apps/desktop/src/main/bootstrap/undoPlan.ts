@@ -287,11 +287,21 @@ export async function checkMove(
     if (now === null) {
       // Found a moment ago: it couldn't be read just now, which says nothing about it.
       const again = await lookUp(fs, step.from);
-      if ("unreadable" in again) {
-        return { ok: false, ...again.unreadable };
+      if ("missing" in again) {
+        return { ok: false, reason: await missingReason(fs, step.from), missing: true };
       }
+      return {
+        ok: false,
+        ...("unreadable" in again
+          ? again.unreadable
+          : {
+              reason: `“${basename(step.from)}” couldn't be checked.`,
+              missing: false,
+              retry: true as const,
+            }),
+      };
     }
-    if (now === null || !sameStamp(step.stamp, now)) {
+    if (!sameStamp(step.stamp, now)) {
       return { ok: false, reason: replacedReason(step.from, null, item), missing: false };
     }
   }
@@ -413,7 +423,13 @@ export async function checkBatch(
   // Places the batch's own items leave, compared as the disk compares names, and the items
   // themselves: on a disk that ignores case, "B" finds the batch's own item now at "b".
   const vacated = new Set(step.items.map((item) => item.from));
-  const ownIds = new Set(step.items.flatMap((item) => (item.id === null ? [] : [idKey(item.id)])));
+  // Each item of the batch by id, with where it is: found under another spelling of that
+  // place it is the item itself; elsewhere (a hard link to it) it is another entry.
+  const ownPlaces = new Map(
+    step.items.flatMap((item) =>
+      item.id === null ? [] : [[idKey(item.id), placeKey(item.from)] as const],
+    ),
+  );
   const checks: BatchItemCheck[] = [];
   for (const item of step.items) {
     const found = await lookUp(fs, item.from);
@@ -453,7 +469,7 @@ export async function checkBatch(
     checks.push({
       item,
       refusal: null,
-      nameTaken: there !== null && !isOwn(there, itemId, ownIds),
+      nameTaken: there !== null && !isOwn(there, target, itemId, ownPlaces),
       isFolder: kindOfStats(stats) === "directory",
     });
   }
@@ -462,12 +478,20 @@ export async function checkBatch(
 
 // Whether the item found where a batch item goes back is the batch's own: the item itself,
 // or another of its items (which makes way for it).
-function isOwn(there: PlanStats, itemId: ItemId | null, ownIds: ReadonlySet<string>): boolean {
+function isOwn(
+  there: PlanStats,
+  target: string,
+  itemId: ItemId | null,
+  ownPlaces: ReadonlyMap<string, string>,
+): boolean {
   const thereId = itemIdOf(there);
   if (thereId === null) {
     return false;
   }
-  return (itemId !== null && sameItemId(itemId, thereId)) || ownIds.has(idKey(thereId));
+  if (itemId !== null && sameItemId(itemId, thereId)) {
+    return true;
+  }
+  return ownPlaces.get(idKey(thereId)) === placeKey(target);
 }
 
 // An item an Undo would move to the Trash though it changed since: one that was put back

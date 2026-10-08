@@ -149,6 +149,14 @@ type RecordingStep = UndoStep | { kind: "createdFile"; path: string };
 
 // Something appeared at the destination while writing to it (EEXIST). Handled like a
 // runtime conflict: the person decides what happens to the item.
+// Part of an item being built under a hidden name couldn't be cleared away (an incomplete
+// package inside it): the whole hidden copy is given up, never put in place.
+class StagingCleanupError extends Error {
+  constructor(readonly original: unknown) {
+    super(describeCopyPasteError(original));
+  }
+}
+
 class DestinationTakenError extends Error {
   constructor(readonly original: unknown) {
     super(original instanceof Error ? original.message : String(original));
@@ -1193,6 +1201,11 @@ async function executeDirectoryNode(
     try {
       childResult = await executeResolvedNode(context, child);
     } catch (error) {
+      // An incomplete package that couldn't be cleared away: nothing around it is put in
+      // place either.
+      if (error instanceof StagingCleanupError) {
+        throw error;
+      }
       if (isAbortError(error) || context.signal.aborted) {
         const nestedItems = error instanceof CancelledWithItemsError ? error.childItems : [];
         const inProgress =
@@ -1250,7 +1263,11 @@ async function executeDirectoryNode(
   ) {
     // Should it stay (the disk refused), the folder it is in isn't put in place either: the
     // error goes up and the whole hidden copy goes.
-    await removeStagedItem(context.fileSystem, currentNode.destinationPath);
+    try {
+      await removeStagedItem(context.fileSystem, currentNode.destinationPath);
+    } catch (error) {
+      throw new StagingCleanupError(error);
+    }
     return {
       itemStatus: "failed",
       skipReason: null,

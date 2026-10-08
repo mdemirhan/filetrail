@@ -133,7 +133,20 @@ export async function runBatchRename(args: {
     stillWritten.some((entry) =>
       entry.items.some((written) => written.temporaryPath.startsWith(`${folder}/`)),
     );
-  for (const level of deepestFirst) {
+  for (const allOfLevel of deepestFirst) {
+    // A folder holding an item still under a hidden name keeps its name (and isn't moved
+    // aside), so the next start finds the item where it is written down.
+    const level: PlannedItem[] = [];
+    for (const item of allOfLevel) {
+      if (holdsHiddenItem(item.sourcePath)) {
+        results[item.index] = failed(
+          item,
+          `“${item.sourceName}” wasn't renamed because an item in it is still under a hidden name.`,
+        );
+      } else {
+        level.push(item);
+      }
+    }
     const blockers = level.filter(isBlocker);
     // The hidden names the items in the way will wait under, written down before any moves.
     const entry: BatchRenameJournalEntry = {
@@ -210,15 +223,6 @@ export async function runBatchRename(args: {
         results[item.index] = await leaveUnrenamed(fs, item, {
           status: "cancelled",
           error: "Not started because the operation was stopped.",
-          skipReason: null,
-        });
-        followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
-        continue;
-      }
-      if (item.isFolder && holdsHiddenItem(item.sourcePath)) {
-        results[item.index] = await leaveUnrenamed(fs, item, {
-          status: "failed",
-          error: `“${item.sourceName}” wasn't renamed because an item in it is still under a hidden name.`,
           skipReason: null,
         });
         followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);

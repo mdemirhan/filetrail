@@ -942,6 +942,44 @@ describe("writing down the items moved aside", () => {
     ]);
   });
 
+  // "P" and "Q" swap names, but "P" holds an item still hidden: "P" is never moved aside,
+  // so it keeps its name and the item stays where it is written down.
+  it("doesn't move aside a folder holding an item left hidden, for a swap", async () => {
+    const disk = new MemoryDisk(["/trip/P", "/trip/Q", "/trip/P/a", "/trip/P/b"]);
+    disk.failures.set("renameExclusive:/trip/P/.tmp-0->/trip/P/b", errno("EACCES"));
+    disk.failures.set("renameExclusive:/trip/P/.tmp-0->/trip/P/a", errno("EACCES"));
+    const live = new Map<string, WriteJournalEntry>();
+    await runBatchRename({
+      request: request(
+        [
+          ["P/a", "b"],
+          ["P/b", "a"],
+          ["Q", "P"],
+          ["P", "Q"],
+        ],
+        { folders: ["P", "Q"] },
+      ),
+      fs: disk,
+      signal: new AbortController().signal,
+      temporaryName: counter(),
+      journal: {
+        add: async (entry) => {
+          live.set(entry.id, structuredClone(entry));
+        },
+        remove: async (id) => {
+          live.delete(id);
+        },
+      },
+    });
+    expect(disk.names("/trip")).toContain("P");
+    expect(disk.names("/trip/P")).toContain(".tmp-0");
+    expect(
+      [...live.values()].flatMap((entry) => (entry.kind === "batch_rename" ? entry.items : [])),
+    ).toEqual([
+      { temporaryPath: "/trip/P/.tmp-0", originalPath: "/trip/P/a", newPath: "/trip/P/b" },
+    ]);
+  });
+
   it("renames nothing of a depth whose items can't be written down", async () => {
     const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
     const result = await runBatchRename({

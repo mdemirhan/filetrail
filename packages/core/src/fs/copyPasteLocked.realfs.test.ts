@@ -3,7 +3,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -376,6 +376,33 @@ describe("stopping part way through a file", () => {
 });
 
 describe("putting right a Replace a crash cut short", () => {
+  // A folder built under a hidden name was put in place, and the crash came before its own
+  // metadata went on: it gets it at the next start.
+  it("puts a folder's own metadata on when it was put in place just before a crash", async () => {
+    await mkdir(join(src, "F"));
+    await chmod(join(src, "F"), 0o750);
+    await mkdir(join(dst, "F"));
+    const stats = await stat(join(dst, "F"));
+
+    const [outcome] = await recoverInterruptedReplaces(
+      [
+        {
+          id: "1",
+          stagingPath: join(dst, ".F.filetrail-0a0a0a0a"),
+          finalPath: join(dst, "F"),
+          sourcePath: join(src, "F"),
+          moved: false,
+          staged: true,
+          stagingId: { dev: stats.dev, ino: stats.ino },
+        },
+      ],
+      nativeFileSystem,
+    );
+
+    expect(outcome).toMatchObject({ outcome: "finished", path: join(dst, "F") });
+    expect((await stat(join(dst, "F"))).mode & 0o777).toBe(0o750);
+  });
+
   it("finishes a Replace whose new item is locked", async () => {
     const staged = join(dst, ".f.txt.filetrail-1234");
     await writeFile(staged, "new");

@@ -155,6 +155,15 @@ async function recoverEntry(
     await fileSystem.lstat(entry.stagingPath);
   } catch (error) {
     if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, entry.stagingPath))) {
+      // A folder built under a hidden name and put in place before its own metadata went on:
+      // it is in place (the same folder, by its id), and gets it now.
+      if (entry.staged && entry.stagingId !== undefined) {
+        const placed = await captureFingerprint(fileSystem, entry.finalPath);
+        if (placed.dev === entry.stagingId.dev && placed.ino === entry.stagingId.ino) {
+          await applyFolderMetadata(fileSystem, entry);
+          return { entry, outcome: "finished", path: entry.finalPath };
+        }
+      }
       return { entry, outcome: "nothing_left" };
     }
     return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
@@ -198,10 +207,28 @@ async function recoverEntry(
   // went to the Trash is worth keeping.
   if (entry.staged && !finalTaken) {
     await moveUnlocked(fileSystem, entry.stagingPath, entry.finalPath);
+    if (entry.stagingId !== undefined) {
+      await applyFolderMetadata(fileSystem, entry);
+    }
     return { entry, outcome: "finished", path: entry.finalPath };
   }
   await removeStagedItem(fileSystem, entry.stagingPath);
   return { entry, outcome: "removed_copy" };
+}
+
+// A folder built under a hidden name gets its own metadata once it has its name (see
+// metadataLaterFor): from its original, when that is still there.
+async function applyFolderMetadata(
+  fileSystem: WriteServiceFileSystem,
+  entry: ReplaceJournalEntry,
+): Promise<void> {
+  if (
+    !fileSystem.copyMetadata ||
+    !(await captureFingerprint(fileSystem, entry.sourcePath)).exists
+  ) {
+    return;
+  }
+  await fileSystem.copyMetadata(entry.sourcePath, entry.finalPath).catch(() => undefined);
 }
 
 async function folderIsThere(fileSystem: WriteServiceFileSystem, path: string): Promise<boolean> {

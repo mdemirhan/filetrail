@@ -6,6 +6,7 @@ import {
   describeTab,
   disambiguateTabLabels,
   followMovedItems,
+  followMovedPath,
   getPathAndAncestors,
   leaveUnmountedDisks,
   moveTabInList,
@@ -299,5 +300,19 @@ describe("leaveUnmountedDisks", () => {
       treeRootPath: "/Volumes/Backup 2",
     };
     expect(leaveUnmountedDisks(onBackup2, unmounted, "/Users/demo")).toBe(onBackup2);
+  });
+});
+
+describe("following moved folders", () => {
+  // "/P" moved to "/Q", and "/P/A" inside it to "/Q/B": the deepest move decides.
+  it("follows the deepest move that holds a path", () => {
+    const moves = [
+      { from: "/P", to: "/Q" },
+      { from: "/P/A", to: "/Q/B" },
+    ];
+    expect(followMovedPath("/P/A", moves)).toBe("/Q/B");
+    expect(followMovedPath("/P/A/x", moves)).toBe("/Q/B/x");
+    expect(followMovedPath("/P/C", moves)).toBe("/Q/C");
+    expect(followMovedPath("/Elsewhere", moves)).toBe("/Elsewhere");
   });
 });

@@ -342,19 +342,24 @@ export function leaveUnmountedDisks(
 }
 
 // Where `path` is after `moves`: a path moved, or one inside a folder moved, goes along.
+// The deepest move that holds it decides: a folder and an item in it may both have moved.
 export function followMovedPath(
   path: string,
   moves: ReadonlyArray<{ from: string; to: string }>,
 ): string {
+  let deepest: { from: string; to: string } | null = null;
   for (const move of moves) {
-    if (path === move.from) {
-      return move.to;
-    }
-    if (path.startsWith(`${move.from}/`)) {
-      return `${move.to}${path.slice(move.from.length)}`;
+    if (
+      (path === move.from || path.startsWith(`${move.from}/`)) &&
+      (deepest === null || move.from.length > deepest.from.length)
+    ) {
+      deepest = move;
     }
   }
-  return path;
+  if (deepest === null) {
+    return path;
+  }
+  return path === deepest.from ? deepest.to : `${deepest.to}${path.slice(deepest.from.length)}`;
 }
 
 // A background tab shows a folder that was renamed or moved (by any window): it follows
