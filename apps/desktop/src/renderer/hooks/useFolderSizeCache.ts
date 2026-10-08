@@ -66,6 +66,13 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
   }, []);
 
   const pollTimers = useRef(new Map<string, ReturnType<typeof setInterval>>());
+  // The measurement each polled folder waits for, and a look at it now, for when the main
+  // process says it has ended.
+  const pollJobs = useRef(new Map<string, string>());
+  const lookNow = useRef(new Map<string, () => void>());
+  // Measurements that ended before the window began waiting for them (a small folder can
+  // be measured before the answer to its start is in): looked at as soon as it begins.
+  const settledEarly = useRef(new Set<string>());
   // Calculations a run of several folders waits for, told how each ended (ready, error, or
   // idle when stopped).
   const finishWaiters = useRef(new Map<string, Array<(entry: FolderSizeEntry) => void>>());
@@ -233,6 +240,11 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
       clearInterval(timer);
       pollTimers.current.delete(path);
     }
+    const jobId = pollJobs.current.get(path);
+    if (jobId !== undefined) {
+      pollJobs.current.delete(path);
+      lookNow.current.delete(jobId);
+    }
   }, []);
 
   const startPolling = useCallback(
@@ -240,7 +252,13 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
       stopPolling(path);
       // The folders inside measured so far, as last seen: more are asked about as they come.
       let measuredFolderCount = 0;
-      const timer = setInterval(async () => {
+      // One look at a time: the timer and the main process's word may come together.
+      let looking = false;
+      const look = async () => {
+        if (looking) {
+          return;
+        }
+        looking = true;
         try {
           const result = await client.invoke("folderSize:getStatus", { jobId });
           // Another calculation of this folder took over meanwhile.
@@ -276,9 +294,17 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
           }
           stopPolling(path);
           updateEntry(path, { status: "error", message: "Failed to poll folder size status" });
+        } finally {
+          looking = false;
         }
-      }, POLL_INTERVAL_MS);
+      };
+      const timer = setInterval(() => void look(), POLL_INTERVAL_MS);
       pollTimers.current.set(path, timer);
+      pollJobs.current.set(path, jobId);
+      lookNow.current.set(jobId, () => void look());
+      if (settledEarly.current.delete(jobId)) {
+        void look();
+      }
     },
     [askAgainInside, client, stopPolling, updateEntry],
   );
@@ -465,6 +491,28 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
         });
       }),
     [client, forgetChangedSizes],
+  );
+
+  // A measurement this window waits for has ended: it is looked at now, not at the next
+  // poll, so measuring many small folders one after another isn't held up between them.
+  useEffect(
+    () =>
+      client.onFolderSizeSettled?.((jobId) => {
+        const lookAtIt = lookNow.current.get(jobId);
+        if (lookAtIt) {
+          lookAtIt();
+          return;
+        }
+        settledEarly.current.add(jobId);
+        // Only the few that came just before their wait began are of use.
+        if (settledEarly.current.size > 64) {
+          const oldest = settledEarly.current.values().next().value;
+          if (oldest !== undefined) {
+            settledEarly.current.delete(oldest);
+          }
+        }
+      }),
+    [client],
   );
 
   // Items a drag out of another window took away: this window's sizes of what held them.

@@ -271,7 +271,18 @@ export async function bootstrapMainProcess(
     isBusy: () => writeCoordinator.getActiveOperation() !== null,
     onFinished: (messages) => windows.showRecoveryNotices(messages),
   });
-  const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
+  const folderSizeHandlers = createFolderSizeHandlers({
+    getFolderSize,
+    cancelFolderSize,
+    // The window that asked hears at once, rather than at its next look a moment later:
+    // a run over many small folders isn't held up between them.
+    onSettled: (owner, jobId) => {
+      const window = BrowserWindow.getAllWindows().find(
+        (candidate) => !candidate.isDestroyed() && candidate.webContents.id === owner,
+      );
+      window?.webContents.send("filetrail:folderSizeSettled", jobId);
+    },
+  });
   activeFolderSizeHandlers?.stopAll();
   activeFolderSizeHandlers = folderSizeHandlers;
   // The windows that have asked for a measurement, so each is let go of when it closes.

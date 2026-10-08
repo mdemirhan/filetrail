@@ -1018,7 +1018,7 @@ describe("useFolderSizeCache", () => {
       });
       await settle();
     };
-    return { client, started, finish };
+    return { client, started, finished, finish };
   }
 
   it("measures several folders one after another, leaving those already known", async () => {
@@ -1039,6 +1039,77 @@ describe("useFolderSizeCache", () => {
     await finish("/a");
     expect(started).toEqual(["/b", "/a", "/c"]);
     await finish("/c");
+    expect(["/a", "/b", "/c"].map((path) => result.current.getEntry(path).status)).toEqual([
+      "ready",
+      "ready",
+      "ready",
+    ]);
+  });
+
+  // The main process says when each measurement ends: the next folder starts then, not at
+  // the window's next look, so many small folders aren't held up between them.
+  it("goes on to the next folder as soon as the main process says one has ended", async () => {
+    const { client, started, finished } = createOneAtATimeClient();
+    let emitSettled: ((jobId: string) => void) | null = null;
+    const settledClient: FiletrailClient = {
+      ...client,
+      onFolderSizeSettled: (listener) => {
+        emitSettled = listener;
+        return () => undefined;
+      },
+    };
+    const { result } = renderHook(() => useFolderSizeCache(settledClient));
+
+    await act(async () => {
+      void result.current.calculateFolderSizes(["/a", "/b"]);
+    });
+    expect(started).toEqual(["/a"]);
+    finished.add("/a");
+    await act(async () => {
+      emitSettled?.("/a");
+    });
+    await settle();
+
+    // No time has passed: no look at the timer's pace was needed.
+    expect(result.current.getEntry("/a").status).toBe("ready");
+    expect(started).toEqual(["/a", "/b"]);
+  });
+
+  it("takes the word of a measurement that ended before the window began waiting for it", async () => {
+    let emitSettled: ((jobId: string) => void) | null = null;
+    const client: FiletrailClient = {
+      ...createMockFiletrailClient({
+        // A small folder, measured before the answer to its start is in.
+        "folderSize:start": vi.fn(async (payload: { path: string }) => {
+          emitSettled?.(payload.path);
+          return { jobId: payload.path, status: "running" as const };
+        }),
+        "folderSize:probeMany": vi.fn(async () => ({ sizes: [] })),
+        "folderSize:getStatus": vi.fn(async (payload: { jobId: string }) => ({
+          jobId: payload.jobId,
+          status: "ready" as const,
+          sizeBytes: 100,
+          diskBytes: 100,
+          fileCount: 1,
+          folderCount: 0,
+          measuredFolderCount: 0,
+          error: null,
+        })),
+        "folderSize:cancel": vi.fn(async () => ({ ok: true })),
+      }),
+      onFolderSizeSettled: (listener) => {
+        emitSettled = listener;
+        return () => undefined;
+      },
+    };
+    const { result } = renderHook(() => useFolderSizeCache(client));
+
+    await act(async () => {
+      void result.current.calculateFolderSizes(["/a", "/b", "/c"]);
+    });
+    await settle();
+    await settle();
+
     expect(["/a", "/b", "/c"].map((path) => result.current.getEntry(path).status)).toEqual([
       "ready",
       "ready",

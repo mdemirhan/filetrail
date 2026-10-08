@@ -62,6 +62,36 @@ const sampleJson = JSON.stringify({
 });
 
 describe("createFolderSizeHandlers", () => {
+  // The window that asked hears when its measurement ends, whichever way, and only once.
+  it("tells the window that asked when its measurement has ended", async () => {
+    const native = createMockNative();
+    const onSettled = vi.fn();
+    const handlers = createFolderSizeHandlers({ ...native, onSettled });
+
+    const measured = handlers.start({ path: "/test/a" }, 7);
+    const waiting = handlers.start({ path: "/test/b" }, 8);
+    expect(onSettled).not.toHaveBeenCalled();
+    native.resolveActive(sampleJson);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onSettled).toHaveBeenCalledWith(7, measured.jobId);
+
+    // Window 8's, now running, fails; a stop afterwards changes nothing it is told.
+    native.rejectActive(new Error("EIO"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onSettled).toHaveBeenLastCalledWith(8, waiting.jobId);
+    handlers.cancel({ jobId: waiting.jobId });
+    expect(onSettled).toHaveBeenCalledTimes(2);
+
+    // Stopped while it waited: told too.
+    const running = handlers.start({ path: "/test/c" }, 7);
+    const queued = handlers.start({ path: "/test/d" }, 8);
+    handlers.cancel({ jobId: queued.jobId });
+    expect(onSettled).toHaveBeenLastCalledWith(8, queued.jobId);
+    native.resolveActive(sampleJson);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onSettled).toHaveBeenLastCalledWith(7, running.jobId);
+  });
+
   it("start returns running and job transitions to ready with all three fields", async () => {
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);

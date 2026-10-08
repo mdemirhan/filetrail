@@ -44,6 +44,7 @@ type InvokeApi = {
   onWriteOperationAdopted(listener: (adoption: WriteOperationAdoption) => void): () => void;
   onDraggedAway(listener: (change: DraggedAway) => void): () => void;
   onTrashEmptied(listener: () => void): () => void;
+  onFolderSizeSettled(listener: (jobId: string) => void): () => void;
   onMergeRequest(listener: (request: MergeRequest) => void): () => void;
   getPathForFile(file: unknown): string;
 };
@@ -148,6 +149,17 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:trashEmptied", handleEmptied);
     return () => {
       ipcRenderer.removeListener("filetrail:trashEmptied", handleEmptied);
+    };
+  },
+  onFolderSizeSettled: (listener) => {
+    const handleSettled = (_event: unknown, jobId: unknown) => {
+      if (typeof jobId === "string") {
+        listener(jobId);
+      }
+    };
+    ipcRenderer.on("filetrail:folderSizeSettled", handleSettled);
+    return () => {
+      ipcRenderer.removeListener("filetrail:folderSizeSettled", handleSettled);
     };
   },
   onMergeRequest: (listener) => {

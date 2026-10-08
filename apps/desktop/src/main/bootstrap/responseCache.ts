@@ -225,6 +225,9 @@ export function createFolderSizeHandlers(native: {
   homePath?: string;
   // How many folder sizes are kept (tests use fewer).
   maxFolderSizes?: number;
+  // Told when a measurement ends (measured, failed or stopped), with the window that asked
+  // (its web contents id): it learns at once, rather than at its next look.
+  onSettled?: (owner: number | null, jobId: string) => void;
 }) {
   // Only a store adds a size, so none goes while removals are taken off. What was stored
   // while a write ran is noted there, until its end has been cleared.
@@ -280,6 +283,14 @@ export function createFolderSizeHandlers(native: {
   // The window that asked for each job. A window's new measurement stops its own earlier
   // one, never another window's: that one finishes, and the new one waits for it.
   const jobOwners = new Map<string, number | null>();
+  // Sets a measurement's state, telling its window once it has ended.
+  const setJob = (jobId: string, job: FolderSizeJob) => {
+    const wasFinished = isFinishedFolderSizeJob(folderSizeJobs.get(jobId)?.status ?? "queued");
+    setFolderSizeJob(jobId, job);
+    if (!wasFinished && isFinishedFolderSizeJob(job.status)) {
+      native.onSettled?.(jobOwners.get(jobId) ?? null, jobId);
+    }
+  };
   // The jobs the app started itself, which walk at a lower priority.
   const backgroundJobIds = new Set<string>();
   // Set when the app quits: nothing more is measured.
@@ -293,7 +304,7 @@ export function createFolderSizeHandlers(native: {
       forgetJob(queuedId);
       const queued = folderSizeJobs.get(queuedId);
       if (queued) {
-        setFolderSizeJob(queuedId, { ...queued, status: "cancelled" });
+        setJob(queuedId, { ...queued, status: "cancelled" });
       }
       return false;
     });
@@ -339,7 +350,7 @@ export function createFolderSizeHandlers(native: {
     activeJobId = jobId;
     measurementCount += 1;
     const measurement = measurementCount;
-    setFolderSizeJob(jobId, {
+    setJob(jobId, {
       jobId,
       path,
       status: "running",
@@ -392,7 +403,7 @@ export function createFolderSizeHandlers(native: {
       const stored = storeMeasured(measured);
       const job = folderSizeJobs.get(jobId);
       if (job) {
-        setFolderSizeJob(jobId, {
+        setJob(jobId, {
           ...job,
           measuredFolderCount: job.measuredFolderCount + stored,
         });
@@ -428,7 +439,7 @@ export function createFolderSizeHandlers(native: {
           measurement,
         });
         const stored = storeMeasured(result);
-        setFolderSizeJob(jobId, {
+        setJob(jobId, {
           jobId,
           path,
           status: "ready",
@@ -455,7 +466,7 @@ export function createFolderSizeHandlers(native: {
           // Already marked as cancelled by the cancel handler
         } else {
           const message = err instanceof Error ? err.message : "Unknown error";
-          setFolderSizeJob(jobId, {
+          setJob(jobId, {
             jobId,
             path,
             status: "error",
@@ -486,7 +497,7 @@ export function createFolderSizeHandlers(native: {
             runJob(jobId, path);
             return;
           }
-          setFolderSizeJob(jobId, { ...job, status: "queued" });
+          setJob(jobId, { ...job, status: "queued" });
           queuedJobIds = [...queuedJobIds, jobId];
         } else {
           forgetJob(jobId);
@@ -509,7 +520,7 @@ export function createFolderSizeHandlers(native: {
       const cached = folderSizeCache.use(payload.path);
       if (cached !== undefined) {
         const jobId = generateJobId();
-        setFolderSizeJob(jobId, {
+        setJob(jobId, {
           jobId,
           path: payload.path,
           status: "ready",
@@ -556,14 +567,14 @@ export function createFolderSizeHandlers(native: {
           native.cancelFolderSize();
           const activeJob = folderSizeJobs.get(activeJobId);
           if (activeJob) {
-            setFolderSizeJob(activeJobId, { ...activeJob, status: "cancelled" });
+            setJob(activeJobId, { ...activeJob, status: "cancelled" });
           }
           queuedJobIds = [jobId, ...queuedJobIds];
         } else {
           // Another window's walk goes on; this one waits its turn.
           queuedJobIds = [...queuedJobIds, jobId];
         }
-        setFolderSizeJob(jobId, {
+        setJob(jobId, {
           jobId,
           path: payload.path,
           status: "queued",
@@ -617,7 +628,7 @@ export function createFolderSizeHandlers(native: {
     cancel(payload: IpcRequest<"folderSize:cancel">): IpcResponse<"folderSize:cancel"> {
       const job = folderSizeJobs.get(payload.jobId);
       if (job) {
-        setFolderSizeJob(payload.jobId, { ...job, status: "cancelled" });
+        setJob(payload.jobId, { ...job, status: "cancelled" });
         if (job.jobId === activeJobId) {
           native.cancelFolderSize();
         }
@@ -635,7 +646,7 @@ export function createFolderSizeHandlers(native: {
       cancelQueuedJobsOf(owner);
       const activeJob = activeJobId ? folderSizeJobs.get(activeJobId) : undefined;
       if (activeJob?.status === "running" && jobOwners.get(activeJob.jobId) === owner) {
-        setFolderSizeJob(activeJob.jobId, { ...activeJob, status: "cancelled" });
+        setJob(activeJob.jobId, { ...activeJob, status: "cancelled" });
         native.cancelFolderSize();
       }
     },
