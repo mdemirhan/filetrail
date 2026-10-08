@@ -73,7 +73,8 @@ export type CantUndoReason =
   // Something was deleted for good: Delete Immediately, Empty Trash, or a Replace on a
   // disk without a Trash.
   | "deleted_for_good"
-  // Copies were made on a disk without a Trash: undoing them would mean deleting them.
+  // Copies, or a new folder, were made on a disk without a Trash: undoing them would mean
+  // deleting them.
   | "no_trash"
   // A move to another disk (copied there, then the original deleted).
   | "other_disk_move"

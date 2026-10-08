@@ -250,10 +250,6 @@ export function createWriteOperationCoordinator(
     if (log.units.length === 0) {
       return null;
     }
-    const { diskHasTrash } = options;
-    if (diskHasTrash === undefined) {
-      return log;
-    }
     // Asked once per folder: each answer reads the mount table, and a paste's copies are
     // all in one folder or a few.
     const answers = new Map<string, boolean>();
@@ -262,7 +258,7 @@ export function createWriteOperationCoordinator(
       if (known !== undefined) {
         return known;
       }
-      const answer = diskHasTrash(folder);
+      const answer = canBeTrashedIn(folder);
       answers.set(folder, answer);
       return answer;
     };
@@ -271,6 +267,18 @@ export function createWriteOperationCoordinator(
     );
     return copiedOntoDiskWithoutTrash ? { undoable: false, reason: "no_trash" } : log;
   }
+
+  // Whether what is made in `folder` could go to the Trash, for Undo. Not knowing (the mount
+  // table couldn't be read) counts as no: it can't be undone then.
+  function canBeTrashedIn(folder: string): boolean {
+    try {
+      return options.diskHasTrash?.(folder) ?? true;
+    } catch (error) {
+      console.error("[filetrail] couldn't tell whether a disk has a Trash", error);
+      return false;
+    }
+  }
+
   const trashPath = resolve(homePath, ".Trash").toLowerCase();
   function assertNotProtectedPath(paths: readonly string[]): void {
     for (const path of paths) {
@@ -341,14 +349,7 @@ export function createWriteOperationCoordinator(
       copyPasteModes.delete(event.operationId);
       try {
         forgetCachedResponses(event.result ? pathsChangedByWrite(event.result) : []);
-        let undoLog: UndoLog | null;
-        try {
-          undoLog = pasteUndoLog(event);
-        } catch (error) {
-          // Whether its copies can be undone isn't known, so it can't be.
-          console.error("[filetrail] couldn't tell whether a paste can be undone", error);
-          undoLog = { undoable: false, reason: "no_trash" };
-        }
+        const undoLog = pasteUndoLog(event);
         if (undoLog !== null) {
           recordFinishedWrite({ action, log: undoLog, items: event.result?.items ?? [] });
         }
@@ -1152,7 +1153,10 @@ export function createWriteOperationCoordinator(
       destinationPath,
       status: "completed",
       error: null,
-      undoLog: { undoable: true, units: [{ steps: [created] }] },
+      // As for a copy: undoing it would mean deleting it, on a disk without a Trash.
+      undoLog: canBeTrashedIn(dirname(destinationPath))
+        ? { undoable: true, units: [{ steps: [created] }] }
+        : { undoable: false, reason: "no_trash" },
     });
   }
 

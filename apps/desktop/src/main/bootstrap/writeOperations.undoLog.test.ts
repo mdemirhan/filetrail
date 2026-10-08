@@ -195,6 +195,46 @@ describe("what the simple operations record", () => {
     await coordinator.shutdown();
   });
 
+  // As a copy there can't: undoing it would mean deleting it.
+  it("can't undo a new folder made on a disk without a Trash", async () => {
+    const asked: string[] = [];
+    const { coordinator, finished, sender } = setUp({
+      diskHasTrash: (path) => {
+        asked.push(path);
+        return false;
+      },
+    });
+
+    await coordinator.handlers["writeOperation:createFolder"](
+      { parentDirectoryPath: root, folderName: "New" },
+      { sender },
+    );
+    await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(finished.map((entry) => entry.log)).toEqual([{ undoable: false, reason: "no_trash" }]);
+    expect(asked).toEqual([root]);
+    await coordinator.shutdown();
+  });
+
+  it("can't undo a new folder when whether its disk has a Trash can't be told", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { coordinator, finished, sender } = setUp({
+      diskHasTrash: () => {
+        throw new Error("The mount table couldn't be read.");
+      },
+    });
+
+    await coordinator.handlers["writeOperation:createFolder"](
+      { parentDirectoryPath: root, folderName: "New" },
+      { sender },
+    );
+
+    expect((await waitForTerminalEvent(sender, "write-op-1")).status).toBe("completed");
+    expect(finished.map((entry) => entry.log)).toEqual([{ undoable: false, reason: "no_trash" }]);
+    errors.mockRestore();
+    await coordinator.shutdown();
+  });
+
   it("records the items a batch rename renamed, under their final names", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     writeFileSync(join(root, "b.txt"), "b");

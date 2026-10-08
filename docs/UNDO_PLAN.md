@@ -19,7 +19,7 @@ Status: built and merged on 2026-10-05 (Phases 0–5); changed after review on 2
 - Delete Immediately and Empty Trash.
 - A paste that merges a folder (Add Missing), including a Replace inside the merged folder.
 - A paste whose Replace deleted an item for good (a disk with no Trash).
-- A copy onto a disk with no Trash.
+- A copy onto a disk with no Trash, and a New Folder made on one.
 - A move to another disk (out of scope for now).
 
 One such item makes the whole operation Can't Undo. Undo never reverses only part of an operation.
@@ -392,4 +392,5 @@ Each phase is its own commit and passes `bun run ci` before the next starts.
 - When the Trash takes an item but doesn't say where (no resulting URL), `nativeTrashItem` resolves with null: the item counts as trashed, and the operation can't be undone (`trash_location_unknown`); an Undo that does this counts it as done, with nothing to redo.
 - An item put back from the Trash on a disk without usable ids (FAT, exFAT) must look as it did when it went (`stamp` on the `trashed` step): kind and size, or for a folder its number of items.
 - Before an Undo starts, up to 16 units are checked at once (`mapAtMost`), in their order.
+- A New Folder made on a disk with no Trash can't be undone (`no_trash`), as a copy there can't: undoing it would mean deleting it. When the mount table can't be read, the disk counts as having no Trash.
 
