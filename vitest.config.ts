@@ -48,6 +48,9 @@ export default defineConfig({
         "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename,useTextEditingFocus}.ts",
         "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,internalDragAndDrop,undoQuestion}.ts",
         "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField,BatchRenameSheet,UndoQuestionAlert}.tsx",
+        // The window's navigation, keys and tabs, and the panes and toolbar they drive.
+        "apps/desktop/src/renderer/hooks/{useExplorerNavigationController,useExplorerShortcuts,useExplorerTabs,useFolderWatch}.ts",
+        "apps/desktop/src/renderer/components/{TabStrip,ContentPane,TreePane,ExplorerWorkspace}.tsx",
       ],
       thresholds: {
         // The copy engine and the contracts: where a gap can lose data.
@@ -130,16 +133,64 @@ export default defineConfig({
         },
         "apps/desktop/src/main/bootstrap/systemHandlers.ts": {
           statements: 98,
-          branches: 92,
+          branches: 93,
           functions: 100,
           lines: 98,
         },
         // The window. The large hooks start from where they are, so they can only go up.
         "apps/desktop/src/renderer/hooks/useExplorerActions.ts": {
-          statements: 77,
-          branches: 71,
-          functions: 81,
-          lines: 77,
+          statements: 85,
+          branches: 78,
+          functions: 89,
+          lines: 85,
+        },
+        "apps/desktop/src/renderer/hooks/useExplorerNavigationController.ts": {
+          statements: 87,
+          branches: 83,
+          functions: 96,
+          lines: 87,
+        },
+        "apps/desktop/src/renderer/hooks/useExplorerShortcuts.ts": {
+          statements: 90,
+          branches: 87,
+          functions: 89,
+          lines: 90,
+        },
+        "apps/desktop/src/renderer/hooks/useExplorerTabs.ts": {
+          statements: 90,
+          branches: 83,
+          functions: 97,
+          lines: 90,
+        },
+        "apps/desktop/src/renderer/hooks/useFolderWatch.ts": {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
+        "apps/desktop/src/renderer/components/ContentPane.tsx": {
+          statements: 89,
+          branches: 81,
+          functions: 83,
+          lines: 89,
+        },
+        "apps/desktop/src/renderer/components/TreePane.tsx": {
+          statements: 95,
+          branches: 88,
+          functions: 93,
+          lines: 95,
+        },
+        "apps/desktop/src/renderer/components/ExplorerWorkspace.tsx": {
+          statements: 94,
+          branches: 90,
+          functions: 75,
+          lines: 94,
+        },
+        "apps/desktop/src/renderer/components/TabStrip.tsx": {
+          statements: 99,
+          branches: 95,
+          functions: 100,
+          lines: 99,
         },
         "apps/desktop/src/renderer/hooks/useExplorerDragAndDrop.ts": {
           statements: 87,
@@ -147,12 +198,14 @@ export default defineConfig({
           functions: 93,
           lines: 87,
         },
-        "apps/desktop/src/renderer/{lib,components}/**": {
-          statements: 93,
-          branches: 83,
-          functions: 85,
-          lines: 93,
-        },
+        // The copy and paste, rename and Undo dialogs, and what they are built on, together.
+        "apps/desktop/src/renderer/{lib/{copyPasteClipboard,copyPasteReview,internalDragAndDrop,undoQuestion}.ts,components/{CopyPaste*,InlineRenameField,BatchRenameSheet,UndoQuestionAlert}.tsx}":
+          {
+            statements: 93,
+            branches: 83,
+            functions: 85,
+            lines: 93,
+          },
         "apps/desktop/src/renderer/hooks/useBatchRename.ts": {
           statements: 95,
           branches: 90,
