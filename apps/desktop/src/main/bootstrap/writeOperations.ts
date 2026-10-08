@@ -1504,6 +1504,8 @@ export function createWriteOperationCoordinator(
     history: UndoHistory,
     direction: UndoDirection,
     entry: UndoEntry,
+    // The changed items the person agreed to move to the Trash.
+    changedAgreed: ReadonlySet<string>,
     operationId: string,
     controller: AbortController,
   ): Promise<void> {
@@ -1528,6 +1530,7 @@ export function createWriteOperationCoordinator(
         signal: controller.signal,
         homeDev: home && home !== "missing" ? home.dev : null,
         diskHasTrash: options.diskHasTrash,
+        changedAgreed,
         onStepStart: (path, completedItemCount) =>
           emitLocalWriteOperationEvent({
             operationId,
@@ -2059,6 +2062,7 @@ export function createWriteOperationCoordinator(
               started.history,
               started.direction,
               started.entry,
+              new Set(asked.changed.map((item) => item.path)),
               operationId,
               controller,
             ),

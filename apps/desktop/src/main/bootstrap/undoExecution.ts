@@ -90,6 +90,9 @@ export async function runUndo(args: {
   // Whether the disk holding a path has a Trash (createDiskHasTrash), to tell a Trash that
   // failed without saying why from a disk that has none.
   diskHasTrash?: ((path: string) => boolean) | undefined;
+  // The items the person agreed to move to the Trash though they changed since. Another
+  // that changed once the Undo started is left, and the next Undo asks about it.
+  changedAgreed?: ReadonlySet<string>;
   onStepStart?: (path: string, completedItemCount: number) => void;
 }): Promise<UndoRun> {
   const run: UndoRun = {
@@ -495,6 +498,10 @@ async function moveToTrash(
       items: [skippedItem(planned.path, null, check.reason)],
       missing: check.missing,
     };
+  }
+  if (check.changed && !args.changedAgreed?.has(planned.path)) {
+    const reason = `“${basename(planned.path)}” was changed after ${args.direction === "undo" ? "Undo" : "Redo"} was chosen, so it was left as it is.`;
+    return failedStep(original, planned.path, null, reason);
   }
   const id = await readItemId(fs.lstat, planned.path);
   const parentId = await readFolderId(fs.stat, dirname(planned.path));

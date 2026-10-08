@@ -11,7 +11,7 @@ import { lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { paste, setUpUndo } from "./undoRealDisk.testkit";
+import { folderTrash, paste, setUpUndo } from "./undoRealDisk.testkit";
 
 // Starting an Undo that was looked at (and asked about) a moment before: what changed in
 // between, on disk or in the history, refuses it rather than doing what wasn't agreed to.
@@ -113,6 +113,42 @@ describe("starting an Undo", () => {
     expect(existsSync(join(root, "b.txt"))).toBe(true);
     hanging = false;
     expect((await t.undo()).status).toBe("completed");
+    await t.coordinator.shutdown();
+  });
+
+  it("leaves a copy that changed once the Undo started, to be asked about next time", async () => {
+    writeFileSync(join(root, "x.txt"), "x");
+    writeFileSync(join(root, "y.txt"), "y");
+    mkdirSync(join(root, "D"));
+    const trash = folderTrash(trashDir);
+    const t = setUpUndo(root, trashDir, {
+      trash: async (path) => {
+        // As the first copy goes to the Trash, the other one is edited.
+        if (path === join(root, "D", "y.txt")) {
+          writeFileSync(join(root, "D", "x.txt"), "edited");
+        }
+        return trash(path);
+      },
+    });
+    await paste(t.history, {
+      mode: "copy",
+      sourcePaths: [join(root, "x.txt"), join(root, "y.txt")],
+      destinationDirectoryPath: join(root, "D"),
+    });
+
+    const undone = await t.undo();
+
+    expect(undone.result?.items).toEqual([
+      expect.objectContaining({ status: "completed" }),
+      expect.objectContaining({
+        status: "failed",
+        error: "“x.txt” was changed after Undo was chosen, so it was left as it is.",
+      }),
+    ]);
+    expect(readFileSync(join(root, "D", "x.txt"), "utf8")).toBe("edited");
+    expect(await t.prepare()).toMatchObject({
+      changed: [{ name: "x.txt", putBack: false, replaced: false }],
+    });
     await t.coordinator.shutdown();
   });
 
