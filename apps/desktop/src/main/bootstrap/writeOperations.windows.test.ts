@@ -916,6 +916,51 @@ describe("deleting immediately what a disk without a Trash couldn't take", () =>
     const { operationId } = await deleteImmediately(first, "/Volumes/Share/a.txt");
     expect((await waitForEnd(first, operationId)).status).toBe("completed");
     expect(rm).toHaveBeenCalledWith("/Volumes/Share/a.txt", { recursive: true, force: true });
+    // Once deleted, it is let go of: another item there now is a different matter.
+    await expect(deleteImmediately(first, "/Volumes/Share/a.txt")).rejects.toThrow(
+      "isn't in the Trash",
+    );
+    await coordinator.shutdown();
+  });
+
+  it("is let go of when the window's page is loaded again", async () => {
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub().writeService,
+      {
+        lstat: async () => ({ isDirectory: () => false }),
+        stat: async () => ({ isDirectory: () => true }),
+        mkdir: async () => undefined,
+        rename: async () => undefined,
+        renameExclusive: async () => undefined,
+        rm: async () => undefined,
+        trash: async () => {
+          throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+        },
+      },
+      { homePath: "/Users/demo" },
+    );
+    const window = createWindow();
+    const trash = async () => {
+      const { operationId } = await coordinator.handlers["writeOperation:trash"](
+        { paths: ["/Volumes/Share/a.txt"] },
+        { sender: window },
+      );
+      await waitForEnd(window, operationId);
+    };
+
+    // Twice: the window is listened to once.
+    await trash();
+    window.emit("did-navigate");
+    await trash();
+    window.emit("did-navigate");
+
+    await expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Volumes/Share/a.txt"] },
+        { sender: window },
+      ),
+    ).rejects.toThrow("isn't in the Trash");
+    expect(window.listenerCount("did-navigate")).toBe(1);
     await coordinator.shutdown();
   });
 });

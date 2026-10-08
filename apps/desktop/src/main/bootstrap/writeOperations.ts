@@ -307,8 +307,21 @@ export function createWriteOperationCoordinator(
 
   // Items that just couldn't go to the Trash because their disk has none, by the window
   // that tried. After asking, that window may delete exactly these immediately (as Finder
-  // does on such a disk), whatever another window sends to the Trash meanwhile.
+  // does on such a disk), whatever another window sends to the Trash meanwhile. Each is let
+  // go of once deleted, and all of them when the window's page is loaded again: the page
+  // that asked is gone.
   const itemsWithoutTrash = new WeakMap<WriteOperationSender, Set<string>>();
+  const sendersWatchedForReload = new WeakSet<WriteOperationSender>();
+
+  function rememberItemsWithoutTrash(sender: WriteOperationSender, paths: Set<string>): void {
+    itemsWithoutTrash.set(sender, paths);
+    const events = sender as SenderLifecycleEvents;
+    if (sendersWatchedForReload.has(sender) || typeof events.on !== "function") {
+      return;
+    }
+    sendersWatchedForReload.add(sender);
+    events.on.call(sender, "did-navigate", () => itemsWithoutTrash.delete(sender));
+  }
 
   // Delete Immediately deletes only what is in a Trash, or what was just found to have no
   // Trash to go to. The folder an item is in is looked up through any symlinks, so a link
@@ -1214,7 +1227,7 @@ export function createWriteOperationCoordinator(
     let cancelled = false;
     // Only what this Trash finds without a Trash may be deleted next.
     const withoutTrash = new Set<string>();
-    itemsWithoutTrash.set(sender, withoutTrash);
+    rememberItemsWithoutTrash(sender, withoutTrash);
     const removedItems: RemovedItem[] = [];
     // One unit per item, so an item put back from the Trash doesn't depend on the others.
     const trashedUnits: UndoUnit[] = [];
@@ -1344,6 +1357,7 @@ export function createWriteOperationCoordinator(
 
   async function executeDeleteImmediatelyOperation(
     payload: IpcRequest<"writeOperation:deleteImmediately">,
+    sender: WriteOperationSender,
     operationId: string,
     controller: AbortController,
   ): Promise<void> {
@@ -1375,6 +1389,7 @@ export function createWriteOperationCoordinator(
       try {
         const before = fs.itemSize ? await readItemSize(fs.itemSize, path) : undefined;
         await fs.rm(path, { recursive: true, force: true });
+        itemsWithoutTrash.get(sender)?.delete(path);
         if (before !== undefined) {
           removedItems.push({
             path,
@@ -1906,7 +1921,7 @@ export function createWriteOperationCoordinator(
           action: "delete_immediately",
           sender: event.sender,
           execute: (operationId, controller) =>
-            executeDeleteImmediatelyOperation(payload, operationId, controller),
+            executeDeleteImmediatelyOperation(payload, event.sender, operationId, controller),
         });
       },
       // What undoing (or redoing) the last operation would ask, without changing anything.
