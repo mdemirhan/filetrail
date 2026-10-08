@@ -153,13 +153,14 @@ export class WriteService {
     request: CopyPasteAnalysisRequest,
     keep: ReadonlySet<string> = new Set(),
   ): CopyPasteAnalysisStartHandle {
-    this.pruneTerminalAnalysisJobs(keep);
     if (this.activeOperationId !== null) {
       throw new Error(WRITE_OPERATION_BUSY_ERROR);
     }
     if (this.hasActiveAnalysisJob()) {
       throw new Error(ANALYSIS_BUSY_ERROR);
     }
+    // Only once it starts: a refused start leaves the caller's own review as it was.
+    this.pruneTerminalAnalysisJobs(keep);
     const normalizedRequest = normalizeCopyPasteAnalysisRequest(request);
     const analysisId = this.createAnalysisId();
     const controller = new AbortController();

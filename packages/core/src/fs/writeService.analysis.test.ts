@@ -227,6 +227,44 @@ describe("writeService analysis and runtime coordination", () => {
     ).toThrow(ANALYSIS_BUSY_ERROR);
   });
 
+  // The window whose start was refused still has its review open.
+  it("drops no finished analysis when a new one is refused", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source": { kind: "directory" },
+      "/source/folder": { kind: "directory" },
+      "/source/folder/file.txt": { kind: "file", size: 5 },
+      "/target": { kind: "directory" },
+    });
+    const service = createWriteService({
+      createAnalysisId: (() => {
+        let index = 0;
+        return () => {
+          index += 1;
+          return `analysis-${index}`;
+        };
+      })(),
+      fileSystem,
+    });
+    const request = {
+      mode: "copy" as const,
+      sourcePaths: ["/source/folder"],
+      destinationDirectoryPath: "/target",
+    };
+    service.startCopyPasteAnalysis(request);
+    await vi.waitFor(() => {
+      expect(service.getCopyPasteAnalysisUpdate("analysis-1").status).toBe("complete");
+    });
+    // Another window's analysis takes its time.
+    fileSystem.readdirImpl = () => new Promise(() => undefined);
+    service.startCopyPasteAnalysis(request, new Set(["analysis-1"]));
+
+    expect(() => service.startCopyPasteAnalysis(request, new Set(["analysis-2"]))).toThrow(
+      ANALYSIS_BUSY_ERROR,
+    );
+    expect(service.getCopyPasteAnalysisUpdate("analysis-1").status).toBe("complete");
+    service.cancelCopyPasteAnalysis("analysis-2");
+  });
+
   it("rejects starting analysis while a write operation is active", async () => {
     const service = createWriteService({
       createAnalysisId: () => "analysis-1",
