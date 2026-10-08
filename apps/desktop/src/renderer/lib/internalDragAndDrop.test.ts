@@ -241,6 +241,26 @@ describe("internalDragAndDrop", () => {
     expect(drop("/Users/demo/Folder")).toEqual({ ok: false, code: "same_path" });
     expect(drop("/Users/demo/Folder/Inner")).toEqual({ ok: false, code: "parent_into_child" });
   });
+
+  it("refuses an app or package dropped into a folder inside it", () => {
+    const session = {
+      sourceSurface: "external" as const,
+      sourceItems: [{ path: "/Applications/Tool.app", kind: "bundle" as const }],
+      leadPath: "/Applications/Tool.app",
+      leadKind: "bundle" as const,
+    };
+
+    expect(
+      validateInternalDrop({
+        session,
+        blocked: false,
+        targetSurface: "content",
+        targetPath: "/Applications/Tool.app/Contents",
+        targetSupportsMove: true,
+        operation: "copy",
+      }),
+    ).toEqual({ ok: false, code: "parent_into_child" });
+  });
 });
 
 describe("which disk decides a drag", () => {

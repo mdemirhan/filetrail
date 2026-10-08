@@ -212,10 +212,11 @@ export function validateInternalDrop(args: {
   ) {
     return { ok: false, code: "already_in_target" };
   }
+  // An app or package is a folder too, which can't go into a folder inside itself.
   if (
     session.sourceItems.some(
       (item) =>
-        item.kind === "directory" &&
+        (item.kind === "directory" || item.kind === "bundle") &&
         (targetPath === item.path || targetPath.startsWith(`${item.path}/`)),
     )
   ) {
