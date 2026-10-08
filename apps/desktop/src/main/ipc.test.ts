@@ -351,6 +351,10 @@ describe("registerIpcHandlers", () => {
       "writeOperation:rename": async () => {
         throw new Error("Choose a different name.");
       },
+      // Undo's checks read the disk before it starts.
+      "undo:prepare": async () => {
+        throw missing();
+      },
     } as unknown as IpcHandlerMap);
     const call = (channel: string, payload: unknown) =>
       handle.mock.calls.find((entry) => entry[0] === channel)?.[1]?.({}, payload);
@@ -365,6 +369,10 @@ describe("registerIpcHandlers", () => {
         destinationDirectoryPath: "/Users/demo/target",
       }),
     ).resolves.toEqual({ ok: false, error: "The item no longer exists." });
+    await expect(call("undo:prepare", { direction: "undo" })).resolves.toEqual({
+      ok: false,
+      error: "The item no longer exists.",
+    });
     // A sentence of the app's own is passed on as it is.
     await expect(
       call("writeOperation:rename", { sourcePath: "/Users/demo/a.txt", destinationName: "a.txt" }),

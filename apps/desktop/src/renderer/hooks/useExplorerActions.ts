@@ -3790,6 +3790,7 @@ export function useExplorerActions(args: {
   // found it can't simply do, then runs all of it as any operation runs, or none of it.
   async function startUndo(direction: "undo" | "redo") {
     if (isWriteOperationInFlight()) {
+      showWriteOperationBusyNotice(direction);
       return;
     }
     let prepared: IpcResponse<"undo:prepare">;

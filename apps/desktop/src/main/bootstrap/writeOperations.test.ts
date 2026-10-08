@@ -1457,10 +1457,10 @@ describe("moving to the Trash and deleting", () => {
       "/System",
       "/Applications",
       "/Library",
-      homedir(),
-      homedir().toUpperCase(),
-      join(homedir(), "Desktop"),
-      join(homedir(), "library"),
+      "/Users/demo",
+      "/USERS/DEMO",
+      "/Users/demo/Desktop",
+      "/Users/demo/library",
       "/Users/demo/../../Library",
       "Documents/report.txt",
     ];
@@ -1635,6 +1635,49 @@ describe("moving to the Trash and deleting", () => {
     await expect(
       coordinator.handlers["copyPaste:analyzeStart"](request("copy"), { sender: createSender() }),
     ).resolves.toEqual({ analysisId: "analysis-1", status: "queued" });
+    coordinator.shutdown();
+  });
+
+  // The home folder it is given, as for everything else it checks.
+  it("protects the folders of the home folder it is given", async () => {
+    const writeService = createWriteServiceStub();
+    const fs = createWriteOperationFs();
+    const coordinator = createWriteOperationCoordinator(writeService, fs, {
+      homePath: "/Users/someone",
+    });
+    const sender = createSender();
+
+    await expect(
+      coordinator.handlers["writeOperation:rename"](
+        { sourcePath: "/Users/someone/Desktop", destinationName: "Old Desktop" },
+        { sender },
+      ),
+    ).rejects.toThrow("“Desktop” can't be renamed.");
+    await expect(
+      coordinator.handlers["writeOperation:trash"](
+        { paths: ["/Users/someone/Documents"] },
+        { sender },
+      ),
+    ).rejects.toThrow("“Documents” can't be moved to the Trash.");
+    await expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Users/someone"] },
+        { sender },
+      ),
+    ).rejects.toThrow("“someone” can't be deleted.");
+    await expect(
+      coordinator.handlers["copyPaste:analyzeStart"](
+        {
+          mode: "cut",
+          sourcePaths: ["/Users/someone/Pictures"],
+          destinationDirectoryPath: "/Volumes/Backup",
+          action: "paste",
+        },
+        { sender },
+      ),
+    ).rejects.toThrow("“Pictures” can't be moved.");
+    expect(writeService.startCopyPasteAnalysis).not.toHaveBeenCalled();
+    expect(fs.trash).not.toHaveBeenCalled();
     coordinator.shutdown();
   });
 

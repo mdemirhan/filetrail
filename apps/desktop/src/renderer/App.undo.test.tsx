@@ -163,7 +163,7 @@ describe("⌘Z and ⇧⌘Z", () => {
     expect(undoRequests(harness)).toEqual([]);
   });
 
-  it("does nothing while another operation runs", async () => {
+  it("starts nothing while another operation runs, and says so", async () => {
     const harness = createAppHarness();
     renderApp(harness);
     await selectItem("/Users/demo/source.txt");
@@ -181,6 +181,9 @@ describe("⌘Z and ⇧⌘Z", () => {
     });
 
     expect(undoRequests(harness)).toEqual([]);
+    expect(await screen.findByRole("dialog", { name: "Couldn’t Undo" })).toHaveTextContent(
+      "Another file operation is running.",
+    );
   });
 });
 

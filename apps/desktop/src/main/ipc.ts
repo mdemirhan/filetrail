@@ -77,11 +77,15 @@ export function registerIpcHandlers(
   }
 }
 
-// A copy, rename, or delete that can't start is explained to the person in a dialog, so a
-// system error ("ENOENT: no such file or directory, lstat '/…'") becomes a plain sentence.
+// A copy, rename, delete or Undo that can't start is explained to the person in a dialog, so
+// a system error ("ENOENT: no such file or directory, lstat '/…'") becomes a plain sentence.
 // Other channels keep the raw text, which the window only logs.
 function isWriteChannel(channel: IpcChannel): boolean {
-  return channel.startsWith("copyPaste:") || channel.startsWith("writeOperation:");
+  return (
+    channel.startsWith("copyPaste:") ||
+    channel.startsWith("writeOperation:") ||
+    channel.startsWith("undo:")
+  );
 }
 
 function isExpectedAccessError(error: unknown): boolean {

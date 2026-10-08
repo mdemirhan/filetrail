@@ -962,7 +962,7 @@ export function createWriteOperationCoordinator(
   ): Promise<PreparedRenameOperation> {
     const sourcePath = resolve(payload.sourcePath);
     assertNotProtectedPath([sourcePath]);
-    await assertNotSystemLocation([sourcePath], "renamed", fs);
+    await assertNotSystemLocation([sourcePath], "renamed", fs, homePath);
     const sourceName = basename(sourcePath);
     const destinationName = payload.destinationName.trim();
     const destinationPath = join(dirname(sourcePath), destinationName);
@@ -1743,7 +1743,7 @@ export function createWriteOperationCoordinator(
         if (payload.mode === "cut") {
           assertNotProtectedPath(payload.sourcePaths);
           // Moving to another disk copies, then deletes the originals: as final as deleting.
-          await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
+          await assertNotSystemLocation(payload.sourcePaths, "moved", fs, homePath);
         }
         ensureNoWriteOperationInFlight();
         const handle = writeService.startCopyPasteAnalysis(
@@ -1907,7 +1907,7 @@ export function createWriteOperationCoordinator(
         assertNotProtectedPath(payload.paths);
         assertNotAlreadyInTrash(payload.paths);
         await prepareWithReservedSlot(() =>
-          assertNotSystemLocation(payload.paths, "moved to the Trash", fs),
+          assertNotSystemLocation(payload.paths, "moved to the Trash", fs, homePath),
         );
         return queueLocalWriteOperation({
           action: "trash",
@@ -1922,7 +1922,7 @@ export function createWriteOperationCoordinator(
       ) => {
         assertNotProtectedPath(payload.paths);
         await prepareWithReservedSlot(async () => {
-          await assertNotSystemLocation(payload.paths, "deleted", fs);
+          await assertNotSystemLocation(payload.paths, "deleted", fs, homePath);
           await assertDeletableImmediately(payload.paths, event.sender);
         });
         return queueLocalWriteOperation({
