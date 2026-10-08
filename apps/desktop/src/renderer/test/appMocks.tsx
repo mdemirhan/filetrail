@@ -560,7 +560,8 @@ export const treePaneMock = () => ({
           path: node.path,
           parentId: null,
           expanded: Boolean(node.expanded),
-          canExpand: !node.isSymlink && (node.childPaths?.length ?? 0) > 0,
+          // As the tree has it: a folder not read yet may hold folders.
+          canExpand: !node.isSymlink,
           loading: false,
           error: null,
           isSymlink: Boolean(node.isSymlink),

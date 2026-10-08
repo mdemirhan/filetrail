@@ -381,6 +381,70 @@ describe("hearing a drag's end", () => {
   });
 });
 
+describe("a folder in the sidebar the drag was over", () => {
+  const treeFolder = `tree:${folder}`;
+
+  it("shows nothing once the drag has moved on, and doesn't open", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await act(async () => {
+      fireEvent.dragOver(screen.getByTitle(treeFolder), { dataTransfer });
+    });
+    expect(screen.getByTitle(treeFolder)).toHaveAttribute("data-drop-target-state", "valid");
+    const pane = screen.getByTestId("content-pane");
+    for (let index = 0; index < 2; index += 1) {
+      await act(async () => {
+        fireEvent.dragOver(pane, { dataTransfer });
+      });
+    }
+    expect(screen.getByTitle(treeFolder)).toHaveAttribute("data-drop-target-state", "none");
+
+    // Still on the list, past the time a held folder opens.
+    for (let held = 0; held < 1000; held += 100) {
+      await waitMs(100);
+      await act(async () => {
+        fireEvent.dragOver(pane, { dataTransfer });
+      });
+    }
+    expect(screen.getByTitle(treeFolder)).toHaveAttribute("data-expanded", "false");
+  });
+
+  it("shows nothing once the drag has left the window, and doesn't open", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await act(async () => {
+      fireEvent.dragOver(screen.getByTitle(treeFolder), { dataTransfer });
+    });
+    await waitMs(1000);
+
+    expect(screen.getByTitle(treeFolder)).toHaveAttribute("data-drop-target-state", "none");
+    expect(screen.getByTitle(treeFolder)).toHaveAttribute("data-expanded", "false");
+  });
+
+  it("opens under a drag held there", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await holdOver(treeFolder, 1000, dataTransfer);
+
+    await vi.waitFor(() => {
+      expect(screen.getByTitle(treeFolder)).toHaveAttribute("data-expanded", "true");
+    });
+    expect(screen.getByTitle(treeFolder)).toHaveAttribute("data-drop-target-state", "valid");
+  });
+});
+
 describe("a drop that comes late", () => {
   it("is taken, though the pointer moved free before it came", async () => {
     const harness = harnessWithFolders();

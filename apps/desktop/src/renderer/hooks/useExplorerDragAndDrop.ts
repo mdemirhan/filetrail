@@ -62,6 +62,10 @@ const SPRING_MOVE_PX = 3;
 // A drag over a folder is still being held there while its drag-overs keep coming (they
 // come many times a second, even when the pointer is still); a longer gap means it left.
 const SPRING_HOLD_GAP_MS = 300;
+// This long without a drag-over, the drag has left the window (or ended): the targets it was
+// over show nothing, and what was about to happen there (a folder in the sidebar or a tab
+// opening) doesn't.
+const DROP_TARGETS_QUIET_MS = 300;
 
 type PointerPosition = { x: number; y: number };
 
@@ -246,6 +250,7 @@ export function useExplorerDragAndDrop(args: {
   // be over; it calls the latest of these.
   const noteFileDragOverRef = useRef<(cameBack: boolean) => void>(() => undefined);
   const noteExternalDragLetGoRef = useRef<() => void>(() => undefined);
+  const noteDragOverForTargetsRef = useRef<() => void>(() => undefined);
   const noteOwnDragMaybeOverRef = useRef<() => void>(() => undefined);
   // The folder a drag is being held over in the content pane, since when, and when it was
   // last heard from.
@@ -282,6 +287,13 @@ export function useExplorerDragAndDrop(args: {
   // The last drag dropped inside the window: its move or copy is the app's own.
   const droppedSessionRef = useRef<InternalDragSession | null>(null);
   const treeHoverExpandRef = useRef<{ path: string; timerId: number } | null>(null);
+  // A folder in the sidebar shows it takes the drag, or is about to open under it; and
+  // whether the sidebar took the last drag-over. The page says nothing as a drag leaves a
+  // row there, so the next drag-over elsewhere lets go of it.
+  const treeTargetShownRef = useRef(false);
+  const treeTookDragOverRef = useRef(false);
+  // Checks for drag-overs having stopped, while a drag of files is over the window.
+  const quietTimerRef = useRef<number | null>(null);
   const activeTreeDropElementRef = useRef<ActiveTreeDropElement | null>(null);
 
   const trashPath = useMemo(() => getTrashPath(homePath), [homePath]);
@@ -336,6 +348,7 @@ export function useExplorerDragAndDrop(args: {
   noteFileDragOverRef.current = noteFileDragOver;
   noteOwnDragMaybeOverRef.current = noteOwnDragMaybeOver;
   noteExternalDragLetGoRef.current = noteExternalDragLetGo;
+  noteDragOverForTargetsRef.current = noteDragOverForTargets;
   // Drags of files from other apps are seen by the whole window first, before any target.
   useEffect(() => {
     function handleWindowDragOver(event: DragEvent) {
@@ -346,6 +359,7 @@ export function useExplorerDragAndDrop(args: {
       const cameBack = now - lastFileDragOverAtRef.current >= DRAG_AWAY_MS;
       lastFileDragOverAtRef.current = now;
       noteFileDragOverRef.current(cameBack);
+      noteDragOverForTargetsRef.current();
       // The path bar and the search field take no files: a drop there would type them in.
       if (isTextField(event.target)) {
         event.preventDefault();
@@ -419,10 +433,51 @@ export function useExplorerDragAndDrop(args: {
     tabHoverSwitchRef.current = null;
   }
 
-  function clearDragSession() {
-    clearTabHoverSwitch();
+  // The sidebar's folder the drag was over shows nothing, and doesn't open.
+  function clearTreeTarget() {
+    treeTargetShownRef.current = false;
     clearTreeHoverExpand();
     clearTreeDropElementIndicator();
+    setActiveDropTarget((current) =>
+      current?.surface === "tree" || current?.surface === "favorite" ? null : current,
+    );
+  }
+
+  // A drag of files over the window. The sidebar lets go of its folder once a drag-over
+  // has gone elsewhere (the next one finds the last wasn't the sidebar's), and every target
+  // lets go once they stop.
+  function noteDragOverForTargets() {
+    if (treeTargetShownRef.current && !treeTookDragOverRef.current) {
+      clearTreeTarget();
+    }
+    treeTookDragOverRef.current = false;
+    if (quietTimerRef.current === null) {
+      checkDragOversWhenQuiet(DROP_TARGETS_QUIET_MS);
+    }
+  }
+
+  function checkDragOversWhenQuiet(ms: number) {
+    const timerId = window.setTimeout(() => {
+      timersRef.current.delete(timerId);
+      quietTimerRef.current = null;
+      const quietFor = Date.now() - lastFileDragOverAtRef.current;
+      if (quietFor < DROP_TARGETS_QUIET_MS) {
+        checkDragOversWhenQuiet(DROP_TARGETS_QUIET_MS - quietFor);
+        return;
+      }
+      clearTabHoverSwitch();
+      clearTreeTarget();
+      setActiveDropTarget(null);
+      resetSpringHold();
+      setBackgroundDropIndicator(null);
+    }, ms);
+    timersRef.current.add(timerId);
+    quietTimerRef.current = timerId;
+  }
+
+  function clearDragSession() {
+    clearTabHoverSwitch();
+    clearTreeTarget();
     setActiveDropTarget(null);
     setDragActive(false);
     dragSessionRef.current = null;
@@ -1352,6 +1407,8 @@ export function useExplorerDragAndDrop(args: {
     if (!dragSessionRef.current || !item.path) {
       return;
     }
+    treeTargetShownRef.current = true;
+    treeTookDragOverRef.current = true;
     resetSpringHold();
     const targetSurface = treeItemSurface(item);
     const validity = evaluateDropTarget(event, {
