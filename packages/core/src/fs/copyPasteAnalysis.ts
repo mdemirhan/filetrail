@@ -408,6 +408,16 @@ async function analyzeNode(args: {
       args.signal?.throwIfAborted();
       const childSourcePath = join(args.sourcePath, childName);
       const childDestinationPath = join(args.destinationPath, childName);
+      // Merging into a folder that has its own view settings (.DS_Store): they are kept,
+      // and the pasted folder's are left out rather than asked about as a clash.
+      if (
+        conflictClass === "directory_conflict" &&
+        !wholePackage &&
+        isFolderViewFile(childName) &&
+        (await captureFingerprint(args.fileSystem, childDestinationPath)).exists
+      ) {
+        continue;
+      }
       const childKey = args.destinationScanCache.pathKey(childName);
       const claimedBy = claimedChildNames.get(childKey);
       if (claimedBy !== undefined) {

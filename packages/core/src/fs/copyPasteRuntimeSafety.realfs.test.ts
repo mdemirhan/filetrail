@@ -17,7 +17,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
   buildCopyPasteAnalysisReport,
@@ -502,6 +502,53 @@ describe("items added to a folder after the review", () => {
     });
 
     expect(result?.status).toBe("completed");
+  });
+});
+
+// Finder writes .DS_Store into a folder just by showing it: merging two folders that both
+// have one isn't a clash to ask about, and the folder merged into keeps its own.
+describe("merging folders that both have Finder's .DS_Store", () => {
+  it.each(["copy", "cut"] as const)(
+    "keeps the destination's, asking nothing (%s)",
+    async (mode) => {
+      await mkdir(join(src, "F"));
+      await writeFile(join(src, "F", ".DS_Store"), "pasted view");
+      await writeFile(join(src, "F", "a.txt"), "a");
+      await mkdir(join(dst, "F"));
+      await writeFile(join(dst, "F", ".DS_Store"), "own view");
+      await writeFile(join(dst, "F", "b.txt"), "b");
+
+      const { report, result } = await runPaste({
+        mode,
+        sourcePaths: [join(src, "F")],
+        destinationDirectoryPath: dst,
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+      });
+
+      expect(report.summary).toMatchObject({ fileConflictCount: 0, directoryConflictCount: 1 });
+      expect(report.nodes[0]?.children.map((child) => basename(child.sourcePath))).toEqual([
+        "a.txt",
+      ]);
+      expect(result?.status).toBe("completed");
+      expect((await readdir(join(dst, "F"))).sort()).toEqual([".DS_Store", "a.txt", "b.txt"]);
+      expect(await readFile(join(dst, "F", ".DS_Store"), "utf8")).toBe("own view");
+    },
+  );
+
+  it("copies the pasted one into a folder that has none", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", ".DS_Store"), "pasted view");
+    await mkdir(join(dst, "F"));
+
+    const { report } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+    });
+
+    expect(report.summary).toMatchObject({ fileConflictCount: 0 });
+    expect(await readFile(join(dst, "F", ".DS_Store"), "utf8")).toBe("pasted view");
   });
 });
 
