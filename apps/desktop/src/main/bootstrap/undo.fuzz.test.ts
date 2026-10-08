@@ -411,7 +411,8 @@ class Case {
 
   // Undoes (or redoes) until there is nothing left, as many times as it takes: what failed
   // or was stopped stays on the list for the next try.
-  async undoAll(direction: "undo" | "redo", tries = 50) {
+  // With `toEnd` off, only `tries` times, and what is left stays.
+  async undoAll(direction: "undo" | "redo", tries = 50, toEnd = true) {
     const results: WriteOperationProgressEvent[] = [];
     for (let step = 0; step < tries; step += 1) {
       const prepared = await this.coordinator.handlers["undo:prepare"]({ direction });
@@ -428,7 +429,22 @@ class Case {
         results.push(terminal);
       }
     }
+    if (!toEnd) {
+      return results;
+    }
     throw new Error("Undo never ran out of things to undo.");
+  }
+
+  // What an Undo did to each item, for the log.
+  describe(result: WriteOperationProgressEvent): string {
+    const name = (path: string | null) => (path === null ? null : relative(this.root, path));
+    return JSON.stringify(
+      result.result?.items.map((item) => [
+        item.status,
+        name(item.sourcePath),
+        name(item.destinationPath),
+      ]),
+    );
   }
 }
 
@@ -614,6 +630,65 @@ describe("Undo, fuzzed on a real disk", () => {
     if (CASES >= 50) {
       expect(failed).toBeGreaterThan(0);
       expect(stopped).toBeGreaterThan(0);
+    }
+  }, 120_000);
+
+  it("stays in step when Undo and Redo take turns through failed writes and stops", async () => {
+    let turns = 0;
+    for (let seed = FIRST_SEED; seed < FIRST_SEED + CASES; seed += 1) {
+      const testCase = new Case(random(seed));
+      try {
+        const start = testCase.snapshot();
+        const operations = testCase.random.integer(2, 6);
+        for (let index = 0; index < operations; index += 1) {
+          await testCase.operate();
+        }
+        const end = testCase.snapshot();
+        const fullyUndoable = !testCase.history.menu().cantUndo;
+        // Undo or Redo, either, while what failed is still left on the other list.
+        testCase.failures = { codes: ["EACCES", "EPERM"], chance: 0.3, stopChance: 0.1 };
+        for (let press = testCase.random.integer(2, 10); press > 0; press -= 1) {
+          const direction = testCase.random.chance(0.6) ? "undo" : "redo";
+          const [result] = await testCase.undoAll(direction, 1, false);
+          if (!result) continue;
+          turns += 1;
+          testCase.log.push(`${direction}: ${result.status} ${testCase.describe(result)}`);
+          // Only what failed is left, never anything skipped: nothing changed outside.
+          if (result.result?.items.some((item) => item.status === "skipped")) {
+            fail(seed, testCase, `An item was skipped: ${JSON.stringify(result.result?.items)}`);
+          }
+        }
+        testCase.failures = null;
+        await testCase.undoAll("undo");
+        if (fullyUndoable && testCase.snapshot().join("\n") !== start.join("\n")) {
+          fail(
+            seed,
+            testCase,
+            `Undo didn't get back to the start.\nStart:\n${start.join("\n")}\nNow:\n${testCase.snapshot().join("\n")}`,
+          );
+        }
+        await testCase.undoAll("redo");
+        if (testCase.snapshot().join("\n") !== end.join("\n")) {
+          fail(
+            seed,
+            testCase,
+            `Redo didn't get back to the end.\nEnd:\n${end.join("\n")}\nNow:\n${testCase.snapshot().join("\n")}`,
+          );
+        }
+        if (testCase.hiddenLeftovers().length > 0) {
+          fail(seed, testCase, `Hidden items left: ${testCase.hiddenLeftovers().join(", ")}`);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Reproduce:")) {
+          throw error;
+        }
+        fail(seed, testCase, `Stopped: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        testCase.dispose();
+      }
+    }
+    if (CASES >= 50) {
+      expect(turns).toBeGreaterThan(CASES);
     }
   }, 120_000);
 

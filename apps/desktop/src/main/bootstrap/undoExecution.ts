@@ -444,17 +444,26 @@ async function moveToTrash(
 
 // The items of a batch rename get their names back, as one batch again: that handles
 // swaps ("a" and "b" trading names) and a folder renamed with items inside it.
+//
+// What is recorded says exactly where each item went, so either list can always put it
+// back: an item that moved is done from where it was to where it is now, and an item not
+// yet back under its name is left to do from where it is now. An item that took a number
+// only because the name it goes back to is still held by an item of the batch that wasn't
+// renamed (two that swap names, one of them locked) is renamed straight back: both are
+// then left to do where they were, and are tried again together.
 async function renameBack(
   planned: Extract<PlannedStep, { kind: "batch" }>,
   args: Parameters<typeof runUndo>[0],
 ): Promise<StepOutcome> {
   const { fs } = args;
   const items: ResultItem[] = [];
+  const running: BatchItem[] = [];
   const toRename: Array<{ sourcePath: string; destinationName: string; isFolder: boolean }> = [];
   for (const check of await checkBatch(fs, planned)) {
     if (check.refusal) {
       items.push(skippedItem(check.item.from, check.item.to, check.refusal.reason));
     } else {
+      running.push(check.item);
       toRename.push({
         sourcePath: check.item.from,
         destinationName: basename(check.item.to),
@@ -462,101 +471,121 @@ async function renameBack(
       });
     }
   }
-  let renamed: Extract<UndoStep, { kind: "batchRenamed" }>["items"] = [];
-  let cancelled = false;
-  // Items whose rename failed, or that a stop reached part way, and where each is now:
-  // still where it was, or under another name than its own when another item had taken
-  // its name meanwhile ("b 2", or the hidden name it waited under). They are tried again.
-  const again = new Map<string, string>();
-  // Items a stop didn't reach at all.
-  const notReached = new Set<string>();
-  if (toRename.length > 0) {
-    const batch = await runBatchRename({
-      request: {
-        items: toRename,
-        onConflict: "number",
-        numberSeparator: " ",
-      },
-      fs,
-      signal: args.signal,
-    });
-    cancelled = batch.cancelled;
-    items.push(...batch.items.filter((item) => item.status !== "cancelled"));
-    for (const item of batch.items) {
-      if (item.sourcePath === null || item.status === "completed") {
-        continue;
-      }
-      if (item.status === "cancelled" && item.destinationPath === null) {
-        notReached.add(item.sourcePath);
-        continue;
-      }
-      const at = item.destinationPath ?? item.sourcePath;
-      if ((await readItemRef(fs.lstat, at)).kind !== null) {
-        again.set(item.sourcePath, at);
-      }
-    }
-    // An item that took a number because the name it goes back to is held by an item of
-    // the batch tried again (two that swap names, one of them locked): it waits for that
-    // one too, rather than keep the number.
-    const held = new Set([...again.values()].map(placeKey));
-    const wanted = new Map(
-      toRename.map((item) => [
-        item.sourcePath,
-        join(dirname(item.sourcePath), item.destinationName),
-      ]),
-    );
-    const done: ResultItem[] = [];
-    for (const item of batch.items) {
-      if (item.status !== "completed" || item.sourcePath === null) {
-        continue;
-      }
-      const target = wanted.get(item.sourcePath);
-      if (
-        item.destinationPath !== null &&
-        target !== undefined &&
-        item.destinationPath !== target &&
-        held.has(placeKey(target))
-      ) {
-        again.set(item.sourcePath, item.destinationPath);
-      } else {
-        done.push(item);
-      }
-    }
-    // An item an earlier try left part way goes back, on Redo, to where it was before that.
-    const wasAt = new Map(planned.items.map((item) => [item.from, item.wasAt ?? item.from]));
-    renamed = (await movedItemsOf(fs.lstat, done)).map((item) => ({
-      ...item,
-      from: wasAt.get(item.from) ?? item.from,
-    }));
+  if (running.length === 0) {
+    return { status: "skipped", items, missing: false };
   }
+  const batch = await runBatchRename({
+    request: { items: toRename, onConflict: "number", numberSeparator: " " },
+    fs,
+    signal: args.signal,
+  });
+  // Every item has a result, in the order asked for. Names are compared in the folder the
+  // item was in: a folder renamed in the same batch takes its items' paths along.
+  const outcomes = batch.items.map((result, index) => {
+    const from = result.sourcePath ?? "";
+    return {
+      item: running[index] as BatchItem,
+      result,
+      from,
+      wanted: join(dirname(from), toRename[index]?.destinationName ?? ""),
+      at: result.destinationPath ?? from,
+      // Left to do, though it moved: numbered while it waits for another item.
+      waits: false,
+    };
+  });
+  // The names still held by items that weren't renamed.
+  const held = new Set<string>();
+  for (const { result, from, at } of outcomes) {
+    if (result.status !== "completed" && basename(at) === basename(from)) {
+      held.add(placeKey(from));
+    }
+  }
+  for (const outcome of outcomes) {
+    const { result, from, wanted } = outcome;
+    if (
+      result.status !== "completed" ||
+      basename(outcome.at) === basename(wanted) ||
+      !held.has(placeKey(wanted))
+    ) {
+      continue;
+    }
+    // Where it was is free: it left it, and the item that holds its new name didn't move.
+    const back = join(dirname(outcome.at), basename(from));
+    try {
+      await fs.renameExclusive(outcome.at, back);
+      followRename(outcomes, outcome.at, back);
+    } catch {
+      // It stays under the number for now: done from where it was to there, and left to
+      // do from there.
+      outcome.waits = true;
+    }
+    items.push(
+      failedItem(
+        from,
+        outcome.waits ? outcome.at : null,
+        `“${basename(from)}” was left as it is, because “${basename(wanted)}” couldn't be renamed out of its way.`,
+      ),
+    );
+  }
+  const moves: ResultItem[] = [];
+  const leftover: BatchItem[] = [];
+  for (const outcome of outcomes) {
+    const { item, result, from, at } = outcome;
+    const moved = basename(at) !== basename(from);
+    if (moved) {
+      moves.push({ ...result, destinationPath: at });
+    }
+    if (result.status === "completed" && moved && !outcome.waits) {
+      items.push(result);
+      continue;
+    }
+    if (outcome.waits || (result.status === "completed" && !moved)) {
+      // Renamed straight back, or still under the number: said so above.
+      leftover.push({ ...item, from: at });
+      continue;
+    }
+    if ((await readItemRef(fs.lstat, at)).kind === null) {
+      // Gone while it was being renamed: like an item the check finds gone.
+      items.push(skippedItem(from, item.to, await missingReason(fs, from)));
+      continue;
+    }
+    if (result.status !== "cancelled") {
+      items.push(result);
+    }
+    leftover.push({ ...item, from: at });
+  }
+  const renamed = await movedItemsOf(fs.lstat, moves);
   const produced: UndoStep | null =
     renamed.length > 0 ? { kind: "batchRenamed", items: renamed } : null;
   // What is left of the step, as the operation named it, each item where it is now.
-  const leftover: UndoStep = {
+  const left: UndoStep = {
     kind: "batchRenamed",
-    items: planned.items
-      .filter((item) => notReached.has(item.from) || again.has(item.from))
-      .map((item) => {
-        const at = again.get(item.from) ?? item.from;
-        const wasAt = at === item.from ? item.wasAt : (item.wasAt ?? item.from);
-        return {
-          from: item.to,
-          to: at,
-          id: item.id,
-          itemKind: item.itemKind,
-          ...(wasAt ? { wasAt } : {}),
-        };
-      }),
+    items: leftover.map((item) => ({
+      from: item.to,
+      to: item.from,
+      id: item.id,
+      itemKind: item.itemKind,
+    })),
   };
-  if (cancelled) {
-    return { status: "stopped", produced, items, leftover };
-  }
-  if (again.size > 0) {
-    return { status: "failed", produced, items, leftover };
+  if (leftover.length > 0) {
+    return { status: batch.cancelled ? "stopped" : "failed", produced, items, leftover: left };
   }
   return produced
     ? { status: "done", produced, items, removed: null }
     : { status: "skipped", items, missing: false };
+}
+
+type BatchItem = Extract<PlannedStep, { kind: "batch" }>["items"][number];
+
+// A folder of the batch renamed straight back takes along the items inside it.
+function followRename(outcomes: Array<{ at: string }>, from: string, to: string): void {
+  for (const outcome of outcomes) {
+    if (outcome.at === from) {
+      outcome.at = to;
+    } else if (outcome.at.startsWith(`${from}/`)) {
+      outcome.at = `${to}/${outcome.at.slice(from.length + 1)}`;
+    }
+  }
 }
 
 // A step not run because the one before it in the same unit couldn't be.

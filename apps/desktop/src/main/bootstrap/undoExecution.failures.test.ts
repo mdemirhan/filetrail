@@ -211,10 +211,15 @@ describe("a write that fails", () => {
     const after = snapshot();
     failOnce = true;
 
-    expect((await t.undo()).status).toBe("partial");
-    // The other one took a number rather than wait, and waits now under it: nothing is
-    // undone yet, both are tried again.
-    expect(readFileSync(join(root, "a 2.txt"), "utf8")).toBe("a");
+    const failed = await t.undo();
+    expect(failed.status).toBe("failed");
+    // The other one took a number rather than wait, and was renamed straight back: nothing
+    // is undone, and both are tried again.
+    expect(snapshot()).toEqual(after);
+    expect(failed.result?.items.map((item) => [item.status, item.error])).toEqual([
+      ["failed", "“b.txt” was left as it is, because “a.txt” couldn't be renamed out of its way."],
+      ["failed", "You don't have permission to access this item."],
+    ]);
     expect(t.history.menu()).toEqual({ undo: "Rename of 2 Items", redo: null, cantUndo: false });
 
     expect((await t.undo()).status).toBe("completed");
@@ -223,6 +228,90 @@ describe("a write that fails", () => {
 
     expect((await t.undo("redo")).status).toBe("completed");
     expect(snapshot()).toEqual(after);
+    await t.coordinator.shutdown();
+  });
+
+  it("records where an item that waits under a number went, when it can't be renamed straight back", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    let failing = false;
+    const t = setUpUndo(root, trashDir, {
+      renameExclusive: async (from, to) => {
+        // The item now named "a.txt" can't be moved aside, nor the other one renamed back
+        // from the number it took.
+        if (failing && (from === join(root, "a.txt") || from === join(root, "a 2.txt"))) {
+          throw permissionDenied();
+        }
+        await originalRenameExclusive(from, to);
+      },
+    });
+    const before = snapshot();
+    await t.batchRename([
+      [join(root, "a.txt"), "b.txt"],
+      [join(root, "b.txt"), "a.txt"],
+    ]);
+    const after = snapshot();
+    failing = true;
+
+    const failed = await t.undo();
+    expect(failed.result?.items.map((item) => [item.status, item.destinationPath])).toEqual([
+      ["failed", join(root, "a 2.txt")],
+      ["failed", null],
+    ]);
+    // Moved, so on Redo; not back yet, so still to undo.
+    expect(t.history.menu()).toEqual({
+      undo: "Rename of 2 Items",
+      redo: "Rename",
+      cantUndo: false,
+    });
+
+    // Redo first: it goes back where it was. Undo then takes it to the number again, and
+    // does both; Redo, each try in turn.
+    failing = false;
+    expect((await t.undo("redo")).status).toBe("completed");
+    expect(snapshot()).toEqual(after);
+    await t.undo();
+    await t.undo();
+    expect(snapshot()).toEqual(before);
+    expect(t.history.menu()).toEqual({ undo: null, redo: "Rename of 2 Items", cantUndo: false });
+    await t.undo("redo");
+    await t.undo("redo");
+    expect(snapshot()).toEqual(after);
+    expect(t.history.menu()).toEqual({ undo: "Rename", redo: null, cantUndo: false });
+    await t.coordinator.shutdown();
+  });
+
+  it("renames a folder that waits straight back with the items inside it", async () => {
+    mkdirSync(join(root, "A"));
+    writeFileSync(join(root, "A", "in.txt"), "in");
+    mkdirSync(join(root, "B"));
+    let failing = false;
+    const t = setUpUndo(root, trashDir, {
+      renameExclusive: async (from, to) => {
+        if (failing && from === join(root, "A")) {
+          throw permissionDenied();
+        }
+        await originalRenameExclusive(from, to);
+      },
+    });
+    const before = snapshot();
+    await t.batchRename([
+      [join(root, "A", "in.txt"), "out.txt"],
+      [join(root, "A"), "B", true],
+      [join(root, "B"), "A", true],
+    ]);
+    const after = snapshot();
+    failing = true;
+
+    expect((await t.undo()).status).toBe("partial");
+    // Only the item inside, which nothing held, is renamed back.
+    expect(readdirSync(join(root, "A"))).toEqual([]);
+    expect(readdirSync(join(root, "B"))).toEqual(["in.txt"]);
+    expect(snapshot()).not.toEqual(after);
+
+    failing = false;
+    await t.undo();
+    expect(snapshot()).toEqual(before);
     await t.coordinator.shutdown();
   });
 

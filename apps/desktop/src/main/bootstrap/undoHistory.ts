@@ -13,8 +13,6 @@ export type UndoEntry = {
   // Whether it moved anything, so a paste is named a Move for as long as it is in the
   // history: what a stop leaves of a moving Replace may be only its trip to the Trash.
   moves: boolean;
-  // The entry whose Undo (or Redo) did this, when it is what that did.
-  madeBy?: number;
 };
 
 export type UndoHistory = ReturnType<typeof createUndoHistory>;
@@ -89,24 +87,15 @@ export function createUndoHistory() {
       if (result.leftover.length > 0) {
         list.push({ ...entry, units: result.leftover });
       }
+      // Each try is its own entry on the other list: what it did, exactly, so the other
+      // command puts back where each item was before it, whatever was tried after it.
       if (result.done.length > 0) {
-        const other = listOf(direction === "undo" ? "redo" : "undo");
-        // A batch rename undone in two tries (an item failed the first time) is one batch
-        // to redo: two items that swapped names can only swap back together.
-        const previous = other.at(-1);
-        const joined =
-          previous?.madeBy === entry.id ? joinedBatch(previous.units, result.done) : null;
-        if (previous && joined) {
-          other[other.length - 1] = { ...previous, units: joined };
-        } else {
-          other.push({
-            id: nextId++,
-            action: entry.action,
-            units: result.done,
-            moves: entry.moves,
-            madeBy: entry.id,
-          });
-        }
+        listOf(direction === "undo" ? "redo" : "undo").push({
+          id: nextId++,
+          action: entry.action,
+          units: result.done,
+          moves: entry.moves,
+        });
       }
       changed();
     },
@@ -131,21 +120,6 @@ export function createUndoHistory() {
       return () => listeners.delete(listener);
     },
   };
-}
-
-// Two parts of one batch rename as one, or null when either is anything else.
-function joinedBatch(first: readonly UndoUnit[], second: readonly UndoUnit[]): UndoUnit[] | null {
-  const left = onlyBatch(first);
-  const right = onlyBatch(second);
-  return left && right
-    ? [{ steps: [{ kind: "batchRenamed", items: [...left.items, ...right.items] }] }]
-    : null;
-}
-
-// The batch rename `units` are, when they are nothing else.
-function onlyBatch(units: readonly UndoUnit[]): Extract<UndoStep, { kind: "batchRenamed" }> | null {
-  const step = units.length === 1 && units[0]?.steps.length === 1 ? units[0].steps[0] : null;
-  return step?.kind === "batchRenamed" ? step : null;
 }
 
 // "Rename", "Move of “a.txt”", "Copy of 3 Items"…: what the Edit menu puts after "Undo".

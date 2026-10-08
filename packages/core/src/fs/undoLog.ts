@@ -48,18 +48,10 @@ export type UndoStep =
       parentId: ItemId | null;
       stamp?: ItemStamp;
     }
-  // Several items renamed at once, undone as one batch. `wasAt` is kept for an item an
-  // Undo left part way under another name ("b 2"), to be tried again: where it was when
-  // that Undo began, which is where Redo puts it back once it is undone.
+  // Several items renamed at once, undone as one batch.
   | {
       kind: "batchRenamed";
-      items: Array<{
-        from: string;
-        to: string;
-        id: ItemId | null;
-        itemKind: ItemKind | null;
-        wasAt?: string;
-      }>;
+      items: Array<{ from: string; to: string; id: ItemId | null; itemKind: ItemKind | null }>;
     };
 
 // The steps for one item the person picked, in the order they happened. They are undone

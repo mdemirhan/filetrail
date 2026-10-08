@@ -36,13 +36,7 @@ export type PlannedStep =
   // Renames each item at `from` back to the name in `to`, as one batch.
   | {
       kind: "batch";
-      items: Array<{
-        from: string;
-        to: string;
-        id: ItemId | null;
-        itemKind: ItemKind | null;
-        wasAt?: string;
-      }>;
+      items: Array<{ from: string; to: string; id: ItemId | null; itemKind: ItemKind | null }>;
     };
 
 export function reverseStep(step: UndoStep): PlannedStep {
@@ -82,7 +76,6 @@ export function reverseStep(step: UndoStep): PlannedStep {
           to: item.from,
           id: item.id,
           itemKind: item.itemKind,
-          ...(item.wasAt ? { wasAt: item.wasAt } : {}),
         })),
       };
   }
