@@ -217,6 +217,10 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   // starts where the window closed last was. `initialCommand` is run once it has opened (a
   // place in the Go menu, chosen with no window open).
   openDefaultWindow(initialCommand?: RendererCommandType): void {
+    // Not while quitting: the window would close again moments later.
+    if (this.shuttingDown) {
+      return;
+    }
     const record = this.recordFromLastClosed();
     this.host.store.addExplorerWindow(record);
     this.open(record, {
@@ -229,6 +233,9 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
 
   // New Window from the Dock menu: the window in front opens it on its folder, as ⌘N does.
   openNewWindowFromFront(): void {
+    if (this.shuttingDown) {
+      return;
+    }
     const front = this.frontWindow();
     if (!front) {
       this.openDefaultWindow();
@@ -245,7 +252,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     tabs: readonly OpenTabPreference[],
     activeTabIndex: number,
   ): boolean {
-    if (tabs.length === 0) {
+    if (tabs.length === 0 || this.shuttingDown) {
       return false;
     }
     const store = this.host.store;
@@ -374,10 +381,13 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       return;
     }
     this.shuttingDown = true;
-    // The store is written here, once, with the windows as they are now.
+    // The store is written now, with the windows as they are, in case stopping the work
+    // never ends; and again once it has, with what changed in the open windows meanwhile.
     this.recordAllBounds();
     this.host.store.flush();
     await this.host.shutDown();
+    this.recordAllBounds();
+    this.host.store.flush();
     this.host.exit();
   }
 

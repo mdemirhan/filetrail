@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -664,6 +664,50 @@ describe("ExplorerWindowController quitting", () => {
     expect(host.exit).toHaveBeenCalledTimes(1);
     // Not while quitting: a window would close again moments later.
     controller.activate();
+    expect(windows).toHaveLength(1);
+  });
+
+  it("writes what changed while it waited for the work to stop", async () => {
+    const { controller, host, store, windows } = setUpWithWindows(1);
+    const [window] = windows;
+    let workStopped: () => void = () => undefined;
+    host.shutDown.mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          workStopped = () => resolve(undefined);
+        }),
+    );
+
+    const quitting = controller.quit();
+    await settle();
+    // The window is still open and used while a copy finishes its item.
+    store.updateWindowPreferences(window?.recordId ?? "", { openTabs: [tab("/Users/demo/late")] });
+    if (window) {
+      window.bounds = { x: 444, y: 333, width: 1000, height: 700 };
+    }
+    workStopped();
+    await quitting;
+
+    expect(host.exit).toHaveBeenCalledTimes(1);
+    const saved = JSON.parse(readFileSync(store.getFilePath(), "utf8"));
+    expect(saved.windows[0].session.openTabs[0].path).toBe("/Users/demo/late");
+    expect(saved.windows[0].bounds).toMatchObject({ x: 444, y: 333 });
+  });
+
+  it("opens no window while quitting", async () => {
+    const { controller, host, windows } = setUpWithWindows(1);
+    host.shutDown.mockImplementation(() => new Promise<undefined>(() => undefined));
+    void controller.quit();
+    await settle();
+    windows[0]?.close();
+    await settle();
+
+    controller.openDefaultWindow();
+    controller.openNewWindowFromFront();
+    controller.bringToFront();
+    controller.activate();
+
+    expect(controller.openWindowFrom(null, [tab("/Users/demo")], 0)).toBe(false);
     expect(windows).toHaveLength(1);
   });
 
