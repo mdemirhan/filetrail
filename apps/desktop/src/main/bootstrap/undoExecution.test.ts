@@ -575,12 +575,12 @@ describe("running an Undo", () => {
     const prepared = await t.prepare();
     await t.newFolder(root, "F");
 
-    expect(() =>
+    await expect(
       t.coordinator.handlers["undo:start"]({ ticket: prepared.ticket ?? "" }, { sender: t.sender }),
-    ).toThrow("Something changed since Undo was chosen. Choose it again.");
-    expect(() =>
+    ).rejects.toThrow("Something changed since Undo was chosen. Choose it again.");
+    await expect(
       t.coordinator.handlers["undo:start"]({ ticket: "sideways:1:1" }, { sender: t.sender }),
-    ).toThrow("Something changed since Undo was chosen.");
+    ).rejects.toThrow("Something changed since Undo was chosen.");
     await t.coordinator.shutdown();
   });
 
@@ -812,14 +812,13 @@ describe("the rarer paths", () => {
       [join(root, "c.txt"), "z.txt"],
     ]);
     let renames = 0;
-    let operationId = "";
     const stopping = setUp({
       renameExclusive: async (from, to) => {
         renames += 1;
         renameSync(from, to);
         if (renames === 1) {
           stopping.coordinator.handlers["writeOperation:cancel"](
-            { operationId },
+            { operationId: stopping.coordinator.getActiveOperation()?.operationId ?? "" },
             { sender: stopping.sender },
           );
         }
@@ -831,10 +830,10 @@ describe("the rarer paths", () => {
       items: [],
     });
     const prepared = await stopping.prepare();
-    ({ operationId } = stopping.coordinator.handlers["undo:start"](
+    const { operationId } = await stopping.coordinator.handlers["undo:start"](
       { ticket: prepared.ticket ?? "" },
       { sender: stopping.sender },
-    ));
+    );
 
     const stopped = await stopping.finish({ operationId });
 

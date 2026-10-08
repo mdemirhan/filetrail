@@ -196,6 +196,9 @@ export function createWriteOperationCoordinator(
   let localWriteOperationSequence = 0;
   // Set once the app starts quitting; no new operation may begin after that.
   let closing = false;
+  // What each Undo or Redo looked at asked, by its ticket: starting it is refused when
+  // there is something to ask now that wasn't asked then.
+  const undoQuestionsAsked = new Map<string, Awaited<ReturnType<typeof findQuestions>>>();
 
   // ~/.Trash is a protected system directory — it must never be deleted, renamed,
   // moved, or trashed.  Items *inside* Trash are fine; this only guards the
@@ -1873,39 +1876,70 @@ export function createWriteOperationCoordinator(
             payload.direction === "undo" && history?.menu().cantUndo ? "cant_undo" : "nothing",
           );
         }
-        const ticket = `${payload.direction}:${entry.id}:${history.generation()}`;
+        const generation = history.generation();
+        const ticket = `${payload.direction}:${entry.id}:${generation}`;
+        const questions = await findQuestions(fs, entry.units);
+        // Only tickets for the history as it is now can still be started.
+        for (const asked of undoQuestionsAsked.keys()) {
+          if (!asked.endsWith(`:${generation}`)) {
+            undoQuestionsAsked.delete(asked);
+          }
+        }
+        undoQuestionsAsked.set(ticket, questions);
         return {
           ticket,
           refusal: null,
           label: history.menu()[payload.direction],
           action: entry.action === "empty_trash" ? null : entry.action,
-          ...(await findQuestions(fs, entry.units)),
+          ...questions,
         };
       },
-      "undo:start": (
+      "undo:start": async (
         payload: IpcRequest<"undo:start">,
         event: { sender: WriteOperationSender },
       ) => {
-        const [direction, entryId, generation] = payload.ticket.split(":");
+        const [givenDirection, entryId, generation] = payload.ticket.split(":");
+        const direction: UndoDirection | null =
+          givenDirection === "undo" || givenDirection === "redo" ? givenDirection : null;
         const history = options.undoHistory;
-        const entry =
-          direction === "undo" || direction === "redo" ? (history?.top(direction) ?? null) : null;
         // Another operation, or another Undo, came in between: what was asked about may not
         // be what would be done now.
-        if (
-          !history ||
-          !entry ||
-          (direction !== "undo" && direction !== "redo") ||
-          String(entry.id) !== entryId ||
-          String(history.generation()) !== generation
-        ) {
-          throw new Error("Something changed since Undo was chosen. Choose it again.");
+        const entryAsked = () => {
+          const entry = direction === null ? null : (history?.top(direction) ?? null);
+          if (
+            !history ||
+            !entry ||
+            direction === null ||
+            String(entry.id) !== entryId ||
+            String(history.generation()) !== generation
+          ) {
+            throw new Error("Something changed since Undo was chosen. Choose it again.");
+          }
+          return { history, direction, entry };
+        };
+        entryAsked();
+        // Things may have changed on disk while the questions were open: what would be asked
+        // now must have been asked and agreed to (each question is all or nothing).
+        const asked = undoQuestionsAsked.get(payload.ticket) ?? { nameTaken: [], changed: [] };
+        const now = await prepareWithReservedSlot(() =>
+          findQuestions(fs, entryAsked().entry.units),
+        );
+        const started = entryAsked();
+        const unasked = describeUnaskedQuestion(asked, now, started.direction);
+        if (unasked !== null) {
+          throw new Error(unasked);
         }
         return queueLocalWriteOperation({
-          action: direction,
+          action: started.direction,
           sender: event.sender,
           execute: (operationId, controller) =>
-            executeUndoOperation(history, direction, entry, operationId, controller),
+            executeUndoOperation(
+              started.history,
+              started.direction,
+              started.entry,
+              operationId,
+              controller,
+            ),
         });
       },
       "writeOperation:cancel": (
@@ -2128,6 +2162,33 @@ function hasFileId(stats: WriteOperationStats): boolean {
 // the same file id this tells a rename of the item to itself from two hard links to one file.
 function namesMatchIgnoringCase(left: string, right: string): boolean {
   return left.normalize("NFC").toLowerCase() === right.normalize("NFC").toLowerCase();
+}
+
+// What an Undo (or Redo) would ask now that it didn't ask when it was chosen, as the
+// sentence that refuses to start it; null when everything was asked.
+function describeUnaskedQuestion(
+  asked: Awaited<ReturnType<typeof findQuestions>>,
+  now: Awaited<ReturnType<typeof findQuestions>>,
+  direction: UndoDirection,
+): string | null {
+  const command = direction === "undo" ? "Undo" : "Redo";
+  const changed = now.changed.find(
+    (item) =>
+      !asked.changed.some(
+        (other) =>
+          other.name === item.name &&
+          other.putBack === item.putBack &&
+          other.replaced === item.replaced,
+      ),
+  );
+  if (changed) {
+    return `“${changed.name}” was changed after ${command} was chosen. Choose ${command} again.`;
+  }
+  const taken = now.nameTaken.find((name) => !asked.nameTaken.includes(name));
+  if (taken !== undefined) {
+    return `Another item took the name “${taken}” after ${command} was chosen. Choose ${command} again.`;
+  }
+  return null;
 }
 
 // A plain sentence for a failed rename, new folder, or the checks before them. Where the
