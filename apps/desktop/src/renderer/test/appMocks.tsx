@@ -598,9 +598,29 @@ export const treePaneMock = () => ({
 });
 
 export const getInfoPanelMock = () => ({
-  // Just what the panel is showing, for tests that check it.
-  InfoPanel: ({ item }: { item: { name: string } | null }) => (
-    <div data-testid="info-panel">{item ? item.name : "Select a file or folder"}</div>
+  // What the panel is showing, for tests that check it, and some of its buttons (without
+  // text, so the panel's text stays the item's name).
+  InfoPanel: ({
+    item,
+    onCopyPath,
+    onCopyName,
+    onEdit,
+  }: {
+    item: { name: string } | null;
+    onCopyPath?: () => unknown;
+    onCopyName?: () => unknown;
+    onEdit?: () => void;
+  }) => (
+    <div data-testid="info-panel">
+      {item ? item.name : "Select a file or folder"}
+      {item ? (
+        <>
+          <button type="button" aria-label="Info: Copy Path" onClick={() => void onCopyPath?.()} />
+          <button type="button" aria-label="Info: Copy Name" onClick={() => void onCopyName?.()} />
+          {onEdit ? <button type="button" aria-label="Info: Edit" onClick={onEdit} /> : null}
+        </>
+      ) : null}
+    </div>
   ),
 });
 

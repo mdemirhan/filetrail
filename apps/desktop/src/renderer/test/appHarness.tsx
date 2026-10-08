@@ -237,11 +237,24 @@ export function createAppHarness(
     deferCopyPasteStart?: boolean;
     copyPasteStartError?: Error;
     openPathsWithApplicationError?: Error;
+    // What an alias resolves to, by its path (an Error: resolving it fails); others resolve
+    // to themselves.
+    resolvedPaths?: Record<string, string | Error>;
+    // Thrown when asked for an app to choose.
+    pickApplicationError?: Error;
+    // Why the terminal app, or Finder emptying the Trash, didn't do as asked.
+    openInTerminalError?: string;
+    emptyTrashError?: string;
     // Thrown by the next rename requests, one each, as the main process would refuse them.
     renameErrors?: Error[];
     // Why some items can't be renamed, as the Rename sheet's checks find.
     batchRenameCannotRename?: Record<string, string>;
     createFolderError?: Error;
+    // Thrown when a Move to Trash, a Delete Immediately or a rename of several items is
+    // asked to start, as the main process would refuse it.
+    trashError?: Error;
+    deleteImmediatelyError?: Error;
+    batchRenameError?: Error;
     resolveConflictError?: Error;
     clearCachesError?: Error;
     // What a search that is not scripted finds, instead of the one source.txt.
@@ -252,6 +265,8 @@ export function createAppHarness(
     // to ask about.
     undoPrepareResponses?: Array<IpcResponse<"undo:prepare">>;
     undoStartError?: Error;
+    // Thrown when an Undo (or Redo) is prepared.
+    undoPrepareError?: Error;
     // What the app's clipboard holds when the window opens (copied in another window).
     clipboard?: CopyPasteClipboard;
     // The tabs of the other windows, handed over by Merge All Windows.
@@ -609,6 +624,9 @@ export function createAppHarness(
         return { operationId: "write-op-rename", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "writeOperation:batchRename") {
+        if (args.batchRenameError) {
+          throw args.batchRenameError;
+        }
         return { operationId: "write-op-batch-rename", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "batchRename:inspect") {
@@ -631,9 +649,15 @@ export function createAppHarness(
         } satisfies IpcResponse<"batchRename:inspect"> as IpcResponse<C>;
       }
       if (channel === "writeOperation:trash") {
+        if (args.trashError) {
+          throw args.trashError;
+        }
         return { operationId: "write-op-trash", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "undo:prepare") {
+        if (args.undoPrepareError) {
+          throw args.undoPrepareError;
+        }
         return (args.undoPrepareResponses?.shift() ?? {
           ticket: `${(payload as IpcRequestInput<"undo:prepare">).direction}:1:1`,
           refusal: null,
@@ -653,12 +677,20 @@ export function createAppHarness(
         return { empty: args.trashEmpty ?? null } as IpcResponse<C>;
       }
       if (channel === "writeOperation:deleteImmediately") {
+        if (args.deleteImmediatelyError) {
+          throw args.deleteImmediatelyError;
+        }
         return { operationId: "write-op-delete", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "path:resolve") {
+        const inputPath = (payload as IpcRequestInput<"path:resolve">).path;
+        const resolved = args.resolvedPaths?.[inputPath] ?? inputPath;
+        if (resolved instanceof Error) {
+          throw resolved;
+        }
         return {
-          inputPath: (payload as IpcRequestInput<"path:resolve">).path,
-          resolvedPath: (payload as IpcRequestInput<"path:resolve">).path,
+          inputPath,
+          resolvedPath: resolved,
         } satisfies IpcResponse<"path:resolve"> as IpcResponse<C>;
       }
       if (channel === "path:getSuggestions") {
@@ -727,6 +759,9 @@ export function createAppHarness(
         return { ok: true, error: null } as IpcResponse<C>;
       }
       if (channel === "system:pickApplication") {
+        if (args.pickApplicationError) {
+          throw args.pickApplicationError;
+        }
         return (args.pickApplicationResponse ?? {
           canceled: false,
           appPath: "/Applications/Other.app",
@@ -746,7 +781,10 @@ export function createAppHarness(
         return { ok: true, error: null } as IpcResponse<C>;
       }
       if (channel === "system:openInTerminal") {
-        return { ok: true, error: null } as IpcResponse<C>;
+        return {
+          ok: args.openInTerminalError === undefined,
+          error: args.openInTerminalError ?? null,
+        } as IpcResponse<C>;
       }
       if (channel === "system:copyText") {
         if (args.copyTextError) {
@@ -780,7 +818,10 @@ export function createAppHarness(
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "system:emptyTrash") {
-        return { ok: true, error: null } as IpcResponse<C>;
+        return {
+          ok: args.emptyTrashError === undefined,
+          error: args.emptyTrashError ?? null,
+        } as IpcResponse<C>;
       }
       if (channel === "system:startFileDrag") {
         return new Promise<IpcResponse<C>>((resolve) => {
