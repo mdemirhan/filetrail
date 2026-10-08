@@ -59,8 +59,14 @@ export default defineConfig({
           lines: 95,
         },
         // The explorer windows: opening, closing, merging, quitting, and the menu.
-        "apps/desktop/src/main/{explorerWindowController,explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers}.ts":
-          { statements: 95, branches: 88, functions: 95, lines: 95 },
+        "apps/desktop/src/main/explorerWindowController.ts": {
+          statements: 96,
+          branches: 90,
+          functions: 96,
+          lines: 96,
+        },
+        "apps/desktop/src/main/{explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers}.ts":
+          { statements: 99, branches: 95, functions: 100, lines: 99 },
         // Undo and Redo, a floor for each file: a pattern's floor is for all it matches
         // together, so one file well below it could hide among the others.
         "apps/desktop/src/main/bootstrap/undoHistory.ts": {
