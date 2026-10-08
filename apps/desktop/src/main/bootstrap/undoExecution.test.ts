@@ -678,7 +678,7 @@ describe("running an Undo", () => {
 
     expect(undone.result?.items).toEqual([
       expect.objectContaining({
-        status: "failed",
+        status: "skipped",
         error: "“a copy.txt” couldn't be moved to the Trash because its disk has no Trash.",
       }),
     ]);

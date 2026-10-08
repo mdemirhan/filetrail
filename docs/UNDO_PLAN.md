@@ -376,8 +376,8 @@ Each phase is its own commit and passes `bun run ci` before the next starts.
 
 - **A write that fails stays on the Undo list.** Before, any step that wasn't done dropped its unit, so a failed Undo took the operation off the list and the next ⌘Z quietly undid an older one. Now there are two kinds:
   - Skipped by the disk check, because something changed outside the app (the item is gone, renamed, replaced; its folder is gone; another app took the name just then): dropped, as agreed before. The rest is undone, and a dialog says what was left and why.
-  - The rename or the Trash failed (no permission, a locked folder, the Trash refusing, a disk with no Trash): the step and the steps before it in its unit stay on top of the Undo list, the whole operation when nothing was done. The next ⌘Z tries them again. What was done goes to Redo as before. The result dialog adds "⌘Z tries again what couldn’t be undone", and Help says so.
-  - A disk with no Trash counts as a failed write, so an Undo of a copy there stays on the list until the copy is moved away by hand (see the open question below).
+  - The rename or the Trash failed (no permission, a locked folder, the Trash refusing): the step and the steps before it in its unit stay on top of the Undo list, the whole operation when nothing was done. The next ⌘Z tries them again. What was done goes to Redo as before. The result dialog adds "⌘Z tries again what couldn’t be undone", and Help says so.
+  - A disk with no Trash won't have one the next time either: it counts as a change the check finds. The item is skipped and reported ("…because its disk has no Trash."), and the operation leaves the list, so older ones can still be undone. (Decided 2026-10-08.)
 - **A copy of a locked item is unlocked to go to the Trash.** Copies keep the lock, and the Trash refuses a locked item, so undoing a copy of a locked item always failed. A Trash step for an item the operation made, whose id matched, now clears the user lock (`unlockForMove`), moves it to the Trash without asking, and locks it again there. Putting an item back from the Trash does the same, so Redo brings the copy back locked. A system lock is still refused.
 
 **Fixes:**
@@ -393,4 +393,3 @@ Each phase is its own commit and passes `bun run ci` before the next starts.
 - An item put back from the Trash on a disk without usable ids (FAT, exFAT) must look as it did when it went (`stamp` on the `trashed` step): kind and size, or for a folder its number of items.
 - Before an Undo starts, up to 16 units are checked at once (`mapAtMost`), in their order.
 
-**Open question:** an Undo of a copy on a disk without a Trash stays on the Undo list and fails each time, so older operations can't be undone until the copy is gone. Dropping it instead would bring back the silent skip.

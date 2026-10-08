@@ -402,10 +402,17 @@ async function moveToTrash(
     if (flags !== null) {
       await fs.setFlags?.(planned.path, flags).catch(() => undefined);
     }
-    const reason =
-      errorCode(error) === NO_TRASH_ERROR_CODE
-        ? `“${basename(planned.path)}” couldn't be moved to the Trash because its disk has no Trash.`
-        : await describeFailure(fs, error, [planned.path, dirname(planned.path)]);
+    // A disk with no Trash won't have one the next time either: like a change the check
+    // finds, it can't be undone, and isn't kept to be tried again.
+    if (errorCode(error) === NO_TRASH_ERROR_CODE) {
+      const reason = `“${basename(planned.path)}” couldn't be moved to the Trash because its disk has no Trash.`;
+      return {
+        status: "skipped",
+        items: [skippedItem(planned.path, null, reason)],
+        missing: false,
+      };
+    }
+    const reason = await describeFailure(fs, error, [planned.path, dirname(planned.path)]);
     return failedStep(original, planned.path, null, reason);
   }
   if (flags !== null && trashPath !== null) {

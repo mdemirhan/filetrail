@@ -226,7 +226,7 @@ describe("a write that fails", () => {
     await t.coordinator.shutdown();
   });
 
-  it("keeps a copy on a disk without a Trash on the Undo list, and says why", async () => {
+  it("lets go of a copy on a disk without a Trash, which would fail each time, and says why", async () => {
     const t = setUpUndo(root, trashDir, {
       trash: async () => {
         throw Object.assign(new Error("no Trash"), { code: "ENOTRASH" });
@@ -243,12 +243,13 @@ describe("a write that fails", () => {
     expect(undone.result?.items).toEqual([
       expect.objectContaining({
         sourcePath: join(root, "F"),
-        status: "failed",
+        status: "skipped",
         error: "“F” couldn't be moved to the Trash because its disk has no Trash.",
       }),
     ]);
     expect(existsSync(join(root, "F"))).toBe(true);
-    expect(t.history.menu()).toEqual({ undo: "New Folder", redo: null, cantUndo: false });
+    // Not kept to be tried again: an older operation is next.
+    expect(t.history.menu()).toEqual({ undo: null, redo: null, cantUndo: false });
     await t.coordinator.shutdown();
   });
 });
