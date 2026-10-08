@@ -101,6 +101,84 @@ describe("useFolderWatch", () => {
     expect(reload).toHaveBeenLastCalledWith("/a", ["/a/two"]);
   });
 
+  it("reads everything again when one of the changes held back was to anything", async () => {
+    const { client, emit } = createClient();
+    const reload = vi.fn(async () => true);
+    const { rerender } = renderHook(
+      ({ held }) => useFolderWatch({ client, path: "/a", held, reload }),
+      { initialProps: { held: true } },
+    );
+    await act(async () => {
+      emit({ path: "/a", changedPaths: ["/a/one"] });
+      emit({ path: "/a", changedPaths: null });
+      emit({ path: "/a", changedPaths: ["/a/two"] });
+    });
+
+    await act(async () => rerender({ held: false }));
+    expect(reload.mock.calls).toEqual([["/a", null]]);
+  });
+
+  it("reads everything again when too many items changed to list them", async () => {
+    const { client, emit } = createClient();
+    const reload = vi.fn(async () => true);
+    const { rerender } = renderHook(
+      ({ held }) => useFolderWatch({ client, path: "/a", held, reload }),
+      { initialProps: { held: true } },
+    );
+    const many = (from: number) =>
+      Array.from({ length: 600 }, (_, index) => `/a/item-${from + index}`);
+    await act(async () => {
+      emit({ path: "/a", changedPaths: many(0) });
+      emit({ path: "/a", changedPaths: many(600) });
+    });
+
+    await act(async () => rerender({ held: false }));
+    expect(reload.mock.calls).toEqual([["/a", null]]);
+  });
+
+  it("forgets changes held back for a folder that was left meanwhile", async () => {
+    const { client, emit } = createClient();
+    const reload = vi.fn(async () => true);
+    const { rerender } = renderHook(
+      ({ path, held }) => useFolderWatch({ client, path, held, reload }),
+      { initialProps: { path: "/a", held: true } },
+    );
+    await act(async () => emit({ path: "/a", changedPaths: ["/a/one"] }));
+
+    await act(async () => rerender({ path: "/b", held: false }));
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("asks no more once the window lets go of the folder", async () => {
+    const { client, emit } = createClient();
+    const reload = vi.fn(async () => false);
+    const { unmount } = renderHook(() =>
+      useFolderWatch({ client, path: "/a", held: false, reload }),
+    );
+    await act(async () => emit({ path: "/a", changedPaths: null }));
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("goes on after a read that fails", async () => {
+    const { client, emit } = createClient();
+    const reload = vi.fn(async () => true).mockRejectedValueOnce(new Error("EACCES"));
+    renderHook(() => useFolderWatch({ client, path: "/a", held: false, reload }));
+
+    await act(async () => emit({ path: "/a", changedPaths: ["/a/one"] }));
+    await act(async () => emit({ path: "/a", changedPaths: ["/a/two"] }));
+
+    expect(reload.mock.calls).toEqual([
+      ["/a", ["/a/one"]],
+      ["/a", ["/a/two"]],
+    ]);
+  });
+
   it("ignores changes to another folder", async () => {
     const { client, emit } = createClient();
     const reload = vi.fn(async () => true);
