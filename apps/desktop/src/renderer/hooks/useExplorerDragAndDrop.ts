@@ -799,6 +799,9 @@ export function useExplorerDragAndDrop<Start>(args: {
     checkingDragRef.current = true;
     try {
       const changeCount = await readCount();
+      if (unmountedRef.current) {
+        return;
+      }
       if (ownDrag) {
         if (ownDragRef.current === ownDrag && changeCount !== ownDrag.changeCount) {
           await checkOwnDragStillGoing(ownDrag);
@@ -824,7 +827,7 @@ export function useExplorerDragAndDrop<Start>(args: {
   async function checkOwnDragStillGoing(ownDrag: OwnDrag) {
     const read = readDraggedInRef.current;
     const contents = read ? await read() : null;
-    if (ownDragRef.current !== ownDrag) {
+    if (unmountedRef.current || ownDragRef.current !== ownDrag) {
       return;
     }
     if (contents && carriesOnlyItemsOf(contents, ownDrag.session)) {
