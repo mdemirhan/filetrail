@@ -517,10 +517,12 @@ export function createWriteOperationCoordinator(
     senderDetachers.get(operationId)?.();
     senderDetachers.delete(operationId);
     attachSender(operationId, successor);
+    const clearsCutClipboard = copyPasteRequests.get(operationId)?.clearsCutClipboard;
     try {
       successor.send(WRITE_OPERATION_ADOPTED_CHANNEL, {
         operationId,
         event: latestProgress.get(operationId) ?? null,
+        ...(clearsCutClipboard ? { clearsCutClipboard } : {}),
       });
     } catch {
       // The window went away mid-send; its own close hands the operation on again.

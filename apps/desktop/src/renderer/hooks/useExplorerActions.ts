@@ -1056,11 +1056,20 @@ export function useExplorerActions(args: {
     const unsubscribeProgress = client.onWriteOperationProgress(handleProgress);
     // The window that started an operation closed and this one has it now: its card, Stop
     // and questions are here from now on.
-    const unsubscribeAdopted = client.onWriteOperationAdopted?.(({ operationId, event }) => {
+    const unsubscribeAdopted = client.onWriteOperationAdopted?.((adoption) => {
+      const { operationId, event } = adoption;
       noteForeignWriteOperation(null);
       earlyWriteOperationEventsRef.current.delete(operationId);
       activeWriteOperationIdRef.current = operationId;
       adoptedWriteOperationIdRef.current = operationId;
+      // A paste of a cut: the clipboard is cleared here when it is done, as the window
+      // that started it would have.
+      if (adoption.clearsCutClipboard) {
+        clipboardClearAfterMoveRef.current = {
+          operationId,
+          capturedAt: adoption.clearsCutClipboard,
+        };
+      }
       if (event) {
         handleProgress(event);
       }
@@ -1774,11 +1783,23 @@ export function useExplorerActions(args: {
         action: choice,
       }));
       noteFolderUsed();
+      // Like Finder: copied items stay on the clipboard for more pastes; cut items are
+      // cleared once something was actually moved. Main is told too, for the window that
+      // takes the paste over should this one close.
+      const clipboard = copyPasteClipboardRef.current;
+      const clearsCutClipboard =
+        clearClipboardOnStart &&
+        report.mode === "cut" &&
+        clipboard.type === "ready" &&
+        clipboard.mode === "cut"
+          ? clipboard.capturedAt
+          : null;
       const response = await client.invoke("copyPaste:start", {
         analysisId: report.analysisId,
         action,
         policy,
         ...(overrides.length > 0 ? { overrides } : {}),
+        ...(clearsCutClipboard !== null ? { clearsCutClipboard } : {}),
       });
       if (action === "move_to" && sourceSurface) {
         moveOperationSourceSurfaceRef.current.set(response.operationId, sourceSurface);
@@ -1786,18 +1807,10 @@ export function useExplorerActions(args: {
       if (sourceSurface === "external") {
         externalDropOperationIdsRef.current.add(response.operationId);
       }
-      // Like Finder: copied items stay on the clipboard for more pastes; cut items are
-      // cleared once something was actually moved.
-      const clipboard = copyPasteClipboardRef.current;
-      if (
-        clearClipboardOnStart &&
-        report.mode === "cut" &&
-        clipboard.type === "ready" &&
-        clipboard.mode === "cut"
-      ) {
+      if (clearsCutClipboard !== null) {
         clipboardClearAfterMoveRef.current = {
           operationId: response.operationId,
-          capturedAt: clipboard.capturedAt,
+          capturedAt: clearsCutClipboard,
         };
       }
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;

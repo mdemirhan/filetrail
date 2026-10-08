@@ -175,6 +175,37 @@ async function analyzed(coordinator: Coordinator, window: Window, analysisId: st
 }
 
 describe("a window taking over an operation", () => {
+  it("is told the cut a paste clears from the clipboard when it is done", async () => {
+    const { writeService, emit } = createWriteServiceStub();
+    const successor = createWindow();
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { successorOf: () => successor },
+    );
+    const owner = createWindow();
+    await analyze(coordinator, owner);
+    await coordinator.handlers["copyPaste:start"](
+      {
+        analysisId: "analysis-1",
+        action: "paste",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        clearsCutClipboard: "2026-10-07T10:00:00.000Z",
+      },
+      { sender: owner },
+    );
+
+    close(owner);
+
+    expect(successor.send).toHaveBeenCalledWith("filetrail:writeOperationAdopted", {
+      operationId: "copy-op-1",
+      event: null,
+      clearsCutClipboard: "2026-10-07T10:00:00.000Z",
+    });
+    emit(copyEvent("cancelled"));
+    await coordinator.shutdown();
+  });
+
   it("isn't shown a question the window that closed already answered", async () => {
     const { writeService, emit } = createWriteServiceStub();
     const successor = createWindow();

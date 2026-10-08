@@ -40,6 +40,7 @@ import {
   expectNoRefusedRequests,
   finishedResultEvent,
   openDirectory,
+  pasteSourceIntoFolder,
   pressKey,
   renderApp,
   selectItem,
@@ -348,6 +349,73 @@ describe("App windows", () => {
       );
       // A change made elsewhere isn't sent back.
       expect(harness.invocations.some((call) => call.channel === "app:setClipboard")).toBe(false);
+    });
+
+    it("tells main which cut a paste clears, for the window that may take it over", async () => {
+      const harness = createAppHarness({
+        planResponse: {
+          mode: "cut",
+          sourcePaths: ["/Users/demo/source.txt"],
+          destinationDirectoryPath: "/Users/demo/Folder",
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/Folder/source.txt",
+              kind: "file",
+              status: "ready",
+              sizeBytes: 5,
+            },
+          ],
+          issues: [],
+          warnings: [],
+          summary: { topLevelItemCount: 1, totalItemCount: 1, totalBytes: 5 },
+        },
+      });
+      await ready(harness);
+
+      await pasteSourceIntoFolder(harness, "x");
+
+      const cut = harness.invocations.find((call) => call.channel === "app:setClipboard")
+        ?.payload as IpcRequestInput<"app:setClipboard">;
+      expect(cut.clipboard).toMatchObject({ type: "ready", mode: "cut" });
+      expect(
+        harness.invocations.find((call) => call.channel === "copyPaste:start")?.payload,
+      ).toMatchObject({
+        clearsCutClipboard: cut.clipboard.type === "ready" ? cut.clipboard.capturedAt : "",
+      });
+    });
+
+    it("clears a cut once a paste of it, taken over here, has moved it", async () => {
+      const harness = createAppHarness();
+      await ready(harness);
+      await act(async () => {
+        harness.emitClipboardChanged({
+          type: "ready",
+          mode: "cut",
+          sourcePaths: ["/Users/demo/elsewhere.txt"],
+          sourceEntries: {},
+          capturedAt: "2026-10-07T10:00:00.000Z",
+        });
+        harness.emitProgress({ ...otherWindowsCopy("running"), action: "paste" });
+      });
+      expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
+
+      // The window that started it closed.
+      await act(async () => {
+        harness.emitWriteOperationAdopted({
+          operationId: "other-op",
+          event: null,
+          clearsCutClipboard: "2026-10-07T10:00:00.000Z",
+        });
+      });
+      await act(async () => {
+        harness.emitProgress({ ...otherWindowsCopy("completed"), action: "paste" });
+      });
+
+      await waitFor(() => expect(clipboardButton()).toBeNull());
+      expect(
+        harness.invocations.filter((call) => call.channel === "app:setClipboard").at(-1)?.payload,
+      ).toEqual({ clipboard: { type: "empty" } });
     });
 
     it("opens with what was copied before the window opened", async () => {

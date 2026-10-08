@@ -1090,6 +1090,10 @@ export const ipcContractSchemas = {
         )
         .max(100_000)
         .optional(),
+      // A paste of what Cut put on the clipboard: when it has moved something, the
+      // clipboard is cleared if it still holds that cut (its `capturedAt`), by whichever
+      // window has the paste by then.
+      clearsCutClipboard: z.string().min(1).optional(),
     }),
     response: z.object({
       operationId: z.string().min(1),
@@ -1502,10 +1506,12 @@ export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
 export type CopyPasteClipboard = z.output<typeof copyPasteClipboardSchema>;
 // A running operation handed to this window because the one that started it closed, with
-// its latest progress (null before any was reported).
+// its latest progress (null before any was reported), and the cut it clears from the
+// clipboard when it is done, if any (see "copyPaste:start").
 export type WriteOperationAdoption = {
   operationId: string;
   event: WriteOperationProgressEvent | null;
+  clearsCutClipboard?: string;
 };
 export type SettingsTab = z.output<typeof settingsTabSchema>;
 export type Volume = z.output<typeof volumeSchema>;
