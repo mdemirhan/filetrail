@@ -348,7 +348,7 @@ describe("hearing a drag's end", () => {
     expect(harness.fileDragsGoing()).toBe(1);
 
     // The drag is over, though the system never said so.
-    await waitMs(400);
+    await waitMs(1100);
     await act(async () => {
       fireEvent.pointerMove(window, { buttons: 0 });
     });
@@ -376,6 +376,37 @@ describe("hearing a drag's end", () => {
     await vi.waitFor(() => {
       expect(analyzeRequests(harness)).toEqual([
         expect.objectContaining({ sourcePaths: ["/Users/other/a.txt"] }),
+      ]);
+    });
+  });
+});
+
+describe("a drop that comes late", () => {
+  it("is taken, though the pointer moved free before it came", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await waitMs(600);
+    const target = screen.getByTitle(folder);
+    await act(async () => {
+      fireEvent.dragOver(target, { dataTransfer });
+    });
+    // The button is let go over the folder; the window is busy, and the drop comes late.
+    await waitMs(400);
+    await act(async () => {
+      fireEvent.pointerMove(window, { buttons: 0 });
+    });
+    await act(async () => {
+      fireEvent.dragOver(target, { dataTransfer });
+      fireEvent.drop(target, { dataTransfer });
+    });
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ sourcePaths: [source], destinationDirectoryPath: folder }),
       ]);
     });
   });

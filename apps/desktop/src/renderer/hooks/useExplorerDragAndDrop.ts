@@ -36,9 +36,9 @@ const OWN_DROP_WAIT_MS = 1000;
 // A drag holds the mouse button down: a press, or the pointer moving with no button held,
 // means the window's own drag is over even if its end was never heard. Not so soon after it
 // started that the page may still be handed what happened before it, and not while
-// drag-overs are still coming in.
+// drag-overs are still coming in, or so soon after the last that its drop may still come.
 const OWN_DRAG_STALE_AFTER_MS = 500;
-const OWN_DRAG_OVER_QUIET_MS = 300;
+const OWN_DRAG_OVER_QUIET_MS = 1000;
 // A drag that comes over the window after this long with no drag-overs was away from it, and
 // may be another drag: the one the window knows may have ended without its end being heard.
 const DRAG_AWAY_MS = 300;
@@ -263,8 +263,7 @@ export function useExplorerDragAndDrop(args: {
   const ownDragRef = useRef<OwnDrag | null>(null);
   // When a drag of files was last over the window, the app's own or another app's.
   const lastFileDragOverAtRef = useRef(0);
-  // A drag that came back over the window is being checked to be the one it knows; until
-  // then nothing takes it.
+  // A drag that came back over the window is being checked to be the one it knows.
   const checkingDragRef = useRef(false);
   // What is still to happen after a drag, which stops when the window goes away.
   const timersRef = useRef(new Set<number>());
@@ -726,8 +725,9 @@ export function useExplorerDragAndDrop(args: {
   // The drag came back over the window after a while away from it. It may be another one:
   // the window's own drag can end without its end being heard, and a drag from another app
   // says nothing as it ends. Every new drag changes the drag pasteboard's count, so a count
-  // other than the one noted is another drag, and the one the window knew is over. Until
-  // the count has come, nothing takes the drag.
+  // other than the one noted is another drag, and the one the window knew is over. The
+  // count comes at once; a drop that comes first anyway is checked by its files (see
+  // dropCarriesDraggedItems), and a drop held back while the window was busy is still taken.
   async function checkDragStillKnown() {
     const readCount = readDragChangeCountRef.current;
     const ownDrag = ownDragRef.current;
@@ -903,12 +903,6 @@ export function useExplorerDragAndDrop(args: {
     return resolveOnSameDisk(getDragFacts(session).folderPaths, path, diskIds);
   }
 
-  // The drag the targets take: none while a drag that came back is checked to be the one
-  // the window knows.
-  function targetSession(): InternalDragSession | null {
-    return checkingDragRef.current ? null : dragSessionRef.current;
-  }
-
   // Whether the drop hands over one of the items the window took the drag to carry. A drop
   // of another drag (the one the window knew having ended unheard) isn't taken for it. Files
   // the page can't place on disk (a drop of promised files has none) tell nothing.
@@ -963,7 +957,7 @@ export function useExplorerDragAndDrop(args: {
     path: string | null,
     modifiers: DragModifiers,
   ): InternalDropOperation {
-    const session = targetSession();
+    const session = dragSessionRef.current;
     if (!session || !path) {
       return "move";
     }
@@ -993,7 +987,7 @@ export function useExplorerDragAndDrop(args: {
     session?: InternalDragSession | null;
   }): Exclude<DropIndicatorState, null> {
     const validation = validateInternalDrop({
-      session: args.session !== undefined ? args.session : targetSession(),
+      session: args.session !== undefined ? args.session : dragSessionRef.current,
       blocked,
       targetSurface: args.surface,
       targetPath: args.path,
@@ -1046,7 +1040,7 @@ export function useExplorerDragAndDrop(args: {
       validateWithItemProperties?: boolean | undefined;
     },
   ) {
-    const session = targetSession();
+    const session = dragSessionRef.current;
     const modifiers = dragModifiers(event);
     let operation = resolveDropOperation(path, modifiers);
     const validityFor = (dropOperation: InternalDropOperation) =>
@@ -1137,7 +1131,7 @@ export function useExplorerDragAndDrop(args: {
   }
 
   function handleContentDragEnter(entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) {
-    const session = targetSession();
+    const session = dragSessionRef.current;
     if (!session || !isFolderLike(entry) || !contentTakesDrag()) {
       return;
     }
@@ -1159,7 +1153,7 @@ export function useExplorerDragAndDrop(args: {
 
   // Search results take drops from other apps only.
   function contentTakesDrag(): boolean {
-    return !contentShowsSearchResults || targetSession()?.sourceSurface === "external";
+    return !contentShowsSearchResults || dragSessionRef.current?.sourceSurface === "external";
   }
 
   // The pane's own folder takes a drag from another app wherever it is held (the empty space,
@@ -1181,7 +1175,7 @@ export function useExplorerDragAndDrop(args: {
   // A folder the drag rests on opens, as in Finder: after a hold it shows it is about to
   // open, and then opens, unless the pointer moves first.
   function springWhenHeld(path: string, canSpring: boolean, pointer: PointerPosition) {
-    const session = targetSession();
+    const session = dragSessionRef.current;
     const springLoading = springLoadingRef.current;
     const openFolder = springLoading.openFolder;
     if (!canSpring || !session || !openFolder || blocked || path === currentPath) {
@@ -1261,7 +1255,7 @@ export function useExplorerDragAndDrop(args: {
   // folder on screen takes the drop of a drag from another app, and of the app's own once it
   // has sprung into that folder.
   function handleContentBackgroundDragOver(event: React.DragEvent<HTMLElement>) {
-    const session = targetSession();
+    const session = dragSessionRef.current;
     if (!session) {
       return;
     }
@@ -1288,7 +1282,7 @@ export function useExplorerDragAndDrop(args: {
   }
 
   async function handleContentBackgroundDrop(event: React.DragEvent<HTMLElement>) {
-    const session = targetSession();
+    const session = dragSessionRef.current;
     if (!session || !backgroundTakesDrop(session)) {
       return;
     }
@@ -1314,7 +1308,7 @@ export function useExplorerDragAndDrop(args: {
       return;
     }
     event.stopPropagation();
-    const session = targetSession();
+    const session = dragSessionRef.current;
     await handleDrop("content", entry.path, event, {
       targetSupportsMove: isRealDirectoryEntry(entry),
       targetIsSelected: session !== null && getDragFacts(session).paths.has(entry.path),
@@ -1327,7 +1321,7 @@ export function useExplorerDragAndDrop(args: {
     event: React.DragEvent<HTMLElement>,
     subview: "favorites" | "tree",
   ) {
-    if (!targetSession() || !item.path) {
+    if (!dragSessionRef.current || !item.path) {
       return;
     }
     resetSpringHold();
@@ -1392,7 +1386,7 @@ export function useExplorerDragAndDrop(args: {
     tab: { id: string; path: string; active: boolean; kind?: string },
     event: React.DragEvent<HTMLElement>,
   ) {
-    if (!targetSession()) {
+    if (!dragSessionRef.current) {
       return;
     }
     resetSpringHold();
