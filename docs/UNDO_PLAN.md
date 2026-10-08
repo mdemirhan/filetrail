@@ -1,6 +1,6 @@
 # Undo and Redo for file operations: implementation plan
 
-Status: plan only, nothing built. Decisions agreed on 2026-10-05.
+Status: built and merged on 2026-10-05 (Phases 0–5); changed after review on 2026-10-08 (see "Changed after review" at the end). Decisions agreed on 2026-10-05. The phases below are kept as they were planned; where building or review changed them, the sections that say so win.
 
 ## What Undo covers
 
@@ -171,6 +171,7 @@ This phase adds three new files in `apps/desktop/src/main/bootstrap/`. Add all t
   - The steps actually reversed go onto the other list.
   - Units left over because Undo was stopped stay on top, so ⌘Z continues where it stopped.
   - Units skipped because they no longer fit are dropped.
+  - (Changed after review: units whose rename or Trash failed stay on top too.)
 - `generation`: a counter that goes up on every change. A prepared Undo started after the history moved on is refused.
 
 **Menu labels:**
@@ -368,3 +369,28 @@ Each phase is its own commit and passes `bun run ci` before the next starts.
 - **Changed since** for a copied folder checks only the folder itself.
 - **Can't Undo warnings** appear only on conflict choices that cause it (Add Missing, Delete Permanently on a disk with no Trash), never on a plain copy or move.
 - **After a disk is ejected and reconnected**, Undo usually skips that disk's items, because the device number changes. It says the disk was disconnected. Volume UUIDs aren't used, because disk-image clones share them.
+
+## Changed after review (2026-10-08)
+
+**Decisions (the user's):**
+
+- **A write that fails stays on the Undo list.** Before, any step that wasn't done dropped its unit, so a failed Undo took the operation off the list and the next ⌘Z quietly undid an older one. Now there are two kinds:
+  - Skipped by the disk check, because something changed outside the app (the item is gone, renamed, replaced; its folder is gone; another app took the name just then): dropped, as agreed before. The rest is undone, and a dialog says what was left and why.
+  - The rename or the Trash failed (no permission, a locked folder, the Trash refusing, a disk with no Trash): the step and the steps before it in its unit stay on top of the Undo list, the whole operation when nothing was done. The next ⌘Z tries them again. What was done goes to Redo as before. The result dialog adds "⌘Z tries again what couldn’t be undone", and Help says so.
+  - A disk with no Trash counts as a failed write, so an Undo of a copy there stays on the list until the copy is moved away by hand (see the open question below).
+- **A copy of a locked item is unlocked to go to the Trash.** Copies keep the lock, and the Trash refuses a locked item, so undoing a copy of a locked item always failed. A Trash step for an item the operation made, whose id matched, now clears the user lock (`unlockForMove`), moves it to the Trash without asking, and locks it again there. Putting an item back from the Trash does the same, so Redo brings the copy back locked. A system lock is still refused.
+
+**Fixes:**
+
+- The folder an item goes back to is identified with `stat` (links followed) when recorded and when checked (`readFolderId`): the app keeps a link's path when it opens a folder through one, and `lstat` found the link, so Undo said the folder no longer existed.
+- The name-taken question goes by what is really in the way: a place a step before empties is found by the id of the item that leaves (so "x.txt" finds the "X.TXT" a Replace moves away first, and the same for accent encodings), and a place a step before fills counts as taken. It was a path comparison, which asked about a Replace spelled differently and missed two put-backs to one name.
+- `undo:start` works out the questions again and refuses ("“a copy.txt” was changed after Undo was chosen. Choose Undo again.") when there is one that wasn't asked: a copy edited while the name-taken alert was open went to the Trash without the changed-work question.
+- A batch rename records every item that moved, also one left as "b 2" or under its hidden name when another item had taken its old name meanwhile. Both places that build the record share `movedItemsOf`.
+- A batch Undo that failed part way stays together: an item that took a number because the name it goes back to is held by an item that failed waits for it (on the Undo list, where it is now, with `wasAt` where it was), and the two Redo parts of one batch are joined, so two items that swapped names swap back together. The fuzz test found both.
+- The progress card counts steps, and each item of a batch, for both the total and what is done ("5 of 3 items" before).
+- A paste whose Replace was stopped between its two steps is still named a Move (the entry keeps `moves`).
+- When the Trash takes an item but doesn't say where (no resulting URL), `nativeTrashItem` resolves with null: the item counts as trashed, and the operation can't be undone (`trash_location_unknown`); an Undo that does this counts it as done, with nothing to redo.
+- An item put back from the Trash on a disk without usable ids (FAT, exFAT) must look as it did when it went (`stamp` on the `trashed` step): kind and size, or for a folder its number of items.
+- Before an Undo starts, up to 16 units are checked at once (`mapAtMost`), in their order.
+
+**Open question:** an Undo of a copy on a disk without a Trash stays on the Undo list and fails each time, so older operations can't be undone until the copy is gone. Dropping it instead would bring back the silent skip.
