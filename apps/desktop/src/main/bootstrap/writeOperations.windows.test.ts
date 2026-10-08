@@ -4,12 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
-import {
-  ANALYSIS_BUSY_ERROR,
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-  type WriteService,
-  createWriteService,
-} from "@filetrail/core";
+import { ANALYSIS_BUSY_ERROR, type WriteService, createWriteService } from "@filetrail/core";
+import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
 import { createUndoHistory } from "./undoHistory";
