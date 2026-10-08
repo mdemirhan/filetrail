@@ -37,12 +37,12 @@ export function describeQuitWhileBusy(
     case "copy":
       return {
         message: "A copy is still in progress.",
-        detail: `${stops} Items already copied stay where they are.`,
+        detail: `${stops} Items already copied stay where they are; a folder still being copied isn't left half copied.`,
       };
     case "move":
       return {
         message: "A move is still in progress.",
-        detail: `${stops} Items already moved stay in their new place; the rest stay where they were.`,
+        detail: `${stops} Items already moved stay in their new place; the rest, and a folder still being moved, stay where they were.`,
       };
     case "trash":
       return {

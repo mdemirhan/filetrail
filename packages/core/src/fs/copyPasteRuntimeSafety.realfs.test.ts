@@ -588,6 +588,156 @@ describe("the folder pasted into goes away during the paste", () => {
   });
 });
 
+describe("a folder copied or moved whole", () => {
+  // Four files in a package, the third of which can't be written (the disk is full).
+  async function packageWithAFailingFile(): Promise<WriteServiceFileSystem> {
+    await mkdir(join(src, "Talk.key", "Data"), { recursive: true });
+    for (const name of ["Index.zip", "Data/a.png", "Data/b.png", "Metadata.plist"]) {
+      await writeFile(join(src, "Talk.key", name), name);
+    }
+    let written = 0;
+    const plain = withoutRenameAtAll();
+    return {
+      ...plain,
+      copyFile: async (from, to, signal) => {
+        written += 1;
+        if (written === 3) {
+          throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+        }
+        await plain.copyFile?.(from, to, signal);
+      },
+    };
+  }
+
+  // As to another disk: no part of the package is left in either place.
+  it("moves nothing of a folder some of whose items couldn't be copied", async () => {
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "Talk.key")],
+      destinationDirectoryPath: dst,
+      fileSystem: await packageWithAFailingFile(),
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.items[0]?.error).toBe(
+      "“Talk.key” wasn't moved because some items in it couldn't be copied. Nothing in it was moved.",
+    );
+    expect(result?.items.filter((item) => item.status === "failed")).toHaveLength(2);
+    expect(await readdir(dst)).toEqual([]);
+    expect((await readdir(join(src, "Talk.key"))).sort()).toEqual([
+      "Data",
+      "Index.zip",
+      "Metadata.plist",
+    ]);
+    expect((await readdir(join(src, "Talk.key", "Data"))).sort()).toEqual(["a.png", "b.png"]);
+  });
+
+  it("copies nothing of a package some of whose items couldn't be copied", async () => {
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Talk.key")],
+      destinationDirectoryPath: dst,
+      fileSystem: await packageWithAFailingFile(),
+    });
+
+    expect(result?.items[0]?.error).toBe(
+      "“Talk.key” wasn't copied because some items in it couldn't be copied.",
+    );
+    expect(await readdir(dst)).toEqual([]);
+  });
+
+  // An ordinary folder is put in place with what could be copied, the rest named.
+  it("puts an ordinary folder in place with what could be copied", async () => {
+    await rm(join(src, "Talk.key"), { recursive: true, force: true });
+    const fileSystem = await packageWithAFailingFile();
+    await rename(join(src, "Talk.key"), join(src, "Talk"));
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Talk")],
+      destinationDirectoryPath: dst,
+      fileSystem,
+    });
+
+    expect(result?.status).toBe("partial");
+    // The folder, and the file in it that couldn't be written.
+    expect(result?.items.filter((item) => item.status === "failed")).toEqual([
+      expect.objectContaining({ sourcePath: join(src, "Talk"), childFailureCount: 1 }),
+      expect.objectContaining({
+        error: "There isn't enough free space on the destination disk.",
+      }),
+    ]);
+    expect(await readdir(dst)).toEqual(["Talk"]);
+    const copied = [
+      ...(await readdir(join(dst, "Talk"))),
+      ...(await readdir(join(dst, "Talk", "Data"))),
+    ];
+    expect(copied).toHaveLength(4);
+  });
+
+  it("moves nothing when stopped part way, and leaves nothing hidden", async () => {
+    await mkdir(join(src, "F"));
+    for (const name of ["a.txt", "b.txt", "c.txt"]) {
+      await writeFile(join(src, "F", name), name);
+    }
+    const controller = new AbortController();
+    const plain = withoutRenameAtAll();
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      signal: controller.signal,
+      fileSystem: {
+        ...plain,
+        copyFile: async (from, to, signal) => {
+          await plain.copyFile?.(from, to, signal);
+          if (from.endsWith("b.txt")) {
+            controller.abort();
+          }
+        },
+      },
+    });
+
+    expect(result?.status).toBe("cancelled");
+    expect(await readdir(dst)).toEqual([]);
+    expect((await readdir(join(src, "F"))).sort()).toEqual(["a.txt", "b.txt", "c.txt"]);
+  });
+
+  // Written down while it is built, so a crash leaves nothing under the hidden name.
+  it("writes the folder down while it is built, and lets go once it is in place", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    const added: WriteJournalEntry[] = [];
+    const live = new Map<string, WriteJournalEntry>();
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: withoutRenameAtAll(),
+      writeJournal: {
+        add: async (entry) => {
+          added.push(entry);
+          live.set(entry.id, entry);
+        },
+        remove: async (id) => {
+          live.delete(id);
+        },
+      },
+    });
+
+    expect(result?.status).toBe("completed");
+    expect(added).toEqual([
+      expect.objectContaining({ finalPath: join(dst, "F"), staged: false }),
+      expect.objectContaining({ finalPath: join(dst, "F"), staged: true }),
+    ]);
+    expect(live.size).toBe(0);
+    expect(await readdir(dst)).toEqual(["F"]);
+    expect(await readdir(src)).toEqual([]);
+  });
+});
+
 describe("a large file being copied", () => {
   // A crash part way would leave the part copied under a hidden name: it is written down
   // first, and let go of once the file has its name, or once the copy failed.

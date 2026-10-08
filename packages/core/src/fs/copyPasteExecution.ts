@@ -27,6 +27,7 @@ import {
   fitName,
   isAppleDoubleCompanionName,
   isFolderViewFile,
+  isPackageFolder,
   resolveDuplicateName,
 } from "./copyPasteNames";
 import {
@@ -110,6 +111,10 @@ type ExecutionContext = {
   // False while a Replace builds its new item under a hidden name: that isn't a step
   // anyone could undo, only the swap that follows is.
   recordsUndo: boolean;
+  // While an item is built under a hidden name (a Replace's new item, or a folder copied
+  // or moved to another disk, see executeStagedDirectory): what the paste is ("cut" for a
+  // move). What is inside is then written straight in, never built aside again.
+  stagingFor: CopyPasteMode | null;
   // Where the items a Replace moved out of the way went in the Trash, which they changed.
   // Shared by every step, like `progress`.
   trashedPaths: string[];
@@ -203,6 +208,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     totalBytes: args.report.summary.totalBytes,
     progress: { completedItemCount: 0, completedByteCount: 0 },
     writeJournal: args.writeJournal ?? null,
+    stagingFor: null,
     folderListings: new Map(),
     undo: {
       topLevelNodeIds: new Set(args.resolvedNodes.map((node) => node.node.id)),
@@ -804,9 +810,133 @@ async function performNode(
     if (currentNode.node.issueCode === "source_unreadable") {
       throw new Error(unreadableFolderMessage(context.mode, currentNode.node.issueMessage));
     }
+    if (
+      context.stagingFor === null &&
+      (currentNode.action === "create" || currentNode.action === "keep_both") &&
+      (context.fileSystem.renameExclusive !== undefined || context.fileSystem.rename !== undefined)
+    ) {
+      return executeStagedDirectory(context, currentNode);
+    }
     return executeDirectoryNode(context, currentNode);
   }
   return executeLeafNode(context, currentNode);
+}
+
+// A folder copied, or moved to another disk, is built whole under a hidden name next to
+// where it goes (written down, for a crash), then given its name: stopped, or a move that
+// couldn't copy everything, leaves nothing half done in either place, and a move removes
+// the originals only once the folder is in place. A copy of an ordinary folder that
+// couldn't copy everything is put in place with what it has, its failures named; a package
+// (a Keynote document, an app) is put in place whole or not at all.
+async function executeStagedDirectory(
+  context: ExecutionContext,
+  currentNode: ResolvedCopyPasteNode,
+): Promise<ExecuteNodeResult> {
+  const { fileSystem } = context;
+  const finalPath = currentNode.destinationPath;
+  const name = basename(finalPath);
+  // Everything it will remove is checked before anything is copied: a move that couldn't
+  // remove its originals would leave them in both places.
+  if (context.mode === "cut") {
+    await assertRemovableAfterCopy(context, currentNode, { deep: true });
+  }
+  const temporaryPath = await temporarySiblingPath(fileSystem, finalPath);
+  const journal = context.writeJournal;
+  const journalEntry = {
+    id: randomBytes(8).toString("hex"),
+    stagingPath: temporaryPath,
+    finalPath,
+    sourcePath: currentNode.node.sourcePath,
+    moved: false,
+    staged: false,
+  };
+  await journal?.add(journalEntry);
+  const discard = async () => {
+    await removeStagedItem(fileSystem, temporaryPath).catch(() => undefined);
+    await journal?.remove(journalEntry.id).catch(() => undefined);
+  };
+
+  let outcome: ExecuteNodeResult;
+  try {
+    outcome = await executeDirectoryNode(
+      {
+        ...context,
+        mode: "copy",
+        recordsUndo: false,
+        stagingFor: context.mode,
+        displayPath: (path) =>
+          (context.displayPath ?? ((value: string) => value))(
+            rebasePath(path, temporaryPath, finalPath),
+          ),
+      },
+      rebaseResolvedNode(currentNode, finalPath, temporaryPath),
+    );
+  } catch (error) {
+    await discard();
+    if (isAbortError(error) || context.signal.aborted) {
+      // What was copied went away with the hidden copy; the originals are where they were.
+      throw new CancelledWithItemsError([]);
+    }
+    throw error instanceof DestinationTakenError ? error.original : error;
+  }
+  const childItems = rebaseItemResults(
+    appendItems([], outcome.childItems),
+    temporaryPath,
+    finalPath,
+  );
+  const failedItems = childItems.filter((item) => item.status === "failed");
+  if (
+    failedItems.length > 0 &&
+    (context.mode === "cut" || (await isPackageFolder(fileSystem, currentNode.node.sourcePath)))
+  ) {
+    await discard();
+    return {
+      itemStatus: "failed",
+      skipReason: null,
+      error:
+        context.mode === "cut"
+          ? `“${name}” wasn't moved because some items in it couldn't be copied. Nothing in it was moved.`
+          : `“${name}” wasn't copied because some items in it couldn't be copied.`,
+      destinationPath: finalPath,
+      // Only the failures: everything else went away with the hidden copy.
+      childItems: failedItems,
+    };
+  }
+
+  try {
+    // Complete now: a crash from here on puts it in place at the next start.
+    await journal?.add({ ...journalEntry, staged: true });
+    // A copy of a locked or read-only folder is locked or read-only too, and can't always
+    // be renamed: it is opened for the move and closed again after.
+    const flags = await unlockForMove(fileSystem, temporaryPath);
+    const mode = await openForMove(fileSystem, temporaryPath);
+    await moveExclusive(fileSystem, temporaryPath, finalPath);
+    await restoreAfterMove(fileSystem, finalPath, mode, flags);
+  } catch (error) {
+    await discard();
+    throw errorCode(error) === "EEXIST" ? new DestinationTakenError(error) : error;
+  }
+  await journal?.remove(journalEntry.id).catch(() => undefined);
+  noteChanged(context);
+  if (context.mode === "copy") {
+    await recordCreated(context, currentNode, finalPath);
+  }
+
+  let error = outcome.error;
+  let items = childItems;
+  if (context.mode === "cut") {
+    const cleanup = await removeMovedSources(context, currentNode, childItems);
+    error = cleanup.error;
+    items = cleanup.childItems;
+  }
+  return {
+    itemStatus:
+      error !== null || items.some((item) => item.status === "failed") ? "failed" : "completed",
+    skipReason: null,
+    error,
+    destinationPath: finalPath,
+    childItems: items,
+  };
 }
 
 // What a move to another disk will have to remove after copying: the item, and for a
@@ -1069,7 +1199,8 @@ async function executeDirectoryNode(
       keptNames,
       () => noteChanged(context),
     );
-  } else {
+  } else if (context.stagingFor !== "cut") {
+    // (Built aside for a move, what was added meanwhile is named once the originals go.)
     dirDeleteError = await describeAddedDuringCopy(currentNode, context.fileSystem);
   }
   return {
@@ -1091,9 +1222,10 @@ async function applyDirectoryMetadata(
     try {
       // Tags, the custom-icon flag, ACLs and flags along with the mode and dates.
       await fileSystem.copyMetadata(sourcePath, node.destinationPath);
-      if (context.mode === "cut") {
-        // Moving the items out changed the source folder's dates; put back the ones it
-        // had before. Only the date is lost if this fails (a locked folder refuses it).
+      if (context.mode === "cut" || context.stagingFor === "cut") {
+        // Moving the items out (or anything written into it meanwhile, as Finder's view
+        // settings) changed the source folder's dates; put back the ones it had before.
+        // Only the date is lost if this fails (a locked folder refuses it).
         await preserveTimestampsIfSupported(
           fileSystem,
           node.destinationPath,
@@ -1221,6 +1353,7 @@ async function executeReplace(
           ...context,
           mode: "copy",
           recordsUndo: false,
+          stagingFor: context.mode,
           displayPath: (path) =>
             (context.displayPath ?? ((value: string) => value))(
               rebasePath(path, temporaryPath, finalPath),

@@ -757,7 +757,9 @@ describe("what a move records", () => {
     });
 
     // The folder is made on the other disk before anything is copied into it.
-    it("can't be undone when stopped just after making the folder there", async () => {
+    // The folder was being built under a hidden name there: stopped, it goes, and nothing
+    // was changed, so Undo is left as it was.
+    it("changes nothing when stopped just after making the folder there", async () => {
       await mkdir(join(src, "Folder"));
       await writeFile(join(src, "Folder", "a.txt"), "a");
       const controller = new AbortController();
@@ -780,7 +782,10 @@ describe("what a move records", () => {
 
       expect(result?.status).toBe("cancelled");
       expect(await readFile(join(src, "Folder", "a.txt"), "utf8")).toBe("a");
-      expect(undoLogOf(result)).toEqual({ undoable: false, reason: "other_disk_move" });
+      expect((await readdir(volume.mountPath)).filter((name) => name.includes("Folder"))).toEqual(
+        [],
+      );
+      expect(undoLogOf(result)).toEqual({ undoable: true, units: [] });
     });
 
     it("can't be undone once a Replace put the new item in place", async () => {

@@ -861,7 +861,9 @@ describe("copy/paste conflict safety (real filesystem)", () => {
     }
   });
 
-  it("keeps what was already done inside a folder when the paste is stopped", async () => {
+  // The folder is built under a hidden name: stopped, it goes, and no half folder is left
+  // under its real name to pass for the whole one.
+  it("leaves no part of a folder behind when the paste is stopped", async () => {
     const source = join(testDir, "source");
     const target = join(testDir, "target");
     await mkdir(join(source, "docs"), { recursive: true });
@@ -882,11 +884,11 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       },
     });
 
-    expect(result?.status).toBe("partial");
+    expect(result?.status).toBe("cancelled");
     expect(result?.items.map((item) => [basename(item.sourcePath), item.status])).toEqual([
       ["docs", "cancelled"],
-      ["a.txt", "completed"],
     ]);
+    expect(await readdir(target)).toEqual([]);
   });
 
   it("gives a Keep Both copy a name no other pasted item uses", async () => {

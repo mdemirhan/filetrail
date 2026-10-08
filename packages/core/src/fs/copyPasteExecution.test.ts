@@ -4366,10 +4366,13 @@ describe("copyPasteExecution", () => {
       const result = await run({ fileSystem, mode: "cut", sourcePaths: ["/source/dir"] });
 
       expect(result.status).toBe("completed");
-      // The file is written under a hidden name in the folder, then given its own name.
+      // The folder is built under a hidden name, and its file under one of its own in it;
+      // each then takes its own name.
       expect(order).toEqual([
-        expect.stringMatching(/^file \/target\/dir\/\.a\.txt\.filetrail-[0-9a-f]+$/u),
-        "metadata /source/dir -> /target/dir",
+        expect.stringMatching(
+          /^file \/target\/\.dir\.filetrail-[0-9a-f]+\/\.a\.txt\.filetrail-[0-9a-f]+$/u,
+        ),
+        expect.stringMatching(/^metadata \/source\/dir -> \/target\/\.dir\.filetrail-[0-9a-f]+$/u),
       ]);
       expect(expectNode(fileSystem, "/target/dir/a.txt").size).toBe(1);
       expect(expectNode(fileSystem, "/target/dir").mtimeMs).toBe(1234);
@@ -4390,9 +4393,10 @@ describe("copyPasteExecution", () => {
       const result = await run({ fileSystem, mode: "copy", sourcePaths: ["/source/dir"] });
 
       expect(result.status).toBe("completed");
-      expect(chmodCalls.filter(([path]) => path === "/target/dir")).toEqual([
-        ["/target/dir", 0o40555],
-      ]);
+      // On the folder while it is built under its hidden name.
+      expect(
+        chmodCalls.filter(([path]) => /^\/target\/\.dir\.filetrail-[0-9a-f]+$/u.test(path)),
+      ).toEqual([[expect.any(String), 0o40555]]);
       expect(expectNode(fileSystem, "/target/dir").mtimeMs).toBe(1234);
     });
 

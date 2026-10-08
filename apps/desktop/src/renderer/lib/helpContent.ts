@@ -362,7 +362,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Closing",
             description:
-              "{closeWindow} closes the window. File Trail stays open with no window, as Finder does: click its icon in the Dock, or use {newWindow} or the Go menu, and a window opens where the last one you closed was. While a copy, move or delete runs, closing the last window asks first, since it would stop it.",
+              "{closeWindow} closes the window. File Trail stays open with no window, as Finder does: click its icon in the Dock, or use {newWindow} or the Go menu, and a window opens where the last one you closed was. While a copy, move, delete or rename of several items runs, closing the last window asks first, since it would stop it.",
           },
           {
             label: "Next launch",

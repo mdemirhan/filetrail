@@ -31,7 +31,7 @@ describe("describeQuitWhileBusy", () => {
     expect(describeQuitWhileBusy("copy")).toEqual({
       message: "A copy is still in progress.",
       detail:
-        "If you quit now, it stops after the current item. Items already copied stay where they are.",
+        "If you quit now, it stops after the current item. Items already copied stay where they are; a folder still being copied isn't left half copied.",
     });
     expect(describeQuitWhileBusy("move")?.message).toBe("A move is still in progress.");
     expect(describeQuitWhileBusy("trash")?.message).toBe(
@@ -64,7 +64,7 @@ describe("describeQuitWhileBusy", () => {
     expect(describeQuitWhileBusy("copy", "close")).toEqual({
       message: "A copy is still in progress.",
       detail:
-        "If you close the window now, it stops after the current item. Items already copied stay where they are.",
+        "If you close the window now, it stops after the current item. Items already copied stay where they are; a folder still being copied isn't left half copied.",
     });
     expect(describeQuitWhileBusy("rename", "close")).toBeNull();
   });
