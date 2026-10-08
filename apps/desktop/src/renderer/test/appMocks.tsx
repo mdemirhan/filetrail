@@ -162,6 +162,7 @@ export const contentPaneMock = () => ({
       </div>
     ) : (
       <div
+        ref={paneRef as React.RefObject<HTMLDivElement | null>}
         data-testid="content-pane"
         data-drop-target-state={backgroundDropIndicator ?? "none"}
         onPointerDown={() => onFocusChange(true)}
@@ -169,6 +170,11 @@ export const contentPaneMock = () => ({
         onDragLeave={onBackgroundDragLeave}
         onDrop={onBackgroundDrop}
       >
+        {/* The list's scroller, whichever the view (its size and offset are set by tests). */}
+        <div
+          className="content-scroll details-scroll icon-grid flow-list"
+          data-testid="content-scroll"
+        />
         <output data-testid="content-current-path">{currentPath}</output>
         <output data-testid="content-entry-count">{entries.length}</output>
         <output data-testid="content-error">{error ?? ""}</output>
