@@ -1297,6 +1297,13 @@ export function App() {
         noticeDragRefusedWhileBusy(gesture);
       }
     },
+    onDropUndecided: () => {
+      setActionNotice({
+        title: "Couldn’t Drop",
+        message:
+          "A disk didn’t answer in time, so File Trail couldn’t tell whether to move or copy the items. Nothing was moved or copied.",
+      });
+    },
     // Files dragged in from Finder and other apps, read from the drag as it comes in.
     readDraggedIn: () => client.invoke("system:readDraggedIn", {}),
     readDragChangeCount: async () =>

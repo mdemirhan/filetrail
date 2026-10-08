@@ -418,7 +418,7 @@ describe("a drop waiting for the disks to say whether it moves", () => {
     return harness;
   }
 
-  it("takes the next drag as a new one, and goes by the paths once it has waited long enough", async () => {
+  it("takes the next drag as a new one, and refuses the drop once it has waited long enough", async () => {
     const harness = harnessWithSlowDisks();
     draggedIn(harness, [{ path: "/Users/other/a.txt", kind: "file" }]);
     renderApp(harness);
@@ -437,17 +437,12 @@ describe("a drop waiting for the disks to say whether it moves", () => {
     expect(second).toHaveAttribute("data-drop-target-state", "valid");
     expect(readsOf(harness)).toBe(2);
 
-    expect(analyzeRequests(harness)).toEqual([]);
+    // A disk that doesn't say whether the drop moves or copies: nothing is guessed.
     await waitMs(1400);
     await vi.waitFor(() => {
-      expect(analyzeRequests(harness)).toEqual([
-        expect.objectContaining({
-          mode: "cut",
-          sourcePaths: ["/Users/other/a.txt"],
-          destinationDirectoryPath: folder,
-        }),
-      ]);
+      expect(screen.getByText("Couldn’t Drop")).toBeInTheDocument();
     });
+    expect(analyzeRequests(harness)).toEqual([]);
   });
 });
 

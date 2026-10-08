@@ -45,8 +45,8 @@ const OWN_DRAG_OVER_QUIET_MS = 1000;
 const DRAG_AWAY_MS = 300;
 // How many of a drop's files are looked at to tell whether it is the drag the window knows.
 const DROPPED_FILES_CHECKED = 64;
-// How long a drop waits for the disks to say whether it moves or copies; then the paths
-// decide, as they did for the drag's cursor.
+// How long a drop waits for the disks to say whether it moves or copies; a drop whose disks
+// haven't answered by then (a network share that doesn't answer) is refused.
 const DISK_ANSWER_WAIT_MS = 1500;
 
 // How long a drag is held over a tab before that tab comes to the front; the same as a
@@ -184,6 +184,11 @@ export function useExplorerDragAndDrop<Start>(args: {
    */
   onDragRefused?: (gesture: "drag" | "drop") => void;
   /**
+   * A drop refused because the disks didn't say in time whether it moves or copies: one of
+   * them (a network share, say) didn't answer.
+   */
+  onDropUndecided?: (targetPath: string) => void;
+  /**
    * Drags the items as a system file drag (`system:startFileDrag`), so Finder and other apps
    * take them as files; answers when the drag ends.
    */
@@ -226,6 +231,7 @@ export function useExplorerDragAndDrop<Start>(args: {
     onActivateTab,
     getDiskIds,
     onDragRefused,
+    onDropUndecided,
     startFileDrag,
     findDraggedAway,
     onDraggedAway,
@@ -324,15 +330,19 @@ export function useExplorerDragAndDrop<Start>(args: {
   }
 
   // Waits for `promise`, `ms` at most.
-  function waitAtMost(promise: Promise<void>, ms: number): Promise<void> {
+  // Resolves true once the promise settles, or false when `ms` passes first.
+  function waitAtMost(promise: Promise<void>, ms: number): Promise<boolean> {
     return new Promise((resolve) => {
-      const timerId = window.setTimeout(done, ms);
+      const timerId = window.setTimeout(() => done(false), ms);
       timersRef.current.add(timerId);
-      void promise.then(done, done);
-      function done() {
+      void promise.then(
+        () => done(true),
+        () => done(true),
+      );
+      function done(settled: boolean) {
         window.clearTimeout(timerId);
         timersRef.current.delete(timerId);
-        resolve();
+        resolve(settled);
       }
     });
   }
@@ -1167,18 +1177,22 @@ export function useExplorerDragAndDrop<Start>(args: {
     }
     // The drop does what the disks say, not only what the paths suggested: a network share
     // or a disk mounted outside /Volumes is another disk, and moving there deletes the
-    // originals once copied. A disk that is slow to say (a share that doesn't answer)
-    // leaves it to the paths.
+    // originals once copied. A disk that doesn't say in time (a share that doesn't answer)
+    // refuses the drop rather than guess.
     let stillValid = true;
     if (
       !modifiers.altKey &&
       !modifiers.metaKey &&
       knownOnSameDisk(session, path, answers.ids) === undefined
     ) {
-      await waitAtMost(
+      const answered = await waitAtMost(
         requestDiskIds([...getDragFacts(session).folderPaths, path], answers),
         DISK_ANSWER_WAIT_MS,
       );
+      if (!answered) {
+        onDropUndecided?.(path);
+        return;
+      }
       const onSameDisk = knownOnSameDisk(session, path, answers.ids);
       if (onSameDisk !== undefined) {
         operation = allowedBySource(onSameDisk ? "move" : "copy", modifiers.effectAllowed);
