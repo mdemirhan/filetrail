@@ -23,8 +23,15 @@ export type WindowHost = {
     tabs: OpenTabPreference[],
     activeTabIndex: number,
   ) => boolean;
-  // Closes the other explorer windows and returns their tabs.
-  mergeExplorerWindows: (senderId: number | null) => OpenTabPreference[];
+  // Closes the other explorer windows whose tabs fit beside the asking window's
+  // `tabCount`, and returns their tabs.
+  mergeExplorerWindows: (senderId: number | null, tabCount: number) => Promise<OpenTabPreference[]>;
+  // A window's answer to Merge All Windows asking for its tabs.
+  answerMergeRequest: (
+    senderId: number | null,
+    requestId: string,
+    answer: WindowTabsAnswer,
+  ) => void;
   explorerWindowCount: () => number;
   // Closes the explorer window as its close button does; false when it isn't one.
   closeExplorerWindow: (senderId: number | null) => boolean;
@@ -34,6 +41,59 @@ export type WindowHost = {
 
 export type PreferencesChange = { patch: Partial<AppPreferences>; senderId: number | null };
 
+// What a window says when Merge All Windows asks for its tabs.
+export type WindowTabsAnswer = { tabs: OpenTabPreference[]; busy: boolean };
+
+// How long Merge All Windows waits for a window's tabs: one that doesn't answer stays open.
+export const TABS_REQUEST_TIMEOUT_MS = 2_000;
+
+// Asks windows for their tabs as they are now, rather than as last saved (the window saves
+// them a moment after each change), and hands over each answer from the window asked.
+export class WindowTabsRequests {
+  private nextRequestId = 1;
+  private readonly pending = new Map<
+    string,
+    { senderId: number; resolve: (answer: WindowTabsAnswer | null) => void }
+  >();
+
+  /** Resolves with the window's answer, or null when it doesn't answer in time. */
+  ask(
+    contents: { readonly id: number; send(channel: string, ...args: unknown[]): void },
+    timeoutMs: number = TABS_REQUEST_TIMEOUT_MS,
+  ): Promise<WindowTabsAnswer | null> {
+    const requestId = `merge-${this.nextRequestId}`;
+    this.nextRequestId += 1;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => this.settle(requestId, null), timeoutMs);
+      this.pending.set(requestId, {
+        senderId: contents.id,
+        resolve: (answer) => {
+          clearTimeout(timer);
+          resolve(answer);
+        },
+      });
+      try {
+        contents.send("filetrail:mergeRequest", { requestId });
+      } catch {
+        // The window went away as it was asked.
+        this.settle(requestId, null);
+      }
+    });
+  }
+
+  answer(senderId: number | null, requestId: string, answer: WindowTabsAnswer): void {
+    if (this.pending.get(requestId)?.senderId === senderId) {
+      this.settle(requestId, answer);
+    }
+  }
+
+  private settle(requestId: string, answer: WindowTabsAnswer | null): void {
+    const request = this.pending.get(requestId);
+    this.pending.delete(requestId);
+    request?.resolve(answer);
+  }
+}
+
 export const WINDOW_IPC_CHANNELS = [
   "app:getPreferences",
   "app:updatePreferences",
@@ -42,6 +102,7 @@ export const WINDOW_IPC_CHANNELS = [
   "app:getExplorerWindowCount",
   "app:closeWindow",
   "app:mergeAllWindows",
+  "app:answerMergeRequest",
   "app:getClipboard",
   "app:setClipboard",
 ] as const;
@@ -96,9 +157,16 @@ export function createWindowIpcHandlers(deps: {
     "app:closeWindow": (_payload, event) => ({
       ok: windows.closeExplorerWindow(senderIdOf(event)),
     }),
-    "app:mergeAllWindows": (_payload, event) => ({
-      tabs: windows.mergeExplorerWindows(senderIdOf(event)),
+    "app:mergeAllWindows": async (payload, event) => ({
+      tabs: await windows.mergeExplorerWindows(senderIdOf(event), payload.tabCount),
     }),
+    "app:answerMergeRequest": (payload, event) => {
+      windows.answerMergeRequest(senderIdOf(event), payload.requestId, {
+        tabs: payload.tabs as OpenTabPreference[],
+        busy: payload.busy,
+      });
+      return { ok: true };
+    },
     "app:getClipboard": () => ({ clipboard: sharedClipboard }),
     "app:setClipboard": (payload, event) => {
       sharedClipboard = payload.clipboard;

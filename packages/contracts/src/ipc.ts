@@ -880,10 +880,22 @@ export const ipcContractSchemas = {
     response: z.object({ count: z.number().int().nonnegative() }),
   },
   // Merge All Windows: the other windows close, and their tabs are handed to the window
-  // asking, front window's first.
+  // asking, front window's first. No more are handed over than fit beside its `tabCount`
+  // tabs; a window whose tabs don't fit stays open.
   "app:mergeAllWindows": {
-    request: emptyRequestSchema,
+    request: z.object({ tabCount: z.number().int().nonnegative().max(100) }),
     response: z.object({ tabs: z.array(openTabPreferenceSchema) }),
+  },
+  // A window's answer to `filetrail:mergeRequest`: its tabs as they are now, and whether
+  // something is open in it that closing would lose (a sheet, a dialog, a name being
+  // edited), which keeps it open.
+  "app:answerMergeRequest": {
+    request: z.object({
+      requestId: z.string().min(1),
+      tabs: z.array(openTabPreferenceSchema).max(100),
+      busy: z.boolean(),
+    }),
+    response: z.object({ ok: z.boolean() }),
   },
   // The app's clipboard, shared by every window; a change is sent to the other windows.
   "app:getClipboard": {
@@ -1554,6 +1566,9 @@ export type WriteOperationAdoption = {
 // Items a drag out of another window took away (another app moved them, or the Dock's Trash
 // took them), as `system:findDraggedAway` found them gone.
 export type DraggedAway = { gone: string[]; intoTrash: boolean };
+// Merge All Windows in another window asks this one for its tabs; it answers with
+// `app:answerMergeRequest`.
+export type MergeRequest = { requestId: string };
 export type SettingsTab = z.output<typeof settingsTabSchema>;
 export type Volume = z.output<typeof volumeSchema>;
 export type FolderChange = z.output<typeof folderChangeSchema>;

@@ -38,6 +38,7 @@ import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
 import { loadPageWindow, pageWebPreferences } from "./pageWindows";
 import { readSettingsTabFromUrl } from "./settingsWindowTab";
+import { WindowTabsRequests } from "./windowIpcHandlers";
 
 // The explorer windows: opening, closing, merging, and quitting.
 let explorerWindowsRef: ExplorerWindowController<BrowserWindow> | null = null;
@@ -124,7 +125,8 @@ if (hasSingleInstanceLock) {
         }
       }
       appStateStoreRef = appStateStore;
-      const explorerWindows = createExplorerWindowController(appStateStore);
+      const tabsRequests = new WindowTabsRequests();
+      const explorerWindows = createExplorerWindowController(appStateStore, tabsRequests);
       explorerWindowsRef = explorerWindows;
       menuSyncRef = new ApplicationMenuSync<BrowserWindow>({
         windows: explorerWindows.windows,
@@ -170,7 +172,10 @@ if (hasSingleInstanceLock) {
           launchContextFor: (senderId) => explorerWindows.launchContextFor(senderId),
           openExplorerWindow: (senderId, tabs, activeTabIndex) =>
             explorerWindows.openWindowFrom(senderId, tabs, activeTabIndex),
-          mergeExplorerWindows: (senderId) => explorerWindows.mergeInto(senderId),
+          mergeExplorerWindows: (senderId, tabCount) =>
+            explorerWindows.mergeInto(senderId, tabCount),
+          answerMergeRequest: (senderId, requestId, answer) =>
+            tabsRequests.answer(senderId, requestId, answer),
           explorerWindowCount: () => explorerWindows.windows.count,
           closeExplorerWindow: (senderId) => explorerWindows.closeWindowOf(senderId),
           successorWindowOf: (senderId) => explorerWindows.successorOf(senderId),
@@ -269,6 +274,7 @@ if (hasSingleInstanceLock) {
 
 function createExplorerWindowController(
   appStateStore: AppStateStore,
+  tabsRequests: WindowTabsRequests,
 ): ExplorerWindowController<BrowserWindow> {
   return new ExplorerWindowController<BrowserWindow>({
     store: appStateStore,
@@ -281,6 +287,7 @@ function createExplorerWindowController(
         ? await dialog.showMessageBox(parent, { type: "warning", ...question })
         : await dialog.showMessageBox({ type: "warning", ...question })
       ).response,
+    requestTabs: (window) => tabsRequests.ask(window.webContents),
     anyWindowOpen: () => BrowserWindow.getAllWindows().length > 0,
     windowsChanged: () => menuSyncRef?.windowsChanged(),
     shutDown: async () => {

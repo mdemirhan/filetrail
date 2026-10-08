@@ -163,6 +163,9 @@ function setUp(store: AppStateStore = createStore()) {
   }> = [];
   let operation: { kind: WriteOperationKind } | null = null;
   let windowCount = 0;
+  // What each window says when Merge All Windows asks for its tabs; left out, the tabs it
+  // last saved.
+  const tabAnswers = new Map<FakeWindow, { tabs: OpenTabPreference[]; busy: boolean } | null>();
   const host = {
     store,
     createWindow: (record: StoredExplorerWindow) => {
@@ -180,6 +183,10 @@ function setUp(store: AppStateStore = createStore()) {
       new Promise<number>((resolve) => {
         questions.push({ question, parent, answer: resolve });
       }),
+    requestTabs: async (window: FakeWindow) =>
+      tabAnswers.has(window)
+        ? (tabAnswers.get(window) ?? null)
+        : { tabs: store.getWindowPreferences(window.recordId).openTabs, busy: false },
     anyWindowOpen: () => windows.some((window) => !window.destroyed),
     windowsChanged: vi.fn(),
     shutDown: vi.fn(async () => undefined),
@@ -194,6 +201,14 @@ function setUp(store: AppStateStore = createStore()) {
     log,
     windows,
     questions,
+    answerTabs: (
+      window: FakeWindow | undefined,
+      answer: { tabs: OpenTabPreference[]; busy: boolean } | null,
+    ) => {
+      if (window) {
+        tabAnswers.set(window, answer);
+      }
+    },
     runOperation: (kind: WriteOperationKind | null) => {
       operation = kind ? { kind } : null;
     },
@@ -573,20 +588,40 @@ describe("ExplorerWindowController closing", () => {
 });
 
 describe("ExplorerWindowController Merge All Windows", () => {
-  it("hands over the other windows' tabs, front to back, and closes them", async () => {
-    const { controller, store, windows } = setUpWithWindows(3);
+  it("hands over the other windows' tabs as they are now, front to back, and closes them", async () => {
+    const { controller, store, windows, answerTabs } = setUpWithWindows(3);
     const [first, second, third] = windows;
+    // Gone somewhere else a moment ago, not saved yet.
+    answerTabs(third, { tabs: [tab("/Users/demo/2/Sub")], busy: false });
 
-    const tabs = controller.mergeInto(first?.webContents.id ?? null);
+    const tabs = await controller.mergeInto(first?.webContents.id ?? null, 1);
     await settle();
 
-    expect(tabs.map((open) => open.path)).toEqual(["/Users/demo/2", "/Users/demo/1"]);
+    expect(tabs.map((open) => open.path)).toEqual(["/Users/demo/2/Sub", "/Users/demo/1"]);
     expect(second?.destroyed).toBe(true);
     expect(third?.destroyed).toBe(true);
     // Merged windows weren't closed by hand.
     expect(store.getLastClosedWindow()).toBeNull();
     expect(controller.windows.count).toBe(1);
-    expect(controller.mergeInto(12_345)).toEqual([]);
+    expect(await controller.mergeInto(12_345, 1)).toEqual([]);
+  });
+
+  it("leaves open a window with something open in it, one that doesn't answer, and one whose tabs don't fit", async () => {
+    const { controller, windows, answerTabs } = setUpWithWindows(5);
+    // In front of the first window, front to back: inFront, leftOut, silent, renaming.
+    const [first, renaming, silent, leftOut, inFront] = windows;
+    answerTabs(renaming, { tabs: [tab("/Users/demo/renaming")], busy: true });
+    answerTabs(silent, null);
+    answerTabs(leftOut, { tabs: [tab("/Users/demo/a"), tab("/Users/demo/b")], busy: false });
+    answerTabs(inFront, { tabs: [tab("/Users/demo/c"), tab("/Users/demo/d")], busy: false });
+
+    // Room for three more tabs.
+    const tabs = await controller.mergeInto(first?.webContents.id ?? null, 97);
+    await settle();
+
+    expect(tabs.map((open) => open.path)).toEqual(["/Users/demo/c", "/Users/demo/d"]);
+    expect(windows.filter((window) => window.destroyed)).toEqual([inFront]);
+    expect(controller.windows.count).toBe(4);
   });
 });
 

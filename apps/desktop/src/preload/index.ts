@@ -9,6 +9,7 @@ import type {
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
+  MergeRequest,
   SettingsTab,
   Volume,
   WriteOperationAdoption,
@@ -42,6 +43,7 @@ type InvokeApi = {
   onClipboardChanged(listener: (clipboard: CopyPasteClipboard) => void): () => void;
   onWriteOperationAdopted(listener: (adoption: WriteOperationAdoption) => void): () => void;
   onDraggedAway(listener: (change: DraggedAway) => void): () => void;
+  onMergeRequest(listener: (request: MergeRequest) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -135,6 +137,15 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:draggedAway", handleChange);
     return () => {
       ipcRenderer.removeListener("filetrail:draggedAway", handleChange);
+    };
+  },
+  onMergeRequest: (listener) => {
+    const handleRequest = (_event: unknown, request: MergeRequest) => {
+      listener(request);
+    };
+    ipcRenderer.on("filetrail:mergeRequest", handleRequest);
+    return () => {
+      ipcRenderer.removeListener("filetrail:mergeRequest", handleRequest);
     };
   },
   onShowSettingsTab: (listener) => {

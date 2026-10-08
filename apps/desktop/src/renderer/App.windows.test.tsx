@@ -238,6 +238,48 @@ describe("App windows", () => {
     expect(screen.getAllByRole("tab")[0]).toHaveAttribute("aria-selected", "true");
   });
 
+  it("asks only for as many tabs as fit beside its own", async () => {
+    const harness = createAppHarness({ explorerWindowCount: 2 });
+    await ready(harness);
+    await pressKey({ key: "t", metaKey: true });
+
+    await command(harness, "mergeAllWindows");
+
+    await waitFor(() =>
+      expect(
+        harness.invocations.find((call) => call.channel === "app:mergeAllWindows")?.payload,
+      ).toEqual({ tabCount: 2 }),
+    );
+  });
+
+  it("gives Merge All Windows in another window its tabs as they are now", async () => {
+    const harness = createAppHarness();
+    await ready(harness);
+    // Not saved yet: the tabs are written a moment after each change.
+    await openDirectory("/Users/demo/Folder");
+
+    await act(async () => {
+      harness.emitMergeRequest("merge-1");
+    });
+
+    const answers = () =>
+      harness.invocations
+        .filter((call) => call.channel === "app:answerMergeRequest")
+        .map((call) => call.payload as IpcRequestInput<"app:answerMergeRequest">);
+    await waitFor(() => expect(answers()).toHaveLength(1));
+    expect(answers()[0]?.requestId).toBe("merge-1");
+    expect(answers()[0]?.busy).toBe(false);
+    expect(answers()[0]?.tabs.map((tab) => tab.path)).toEqual(["/Users/demo/Folder"]);
+
+    // With a sheet open, the window stays open rather than lose it.
+    await command(harness, "openLocationSheet");
+    await act(async () => {
+      harness.emitMergeRequest("merge-2");
+    });
+    await waitFor(() => expect(answers()).toHaveLength(2));
+    expect(answers()[1]).toMatchObject({ requestId: "merge-2", busy: true });
+  });
+
   it("opens the tabs it was given, whatever Reopen the last folder and tabs says", async () => {
     const harness = createAppHarness({
       preferences: {

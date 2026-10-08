@@ -9,6 +9,7 @@ import type {
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
+  MergeRequest,
   SettingsTab,
   Volume,
   WriteOperationAdoption,
@@ -39,6 +40,8 @@ export type FiletrailClient = {
   onWriteOperationAdopted?(listener: (adoption: WriteOperationAdoption) => void): () => void;
   // Items a drag out of another window took away.
   onDraggedAway?(listener: (change: DraggedAway) => void): () => void;
+  // Merge All Windows in another window, asking for this window's tabs.
+  onMergeRequest?(listener: (request: MergeRequest) => void): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =

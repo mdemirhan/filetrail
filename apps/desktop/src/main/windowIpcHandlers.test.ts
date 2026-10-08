@@ -4,7 +4,12 @@ import { join } from "node:path";
 
 import type { OpenTabPreference } from "../shared/appPreferences";
 import { createAppStateStore, resolveAppStatePath } from "./appStateStore";
-import { type WindowHost, createWindowIpcHandlers } from "./windowIpcHandlers";
+import {
+  TABS_REQUEST_TIMEOUT_MS,
+  type WindowHost,
+  WindowTabsRequests,
+  createWindowIpcHandlers,
+} from "./windowIpcHandlers";
 
 function tab(path: string): OpenTabPreference {
   return {
@@ -44,7 +49,8 @@ function setUp() {
       restoreTabs: false,
     })),
     openExplorerWindow: vi.fn(() => true),
-    mergeExplorerWindows: vi.fn(() => [tab("/Users/demo/merged")]),
+    mergeExplorerWindows: vi.fn(async () => [tab("/Users/demo/merged")]),
+    answerMergeRequest: vi.fn(),
     explorerWindowCount: () => 2,
     closeExplorerWindow: vi.fn((senderId: number | null) => senderId === 1),
     sendToOtherWindows: vi.fn(),
@@ -103,10 +109,20 @@ describe("createWindowIpcHandlers", () => {
     ).toEqual({ ok: true });
     expect(windows.openExplorerWindow).toHaveBeenCalledWith(1, [tab("/Users/demo/x")], 0);
     expect(await handlers["app:getExplorerWindowCount"]({}, from(1))).toEqual({ count: 2 });
-    expect(await handlers["app:mergeAllWindows"]({}, from(1))).toEqual({
+    expect(await handlers["app:mergeAllWindows"]({ tabCount: 3 }, from(1))).toEqual({
       tabs: [tab("/Users/demo/merged")],
     });
-    expect(windows.mergeExplorerWindows).toHaveBeenCalledWith(1);
+    expect(windows.mergeExplorerWindows).toHaveBeenCalledWith(1, 3);
+    expect(
+      await handlers["app:answerMergeRequest"](
+        { requestId: "merge-1", tabs: [tab("/Users/demo/b")], busy: false },
+        from(2),
+      ),
+    ).toEqual({ ok: true });
+    expect(windows.answerMergeRequest).toHaveBeenCalledWith(2, "merge-1", {
+      tabs: [tab("/Users/demo/b")],
+      busy: false,
+    });
     expect(await handlers["app:closeWindow"]({}, from(1))).toEqual({ ok: true });
     expect(windows.closeExplorerWindow).toHaveBeenCalledWith(1);
   });
@@ -132,5 +148,43 @@ describe("createWindowIpcHandlers", () => {
       "filetrail:clipboardChanged",
       clipboard,
     );
+  });
+});
+
+describe("WindowTabsRequests", () => {
+  it("hands over the answer of the window asked, and no other's", async () => {
+    const requests = new WindowTabsRequests();
+    const contents = { id: 4, send: vi.fn() };
+
+    const answered = requests.ask(contents);
+    const [[channel, { requestId }]] = contents.send.mock.calls as [
+      [string, { requestId: string }],
+    ];
+    expect(channel).toBe("filetrail:mergeRequest");
+    requests.answer(5, requestId, { tabs: [], busy: true });
+    requests.answer(4, "merge-other", { tabs: [], busy: true });
+    requests.answer(4, requestId, { tabs: [tab("/Users/demo")], busy: false });
+
+    expect(await answered).toEqual({ tabs: [tab("/Users/demo")], busy: false });
+  });
+
+  it("gives up on a window that doesn't answer in time, or can't be asked", async () => {
+    vi.useFakeTimers();
+    try {
+      const requests = new WindowTabsRequests();
+      const silent = requests.ask({ id: 4, send: vi.fn() });
+      await vi.advanceTimersByTimeAsync(TABS_REQUEST_TIMEOUT_MS);
+      expect(await silent).toBeNull();
+
+      const gone = {
+        id: 5,
+        send: () => {
+          throw new Error("Object has been destroyed");
+        },
+      };
+      expect(await requests.ask(gone)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

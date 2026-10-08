@@ -1,4 +1,4 @@
-import type { OpenTabPreference } from "../shared/appPreferences";
+import { OPEN_TABS_LIMIT, type OpenTabPreference } from "../shared/appPreferences";
 import type { RendererCommandType } from "../shared/rendererCommands";
 import {
   type AppStateStore,
@@ -91,6 +91,8 @@ export type ExplorerWindowHost<W extends ExplorerWindowLike> = {
   activeOperation: () => { kind: WriteOperationKind } | null;
   // Shows the question, on `parent` when there is one; resolves with the button chosen.
   showStopQuestion: (question: StopQuestion, parent: W | null) => Promise<number>;
+  // Asks the window for its tabs as they are now; null when it doesn't answer.
+  requestTabs: (window: W) => Promise<{ tabs: OpenTabPreference[]; busy: boolean } | null>;
   // Whether any window of the app is open, explorer or not (Settings, Help, About).
   anyWindowOpen: () => boolean;
   // Something the menu shows changed: which windows are open, or which is in front.
@@ -267,20 +269,37 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   }
 
   // Merge All Windows: the tabs of every other window, front to back, which close. The
-  // window asking adds the tabs after its own.
-  mergeInto(senderId: number | null): OpenTabPreference[] {
+  // window asking adds the tabs after its own `tabCount`. Each window is asked for its tabs
+  // as they are now. One stays open, its tabs where they are, when it doesn't answer, when
+  // something is open in it that closing would lose (a sheet, a dialog, a name being
+  // edited), or when its tabs don't fit in the window asking.
+  async mergeInto(senderId: number | null, tabCount: number): Promise<OpenTabPreference[]> {
     const target = this.list.byWebContentsId(senderId);
-    if (!target) {
+    if (!target || this.shuttingDown) {
       return [];
     }
-    const others = this.list.all().filter((entry) => entry !== target);
-    const tabs = others.flatMap((entry) => this.host.store.getWindowPreferences(entry.id).openTabs);
-    for (const entry of others) {
-      if (!entry.window.isDestroyed()) {
-        this.closingWithoutAsking.add(entry.window);
-        this.merged.add(entry.window);
-        entry.window.close();
+    const others = this.openWindows().filter((entry) => entry !== target);
+    const answers = await Promise.all(others.map((entry) => this.host.requestTabs(entry.window)));
+    let room = OPEN_TABS_LIMIT - tabCount;
+    const tabs: OpenTabPreference[] = [];
+    for (const [index, entry] of others.entries()) {
+      const answer = answers[index];
+      if (
+        !answer ||
+        answer.busy ||
+        answer.tabs.length === 0 ||
+        answer.tabs.length > room ||
+        entry.window.isDestroyed() ||
+        this.closing.has(entry.window) ||
+        this.shuttingDown
+      ) {
+        continue;
       }
+      room -= answer.tabs.length;
+      tabs.push(...answer.tabs);
+      this.closingWithoutAsking.add(entry.window);
+      this.merged.add(entry.window);
+      entry.window.close();
     }
     return tabs;
   }

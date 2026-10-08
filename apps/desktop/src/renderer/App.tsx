@@ -9,6 +9,7 @@ import {
   DETAIL_COLUMN_LABELS,
   type DetailColumnVisibility,
   type DetailColumnWidths,
+  OPEN_TABS_LIMIT,
   SORT_BY_ORDER,
   type SearchResultsSortByPreference,
   VIEW_MODE_NAMES,
@@ -1106,10 +1107,35 @@ export function App() {
   }, [activeTabLabel]);
   openPathInNewTabRef.current = openPathInNewTab;
   openPathInNewWindowRef.current = openPathInNewWindow;
-  // Window › Merge All Windows: the other windows close and their tabs come here.
+  // Merge All Windows chosen in another window asks for this window's tabs as they are now
+  // (they are saved a moment after each change). A window with something open that closing
+  // would lose (a sheet, a dialog, a name being edited, a copy being checked) says so, and
+  // stays open.
+  const mergeAnswerRef = useRef({ tabs: openTabs, busy: true });
+  mergeAnswerRef.current = {
+    tabs: openTabs,
+    busy:
+      !preferencesReady ||
+      copyPasteDialogState !== null ||
+      copyPasteModalOpen ||
+      sheetOpen ||
+      actionNotice !== null,
+  };
+  useEffect(
+    () =>
+      client.onMergeRequest?.(({ requestId }) => {
+        const { tabs, busy } = mergeAnswerRef.current;
+        void client
+          .invoke("app:answerMergeRequest", { requestId, tabs, busy })
+          .catch(() => undefined);
+      }),
+    [client],
+  );
+  // Window › Merge All Windows: the other windows close and their tabs come here, as many
+  // as fit beside this window's.
   const mergeAllWindows = () => {
     void client
-      .invoke("app:mergeAllWindows", {})
+      .invoke("app:mergeAllWindows", { tabCount: Math.min(tabCount, OPEN_TABS_LIMIT) })
       .then(({ tabs }) =>
         addTabs(
           tabs.map((tab) => {

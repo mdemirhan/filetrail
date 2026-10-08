@@ -271,6 +271,8 @@ export function createAppHarness(
   emitClipboardChanged: (clipboard: CopyPasteClipboard) => void;
   // The window that ran an operation closed and this one takes it over.
   emitWriteOperationAdopted: (adoption: WriteOperationAdoption) => void;
+  // Merge All Windows in another window asks for this window's tabs.
+  emitMergeRequest: (requestId: string) => void;
   // The folder the window last asked to have watched (null: none).
   watchedPath: () => string | null;
   // A change made outside the app to the watched folder, as the main process tells of it.
@@ -372,6 +374,7 @@ export function createAppHarness(
   const folderChangeListeners = new Set<(change: FolderChange) => void>();
   let clipboardListener: ((clipboard: CopyPasteClipboard) => void) | null = null;
   let adoptionListener: ((adoption: WriteOperationAdoption) => void) | null = null;
+  let mergeRequestListener: ((request: { requestId: string }) => void) | null = null;
   // Several parts of the window listen (the operation itself, folder sizes), as in the app.
   const writeOperationProgressListeners = new Set<(event: WriteOperationProgressEvent) => void>();
   let copyPasteProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
@@ -432,7 +435,8 @@ export function createAppHarness(
       if (
         channel === "app:setClipboard" ||
         channel === "app:openWindow" ||
-        channel === "app:closeWindow"
+        channel === "app:closeWindow" ||
+        channel === "app:answerMergeRequest"
       ) {
         return { ok: true } as IpcResponse<C>;
       }
@@ -873,6 +877,14 @@ export function createAppHarness(
         }
       };
     },
+    onMergeRequest(listener) {
+      mergeRequestListener = listener;
+      return () => {
+        if (mergeRequestListener === listener) {
+          mergeRequestListener = null;
+        }
+      };
+    },
   };
 
   return {
@@ -887,6 +899,9 @@ export function createAppHarness(
     },
     emitWriteOperationAdopted(adoption) {
       adoptionListener?.(adoption);
+    },
+    emitMergeRequest(requestId) {
+      mergeRequestListener?.({ requestId });
     },
     watchedPath: () => watchedPath,
     emitFolderChange(change) {
