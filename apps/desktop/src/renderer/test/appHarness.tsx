@@ -273,6 +273,8 @@ export function createAppHarness(
   emitWriteOperationAdopted: (adoption: WriteOperationAdoption) => void;
   // Merge All Windows in another window asks for this window's tabs.
   emitMergeRequest: (requestId: string) => void;
+  // Preferences changed in another window (Settings), as main passes them on.
+  emitPreferencesChanged: (patch: IpcRequestInput<"app:updatePreferences">["preferences"]) => void;
   // The folder the window last asked to have watched (null: none).
   watchedPath: () => string | null;
   // A change made outside the app to the watched folder, as the main process tells of it.
@@ -375,6 +377,9 @@ export function createAppHarness(
   let clipboardListener: ((clipboard: CopyPasteClipboard) => void) | null = null;
   let adoptionListener: ((adoption: WriteOperationAdoption) => void) | null = null;
   let mergeRequestListener: ((request: { requestId: string }) => void) | null = null;
+  let preferencesChangedListener:
+    | ((patch: IpcRequestInput<"app:updatePreferences">["preferences"]) => void)
+    | null = null;
   // Several parts of the window listen (the operation itself, folder sizes), as in the app.
   const writeOperationProgressListeners = new Set<(event: WriteOperationProgressEvent) => void>();
   let copyPasteProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
@@ -885,6 +890,14 @@ export function createAppHarness(
         }
       };
     },
+    onPreferencesChanged(listener) {
+      preferencesChangedListener = listener;
+      return () => {
+        if (preferencesChangedListener === listener) {
+          preferencesChangedListener = null;
+        }
+      };
+    },
   };
 
   return {
@@ -902,6 +915,9 @@ export function createAppHarness(
     },
     emitMergeRequest(requestId) {
       mergeRequestListener?.({ requestId });
+    },
+    emitPreferencesChanged(patch) {
+      preferencesChangedListener?.(patch);
     },
     watchedPath: () => watchedPath,
     emitFolderChange(change) {

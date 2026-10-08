@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import type { IpcRequest } from "@filetrail/contracts";
 
+import { isWindowSessionKey } from "../../shared/appPreferences";
 import type { FiletrailClient } from "../lib/filetrailClient";
 
 export type PreferencesPatch = IpcRequest<"app:updatePreferences">["preferences"];
@@ -101,7 +102,12 @@ export function usePreferencesSync({
   });
 
   useEffect(() => {
-    const unsubscribe = client.onPreferencesChanged?.((patch) => {
+    const unsubscribe = client.onPreferencesChanged?.((remotePatch) => {
+      // What belongs to one window (its tabs, its view, its panels) is never another
+      // window's to change; taken as synced, this window's own change to it would be lost.
+      const patch = Object.fromEntries(
+        Object.entries(remotePatch).filter(([key]) => !isWindowSessionKey(key)),
+      ) as PreferencesPatch;
       syncedRef.current = { ...syncedRef.current, ...patch };
       onRemotePatchRef.current(patch);
     });

@@ -1,7 +1,11 @@
 import type { IpcResponse } from "@filetrail/contracts";
 
-import type { AppPreferences, OpenTabPreference } from "../shared/appPreferences";
-import { type AppStateStore, isWindowSessionKey } from "./appStateStore";
+import {
+  type AppPreferences,
+  type OpenTabPreference,
+  isWindowSessionKey,
+} from "../shared/appPreferences";
+import type { AppStateStore } from "./appStateStore";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import type { IpcHandlerMap } from "./ipc";
 

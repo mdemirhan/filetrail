@@ -19,6 +19,8 @@ import {
   OPTIONAL_SEARCH_COLUMN_KEYS,
   type OpenTabPreference,
   type ThemePreference,
+  WINDOW_SESSION_PREFERENCE_KEYS,
+  type WindowSessionKey,
   clampDetailColumnWidth,
   clampOpenItemLimit,
   clampPaneWidth,
@@ -48,44 +50,7 @@ export type StoredWindowState = {
   maximized: boolean;
 };
 
-// What belongs to one explorer window rather than to the app: its tabs and where they are,
-// how its front tab shows its folder, which of its panels are open and how wide, and how
-// wide its columns are (windows of different sizes want different widths). Each
-// window keeps its own; the app's preferences hold the values last set in any window,
-// which a window opened without one of its own starts from.
-export const WINDOW_SESSION_PREFERENCE_KEYS = [
-  "openTabs",
-  "activeTabIndex",
-  "treeRootPath",
-  "lastVisitedPath",
-  "lastVisitedFavoritePath",
-  "viewMode",
-  "searchViewMode",
-  "sortBy",
-  "sortDirection",
-  "searchResultsSortBy",
-  "searchResultsSortDirection",
-  "includeHidden",
-  "foldersFirst",
-  "favoritesExpanded",
-  "locationsExpanded",
-  "folderTreeOpen",
-  "propertiesOpen",
-  "detailRowOpen",
-  "treeWidth",
-  "inspectorWidth",
-  "detailColumnWidths",
-  "searchColumnWidths",
-] as const satisfies readonly (keyof AppPreferences)[];
-
-export type WindowSessionKey = (typeof WINDOW_SESSION_PREFERENCE_KEYS)[number];
 export type WindowSession = Pick<AppPreferences, WindowSessionKey>;
-
-const WINDOW_SESSION_KEY_SET: ReadonlySet<string> = new Set(WINDOW_SESSION_PREFERENCE_KEYS);
-
-export function isWindowSessionKey(key: string): key is WindowSessionKey {
-  return WINDOW_SESSION_KEY_SET.has(key);
-}
 
 // An explorer window as it is brought back at the next launch.
 export type StoredExplorerWindow = {

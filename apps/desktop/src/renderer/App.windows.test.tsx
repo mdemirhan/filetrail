@@ -828,4 +828,34 @@ describe("App windows", () => {
     // The tree the tab shows is read again, as well as the folder's place in it.
     await waitFor(() => expect(treeReads()).toBe(2));
   });
+
+  it("keeps its own tabs and view when another window's change carries them", async () => {
+    const harness = createAppHarness();
+    await ready(harness);
+    await openDirectory("/Users/demo/Folder");
+
+    await act(async () => {
+      harness.emitPreferencesChanged({
+        viewMode: "icons",
+        openTabs: [savedTab("/Users/demo/elsewhere")],
+        activeTabIndex: 0,
+        notificationsEnabled: false,
+      });
+    });
+
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    expect(harness.menuStates.at(-1)?.viewMode).toBe("details");
+    // Its own change to the same view is still saved.
+    await command(harness, "viewAsIcons");
+    await waitFor(() =>
+      expect(
+        harness.invocations.some(
+          (call) =>
+            call.channel === "app:updatePreferences" &&
+            (call.payload as IpcRequestInput<"app:updatePreferences">).preferences.viewMode ===
+              "icons",
+        ),
+      ).toBe(true),
+    );
+  });
 });
