@@ -178,10 +178,12 @@ export async function runBatchRename(args: {
   }
 
   // Every item has its result by now: the loops above give one to each.
+  const items = results.filter((result): result is ResultItem => result !== null);
+  // A stop that came as the last item finished stopped nothing.
   return {
-    items: results.filter((result): result is ResultItem => result !== null),
+    items,
     completedItemCount,
-    cancelled,
+    cancelled: cancelled && items.some((item) => item.status === "cancelled"),
   };
 }
 

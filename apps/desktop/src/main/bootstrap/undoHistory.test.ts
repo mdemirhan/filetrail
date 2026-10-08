@@ -106,6 +106,21 @@ describe("createUndoHistory", () => {
     expect(history.top("redo")).toBeNull();
   });
 
+  it("leaves the history as it was after an operation that changed nothing", () => {
+    const history = createUndoHistory();
+    history.record(undoable("rename", [moved("/a", "/b")]));
+    history.finish("undo", history.top("undo")?.id ?? -1, {
+      done: units([moved("/b", "/a")]),
+      leftover: [],
+    });
+    const generation = history.generation();
+
+    history.record(undoable("paste"));
+
+    expect(history.menu()).toEqual({ undo: null, redo: "Rename", cantUndo: false });
+    expect(history.generation()).toBe(generation);
+  });
+
   it("leaves nothing to undo after an operation that can't be undone, until the next one", () => {
     const history = createUndoHistory();
     history.record(undoable("rename", [moved("/a", "/b")]));

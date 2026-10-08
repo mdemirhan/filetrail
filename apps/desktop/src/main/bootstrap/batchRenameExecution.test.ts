@@ -684,6 +684,29 @@ describe("renaming several items", () => {
       expect(result.completedItemCount).toBe(2);
     });
 
+    it("isn't stopped by a stop that comes as the last item finishes", async () => {
+      const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
+      const controller = new AbortController();
+      const original = disk.renameExclusive;
+      disk.renameExclusive = async (from, to) => {
+        await original(from, to);
+        if (to === "/trip/y") {
+          controller.abort();
+        }
+      };
+      const result = await run(
+        disk,
+        request([
+          ["a", "x"],
+          ["b", "y"],
+        ]),
+        { signal: controller.signal },
+      );
+      expect(result.cancelled).toBe(false);
+      expect(result.completedItemCount).toBe(2);
+      expect(disk.names()).toEqual(["x", "y"]);
+    });
+
     it("puts back what was moved aside when stopped while moving items aside", async () => {
       const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
       const controller = new AbortController();

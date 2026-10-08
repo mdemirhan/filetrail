@@ -47,9 +47,14 @@ export function createUndoHistory() {
     // A finished operation. One that can be undone goes on top and leaves nothing to
     // redo; one that can't leaves nothing to undo either.
     record(finished: FinishedWrite): void {
+      const { log } = finished;
+      // One that changed nothing leaves the history as it was (callers leave it out too).
+      if (log.undoable && log.units.length === 0) {
+        return;
+      }
       redoList.length = 0;
       // (Emptying the Trash is never undoable.)
-      if (finished.action === "empty_trash" || !finished.log.undoable) {
+      if (finished.action === "empty_trash" || !log.undoable) {
         undoList.length = 0;
         cantUndo = true;
         changed();
@@ -58,8 +63,8 @@ export function createUndoHistory() {
       undoList.push({
         id: nextId++,
         action: finished.action,
-        units: finished.log.units,
-        moves: movesAnything(finished.log.units),
+        units: log.units,
+        moves: movesAnything(log.units),
       });
       cantUndo = false;
       changed();

@@ -492,6 +492,38 @@ describe("a write that fails, by its error", () => {
   });
 });
 
+describe("a stop as the last item of a batch is renamed back", () => {
+  it("stops nothing, and leaves nothing to undo", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    let stopping = false;
+    const t = setUpUndo(root, trashDir, {
+      renameExclusive: async (from, to) => {
+        await originalRenameExclusive(from, to);
+        if (stopping && to === join(root, "b.txt")) {
+          t.coordinator.handlers["writeOperation:cancel"](
+            { operationId: t.coordinator.getActiveOperation()?.operationId ?? "" },
+            { sender: t.sender },
+          );
+        }
+      },
+    });
+    const before = snapshot();
+    await t.batchRename([
+      [join(root, "a.txt"), "x.txt"],
+      [join(root, "b.txt"), "y.txt"],
+    ]);
+    stopping = true;
+
+    const undone = await t.undo();
+
+    expect(undone.status).toBe("completed");
+    expect(snapshot()).toEqual(before);
+    expect(t.history.menu()).toEqual({ undo: null, redo: "Rename of 2 Items", cantUndo: false });
+    await t.coordinator.shutdown();
+  });
+});
+
 describe("a stop inside a Replace", () => {
   // A moving Replace undone up to the stop: the new item went back where it came from,
   // the old item is still in the Trash.
