@@ -3,7 +3,7 @@
 // The window's own drags, which the system drags: where they end, what the window does
 // when it hears they have, and the tabs they spring into folders in.
 
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("./components/ContentPane", async () =>
   (await import("./test/appMocks")).contentPaneMock(),
@@ -31,6 +31,8 @@ vi.mock("./lib/progressCardDelay", async () =>
   (await import("./test/appMocks")).progressCardDelayMock(),
 );
 
+import { App } from "./App";
+import { FiletrailClientProvider } from "./lib/filetrailClient";
 import {
   analyzeRequests,
   createAppHarness,
@@ -149,6 +151,14 @@ function tabs(): [HTMLElement, HTMLElement] {
   return screen.getAllByRole("tab") as [HTMLElement, HTMLElement];
 }
 
+function readsOf(harness: Harness): number {
+  return harness.invocations.filter((call) => call.channel === "system:readDraggedIn").length;
+}
+
+function checksFor(harness: Harness): unknown[] {
+  return harness.invocations.filter((call) => call.channel === "system:findDraggedAway");
+}
+
 function goBackDisabled(harness: Harness): boolean {
   return harness.menuStates.at(-1)?.disabledCommands.includes("goBack") ?? false;
 }
@@ -239,5 +249,155 @@ describe("a folder that can't be sprung into", () => {
 
     expect(pane).toHaveAttribute("data-drop-target-state", "none");
     expect(analyzeRequests(harness)).toEqual([]);
+  });
+});
+
+describe("hearing a drag's end", () => {
+  it("takes a drop on the window that comes after the drag's end", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await springInto(folder, dataTransfer);
+    await endDrag(harness, "move", "this_window");
+    const pane = screen.getByTestId("content-pane");
+    await act(async () => {
+      fireEvent.dragOver(pane, { dataTransfer });
+      fireEvent.drop(pane, { dataTransfer });
+    });
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ mode: "cut", destinationDirectoryPath: folder }),
+      ]);
+    });
+    await waitMs(1100);
+    expect(currentPath()).toBe(folder);
+  });
+
+  it("brings the tab back when the drop the drag's end spoke of never comes", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await springInto(folder, dataTransfer);
+    await endDrag(harness, "move", "this_window");
+    await waitMs(1100);
+
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(home);
+    });
+    expect(analyzeRequests(harness)).toEqual([]);
+  });
+
+  it("lets go of a drag whose end is never heard once the pointer is pressed or moved free", async () => {
+    const harness = harnessWithFolders();
+    harness.setDraggedIn({ changeCount: 9, items: [{ path: "/Users/other/a.txt", kind: "file" }] });
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await springInto(folder, dataTransfer);
+    // Still going: the button is held, or drag-overs are still coming in.
+    await act(async () => {
+      fireEvent.pointerMove(window, { buttons: 1 });
+    });
+    await act(async () => {
+      fireEvent.dragOver(screen.getByTestId("content-pane"), { dataTransfer });
+      fireEvent.pointerMove(window, { buttons: 0 });
+    });
+    expect(currentPath()).toBe(folder);
+    expect(harness.fileDragsGoing()).toBe(1);
+
+    // The drag is over, though the system never said so.
+    await waitMs(400);
+    await act(async () => {
+      fireEvent.pointerMove(window, { buttons: 0 });
+    });
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(home);
+    });
+
+    // A drag from Finder is taken from then on.
+    const fromFinder = fileDrag();
+    const pane = screen.getByTestId("content-pane");
+    await act(async () => {
+      fireEvent.dragEnter(pane, { dataTransfer: fromFinder });
+    });
+    await vi.waitFor(() => {
+      expect(readsOf(harness)).toBe(1);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      fireEvent.dragOver(pane, { dataTransfer: fromFinder });
+      fireEvent.drop(pane, { dataTransfer: fromFinder });
+    });
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({ sourcePaths: ["/Users/other/a.txt"] }),
+      ]);
+    });
+  });
+});
+
+describe("a drag of the window's own while an operation starts", () => {
+  it("is not taken for a drag from another app", async () => {
+    const harness = harnessWithFolders();
+    harness.setDraggedIn({ changeCount: 9, items: [{ path: source, kind: "file" }] });
+    renderApp(harness);
+    await screen.findByTitle(source);
+
+    const dataTransfer = await startDrag(source);
+    await act(async () => {
+      harness.emitCommand({ type: "openLocationSheet" });
+    });
+    const pane = screen.getByTestId("content-pane");
+    await act(async () => {
+      fireEvent.dragEnter(pane, { dataTransfer });
+      fireEvent.dragOver(pane, { dataTransfer });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(readsOf(harness)).toBe(0);
+    await endDrag(harness, "none");
+    expect(analyzeRequests(harness)).toEqual([]);
+  });
+});
+
+describe("a window closed with a drag still being followed", () => {
+  it("leaves nothing waiting behind", async () => {
+    const harness = harnessWithFolders();
+    const { unmount } = render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByTitle(source);
+    await pressKey({ key: "t", metaKey: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    // Items another app moved away, still being looked for...
+    await startDrag(source);
+    harness.markGoneFromDisk([source]);
+    await endDrag(harness, "move");
+    // ...and a tab about to come forward under the next drag.
+    const dataTransfer = await startDrag(source);
+    await act(async () => {
+      fireEvent.dragOver(tabs()[0], { dataTransfer });
+    });
+    unmount();
+
+    expect(vi.getTimerCount()).toBe(0);
+    await waitMs(5000);
+    expect(checksFor(harness)).toEqual([]);
   });
 });

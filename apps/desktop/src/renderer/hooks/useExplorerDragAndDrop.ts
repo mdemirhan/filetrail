@@ -30,6 +30,16 @@ type FileDragResult = {
   endedOver: "this_window" | "another_window" | "elsewhere";
 };
 
+// The window's own drag can be heard to end before its drop on the window arrives; the drop
+// is waited for this long.
+const OWN_DROP_WAIT_MS = 1000;
+// A drag holds the mouse button down: a press, or the pointer moving with no button held,
+// means the window's own drag is over even if its end was never heard. Not so soon after it
+// started that the page may still be handed what happened before it, and not while
+// drag-overs are still coming in.
+const OWN_DRAG_STALE_AFTER_MS = 500;
+const OWN_DRAG_OVER_QUIET_MS = 300;
+
 // How long a drag is held over a tab before that tab comes to the front; the same as a
 // folder in the tree takes to open, and a folder in the content pane to spring open.
 const TAB_HOVER_SWITCH_MS = 700;
@@ -88,6 +98,16 @@ export type SpringLoading = {
 type Springs = {
   session: InternalDragSession;
   tabs: Map<string, { start: unknown; opened: boolean }>;
+};
+
+// The window's own system drag, from its start until its end is heard (or found to have
+// been missed). Its drag-overs are its own, never a drag from another app's, even once its
+// session has ended here (dropped, or cut short while an operation holds the window).
+type OwnDrag = {
+  session: InternalDragSession;
+  startedAt: number;
+  // Waiting for the drop on this window, the drag's end already heard.
+  awaitingDrop: (() => void) | null;
 };
 
 type DropIndicatorState = "valid" | "invalid" | null;
@@ -183,8 +203,10 @@ export function useExplorerDragAndDrop(args: {
   const externalDragRef = useRef<ExternalDrag | null>(null);
   // The drag (by its change count) last told it can't be dropped, so it is told once.
   const refusedDragChangeCountRef = useRef<number | null>(null);
-  // The window listens for drags from other apps; it calls the latest of these.
+  // The window listens for drags from other apps, and for the pointer once its own drag may
+  // be over; it calls the latest of these.
   const noteExternalDragOverRef = useRef<() => void>(() => undefined);
+  const noteOwnDragMaybeOverRef = useRef<() => void>(() => undefined);
   // The folder a drag is being held over in the content pane, since when, and when it was
   // last heard from.
   const contentHoverRef = useRef<{
@@ -200,6 +222,12 @@ export function useExplorerDragAndDrop(args: {
   // The folder showing it is about to open.
   const [springWarningPath, setSpringWarningPath] = useState<string | null>(null);
   const springRef = useRef<Springs | null>(null);
+  const ownDragRef = useRef<OwnDrag | null>(null);
+  // When a drag of files was last over the window, the app's own or another app's.
+  const lastFileDragOverAtRef = useRef(0);
+  // What is still to happen after a drag, which stops when the window goes away.
+  const timersRef = useRef(new Set<number>());
+  const unmountedRef = useRef(false);
   const [backgroundDropIndicator, setBackgroundDropIndicator] = useState<DropIndicatorState>(null);
   // Which disk each folder of this drag is on, as far as the disks have answered.
   const diskIdsRef = useRef(new Map<string, number | null>());
@@ -222,17 +250,33 @@ export function useExplorerDragAndDrop(args: {
   );
   const trashPath = useMemo(() => getTrashPath(homePath), [homePath]);
 
-  useEffect(
-    () => () => {
-      if (treeHoverExpandRef.current) {
-        window.clearTimeout(treeHoverExpandRef.current.timerId);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      clearTreeHoverExpand();
+      clearTabHoverSwitch();
+      for (const timerId of timersRef.current) {
+        window.clearTimeout(timerId);
       }
-    },
-    [],
-  );
+      timersRef.current.clear();
+    };
+  }, []);
+
+  // Waits `ms`, unless the window goes away first: then never.
+  function wait(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timerId = window.setTimeout(() => {
+        timersRef.current.delete(timerId);
+        resolve();
+      }, ms);
+      timersRef.current.add(timerId);
+    });
+  }
 
   // A drag from another app goes on whatever the window does; its drop is refused while the
-  // window is held (see resolveDropValidity).
+  // window is held (see resolveDropValidity). The window's own ends here, though the system
+  // drag goes on (and may still be dropped in another app).
   useEffect(() => {
     if (blocked && dragSessionRef.current?.sourceSurface !== "external") {
       clearDragSession();
@@ -240,12 +284,14 @@ export function useExplorerDragAndDrop(args: {
   }, [blocked]);
 
   noteExternalDragOverRef.current = noteExternalDragOver;
+  noteOwnDragMaybeOverRef.current = noteOwnDragMaybeOver;
   // Drags of files from other apps are seen by the whole window first, before any target.
   useEffect(() => {
     function handleWindowDragOver(event: DragEvent) {
       if (!isFileDrag(event.dataTransfer)) {
         return;
       }
+      lastFileDragOverAtRef.current = Date.now();
       noteExternalDragOverRef.current();
       // The path bar and the search field take no files: a drop there would type them in.
       if (isTextField(event.target)) {
@@ -262,13 +308,23 @@ export function useExplorerDragAndDrop(args: {
         event.stopPropagation();
       }
     }
+    function handleWindowPointer(event: PointerEvent) {
+      // A press, or a move with the button let go.
+      if (event.type === "pointerdown" || (event.buttons & 1) === 0) {
+        noteOwnDragMaybeOverRef.current();
+      }
+    }
     window.addEventListener("dragenter", handleWindowDragOver, true);
     window.addEventListener("dragover", handleWindowDragOver, true);
     window.addEventListener("drop", handleWindowDrop, true);
+    window.addEventListener("pointerdown", handleWindowPointer, true);
+    window.addEventListener("pointermove", handleWindowPointer, true);
     return () => {
       window.removeEventListener("dragenter", handleWindowDragOver, true);
       window.removeEventListener("dragover", handleWindowDragOver, true);
       window.removeEventListener("drop", handleWindowDrop, true);
+      window.removeEventListener("pointerdown", handleWindowPointer, true);
+      window.removeEventListener("pointermove", handleWindowPointer, true);
       const drag = externalDragRef.current;
       if (drag) {
         window.clearInterval(drag.timerId);
@@ -415,28 +471,88 @@ export function useExplorerDragAndDrop(args: {
     // A system drag, not the page's: only it can leave the window. Its drops here still
     // come to the handlers below, while it is still this session.
     event.preventDefault();
-    const paths = session.sourceItems.map((item) => item.path);
+    const ownDrag: OwnDrag = { session, startedAt: Date.now(), awaitingDrop: null };
+    ownDragRef.current = ownDrag;
     void startFileDrag(session.sourceItems)
-      .then((result) => {
-        settleSprings(session);
-        // A drop on another window of the app is that window's own: it follows what it
-        // moves itself.
+      .then(async (result) => {
+        // It was dropped on this window, but the page hasn't been handed the drop yet.
         if (
-          result.endedOver === "elsewhere" &&
+          result.endedOver === "this_window" &&
+          result.operation !== "none" &&
           droppedSessionRef.current !== session &&
-          (result.operation === "move" || result.operation === "delete")
+          ownDragRef.current === ownDrag
         ) {
-          void followDraggedAway(paths, { intoTrash: result.operation === "delete" });
+          await waitForOwnDrop(ownDrag);
         }
+        return result;
       })
-      .catch(() => {
+      .then(
+        (result) => endOwnDrag(ownDrag, result),
         // The drag never started; nothing was dropped.
-      })
-      .finally(() => {
-        if (dragSessionRef.current === session) {
-          clearDragSession();
-        }
-      });
+        () => endOwnDrag(ownDrag, null),
+      );
+  }
+
+  // Waits for the drop on this window that the drag's end says was made, a while at most.
+  function waitForOwnDrop(ownDrag: OwnDrag): Promise<void> {
+    return new Promise((resolve) => {
+      const timerId = window.setTimeout(done, OWN_DROP_WAIT_MS);
+      timersRef.current.add(timerId);
+      function done() {
+        window.clearTimeout(timerId);
+        timersRef.current.delete(timerId);
+        ownDrag.awaitingDrop = null;
+        resolve();
+      }
+      ownDrag.awaitingDrop = done;
+    });
+  }
+
+  // The window's own drag is over. Tabs it sprang in go back unless it was dropped here; items
+  // another app (or the Dock's Trash) took are followed. A drop on another window of the app
+  // is that window's own: it follows what it moves itself. `result` is null for a drag whose
+  // end was never heard, or that never started.
+  function endOwnDrag(ownDrag: OwnDrag, result: FileDragResult | null) {
+    if (unmountedRef.current) {
+      return;
+    }
+    const { session } = ownDrag;
+    if (ownDragRef.current === ownDrag) {
+      ownDragRef.current = null;
+    }
+    settleSprings(session);
+    if (
+      result !== null &&
+      result.endedOver === "elsewhere" &&
+      droppedSessionRef.current !== session &&
+      (result.operation === "move" || result.operation === "delete")
+    ) {
+      void followDraggedAway(
+        session.sourceItems.map((item) => item.path),
+        { intoTrash: result.operation === "delete" },
+      );
+    }
+    if (dragSessionRef.current === session) {
+      clearDragSession();
+    }
+  }
+
+  // The pointer was pressed, or moved with no button held, while the window's own drag is
+  // still thought to be going: its end was missed (AppKit didn't say), so it ends now, as a
+  // drag that ended without a drop here. Were it left, the window would take every later
+  // drag from Finder for it, and ignore it.
+  function noteOwnDragMaybeOver() {
+    const ownDrag = ownDragRef.current;
+    const now = Date.now();
+    if (
+      !ownDrag ||
+      ownDrag.awaitingDrop !== null ||
+      now - ownDrag.startedAt < OWN_DRAG_STALE_AFTER_MS ||
+      now - lastFileDragOverAtRef.current < OWN_DRAG_OVER_QUIET_MS
+    ) {
+      return;
+    }
+    endOwnDrag(ownDrag, null);
   }
 
   // A drag that ends without a drop in this window brings every tab it sprang in back to
@@ -461,11 +577,14 @@ export function useExplorerDragAndDrop(args: {
   async function followDraggedAway(paths: string[], options: { intoTrash: boolean }) {
     let remaining = paths;
     for (const delayMs of DRAGGED_AWAY_CHECK_DELAYS_MS) {
-      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+      await wait(delayMs);
       let gone: string[];
       try {
         gone = await findDraggedAway(remaining);
       } catch {
+        return;
+      }
+      if (unmountedRef.current) {
         return;
       }
       if (gone.length === 0) {
@@ -491,9 +610,8 @@ export function useExplorerDragAndDrop(args: {
   // targets and rules. It ends when it is dropped here, or when its drag-overs stop.
 
   function noteExternalDragOver() {
-    const current = dragSessionRef.current;
-    if (current && current.sourceSurface !== "external") {
-      // The app's own drag.
+    if (ownDragRef.current) {
+      // The window's own drag, even once its session here has ended.
       return;
     }
     const now = Date.now();
@@ -529,6 +647,7 @@ export function useExplorerDragAndDrop(args: {
     if (
       externalDragRef.current !== drag ||
       dragSessionRef.current !== null ||
+      ownDragRef.current !== null ||
       contents.items.length === 0
     ) {
       return;
@@ -732,6 +851,10 @@ export function useExplorerDragAndDrop(args: {
     }
     event.preventDefault();
     droppedSessionRef.current = session;
+    // The drag's end may have been heard first, and waits for this.
+    if (ownDragRef.current?.session === session) {
+      ownDragRef.current.awaitingDrop?.();
+    }
     // A drag from another app ends with its drop: no more drag-overs are waited for.
     const externalDrag =
       externalDragRef.current?.session === session ? externalDragRef.current : null;
