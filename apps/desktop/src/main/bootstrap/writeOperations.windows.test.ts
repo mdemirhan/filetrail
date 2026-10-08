@@ -13,8 +13,15 @@ import {
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
+import { clearResponseCaches } from "./responseCache";
 import { createUndoHistory } from "./undoHistory";
-import { createWriteOperationCoordinator } from "./writeOperations";
+import { type FinishedWrite, createWriteOperationCoordinator } from "./writeOperations";
+
+// Forgetting cached listings tells the folder sizes, which can go wrong; the tests make it.
+vi.mock("./responseCache", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./responseCache")>();
+  return { ...original, clearResponseCaches: vi.fn(original.clearResponseCaches) };
+});
 
 // Operations and copy analyses with several windows open: each belongs to the window that
 // started it, and is handed on or cancelled when that window goes away.
@@ -118,6 +125,55 @@ function copyEvent(status: string, extra: Record<string, unknown> = {}) {
     result: null,
     ...extra,
   };
+}
+
+// The end of a paste that copied a.txt into /Volumes/Share, with what it did for Undo.
+function copiedEvent() {
+  return copyEvent("completed", {
+    completedItemCount: 1,
+    result: {
+      operationId: "copy-op-1",
+      mode: "copy",
+      status: "completed",
+      destinationDirectoryPath: "/Volumes/Share",
+      startedAt: "2026-10-08T12:00:00.000Z",
+      finishedAt: "2026-10-08T12:00:00.050Z",
+      summary: {
+        topLevelItemCount: 1,
+        totalItemCount: 1,
+        completedItemCount: 1,
+        failedItemCount: 0,
+        skippedItemCount: 0,
+        cancelledItemCount: 0,
+        completedByteCount: 0,
+        totalBytes: null,
+      },
+      items: [
+        {
+          sourcePath: "/Users/demo/a.txt",
+          destinationPath: "/Volumes/Share/a.txt",
+          status: "completed",
+          error: null,
+        },
+      ],
+      error: null,
+      undoLog: {
+        undoable: true,
+        units: [
+          {
+            steps: [
+              {
+                kind: "created",
+                path: "/Volumes/Share/a.txt",
+                id: { dev: 9, ino: 1 },
+                stamp: null,
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
 }
 
 function fingerprint() {
@@ -508,6 +564,96 @@ describe("an operation that stops unexpectedly", () => {
       "[filetrail] couldn't tell the other windows about an operation",
       expect.any(Error),
     );
+    await coordinator.shutdown();
+  });
+
+  it("ends a paste whose disk can't be told to have a Trash, and can't undo it", async () => {
+    await writeFile(join(root, "a.txt"), "a");
+    const { writeService, emit } = createWriteServiceStub();
+    const broadcastProgress = vi.fn();
+    const finished: FinishedWrite[] = [];
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      {
+        homePath: root,
+        broadcastProgress,
+        recordUndo: (entry) => finished.push(entry),
+        // Reading the mount table goes wrong.
+        diskHasTrash: () => {
+          throw new Error("The mount table couldn't be read.");
+        },
+      },
+    );
+    const window = createWindow();
+    await analyze(coordinator, window);
+    await paste(coordinator, window);
+
+    emit(copiedEvent());
+
+    expect((await waitForEnd(window, "copy-op-1")).status).toBe("completed");
+    expect(broadcastProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId: "copy-op-1", status: "completed" }),
+      window,
+    );
+    expect(coordinator.getActiveOperation()).toBeNull();
+    // Whether its copy could go to the Trash isn't known, so it isn't offered to Undo.
+    expect(finished.map((entry) => entry.log)).toEqual([{ undoable: false, reason: "no_trash" }]);
+    // The next operation can start.
+    const rename = await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: join(root, "a.txt"), destinationName: "b.txt" },
+      { sender: window },
+    );
+    expect((await waitForEnd(window, rename.operationId)).status).toBe("completed");
+    await coordinator.shutdown();
+  });
+
+  it("ends a paste, and frees the slot, when forgetting what it changed goes wrong", async () => {
+    const { writeService, emit } = createWriteServiceStub();
+    const finished: FinishedWrite[] = [];
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { homePath: root, recordUndo: (entry) => finished.push(entry) },
+    );
+    const window = createWindow();
+    await analyze(coordinator, window);
+    await paste(coordinator, window);
+    vi.mocked(clearResponseCaches).mockImplementationOnce(() => {
+      throw new Error("A folder size broke.");
+    });
+
+    emit(copiedEvent());
+
+    expect((await waitForEnd(window, "copy-op-1")).status).toBe("completed");
+    expect(coordinator.getActiveOperation()).toBeNull();
+    expect(finished).toHaveLength(1);
+    expect(errors).toHaveBeenCalledWith(
+      "[filetrail] couldn't forget what an operation changed",
+      expect.any(Error),
+    );
+    await coordinator.shutdown();
+  });
+
+  it("sends the end of a rename when forgetting what it changed goes wrong", async () => {
+    await writeFile(join(root, "a.txt"), "a");
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub().writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { homePath: root },
+    );
+    const window = createWindow();
+    vi.mocked(clearResponseCaches).mockImplementationOnce(() => {
+      throw new Error("A folder size broke.");
+    });
+
+    const { operationId } = await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: join(root, "a.txt"), destinationName: "b.txt" },
+      { sender: window },
+    );
+
+    expect((await waitForEnd(window, operationId)).status).toBe("completed");
+    expect(coordinator.getActiveOperation()).toBeNull();
     await coordinator.shutdown();
   });
 

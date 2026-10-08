@@ -208,6 +208,20 @@ export function createWriteOperationCoordinator(
   // top-level Trash folder itself. The comparison ignores case, as the disk does.
   const homePath = options.homePath ?? homedir();
 
+  // Folder listings and sizes read before an operation finished may show the old contents.
+  // Forgetting them reads nothing from disk, but it tells the folder sizes, and a mistake
+  // there must never keep the write slot from being freed or the end from being sent.
+  function forgetCachedResponses(
+    changedPaths: readonly string[],
+    removedItems: readonly RemovedItem[] = [],
+  ): void {
+    try {
+      clearResponseCaches(changedPaths, removedItems);
+    } catch (error) {
+      console.error("[filetrail] couldn't forget what an operation changed", error);
+    }
+  }
+
   // A mistake in keeping the history must never keep the write slot from being freed.
   function recordFinishedWrite(finished: FinishedWrite): void {
     try {
@@ -318,13 +332,23 @@ export function createWriteOperationCoordinator(
     if (isTerminalStatus(event.status)) {
       copyPasteRequests.delete(event.operationId);
       copyPasteModes.delete(event.operationId);
-      // Folder listings read before the operation finished may show the old contents.
-      clearResponseCaches(event.result ? pathsChangedByWrite(event.result) : []);
-      const undoLog = pasteUndoLog(event);
-      if (undoLog !== null) {
-        recordFinishedWrite({ action, log: undoLog, items: event.result?.items ?? [] });
+      try {
+        forgetCachedResponses(event.result ? pathsChangedByWrite(event.result) : []);
+        let undoLog: UndoLog | null;
+        try {
+          undoLog = pasteUndoLog(event);
+        } catch (error) {
+          // Whether its copies can be undone isn't known, so it can't be.
+          console.error("[filetrail] couldn't tell whether a paste can be undone", error);
+          undoLog = { undoable: false, reason: "no_trash" };
+        }
+        if (undoLog !== null) {
+          recordFinishedWrite({ action, log: undoLog, items: event.result?.items ?? [] });
+        }
+      } finally {
+        // Nothing that goes wrong above may keep the slot held, or the end from the window.
+        freeWriteSlot(event.operationId);
       }
-      freeWriteSlot(event.operationId);
     }
     const sender = writeOperationSenders.get(event.operationId);
     if (!sender) {
@@ -694,9 +718,8 @@ export function createWriteOperationCoordinator(
     // Release the operation before telling the window, so a failed send can't leave the
     // write slot held and a renderer reacting to the final event can start the next write.
     if (isTerminalStatus(event.status)) {
-      // Folder listings read before the operation finished may show the old contents.
       const removedPaths = new Set(removedItems.map((removed) => removed.path));
-      clearResponseCaches(
+      forgetCachedResponses(
         event.result
           ? pathsChangedByWrite(event.result).filter((path) => !removedPaths.has(path))
           : [],
