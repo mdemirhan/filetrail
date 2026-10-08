@@ -1048,6 +1048,55 @@ describe("getCachedResponse", () => {
     expect(getResponseCacheSizes().directoryMetadata).toBe(1);
     resetResponseCacheState();
   });
+
+  // Expired listings were let go of only once there were too many: up to 64, of 23 MB each
+  // for a folder of 100,000 items.
+  it("lets go of expired listings when another is stored", async () => {
+    resetResponseCacheState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await getCachedResponse("directory", { path: "/big" }, async () => "100,000 items");
+      await getCachedResponse("tree", { path: "/big" }, async () => "its folders");
+      await vi.advanceTimersByTimeAsync(3_001);
+
+      await getCachedResponse("directory", { path: "/small" }, async () => "2 items");
+
+      expect(getResponseCacheSizes()).toMatchObject({ directorySnapshots: 1, treeChildren: 1 });
+    } finally {
+      vi.useRealTimers();
+      resetResponseCacheState();
+    }
+  });
+
+  // Each item of a batch looked through the 5,000 kept once there were that many: 11 ms a
+  // batch of 500 while scrolling a large folder.
+  it("stores a batch of item details without looking through all those kept for each", async () => {
+    resetResponseCacheState();
+    const workerClient = {
+      request: async (_channel: string, payload: { paths: string[] }) => ({
+        directoryPath: "/big",
+        items: payload.paths.map((path) => ({ path })),
+      }),
+    } as unknown as ExplorerWorkerClient;
+    let next = 0;
+    const batch = () =>
+      getCachedMetadataBatch(workerClient, {
+        directoryPath: "/big",
+        paths: Array.from({ length: 500 }, () => `/big/file-${next++}.txt`),
+      } as Parameters<typeof getCachedMetadataBatch>[1]);
+    for (let index = 0; index < 10; index++) {
+      await batch();
+    }
+
+    const started = performance.now();
+    for (let index = 0; index < 200; index++) {
+      await batch();
+    }
+    // A few ms on a laptop; the bound only catches looking through all of them for each.
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(getResponseCacheSizes().directoryMetadata).toBe(5_000);
+    resetResponseCacheState();
+  });
 });
 
 describe("forgetFolderListings", () => {

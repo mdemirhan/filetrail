@@ -149,23 +149,26 @@ export function getResponseCacheSizes(): {
   };
 }
 
-function storeCacheEntry(cache: TtlCache, key: string, value: unknown, now: number): void {
-  // Re-inserting moves the key to the newest position so eviction stays oldest-first.
-  cache.entries.delete(key);
-  cache.entries.set(key, { expiresAt: now + CACHE_TTL_MS, value });
-  if (cache.entries.size <= cache.maxEntries) {
-    return;
+// Stores the entries, read at `now`, then sweeps once: from the oldest, those expired go, and
+// any while there are too many. All live as long, so the expired ones are at the front
+// (near enough: one stored after a slow load waits behind newer ones until they go), and the
+// sweep stops at the first one kept.
+function storeCacheEntries(
+  cache: TtlCache,
+  entries: Iterable<readonly [key: string, value: unknown]>,
+  now: number,
+): void {
+  for (const [key, value] of entries) {
+    // Re-inserting moves the key to the newest position so eviction stays oldest-first.
+    cache.entries.delete(key);
+    cache.entries.set(key, { expiresAt: now + CACHE_TTL_MS, value });
   }
-  for (const [entryKey, entry] of cache.entries) {
-    if (entry.expiresAt <= now) {
-      cache.entries.delete(entryKey);
-    }
-  }
-  for (const entryKey of cache.entries.keys()) {
-    if (cache.entries.size <= cache.maxEntries) {
+  const sweptAt = Date.now();
+  for (const [key, entry] of cache.entries) {
+    if (entry.expiresAt > sweptAt && cache.entries.size <= cache.maxEntries) {
       break;
     }
-    cache.entries.delete(entryKey);
+    cache.entries.delete(key);
   }
 }
 
@@ -667,10 +670,15 @@ export async function getCachedMetadataBatch(
       paths: missingPaths,
     });
     for (const item of response.items) {
-      if (generation === cacheGeneration) {
-        storeCacheEntry(directoryMetadataCache, item.path, item, now);
-      }
       cachedItemsByPath.set(item.path, item);
+    }
+    // Swept once for the whole batch: scrolling a large folder asks for one after another.
+    if (generation === cacheGeneration) {
+      storeCacheEntries(
+        directoryMetadataCache,
+        response.items.map((item) => [item.path, item] as const),
+        now,
+      );
     }
   }
 
@@ -714,7 +722,7 @@ async function withCachedResponse<TPayload extends object, TResponse>(
   const generation = cacheGeneration;
   const value = await load();
   if (generation === cacheGeneration) {
-    storeCacheEntry(cache, cacheKey, value, now);
+    storeCacheEntries(cache, [[cacheKey, value]], now);
   }
   return value;
 }
