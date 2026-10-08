@@ -1,5 +1,15 @@
 import { writeFileSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  readlink,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,10 +22,21 @@ import {
   runPaste,
 } from "./testNativePaste";
 import type { ItemId, UndoLog, UndoStep } from "./undoLog";
-import type { CopyPasteOperationResult, WriteServiceFileSystem } from "./writeServiceTypes";
+import type {
+  CopyPasteOperationResult,
+  CopyPastePolicy,
+  WriteServiceFileSystem,
+} from "./writeServiceTypes";
 
 // What a paste records for Undo: one unit per item picked, with the steps it really took,
 // or why the paste can't be undone.
+
+// Folders merged, and files inside them replaced.
+const MERGE_AND_REPLACE: CopyPastePolicy = {
+  file: "overwrite",
+  directory: "merge",
+  mismatch: "skip",
+};
 
 let testDir: string;
 let src: string;
@@ -312,6 +333,41 @@ describe("what a copy records", () => {
     expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
   });
 
+  it("can't be undone when all a merge did was replace an item in the folder", async () => {
+    await mkdir(join(src, "Folder"));
+    await writeFile(join(src, "Folder", "a.txt"), "new");
+    await mkdir(join(dst, "Folder"));
+    await writeFile(join(dst, "Folder", "a.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      policy: MERGE_AND_REPLACE,
+      fileSystem: nativeFileSystemWithTrash(trashDir),
+    });
+
+    expect(await readFile(join(dst, "Folder", "a.txt"), "utf8")).toBe("new");
+    expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
+  });
+
+  it("can't be undone when all a merge did was add a link", async () => {
+    await mkdir(join(src, "Folder"));
+    await symlink("/nowhere", join(src, "Folder", "link"));
+    await mkdir(join(dst, "Folder"));
+    await writeFile(join(dst, "Folder", "old.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      policy: KEEP_EXISTING,
+    });
+
+    expect(await readlink(join(dst, "Folder", "link"))).toBe("/nowhere");
+    expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
+  });
+
   // Nothing was changed, so Undo must still undo what came before.
   it("leaves Undo as it was when a merge finds every item already there", async () => {
     await mkdir(join(src, "Folder"));
@@ -433,6 +489,24 @@ describe("what a move records", () => {
     });
 
     expect(await readdir(join(dst, "Folder"))).toEqual(["new.txt", "old.txt"]);
+    expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
+  });
+
+  it("can't be undone when all a merge on its own disk did was replace an item", async () => {
+    await mkdir(join(src, "Folder"));
+    await writeFile(join(src, "Folder", "a.txt"), "new");
+    await mkdir(join(dst, "Folder"));
+    await writeFile(join(dst, "Folder", "a.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      policy: MERGE_AND_REPLACE,
+      fileSystem: nativeFileSystemWithTrash(trashDir),
+    });
+
+    expect(await readFile(join(dst, "Folder", "a.txt"), "utf8")).toBe("new");
     expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
   });
 
@@ -566,6 +640,33 @@ describe("what a move records", () => {
       expect(await readFile(join(volume.mountPath, "a.txt"), "utf8")).toBe("old");
       expect(await readdir(trashDir)).toEqual([]);
       expect(undoLogOf(result)).toEqual({ undoable: true, units: [] });
+    });
+
+    // The folder is made on the other disk before anything is copied into it.
+    it("can't be undone when stopped just after making the folder there", async () => {
+      await mkdir(join(src, "Folder"));
+      await writeFile(join(src, "Folder", "a.txt"), "a");
+      const controller = new AbortController();
+
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "Folder")],
+        destinationDirectoryPath: volume.mountPath,
+        signal: controller.signal,
+        fileSystem: {
+          ...nativeFileSystem,
+          mkdir: async (path, options) => {
+            await nativeFileSystem.mkdir(path, options);
+            if (path.startsWith(volume.mountPath)) {
+              controller.abort();
+            }
+          },
+        },
+      });
+
+      expect(result?.status).toBe("cancelled");
+      expect(await readFile(join(src, "Folder", "a.txt"), "utf8")).toBe("a");
+      expect(undoLogOf(result)).toEqual({ undoable: false, reason: "other_disk_move" });
     });
 
     it("can't be undone once a Replace put the new item in place", async () => {
