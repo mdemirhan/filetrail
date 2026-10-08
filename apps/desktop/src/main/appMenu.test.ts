@@ -398,18 +398,21 @@ describe("createApplicationMenuTemplate", () => {
     expect(front.send).toHaveBeenCalledTimes(1);
   });
 
-  it("opens a new window beside the front explorer window while another window is focused", () => {
+  it("has the host open a new window while another window is focused", () => {
     const front = { send: vi.fn() };
-    const template = createApplicationMenuTemplate({
-      explorerFor: () => ({ contents: front, focused: false }),
-    });
+    const onNewWindowFromOtherWindow = vi.fn();
+    const template = createApplicationMenuTemplate(
+      { explorerFor: () => ({ contents: front, focused: false }) },
+      { onNewWindowFromOtherWindow },
+    );
     const settingsWindow = { webContents: { copy: vi.fn() }, close: vi.fn() };
 
     choose(itemOf(submenuOf(template, "File"), "New Window"), settingsWindow);
     choose(itemOf(submenuOf(template, "Go"), "Back"), settingsWindow);
 
-    expect(front.send).toHaveBeenCalledTimes(1);
-    expect(front.send).toHaveBeenCalledWith("filetrail:command", { type: "newWindow" });
+    // Not through the front window, which may not be able to take it (a sheet is open).
+    expect(onNewWindowFromOtherWindow).toHaveBeenCalledTimes(1);
+    expect(front.send).not.toHaveBeenCalled();
     expect(settingsWindow.close).not.toHaveBeenCalled();
   });
 

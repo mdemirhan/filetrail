@@ -599,6 +599,7 @@ function buildApplicationMenu(): void {
           // With no window open, New Window and the Go menu's places open one.
           onCommandWithoutExplorerWindow: (type) =>
             explorerWindowsRef?.openDefaultWindow(type === "newWindow" ? undefined : type),
+          onNewWindowFromOtherWindow: () => explorerWindowsRef?.openNewWindowFromFront(),
         },
       ),
     ),

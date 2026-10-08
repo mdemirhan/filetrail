@@ -231,17 +231,23 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     });
   }
 
-  // New Window from the Dock menu: the window in front opens it on its folder, as ⌘N does.
+  // New Window from the Dock menu, or while another window (Settings) has the keyboard: a
+  // window on the folder of the front window's tab, as ⌘N there opens. It is opened here
+  // rather than by that window, which can't while a sheet or a dialog is open in it.
   openNewWindowFromFront(): void {
     if (this.shuttingDown) {
       return;
     }
-    const front = this.frontWindow();
-    if (!front) {
+    const front = this.openWindows()[0];
+    const preferences = front ? this.host.store.getWindowPreferences(front.id) : null;
+    const tab = preferences
+      ? preferences.openTabs[Math.min(preferences.activeTabIndex, preferences.openTabs.length - 1)]
+      : undefined;
+    if (!front || !tab) {
       this.openDefaultWindow();
       return;
     }
-    front.webContents.send("filetrail:command", { type: "newWindow" });
+    this.openWindowFrom(front.webContentsId, [tab], 0);
   }
 
   // A window opened from another one (New Window, Open in New Window, Move Tab to New

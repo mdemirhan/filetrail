@@ -28,7 +28,7 @@ export const APP_MENU_NAME = "File Trail";
 
 // The commands that still do something while a window other than an explorer window
 // (Settings) has the keyboard: the edit commands act on its text field, ⌘W closes it, and
-// New Window opens one beside the explorer window in front.
+// New Window opens one beside the explorer window in front (the host opens it).
 const COMMANDS_FOR_ANY_WINDOW = new Set<RendererCommandType>([
   "undo",
   "redo",
@@ -39,9 +39,6 @@ const COMMANDS_FOR_ANY_WINDOW = new Set<RendererCommandType>([
   "closeTab",
   "newWindow",
 ]);
-
-// Sent to the explorer window in front even while another window has the keyboard.
-const EXPLORER_COMMANDS_FROM_ANY_WINDOW = new Set<RendererCommandType>(["newWindow"]);
 
 // What the menu still does with no explorer window open, as Finder's does: New Window, and
 // the Go menu's places, which open a window there. The host opens the window.
@@ -114,6 +111,9 @@ export function createApplicationMenuTemplate(
     undoLabels?: { undo: string; redo: string };
     // A command chosen with no explorer window open (COMMANDS_WITHOUT_EXPLORER_WINDOW).
     onCommandWithoutExplorerWindow?: (type: RendererCommandType) => void;
+    // New Window chosen while another window (Settings) has the keyboard: the host opens it
+    // beside the explorer window in front, which may not be able to take the command.
+    onNewWindowFromOtherWindow?: () => void;
   } = {},
 ): MenuItemConstructorOptions[] {
   const explorerFor = toExplorerFor(explorer);
@@ -142,8 +142,8 @@ export function createApplicationMenuTemplate(
       if (type === "closeTab") {
         focused?.close?.();
       }
-      if (EXPLORER_COMMANDS_FROM_ANY_WINDOW.has(type)) {
-        target?.contents.send("filetrail:command", { type });
+      if (type === "newWindow") {
+        options.onNewWindowFromOtherWindow?.();
       }
       return;
     }

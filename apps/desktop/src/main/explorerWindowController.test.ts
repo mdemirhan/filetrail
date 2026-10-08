@@ -360,15 +360,26 @@ describe("ExplorerWindowController opening windows", () => {
     });
   });
 
-  it("has the window in front open New Window from the Dock, or opens one with none open", () => {
-    const { controller, windows } = setUp();
+  it("opens New Window from the Dock on the front window's tab, or one where the last closed", () => {
+    const { controller, windows, store } = setUp();
 
     controller.openNewWindowFromFront();
     expect(windows).toHaveLength(1);
+    const [front] = windows;
+    store.updateWindowPreferences(front?.recordId ?? "", {
+      openTabs: [tab("/Users/demo/a"), tab("/Users/demo/b")],
+      activeTabIndex: 1,
+      propertiesOpen: true,
+    });
 
+    // Opened here, not by the window in front, which can't while a sheet is open in it.
     controller.openNewWindowFromFront();
-    expect(windows[0]?.webContents.send).toHaveBeenCalledWith("filetrail:command", {
-      type: "newWindow",
+
+    expect(windows).toHaveLength(2);
+    expect(front?.webContents.send).not.toHaveBeenCalled();
+    expect(store.getWindowPreferences(windows[1]?.recordId ?? "")).toMatchObject({
+      openTabs: [tab("/Users/demo/b")],
+      propertiesOpen: true,
     });
   });
 
