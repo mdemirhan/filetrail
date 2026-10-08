@@ -4,13 +4,17 @@
 
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 
-// How many times the file list has been drawn.
-const contentPaneDraws = vi.hoisted(() => ({ count: 0 }));
+// How many times the file list has been drawn, and the items it was last given.
+const contentPaneDraws = vi.hoisted(() => ({
+  count: 0,
+  entries: [] as ReadonlyArray<{ path: string }>,
+}));
 vi.mock("./components/ContentPane", async () => {
   const { ContentPane } = (await import("./test/appMocks")).contentPaneMock();
   return {
     ContentPane: (props: Parameters<typeof ContentPane>[0]) => {
       contentPaneDraws.count += 1;
+      contentPaneDraws.entries = props.entries;
       return ContentPane(props);
     },
   };
@@ -220,6 +224,24 @@ describe("App folder watch", () => {
     await settle();
 
     expect(contentPaneDraws.count).toBe(drawsBefore);
+  });
+
+  it("keeps the items that didn't change when an item arrives, so only its row is new", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await screen.findByTitle("/Users/demo/source.txt");
+    const shownSource = contentPaneDraws.entries.find(
+      (entry) => entry.path === "/Users/demo/source.txt",
+    );
+    expect(shownSource).toBeDefined();
+
+    withArrived(harness);
+    await emitArrived(harness);
+    await screen.findByTitle("/Users/demo/arrived.txt");
+
+    expect(contentPaneDraws.entries.find((entry) => entry.path === "/Users/demo/source.txt")).toBe(
+      shownSource,
+    );
   });
 
   it("shows a file's new size when it grows, though the folder lists the same items", async () => {

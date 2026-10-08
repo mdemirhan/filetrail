@@ -8,6 +8,7 @@ import {
   getPagedSelectionIndex,
   getTreeSeedChain,
   isFolderGoneError,
+  keepUnchangedEntries,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
   sameDetailsByPath,
@@ -302,6 +303,34 @@ describe("explorerNavigation", () => {
     expect(sameDirectoryEntries([file], [{ ...file, isHidden: true }])).toBe(false);
     // A detail only one of them has (a size, when sorted by size).
     expect(sameDirectoryEntries<object>([file], [{ ...file, sizeBytes: 5 }])).toBe(false);
+  });
+
+  it("keeps the items of a folder read again that are still as they were", () => {
+    const one = { path: "/a/one.txt", name: "one.txt", kind: "file", isHidden: false };
+    const two = { path: "/a/two.txt", name: "two.txt", kind: "file", isHidden: false };
+    const shown = [one, two];
+
+    // Nothing changed: the listing on screen stays as it is.
+    expect(
+      keepUnchangedEntries(
+        shown,
+        shown.map((entry) => ({ ...entry })),
+      ),
+    ).toBe(shown);
+
+    // One item changed, one came: the one that didn't change is the one on screen.
+    const changedTwo = { ...two, isHidden: true };
+    const three = { path: "/a/three.txt", name: "three.txt", kind: "file", isHidden: false };
+    const next = keepUnchangedEntries(shown, [{ ...one }, changedTwo, three]);
+    expect(next).toHaveLength(3);
+    expect(next[0]).toBe(one);
+    expect(next[1]).toBe(changedTwo);
+    expect(next[2]).toBe(three);
+
+    // The new order is kept, with the same items.
+    const reordered = keepUnchangedEntries(shown, [{ ...two }, { ...one }]);
+    expect(reordered[0]).toBe(two);
+    expect(reordered[1]).toBe(one);
   });
 
   it("tells whether two sets of item details are the very same", () => {

@@ -307,6 +307,25 @@ export function sameDirectoryEntries<T extends object>(
   return true;
 }
 
+// A folder read again, as `next`, keeping each item of `shown` that is still there as it
+// was: only the rows of the items that changed are then drawn again. `shown` itself comes
+// back when nothing changed (see sameDirectoryEntries).
+export function keepUnchangedEntries<T extends { path: string }>(shown: T[], next: T[]): T[] {
+  if (sameDirectoryEntries(shown, next)) {
+    return shown;
+  }
+  const shownByPath = new Map<string, T>();
+  for (const entry of shown) {
+    if (!shownByPath.has(entry.path)) {
+      shownByPath.set(entry.path, entry);
+    }
+  }
+  return next.map((entry) => {
+    const kept = shownByPath.get(entry.path);
+    return kept !== undefined && sameFields(kept, entry) ? kept : entry;
+  });
+}
+
 // Whether two sets of item details, by path, hold the very same details for the same items.
 export function sameDetailsByPath(
   left: Readonly<Record<string, unknown>>,

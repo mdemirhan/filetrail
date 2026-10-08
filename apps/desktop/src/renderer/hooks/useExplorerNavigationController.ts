@@ -31,10 +31,10 @@ import {
   getPagedSelectionIndex,
   getTreeSeedChain,
   isFolderGoneError,
+  keepUnchangedEntries,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
   sameDetailsByPath,
-  sameDirectoryEntries,
   withPackageChild,
 } from "../lib/explorerNavigation";
 import { type ExplorerPane, resolveExplorerPaneRestoreTarget } from "../lib/explorerPaneFocus";
@@ -881,9 +881,12 @@ export function useExplorerNavigationController(args: {
     // The same folder read again as it was (a file in it written to, say) keeps the listing
     // and details on screen as they are, so nothing is drawn again for it. Kept only while
     // they are still the ones compared to.
-    const sameListing = sameFolder && sameDirectoryEntries(currentEntries, entries);
+    // A change keeps the items that are still as they were, so only their rows are drawn
+    // again.
+    const shownEntries = sameFolder ? keepUnchangedEntries(currentEntries, entries) : entries;
+    const sameListing = sameFolder && shownEntries === currentEntries;
     const sameDetails = sameFolder && sameDetailsByPath(metadataByPath, cachedMetadata);
-    setCurrentEntries((shown) => (sameListing && shown === currentEntries ? shown : entries));
+    setCurrentEntries((shown) => (shown === currentEntries ? shownEntries : entries));
     // The same folder read again keeps the rows on screen: the list tells of them again only
     // when they change, and the details of those that changed are read again from them.
     if (!sameFolder) {
