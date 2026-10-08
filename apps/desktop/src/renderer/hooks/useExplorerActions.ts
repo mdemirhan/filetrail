@@ -2660,79 +2660,6 @@ export function useExplorerActions(args: {
     }
   }
 
-  async function addOpenWithApplication() {
-    const selection = await pickApplicationForOpenWith("Couldn’t Add an App");
-    if (!selection) {
-      return;
-    }
-    setOpenWithApplications((current) => [
-      ...current,
-      {
-        id: createOpenWithApplicationId(),
-        appPath: selection.appPath,
-        appName: selection.appName,
-      },
-    ]);
-  }
-
-  async function browseDefaultTextEditor() {
-    const selection = await pickApplicationForOpenWith("Couldn’t Choose the Text Editor");
-    if (!selection) {
-      return;
-    }
-    setDefaultTextEditor(selection);
-  }
-
-  async function browseTerminalApplication() {
-    const selection = await pickApplicationForOpenWith("Couldn’t Choose the Terminal App");
-    if (!selection) {
-      return;
-    }
-    setTerminalApp(selection);
-  }
-
-  async function browseOpenWithApplication(entryId: string) {
-    const selection = await pickApplicationForOpenWith("Couldn’t Change the App");
-    if (!selection) {
-      return;
-    }
-    setOpenWithApplications((current) =>
-      current.map((entry) =>
-        entry.id === entryId
-          ? {
-              ...entry,
-              appPath: selection.appPath,
-              appName: selection.appName,
-            }
-          : entry,
-      ),
-    );
-  }
-
-  function moveOpenWithApplication(entryId: string, direction: "up" | "down") {
-    setOpenWithApplications((current) => {
-      const index = current.findIndex((entry) => entry.id === entryId);
-      if (index === -1) {
-        return current;
-      }
-      const targetIndex = direction === "up" ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= current.length) {
-        return current;
-      }
-      const next = [...current];
-      const [entry] = next.splice(index, 1);
-      if (!entry) {
-        return current;
-      }
-      next.splice(targetIndex, 0, entry);
-      return next;
-    });
-  }
-
-  function removeOpenWithApplication(entryId: string) {
-    setOpenWithApplications((current) => current.filter((entry) => entry.id !== entryId));
-  }
-
   // Goes to the folder an item is in and selects the item there.
   async function revealSearchResultInFolder(path: string) {
     const folderPath = parentDirectoryPath(path);
@@ -4218,10 +4145,7 @@ export function useExplorerActions(args: {
     actionNotice,
     applyContentSelection,
     followItemsGoneElsewhere,
-    browseDefaultTextEditor,
     browseForDirectoryPath,
-    browseOpenWithApplication,
-    browseTerminalApplication,
     canRunContentSelectionAction,
     clearContentSelection,
     closeConfirmationDialog,
@@ -4246,7 +4170,6 @@ export function useExplorerActions(args: {
     handleContentSelectionGesture,
     selectContentPaths,
     handleCopyPasteDialogEscape,
-    moveOpenWithApplication,
     openItemContextMenu,
     openTreeItemContextMenu,
     openMoveDialog,
@@ -4259,7 +4182,6 @@ export function useExplorerActions(args: {
     openPaths,
     openRenameDialog,
     startBatchRename,
-    removeOpenWithApplication,
     resolveContentActionPaths,
     retryFailedCopyPasteItems,
     resolveRuntimeConflict,
@@ -4292,7 +4214,6 @@ export function useExplorerActions(args: {
     activateContentEntry,
     activateContentPaths,
     openFolderInNewTab,
-    addOpenWithApplication,
     cancelWriteOperation,
     confirmDotNameDialog,
   };
