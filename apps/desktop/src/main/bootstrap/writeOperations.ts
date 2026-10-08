@@ -28,7 +28,9 @@ import {
   errorCode,
   fileIdOf,
   findLockedRefusal,
+  itemIdOf,
   readFolderId,
+  readFolderIdOnce,
   readItemId,
   readItemRef,
   readItemStamp,
@@ -1239,6 +1241,7 @@ export function createWriteOperationCoordinator(
     const removedItems: RemovedItem[] = [];
     // One unit per item, so an item put back from the Trash doesn't depend on the others.
     const trashedUnits: UndoUnit[] = [];
+    const folderIds = new Map<string, Promise<ItemId | null>>();
     // Set when an item went to the Trash where it can't be found again: the operation
     // can't be undone then, as undoing only part of it would.
     let trashLocationUnknown = false;
@@ -1271,9 +1274,10 @@ export function createWriteOperationCoordinator(
         const before = fs.itemSize ? await readItemSize(fs.itemSize, path) : undefined;
         // An item that is already gone (deleted or moved since it was chosen) has
         // nothing left to move: that counts as done, not as a failure.
-        if (!(await isMissing(path, fs.lstat))) {
-          const id = await readItemId(fs.lstat, path);
-          const parentId = await readFolderId(fs.stat, dirname(path));
+        const stats = await lstatUnlessMissing(path, fs.lstat);
+        if (stats !== "missing") {
+          const id = stats === null ? null : itemIdOf(stats);
+          const parentId = await readFolderIdOnce(folderIds, fs.stat, dirname(path));
           const looks = await stampWithoutId(fs, path, id);
           const trashPath = await fs.trash(path);
           if (trashPath === null) {
@@ -2267,12 +2271,15 @@ async function readItemSize(
   }
 }
 
-async function isMissing(path: string, lstatFn: WriteOperationFs["lstat"]): Promise<boolean> {
+// What lstat says of `path`: "missing" when nothing is there, null when it can't be read.
+async function lstatUnlessMissing(
+  path: string,
+  lstatFn: WriteOperationFs["lstat"],
+): Promise<WriteOperationStats | "missing" | null> {
   try {
-    await lstatFn(path);
-    return false;
+    return await lstatFn(path);
   } catch (error) {
-    return errorCode(error) === "ENOENT";
+    return errorCode(error) === "ENOENT" ? "missing" : null;
   }
 }
 

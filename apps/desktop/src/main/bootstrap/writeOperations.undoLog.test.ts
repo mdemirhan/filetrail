@@ -332,6 +332,39 @@ describe("what the simple operations record", () => {
     await coordinator.shutdown();
   });
 
+  it("looks at each item it moves to the Trash once, and at their folder once, for Undo", async () => {
+    const paths = ["a.txt", "b.txt", "c.txt"].map((name) => join(root, name));
+    for (const path of paths) {
+      writeFileSync(path, "a");
+    }
+    const looks: string[] = [];
+    const real = createOriginalWriteOperationFs(folderTrash());
+    const { coordinator, finished, sender } = setUp({
+      fs: {
+        lstat: (path) => {
+          looks.push(`lstat ${path}`);
+          return real.lstat(path);
+        },
+        stat: (path) => {
+          looks.push(`stat ${path}`);
+          return real.stat(path);
+        },
+      },
+    });
+
+    await coordinator.handlers["writeOperation:trash"]({ paths }, { sender });
+    await waitForTerminalEvent(sender, "write-op-1");
+
+    // Each item once by the check that refuses system folders, and once to be moved.
+    expect(looks.sort()).toEqual(
+      [...paths.flatMap((path) => [`lstat ${path}`, `lstat ${path}`]), `stat ${root}`].sort(),
+    );
+    expect(finished[0]?.log).toMatchObject({
+      units: paths.map(() => ({ steps: [expect.objectContaining({ parentId: idOf(root) })] })),
+    });
+    await coordinator.shutdown();
+  });
+
   it("records nothing when nothing could go to the Trash", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     const { coordinator, finished, sender } = setUp({
