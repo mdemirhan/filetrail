@@ -131,13 +131,15 @@ function copyEvent(status: string, extra: Record<string, unknown> = {}) {
   };
 }
 
-// The end of a paste that copied a.txt into /Volumes/Share, with what it did for Undo.
-function copiedEvent() {
+// The end of a paste that copied (or moved) a.txt into /Volumes/Share, with what it did for
+// Undo.
+function copiedEvent(mode: "copy" | "cut" = "copy") {
   return copyEvent("completed", {
+    mode,
     completedItemCount: 1,
     result: {
       operationId: "copy-op-1",
-      mode: "copy",
+      mode,
       status: "completed",
       destinationDirectoryPath: "/Volumes/Share",
       startedAt: "2026-10-08T12:00:00.000Z",
@@ -273,6 +275,28 @@ describe("a paste starting", () => {
       event: expect.objectContaining({ status: "queued" }),
     });
     emit(copyEvent("cancelled"));
+    await coordinator.shutdown();
+  });
+});
+
+describe("a paste ending", () => {
+  // The window follows what a paste after Cut moved, as it follows a Move To.
+  it("tells the window whether it copied or moved the items", async () => {
+    const { writeService, emit } = createWriteServiceStub();
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+    );
+    const window = createWindow();
+    await analyze(coordinator, window);
+    await paste(coordinator, window);
+
+    emit(copiedEvent("cut"));
+
+    expect((await waitForEnd(window, "copy-op-1")).result).toMatchObject({
+      action: "paste",
+      mode: "cut",
+    });
     await coordinator.shutdown();
   });
 });

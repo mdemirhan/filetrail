@@ -3,7 +3,7 @@ import type { IpcRequest } from "@filetrail/contracts";
 import {
   collectFollowedMoves,
   getPathLeafName,
-  isRenameOrMove,
+  movedItems,
   removedByWrite,
   replacePathPrefix,
 } from "./explorerAppUtils";
@@ -151,7 +151,7 @@ export function followClipboardThroughWrite(
   clipboard: CopyPasteClipboardState,
   result: WriteOperationResult,
 ): CopyPasteClipboardState {
-  const moves = isRenameOrMove(result.action) ? collectFollowedMoves(result) : [];
+  const moves = movedItems(result) ? collectFollowedMoves(result) : [];
   return followClipboard(clipboard, moves, removedByWrite(result));
 }
 

@@ -2358,6 +2358,7 @@ function toProgressEvent(
       ? {
           operationId: event.result.operationId,
           action,
+          mode: event.result.mode,
           status: event.result.status,
           targetPath: event.result.destinationDirectoryPath,
           startedAt: event.result.startedAt,

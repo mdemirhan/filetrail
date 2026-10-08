@@ -564,6 +564,8 @@ export const writeOperationItemResultSchema = z.object({
 export const writeOperationResultSchema = z.object({
   operationId: z.string().min(1),
   action: writeOperationActionSchema,
+  // A paste's: whether it copied the items or moved them (a paste after Cut).
+  mode: copyPasteModeSchema.optional(),
   status: copyPasteOperationStatusSchema,
   targetPath: z.string().nullable(),
   startedAt: z.string().min(1),

@@ -415,6 +415,12 @@ export function isRenameOrMove(action: WriteOperationAction): boolean {
   );
 }
 
+/** A write that gave items new paths: a rename or move (see isRenameOrMove), or a paste
+ *  that moved what was cut. */
+export function movedItems(result: WriteOperationResult): boolean {
+  return isRenameOrMove(result.action) || result.mode === "cut";
+}
+
 export function isUndoOrRedo(action: WriteOperationAction): boolean {
   return action === "undo" || action === "redo";
 }

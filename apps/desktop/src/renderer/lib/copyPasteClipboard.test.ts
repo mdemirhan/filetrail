@@ -312,6 +312,32 @@ describe("copyPasteClipboard", () => {
           ]),
         ),
       ).toBe(clipboard);
+      expect(
+        followClipboardThroughWrite(clipboard, {
+          ...writeResult("paste", [
+            { sourcePath: "/Users/demo/report.pdf", destinationPath: "/tmp/report.pdf" },
+          ]),
+          mode: "copy",
+        }),
+      ).toBe(clipboard);
+    });
+
+    // Something copied from inside a folder while a paste of the folder's Cut moves it.
+    it("follows items a paste after Cut moved", () => {
+      expect(
+        followClipboardThroughWrite(clipboard, {
+          ...writeResult("paste", [
+            { sourcePath: "/Users/demo/Folder", destinationPath: "/Volumes/Backup/Folder" },
+          ]),
+          mode: "cut",
+        }),
+      ).toMatchObject({
+        sourcePaths: [
+          "/Users/demo/report.pdf",
+          "/Volumes/Backup/Folder/inner.txt",
+          "/Users/demo/other.txt",
+        ],
+      });
     });
 
     it("cancels a whole cut once any item in it is renamed, moved or deleted", () => {
