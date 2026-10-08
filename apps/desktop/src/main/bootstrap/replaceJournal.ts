@@ -10,6 +10,7 @@ import {
 } from "@filetrail/core";
 
 import type { AppLogger } from "../appLog";
+import { clearResponseCaches } from "./responseCache";
 
 export type FileReplaceJournal = ReplaceJournal & {
   entries: () => ReplaceJournalEntry[];
@@ -83,6 +84,17 @@ export async function recoverReplaces(
   } catch (error) {
     logger.error("[filetrail] couldn't recover interrupted replaces", error);
     return report;
+  }
+  // Where items were put in place, back, or taken away: folder listings and sizes read
+  // before (a retry runs while the app is in use) are out of date there.
+  const changedPaths: string[] = [];
+  for (const outcome of outcomes) {
+    if ("path" in outcome || outcome.outcome === "removed_copy") {
+      changedPaths.push(outcome.entry.stagingPath, ...("path" in outcome ? [outcome.path] : []));
+    }
+  }
+  if (changedPaths.length > 0) {
+    clearResponseCaches(changedPaths);
   }
   for (const outcome of outcomes) {
     const name = basename(outcome.entry.finalPath);

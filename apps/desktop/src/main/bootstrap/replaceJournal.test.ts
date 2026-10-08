@@ -8,6 +8,7 @@ import type { ReplaceJournalEntry, RunWriteAlone } from "@filetrail/core";
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
 import { openReplaceJournal, recoverReplaces, retryReplaceRecovery } from "./replaceJournal";
+import { getCachedResponse, getResponseCacheSizes, resetResponseCacheState } from "./responseCache";
 
 let testDir: string;
 
@@ -203,6 +204,54 @@ describe("recoverReplaces", () => {
     expect(report.finished).toEqual([`“waiting.txt” is in place now, in “${testDir}”.`]);
     expect(await readFile(waiting.finalPath, "utf8")).toBe("moved contents");
     expect(journal.entries()).toEqual([]);
+  });
+
+  it("forgets the folder listings read before a retry put an item in place", async () => {
+    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const waiting = createEntry("waiting", { moved: true });
+    await writeFile(waiting.stagingPath, "moved contents");
+    await journal.add(waiting);
+    resetResponseCacheState();
+    await getCachedResponse("directory", { path: testDir }, async () => "listing before");
+    expect(getResponseCacheSizes().directorySnapshots).toBe(1);
+
+    await recoverReplaces(
+      journal,
+      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      { info: vi.fn(), error: vi.fn() },
+      {
+        entryIds: new Set([waiting.id]),
+        retry: true,
+        runWriteAlone: async (write) => ({ ran: true, value: await write() }),
+      },
+    );
+
+    expect(await readFile(waiting.finalPath, "utf8")).toBe("moved contents");
+    expect(getResponseCacheSizes().directorySnapshots).toBe(0);
+    resetResponseCacheState();
+  });
+
+  it("keeps the folder listings when a retry changed nothing", async () => {
+    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const waiting = createEntry("waiting", { moved: true });
+    await writeFile(waiting.stagingPath, "moved contents");
+    await journal.add(waiting);
+    resetResponseCacheState();
+    await getCachedResponse("directory", { path: testDir }, async () => "listing before");
+
+    await recoverReplaces(
+      journal,
+      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      { info: vi.fn(), error: vi.fn() },
+      {
+        entryIds: new Set([waiting.id]),
+        retry: true,
+        runWriteAlone: async () => ({ ran: false }),
+      },
+    );
+
+    expect(getResponseCacheSizes().directorySnapshots).toBe(1);
+    resetResponseCacheState();
   });
 
   // A retry runs while the app is in use: it waits for a moment when nothing else writes,
