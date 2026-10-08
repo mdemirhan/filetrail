@@ -89,6 +89,8 @@ type PlanStats = {
 
 export type PlanFs = {
   lstat: (path: string) => Promise<PlanStats>;
+  // For the folder an item goes back to, which may be reached through a link.
+  stat: (path: string) => Promise<PlanStats>;
   readdir?: (path: string) => Promise<string[]>;
 };
 
@@ -158,7 +160,8 @@ export async function checkMove(
     return { ok: false, reason: replacedReason(step.from), missing: false };
   }
   const folderPath = dirname(step.to);
-  const folder = await lstatOrNull(fs, folderPath);
+  // Through a link, as when the step was recorded (see readFolderId).
+  const folder = await fs.stat(folderPath).catch(() => null);
   if (folder === null || !folder.isDirectory()) {
     return {
       ok: false,

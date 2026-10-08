@@ -40,6 +40,7 @@ import {
   type UndoStep,
   type UndoUnit,
   itemIdOf,
+  readFolderId,
   readItemId,
   readItemRef,
   readItemStamp,
@@ -366,7 +367,7 @@ async function recordMoved(
     to,
     id: moved.id,
     itemKind: moved.kind,
-    parentId: await readItemId(context.fileSystem.lstat, dirname(from)),
+    parentId: await readFolderId(context.fileSystem.stat, dirname(from)),
   });
 }
 
@@ -1362,7 +1363,7 @@ async function removeReplacedItem(
             destination.dev !== null && destination.ino !== null
               ? itemIdOf({ dev: destination.dev, ino: destination.ino })
               : null,
-          parentId: await readItemId(fileSystem.lstat, dirname(node.destinationPath)),
+          parentId: await readFolderId(fileSystem.stat, dirname(node.destinationPath)),
         });
       }
       return "removed";

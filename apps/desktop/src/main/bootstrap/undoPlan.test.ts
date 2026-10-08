@@ -10,25 +10,37 @@ import {
   reverseStep,
 } from "./undoPlan";
 
-// A disk of paths: each with a kind and an id (ino on dev 1; null for none, as on FAT).
+// A disk of paths: each with a kind and an id (ino on dev 1; null for none, as on FAT). A
+// link leads to the path it names.
 function disk(
-  items: Record<string, { kind: "file" | "dir"; ino: number | null; size?: number }>,
+  items: Record<
+    string,
+    { kind: "file" | "dir"; ino: number | null; size?: number } | { kind: "link"; to: string }
+  >,
 ): PlanFs {
+  const lstat = async (path: string) => {
+    const item = items[path];
+    if (!item) {
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    }
+    if (item.kind === "link") {
+      return { dev: 1, ino: 999, isDirectory: () => false, isSymbolicLink: () => true };
+    }
+    return {
+      dev: 1,
+      ...(item.ino === null ? {} : { ino: item.ino }),
+      size: item.size ?? 0,
+      mtimeMs: 1000,
+      isFile: () => item.kind === "file",
+      isDirectory: () => item.kind === "dir",
+      isSymbolicLink: () => false,
+    };
+  };
   return {
-    lstat: async (path) => {
+    lstat,
+    stat: async (path) => {
       const item = items[path];
-      if (!item) {
-        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
-      }
-      return {
-        dev: 1,
-        ...(item.ino === null ? {} : { ino: item.ino }),
-        size: item.size ?? 0,
-        mtimeMs: 1000,
-        isFile: () => item.kind === "file",
-        isDirectory: () => item.kind === "dir",
-        isSymbolicLink: () => false,
-      };
+      return lstat(item?.kind === "link" ? item.to : path);
     },
     readdir: async (path) =>
       Object.keys(items).filter(
@@ -161,6 +173,19 @@ describe("checkMove", () => {
     ).toMatchObject({ ok: true });
   });
 
+  it("follows a link to the folder the item goes back to", async () => {
+    const fs = disk({
+      "/Data/Docs": { kind: "dir", ino: 1 },
+      "/Docs": { kind: "link", to: "/Data/Docs" },
+      "/Docs/b.txt": { kind: "file", ino: 10 },
+    });
+    expect(await checkMove(fs, moveBack())).toMatchObject({ ok: true });
+    expect(await checkMove(fs, moveBack({ parentId: id(5) }))).toMatchObject({
+      ok: false,
+      reason: "Its folder “Docs” was replaced by another folder.",
+    });
+  });
+
   it("finds the name free when a step before it empties it", async () => {
     const fs = disk({
       ...docs,
@@ -186,15 +211,14 @@ describe("checkTrash", () => {
 
   it("finds an item changed when it can't be looked at again", async () => {
     let calls = 0;
-    const flaky: PlanFs = {
-      lstat: async () => {
-        calls += 1;
-        if (calls > 1) {
-          throw new Error("EIO");
-        }
-        return { dev: 1, ino: 10, isDirectory: () => false, isFile: () => true };
-      },
+    const lstat = async () => {
+      calls += 1;
+      if (calls > 1) {
+        throw new Error("EIO");
+      }
+      return { dev: 1, ino: 10, isDirectory: () => false, isFile: () => true };
     };
+    const flaky: PlanFs = { lstat, stat: lstat };
     const stamp = { kind: "file" as const, size: 0, mtimeMs: 1000, entryCount: null };
     expect(
       await checkTrash(flaky, { kind: "trash", path: "/a", id: id(10), stamp, putBack: false }),

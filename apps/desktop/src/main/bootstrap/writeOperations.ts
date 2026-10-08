@@ -27,6 +27,7 @@ import {
   errorCode,
   fileIdOf,
   findLockedRefusal,
+  readFolderId,
   readItemId,
   readItemRef,
   readItemStamp,
@@ -871,7 +872,7 @@ export function createWriteOperationCoordinator(
       to: destinationPath,
       id: renamedItem.id,
       itemKind: renamedItem.kind,
-      parentId: await readItemId(fs.lstat, dirname(sourcePath)),
+      parentId: await readFolderId(fs.stat, dirname(sourcePath)),
     };
     emitSingleItemResult({
       operationId,
@@ -1214,7 +1215,7 @@ export function createWriteOperationCoordinator(
         // nothing left to move: that counts as done, not as a failure.
         if (!(await isMissing(path, fs.lstat))) {
           const id = await readItemId(fs.lstat, path);
-          const parentId = await readItemId(fs.lstat, dirname(path));
+          const parentId = await readFolderId(fs.stat, dirname(path));
           const trashPath = await fs.trash(path);
           trashedUnits.push({ steps: [{ kind: "trashed", from: path, trashPath, id, parentId }] });
         }

@@ -91,6 +91,16 @@ export async function readItemId(
   }
 }
 
+// The id of the folder at `path`, a link to a folder followed (`stat`): a folder opened
+// through a link keeps the link's path (~/Projects for /Volumes/Data/Projects), and the
+// folder an item is in is the one the link leads to.
+export function readFolderId(
+  stat: (path: string) => Promise<IdStats>,
+  path: string,
+): Promise<ItemId | null> {
+  return readItemId(stat, path);
+}
+
 // The id and kind of the item at `path` now; both null when it can't be read.
 export async function readItemRef(
   lstat: (path: string) => Promise<KindStats>,

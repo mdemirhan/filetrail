@@ -8,6 +8,7 @@ import {
   describeCopyPasteError,
   errorCode,
   findLockedRefusal,
+  readFolderId,
   readItemId,
   readItemRef,
   readItemStamp,
@@ -246,7 +247,7 @@ async function moveBack(
     to: target,
     id: moved.id,
     itemKind: moved.kind,
-    parentId: await readItemId(fs.lstat, dirname(planned.from)),
+    parentId: await readFolderId(fs.stat, dirname(planned.from)),
     ...(planned.putBack ? { fromTrash: true, stamp: await readItemStamp(fs, target) } : {}),
   };
   return {
@@ -299,7 +300,7 @@ async function moveToTrash(
     };
   }
   const id = await readItemId(fs.lstat, planned.path);
-  const parentId = await readItemId(fs.lstat, dirname(planned.path));
+  const parentId = await readFolderId(fs.stat, dirname(planned.path));
   const before: ItemSize | null = fs.itemSize
     ? await fs.itemSize(planned.path).catch(() => null)
     : null;

@@ -26,6 +26,7 @@ export {
   type UndoUnit,
   itemIdOf,
   kindOfStats,
+  readFolderId,
   readItemId,
   readItemRef,
   readItemStamp,
