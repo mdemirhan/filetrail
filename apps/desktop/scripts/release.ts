@@ -55,6 +55,19 @@ function run(title: string, command: string, args: string[]): void {
   }
 }
 
+// Stops the release when the checkout changed while it ran (a commit, or an edit made in
+// the meantime), so the tag, the build and what was checked are the same code.
+function assertUnchangedSince(commit: string, step: string): void {
+  if (capture("git", ["rev-parse", "HEAD"]) !== commit) {
+    throw new ReleaseError(`HEAD moved during ${step}: run the release again.`);
+  }
+  if (capture("git", ["status", "--porcelain"]).length > 0) {
+    throw new ReleaseError(
+      `Files changed during ${step}: commit or set them aside, then run again.`,
+    );
+  }
+}
+
 function usage(): string {
   return "Usage: bun run release <major|minor|patch|X.Y.Z> [--yes] [--dry-run]";
 }
@@ -129,10 +142,17 @@ function main(): void {
   }
 
   const problems = findStartingProblems();
+  // What is checked, tagged and built: the commit found clean and on GitHub here.
+  const checkedCommit = capture("git", ["rev-parse", "HEAD"]);
   const tags = readReleaseTags(repoDir);
   problems.push(...findUnfinishedReleaseProblems(tags));
   const latest = latestRelease(tags);
-  const version = formatVersion(nextVersion(latest, request));
+  let version: string;
+  try {
+    version = formatVersion(nextVersion(latest, request));
+  } catch (error) {
+    throw new ReleaseError(`${error instanceof Error ? error.message : String(error)}\n${usage()}`);
+  }
   const tag = `v${version}`;
   if (capture("git", ["tag", "--list", tag]).length > 0) {
     problems.push(`${tag} already exists.`);
@@ -161,7 +181,7 @@ function main(): void {
     for (const problem of problems) {
       console.log(`Would stop: ${problem}`);
     }
-    console.log("\nDry run: nothing was checked, tagged, built or pushed.");
+    console.log("\nDry run: the tags were fetched; nothing was checked, tagged, built or pushed.");
     return;
   }
   if (!yes && prompt(`Check, tag, build and draft ${tag}? [y/N]`)?.trim().toLowerCase() !== "y") {
@@ -174,6 +194,8 @@ function main(): void {
   run("Building the app", "bun", ["run", "desktop:build"]);
   run("Smoke tests", "bun", ["run", "test:smoke"]);
 
+  // The checks and the build take minutes: what is tagged must still be what was checked.
+  assertUnchangedSince(checkedCommit, "the checks");
   run(`Tagging ${tag}`, "git", ["tag", "-a", tag, "-m", `File Trail ${version}`]);
   let pushed = false;
   const notesDir = mkdtempSync(join(tmpdir(), "filetrail-release-"));
@@ -192,6 +214,8 @@ function main(): void {
       );
     }
 
+    // The app was built from the working tree: it must still be the tagged commit.
+    assertUnchangedSince(checkedCommit, "the build");
     run(`Pushing ${tag} to GitHub`, "git", ["push", "origin", tag]);
     pushed = true;
 
