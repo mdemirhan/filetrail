@@ -178,6 +178,62 @@ test("opens windows on the folder on screen, and brings back those open at quit"
   );
 });
 
+test("brings back each window's place and which was in front", async () => {
+  const first = await electronApp.firstWindow();
+  await item(first, join(folder, "Sub")).click();
+  const opened = electronApp.waitForEvent("window");
+  await sendCommand(first, "openSelectionInNewWindow");
+  await waitForListing(await opened, join(folder, "Sub", "inside.txt"));
+  await pageTitled("Sub");
+  // Each window somewhere of its own; the first one in front.
+  await electronApp.evaluate(({ BrowserWindow }, folderName) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.getTitle() === "Sub") {
+        window.setBounds({ x: 220, y: 140, width: 900, height: 620 });
+      } else if (window.getTitle() === folderName) {
+        window.setBounds({ x: 60, y: 60, width: 1000, height: 700 });
+      }
+    }
+    BrowserWindow.getAllWindows()
+      .find((window) => window.getTitle() === folderName)
+      ?.focus();
+  }, basename(folder));
+  await waitUntil(async () => {
+    const saved = await electronApp.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getFocusedWindow()?.getTitle(),
+    );
+    return saved === basename(folder);
+  });
+
+  await closeApp();
+  const saved = JSON.parse(readFileSync(join(userDataDir, "app-state.json"), "utf8"));
+  expect(saved.windows.map((window: { bounds: { x: number } }) => window.bounds.x)).toEqual([
+    60, 220,
+  ]);
+
+  electronApp = await launch();
+  await waitUntil(async () => (await explorerWindows()).length === 2, 30_000);
+  await waitUntil(async () => (await explorerWindows()).some((window) => window.title === "Sub"));
+  const windows = await explorerWindows();
+  expect(windows.find((window) => window.title === "Sub")).toMatchObject({
+    x: 220,
+    y: 140,
+    width: 900,
+    height: 620,
+  });
+  expect(windows.find((window) => window.title === basename(folder))).toMatchObject({
+    x: 60,
+    y: 60,
+    width: 1000,
+    height: 700,
+  });
+  await waitUntil(async () =>
+    electronApp
+      .evaluate(({ BrowserWindow }) => BrowserWindow.getFocusedWindow()?.getTitle() ?? null)
+      .then((title) => title === basename(folder)),
+  );
+});
+
 test("moves a tab to a window of its own, and merges the windows back", async () => {
   const first = await electronApp.firstWindow();
   await item(first, join(folder, "Sub")).click();
