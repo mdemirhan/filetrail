@@ -481,11 +481,14 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
           NSDraggingSession *session = [view beginDraggingSessionWithItems:items
                                                                      event:drag_event
                                                                     source:source];
-          /* From here the drag runs, and the source lets itself go once it has ended. */
-          started = true;
-          session.animatesToStartingPositionsOnCancelOrFail = YES;
-          /* Items set off from their places and gather into a stack under the pointer. */
-          session.draggingFormation = NSDraggingFormationStack;
+          /* From here the drag runs, and the source lets itself go once it has ended. With
+             no session, AppKit didn't start one: the source is let go below. */
+          started = session != nil;
+          if (started) {
+            session.animatesToStartingPositionsOnCancelOrFail = YES;
+            /* Items set off from their places and gather into a stack under the pointer. */
+            session.draggingFormation = NSDraggingFormationStack;
+          }
         }
       } @catch (NSException *exception) {
         (void)exception;
