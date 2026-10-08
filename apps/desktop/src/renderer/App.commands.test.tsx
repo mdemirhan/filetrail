@@ -1866,6 +1866,92 @@ describe("App copy/paste integration", () => {
     expect(await screen.findByLabelText("Rename untitled folder")).toBeInTheDocument();
   });
 
+  // The second press was refused, and took the first folder's name field with it.
+  it("still edits the first folder's name in its row after a second press is refused", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const backgroundButton = await screen.findByTestId("content-pane-background");
+    await act(async () => {
+      fireEvent.click(backgroundButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.filter((call) => call.channel === "writeOperation:createFolder"),
+      ).toHaveLength(1);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
+    });
+    expect(
+      await screen.findByText(
+        "Another file operation is running. Wait for it to finish, or stop it.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      harness.invocations.filter((call) => call.channel === "writeOperation:createFolder"),
+    ).toHaveLength(1);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    });
+
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+      createDirectoryEntry("/Users/demo/Folder", "directory"),
+      createDirectoryEntry("/Users/demo/untitled folder", "directory"),
+    ]);
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "write-op-folder",
+        action: "new_folder",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: "/Users/demo/untitled folder",
+        result: {
+          operationId: "write-op-folder",
+          action: "new_folder",
+          status: "completed",
+          targetPath: "/Users/demo/untitled folder",
+          startedAt: "2026-03-09T10:00:00.000Z",
+          finishedAt: "2026-03-09T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: null,
+          },
+          items: [
+            {
+              sourcePath: null,
+              destinationPath: "/Users/demo/untitled folder",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    expect(await screen.findByLabelText("Rename untitled folder")).toBeInTheDocument();
+  });
+
   it("finishes a new folder whose completion arrives before its start request returns", async () => {
     const harness = createAppHarness();
     const invoke = harness.client.invoke.bind(harness.client);

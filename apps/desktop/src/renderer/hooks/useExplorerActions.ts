@@ -3687,8 +3687,6 @@ export function useExplorerActions(args: {
       showWriteOperationBusyNotice("rename");
       return;
     }
-    // The folder won't be made, so nothing is waiting to be renamed in its row.
-    pendingInlineRenamePathRef.current = null;
     setNewFolderDialogState(null);
     showWriteOperationBusyNotice("new_folder");
   }
@@ -3973,21 +3971,36 @@ export function useExplorerActions(args: {
       !options.selectInTreeOnSuccess
     ) {
       const name = resolveFreeNewFolderName(currentEntries.map((entry) => entry.name));
-      pendingInlineRenamePathRef.current = buildChildPath(parentDirectoryPath, name);
-      void startCreateFolder(
-        {
-          kind: "newFolder",
-          parentDirectoryPath,
-          name,
-          selectInTreeOnSuccess: false,
-          // The listing may not know of a "New Folder" made elsewhere meanwhile.
-          nextFreeName: true,
-        },
-        (message) => {
+      const request = {
+        kind: "newFolder",
+        parentDirectoryPath,
+        name,
+        selectInTreeOnSuccess: false,
+        // The listing may not know of a "New Folder" made elsewhere meanwhile.
+        nextFreeName: true,
+      } as const;
+      // A second press while the first folder is being made is refused before anything is
+      // noted: the first one's name field still opens in its row.
+      if (isWriteOperationInFlight()) {
+        refuseWriteWhileBusy(request);
+        return;
+      }
+      const pendingPath = buildChildPath(parentDirectoryPath, name);
+      pendingInlineRenamePathRef.current = pendingPath;
+      // The folder won't be made, so nothing is waiting to be renamed in its row.
+      const forgetPendingRename = () => {
+        if (pendingInlineRenamePathRef.current === pendingPath) {
           pendingInlineRenamePathRef.current = null;
-          setActionNotice({ title: "The folder couldn’t be made", message });
-        },
-      );
+        }
+      };
+      void startCreateFolder(request, (message) => {
+        forgetPendingRename();
+        setActionNotice({ title: "The folder couldn’t be made", message });
+      }).then((started) => {
+        if (!started) {
+          forgetPendingRename();
+        }
+      });
       return;
     }
     const showDialog = (initialName: string) => {
@@ -4040,13 +4053,14 @@ export function useExplorerActions(args: {
     );
   }
 
+  // Resolves whether the folder is being made.
   async function startCreateFolder(
     request: Extract<DotNameRequest, { kind: "newFolder" }>,
     onRefused: (message: string) => void,
-  ) {
+  ): Promise<boolean> {
     if (isWriteOperationInFlight()) {
       refuseWriteWhileBusy(request);
-      return;
+      return false;
     }
     takeWriteOperationLock("new_folder", {
       targetPath: request.parentDirectoryPath,
@@ -4078,13 +4092,15 @@ export function useExplorerActions(args: {
         currentSourcePath: null,
       });
       setNewFolderDialogState(null);
+      return true;
     } catch (error) {
       applyWriteOperationCardState(null);
       if (isWriteOperationBusyError(error)) {
         refuseWriteWhileBusy(request);
-        return;
+        return false;
       }
       onRefused(error instanceof Error ? error.message : String(error));
+      return false;
     }
   }
 
