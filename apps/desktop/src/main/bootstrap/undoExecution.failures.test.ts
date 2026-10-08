@@ -367,7 +367,9 @@ describe("a write that fails", () => {
     expect(t.history.menu().undo).toBe("New Folder");
     await t.coordinator.shutdown();
 
-    // On a network share, which has none, it is let go.
+    // On a disk found to have none by the time of the Undo (a share mounted there since: a
+    // New Folder made on one can't be undone at all), it is let go.
+    let hasTrash = true;
     const share = setUpUndo(
       root,
       trashDir,
@@ -376,9 +378,10 @@ describe("a write that fails", () => {
           throw unsaid();
         },
       },
-      { diskHasTrash: () => false },
+      { diskHasTrash: () => hasTrash },
     );
     await share.newFolder(root, "G");
+    hasTrash = false;
     expect((await share.undo()).result?.items).toEqual([
       expect.objectContaining({ status: "skipped", error: expect.stringContaining("no Trash") }),
     ]);
