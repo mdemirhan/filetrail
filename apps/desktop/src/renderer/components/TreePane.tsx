@@ -356,7 +356,13 @@ export function TreePane({
   useEffect(() => {
     void selectedRowRegistrationVersion;
     void treeVisibilityVersion;
-    if (!selectedTreeItemId || holdScrollPositionRef.current) {
+    if (!selectedTreeItemId) {
+      return;
+    }
+    if (holdScrollPositionRef.current) {
+      // Kept where the tab left it: its selection counts as shown, so a section opened
+      // by hand next doesn't scroll to it.
+      lastRevealedItemIdRef.current = selectedTreeItemId;
       return;
     }
     if (

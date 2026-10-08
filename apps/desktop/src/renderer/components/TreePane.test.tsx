@@ -727,6 +727,77 @@ describe("TreePane", () => {
     vi.useRealTimers();
   });
 
+  it("stays where it is scrolled on the first section opened by hand after a tab switch", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    const rect = (top: number, height: number) =>
+      ({
+        top,
+        bottom: top + height,
+        left: 0,
+        right: 240,
+        width: 240,
+        height,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const getBoundingClientRectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function mockRect(this: HTMLElement) {
+        if (this.classList.contains("tree-scroll")) {
+          return rect(0, 160);
+        }
+        const path = this.getAttribute("data-tree-path");
+        if (path === "/Users/demo") {
+          return rect(40, 32);
+        }
+        // The other tab's folder is scrolled out of sight above.
+        if (path === "/Users/demo/Documents") {
+          return rect(-36, 32);
+        }
+        return rect(0, 0);
+      });
+    const settle = () =>
+      act(() => {
+        vi.runAllTimers();
+      });
+    const props = { ...treePaneDefaults(), onToggleFavoritesExpanded: vi.fn() };
+
+    const { rerender } = renderTreePane({ ...props, selectedTreeItemId: "fs:/Users/demo" });
+    settle();
+    // Another tab comes forward, its sidebar kept where that tab left it.
+    rerender(
+      <TreePane {...props} holdScrollPosition selectedTreeItemId="fs:/Users/demo/Documents" />,
+    );
+    settle();
+    rerender(<TreePane {...props} selectedTreeItemId="fs:/Users/demo/Documents" />);
+    settle();
+
+    fireEvent.click(screen.getByRole("button", { name: "Favorites" }), { detail: 1 });
+    rerender(
+      <TreePane
+        {...props}
+        favoritesExpanded={false}
+        selectedTreeItemId="fs:/Users/demo/Documents"
+      />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    getBoundingClientRectSpy.mockRestore();
+    scrollIntoViewSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
   it("stays where it is scrolled when a section is opened or closed by hand", () => {
     vi.useFakeTimers();
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
