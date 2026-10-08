@@ -1931,6 +1931,53 @@ describe("App copy/paste integration", () => {
     }
   });
 
+  it("pages past the Favorites and Locations headings with Ctrl+U and Ctrl+D", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const favorite = await screen.findByTitle("favorite:/Users/demo/Documents");
+    await act(async () => {
+      fireEvent.click(favorite);
+    });
+    await focusTreePane();
+
+    // Each page is one row here (the pane has no height): every row is reached in turn,
+    // and none is a heading.
+    const selections = async (key: "u" | "d") => {
+      const seen: string[] = [];
+      for (let press = 0; press < 30; press += 1) {
+        await act(async () => {
+          fireEvent.keyDown(window, { key, ctrlKey: true });
+        });
+        seen.push(screen.getByTestId("tree-selection").textContent ?? "");
+      }
+      return seen;
+    };
+    const upward = await selections("u");
+    const downward = await selections("d");
+
+    for (const selection of [...upward, ...downward]) {
+      expect(selection).not.toMatch(/-root$/);
+    }
+    // Up to the first favorite, and down past the Locations heading to the folders.
+    expect(upward.at(-1)).toBe("favorite:/Applications");
+    expect(downward).toContain("location:/Users/demo");
+    expect(downward.at(-1)).toMatch(/^fs:/);
+  });
+
   it("copies the tree's folder with Cmd+C in tree focus, not a stale selection in the list", async () => {
     const harness = createAppHarness();
 

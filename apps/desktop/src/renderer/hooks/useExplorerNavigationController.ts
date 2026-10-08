@@ -459,7 +459,11 @@ export function useExplorerNavigationController(args: {
         }
         return didScroll || nextItemId !== undefined;
       }
-      const { visibleItemIds } = getTreePresentationState();
+      // Paging goes past the Favorites and Locations headings, as the arrow keys do: a
+      // heading is never selected.
+      const visibleItemIds = getTreePresentationState().visibleItemIds.filter(
+        (itemId) => !isFavoritesRootItemId(itemId) && !isLocationsRootItemId(itemId),
+      );
       if (visibleItemIds.length === 0) {
         return didScroll;
       }
