@@ -215,6 +215,101 @@ describe("useFolderSizeCache", () => {
     expect(handlers.getStatusHandler).not.toHaveBeenCalled();
   });
 
+  it("tells whether any folder is being measured", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useFolderSizeCache(createClient(handlers)));
+    expect(result.current.isCalculating()).toBe(false);
+
+    await act(async () => {
+      await result.current.calculateFolderSize("/test");
+    });
+    expect(result.current.isCalculating()).toBe(true);
+  });
+
+  it("shows an error when a calculation can't start, or its progress can't be read", async () => {
+    const handlers = createHandlers();
+    handlers.startHandler.mockRejectedValueOnce(new Error("gone"));
+    handlers.getStatusHandler.mockRejectedValue(new Error("gone"));
+    const { result } = renderHook(() => useFolderSizeCache(createClient(handlers)));
+
+    await act(async () => {
+      await result.current.calculateFolderSize("/a");
+    });
+    expect(result.current.getEntry("/a")).toEqual({
+      status: "error",
+      message: "Failed to start folder size calculation",
+    });
+
+    await act(async () => {
+      await result.current.calculateFolderSize("/b");
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+    await settle();
+    expect(result.current.getEntry("/b")).toEqual({
+      status: "error",
+      message: "Failed to poll folder size status",
+    });
+  });
+
+  it("polls a known size the main process hasn't finished reporting", async () => {
+    const handlers = createHandlers({ status: "ready" });
+    handlers.getStatusHandler.mockResolvedValueOnce({
+      jobId: "job-1",
+      status: "running" as never,
+      sizeBytes: null as never,
+      diskBytes: null as never,
+      fileCount: null as never,
+      folderCount: null as never,
+      measuredFolderCount: 0,
+      error: null,
+    });
+    const { result } = renderHook(() => useFolderSizeCache(createClient(handlers)));
+
+    await act(async () => {
+      await result.current.calculateFolderSize("/test");
+    });
+    expect(result.current.getEntry("/test")).toEqual({ status: "calculating", jobId: "job-1" });
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+    await settle();
+    expect(result.current.getEntry("/test")).toMatchObject({ status: "ready", sizeBytes: 1000 });
+  });
+
+  it("asks at once about a folder not known when a write changed it", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useFolderSizeCache(createClient(handlers), "/Users/demo"));
+    await show(result.current.getEntry, "/Users/demo/Work");
+
+    act(() => {
+      result.current.forgetChangedSizes(["/Users/demo/Work/new.txt"], { intoTrash: false });
+    });
+    await show(result.current.getEntry, "/Users/demo/Work");
+
+    expect(probedPaths(handlers.probeHandler)).toEqual(["/Users/demo/Work", "/Users/demo/Work"]);
+  });
+
+  it("keeps the sizes it has when the main process can't be asked, and forgets those a write changed", async () => {
+    const sizes = new Map([
+      ["/Users/demo/Project", 1_000],
+      ["/Users/demo/Music", 500],
+    ]);
+    const { client, finishWrite } = createWriteClient(sizes);
+    const { result } = renderHook(() => useFolderSizeCache(client, "/Users/demo"));
+    await calculateAll(result, sizes.keys());
+    const failing = client as { invoke: FiletrailClient["invoke"] };
+    failing.invoke = vi.fn(async () => {
+      throw new Error("gone");
+    }) as never;
+
+    await finishWrite("delete_immediately", ["/Users/demo/Project/a.txt"]);
+
+    expect(result.current.getEntry("/Users/demo/Project").status).toBe("idle");
+    expect(result.current.getEntry("/Users/demo/Music")).toMatchObject({ sizeBytes: 500 });
+  });
+
   it("recalculateFolderSize passes recalculate flag", async () => {
     const handlers = createHandlers();
     const { result } = renderHook(() => useFolderSizeCache(createClient(handlers)));

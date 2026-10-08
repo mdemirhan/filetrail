@@ -35,6 +35,9 @@ export default defineConfig({
         "packages/core/src/fs/undoLog.ts",
         "packages/contracts/src/{copyPasteChoices,itemName,paths,trash,writeEffects}.ts",
         "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds,diskHasTrash,batchRenameExecution,batchRenameInspect,undoHistory,undoPlan,undoExecution}.ts",
+        // Folder sizes: what a write does to the sizes shown, and how they are measured.
+        "apps/desktop/src/main/bootstrap/{responseCache,folderSizeAdjust}.ts",
+        "apps/desktop/src/renderer/hooks/{useFolderSizeCache,useAutoFolderSize}.ts",
         "apps/desktop/src/shared/batchRename.ts",
         "apps/desktop/src/main/ipc.ts",
         "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename,useTextEditingFocus}.ts",
@@ -66,6 +69,31 @@ export default defineConfig({
           branches: 90,
           functions: 100,
           lines: 97,
+        },
+        // Folder sizes, a floor for each file, from where they are.
+        "apps/desktop/src/main/bootstrap/responseCache.ts": {
+          statements: 97,
+          branches: 92,
+          functions: 100,
+          lines: 97,
+        },
+        "apps/desktop/src/main/bootstrap/folderSizeAdjust.ts": {
+          statements: 96,
+          branches: 95,
+          functions: 100,
+          lines: 96,
+        },
+        "apps/desktop/src/renderer/hooks/useFolderSizeCache.ts": {
+          statements: 95,
+          branches: 84,
+          functions: 100,
+          lines: 95,
+        },
+        "apps/desktop/src/renderer/hooks/useAutoFolderSize.ts": {
+          statements: 91,
+          branches: 92,
+          functions: 100,
+          lines: 91,
         },
         // The names a rename of several items gives: what the preview shows is what is done.
         "apps/desktop/src/shared/batchRename.ts": {

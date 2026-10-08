@@ -11,6 +11,7 @@ import {
   getResponseCacheSizes,
   noteWriteStarting,
   resetResponseCacheState,
+  withTiming,
 } from "./responseCache";
 
 function createMockNative() {
@@ -411,6 +412,54 @@ describe("createFolderSizeHandlers", () => {
       status: "ready",
       sizeBytes: 1000,
     });
+  });
+
+  it("takes a waiting measurement off the queue when it is stopped", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    handlers.start({ path: "/test/a" }, 1);
+    const waiting = handlers.start({ path: "/test/b" }, 2);
+
+    handlers.cancel({ jobId: waiting.jobId });
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(handlers.getStatus({ jobId: waiting.jobId }).status).toBe("cancelled");
+    expect(native.getFolderSize).toHaveBeenCalledTimes(1);
+  });
+
+  it("learns the Trash was read from measuring the Trash itself", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers({ ...native, homePath: "/Users/demo" });
+    handlers.start({ path: "/Users/demo/.Trash" });
+    native.resolveActive(
+      JSON.stringify({
+        total: 50,
+        diskTotal: 100,
+        fileCount: 1,
+        folderCount: 0,
+        dev: 16,
+        dirs: {},
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    handlers.start({ path: "/Users/demo/Downloads" });
+    native.resolveActive(
+      JSON.stringify({
+        total: 600,
+        diskTotal: 1_200,
+        fileCount: 6,
+        folderCount: 0,
+        dev: 16,
+        dirs: {},
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    clearResponseCaches([], [trashedZip]);
+
+    expect(handlers.getCachedSize("/Users/demo/.Trash")).toBe(250);
+    expect(handlers.getCachedSize("/Users/demo/Downloads")).toBe(400);
   });
 
   it("lets Stop end a measurement a write had outdated", async () => {
@@ -957,5 +1006,21 @@ describe("forgetFolderListings", () => {
     expect(await getCachedResponse("directory", { path: "/p/a" }, load)).toBe("after the change");
     expect(load).toHaveBeenCalledTimes(1);
     resetResponseCacheState();
+  });
+});
+
+describe("withTiming", () => {
+  it("logs only a slow load, with its label and path", async () => {
+    const logger = { debug: vi.fn() };
+    await expect(withTiming("fast", "/a", async () => 1, logger)).resolves.toBe(1);
+    expect(logger.debug).not.toHaveBeenCalled();
+
+    const now = vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValueOnce(150);
+    try {
+      await expect(withTiming("slow", "/b", async () => 2, logger)).resolves.toBe(2);
+    } finally {
+      now.mockRestore();
+    }
+    expect(logger.debug).toHaveBeenCalledWith("[filetrail] slow /b 150ms");
   });
 });
