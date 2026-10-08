@@ -639,4 +639,378 @@ describe("ExplorerWorkspace customizing the toolbar", () => {
     expect(onCustomizeToolbar).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu", { name: "Toolbar" })).toBeNull();
   });
+
+  it("closes the toolbar's menu on Escape, a click elsewhere or the window going to the back", () => {
+    const { container } = renderExplorerWorkspace({ topToolbarItems: [...DEFAULT_ITEMS] });
+    const title = container.querySelector(".toolbar-title") as HTMLElement;
+
+    for (const close of [
+      () => fireEvent.keyDown(window, { key: "Escape" }),
+      () => fireEvent.pointerDown(document.body),
+      () => fireEvent(window, new Event("blur")),
+    ]) {
+      fireEvent.contextMenu(title);
+      const menu = screen.getByRole("menu", { name: "Toolbar" });
+      // A press in the menu keeps it.
+      fireEvent.pointerDown(menu);
+      expect(screen.getByRole("menu", { name: "Toolbar" })).toBe(menu);
+      act(close);
+      expect(screen.queryByRole("menu", { name: "Toolbar" })).toBeNull();
+    }
+  });
+
+  describe("dragging", () => {
+    // The toolbar 1000 px wide; its items 40 px wide, 50 px apart, from the left.
+    function layOutToolbar(container: HTMLElement) {
+      const toolbar = container.querySelector(".window-toolbar") as HTMLElement;
+      toolbar.getBoundingClientRect = () =>
+        ({ left: 0, right: 1000, top: 0, bottom: 40, width: 1000, height: 40 }) as DOMRect;
+      for (const [index, element] of Array.from(
+        container.querySelectorAll<HTMLElement>(".toolbar-row > [data-toolbar-slot]"),
+      ).entries()) {
+        element.getBoundingClientRect = () =>
+          ({
+            left: index * 50,
+            right: index * 50 + 40,
+            top: 0,
+            bottom: 40,
+            width: 40,
+            height: 40,
+          }) as DOMRect;
+      }
+    }
+
+    function handle(container: HTMLElement, key: string): HTMLElement {
+      return container.querySelector<HTMLElement>(`[data-toolbar-handle="${key}"]`) as HTMLElement;
+    }
+
+    // Sort is the eighth item: its middle is at 370.
+    function pressSort(container: HTMLElement) {
+      fireEvent.pointerDown(handle(container, "sort"), { button: 0, clientX: 370, clientY: 20 });
+    }
+
+    it("moves an item to where it is let go along the toolbar", () => {
+      const { container, onTopToolbarItemsChange } = renderCustomizing();
+      layOutToolbar(container);
+
+      pressSort(container);
+      // A small slip is not a drag.
+      fireEvent.pointerMove(window, { clientX: 372, clientY: 21 });
+      expect(document.querySelector(".toolbar-drag-ghost")).toBeNull();
+      // Past the first item's middle only.
+      fireEvent.pointerMove(window, { clientX: 60, clientY: 20 });
+      expect(document.querySelector(".toolbar-drag-ghost")).not.toBeNull();
+      fireEvent.pointerUp(window);
+
+      expect(onTopToolbarItemsChange).toHaveBeenCalledWith([
+        "folderTree",
+        "sort",
+        "topSeparator",
+        "back",
+        "forward",
+        "title",
+        "clipboard",
+        "view",
+        "search",
+        "viewOptions",
+        "infoPanel",
+      ]);
+      expect(document.querySelector(".toolbar-drag-ghost")).toBeNull();
+    });
+
+    it("takes an item off when it is let go away from the toolbar", () => {
+      const { container, onTopToolbarItemsChange } = renderCustomizing();
+      layOutToolbar(container);
+
+      pressSort(container);
+      fireEvent.pointerMove(window, { clientX: 370, clientY: 300 });
+      expect(document.querySelector(".toolbar-drag-ghost")).toHaveAttribute("data-removing");
+      fireEvent.pointerUp(window);
+
+      expect(onTopToolbarItemsChange).toHaveBeenCalledWith(
+        DEFAULT_ITEMS.filter((itemId) => itemId !== "sort"),
+      );
+    });
+
+    it("keeps an item that always stays, wherever it is let go", () => {
+      const { container, onTopToolbarItemsChange } = renderCustomizing();
+      layOutToolbar(container);
+
+      fireEvent.pointerDown(handle(container, "search"), { button: 0, clientX: 420, clientY: 20 });
+      fireEvent.pointerMove(window, { clientX: 420, clientY: 300 });
+      expect(document.querySelector(".toolbar-drag-ghost")).not.toHaveAttribute("data-removing");
+      fireEvent.pointerUp(window);
+
+      expect(onTopToolbarItemsChange).not.toHaveBeenCalled();
+    });
+
+    it("adds an item dragged in from the panel where it is let go, and only once", () => {
+      vi.useFakeTimers();
+      try {
+        const { container, onTopToolbarItemsChange } = renderCustomizing();
+        layOutToolbar(container);
+        const refresh = screen.getByRole("button", { name: "Add Refresh to the toolbar" });
+
+        fireEvent.pointerDown(refresh, { button: 0, clientX: 500, clientY: 500 });
+        fireEvent.pointerMove(window, { clientX: 60, clientY: 20 });
+        fireEvent.pointerUp(window);
+        // The click that ends the drag over the item adds nothing more.
+        fireEvent.click(refresh);
+
+        expect(onTopToolbarItemsChange.mock.calls).toEqual([
+          [["folderTree", "refresh", ...DEFAULT_ITEMS.slice(1)]],
+        ]);
+        act(() => {
+          vi.runAllTimers();
+        });
+        fireEvent.click(refresh);
+        expect(onTopToolbarItemsChange).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("drops an item from the panel let go away from the toolbar", () => {
+      const { container, onTopToolbarItemsChange } = renderCustomizing();
+      layOutToolbar(container);
+
+      const refresh = screen.getByRole("button", { name: "Add Refresh to the toolbar" });
+      fireEvent.pointerDown(refresh, { button: 0, clientX: 500, clientY: 500 });
+      fireEvent.pointerMove(window, { clientX: 520, clientY: 520 });
+      fireEvent.pointerUp(window);
+
+      expect(onTopToolbarItemsChange).not.toHaveBeenCalled();
+    });
+
+    it("stops a drag on Escape, or the window going to the back, and changes nothing", () => {
+      const { container, onTopToolbarItemsChange, onFinishCustomizingToolbar } =
+        renderCustomizing();
+      layOutToolbar(container);
+
+      pressSort(container);
+      fireEvent.pointerMove(window, { clientX: 60, clientY: 20 });
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(document.querySelector(".toolbar-drag-ghost")).toBeNull();
+      // That Escape ended the drag, not customizing.
+      expect(onFinishCustomizingToolbar).not.toHaveBeenCalled();
+
+      pressSort(container);
+      fireEvent.pointerMove(window, { clientX: 60, clientY: 20 });
+      fireEvent(window, new Event("blur"));
+      fireEvent.pointerUp(window);
+
+      expect(onTopToolbarItemsChange).not.toHaveBeenCalled();
+    });
+
+    it("starts no drag from a right button", () => {
+      const { container } = renderCustomizing();
+      layOutToolbar(container);
+
+      fireEvent.pointerDown(handle(container, "sort"), { button: 2, clientX: 370, clientY: 20 });
+      fireEvent.pointerMove(window, { clientX: 60, clientY: 20 });
+
+      expect(document.querySelector(".toolbar-drag-ghost")).toBeNull();
+    });
+  });
+});
+
+describe("ExplorerWorkspace toolbar buttons", () => {
+  const TOGGLES = ["foldersFirst", "hidden", "folderTree", "infoPanel", "infoRow"] as const;
+
+  function renderToggles(state: boolean) {
+    const handlers = {
+      onToggleFoldersFirst: vi.fn(),
+      onToggleHidden: vi.fn(),
+      onToggleFolderTree: vi.fn(),
+      onToggleInfoPanel: vi.fn(),
+      onToggleInfoRow: vi.fn(),
+    };
+    renderExplorerWorkspace({
+      topToolbarItems: [...TOGGLES, "title", "clipboard", "search", "viewOptions"],
+      foldersFirst: state,
+      includeHidden: state,
+      folderTreeOpen: state,
+      infoPanelOpen: state,
+      infoRowOpen: state,
+      ...handlers,
+    });
+    return handlers;
+  }
+
+  it("turn folders first, hidden files, the folder tree and the Info panel and row on and off", () => {
+    const handlers = renderToggles(true);
+
+    for (const name of ["Folders First", "Hidden Files", "Folder Tree", "Info Panel", "Info Row"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveAttribute("aria-pressed", "true");
+      fireEvent.click(button);
+    }
+
+    for (const handler of Object.values(handlers)) {
+      expect(handler).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("show them off when they are off", () => {
+    renderToggles(false);
+
+    for (const name of ["Folders First", "Hidden Files", "Folder Tree", "Info Panel", "Info Row"]) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
+  it("closes the sort menu on Escape, a click elsewhere or the window going to the back", () => {
+    renderExplorerWorkspace({ topToolbarItems: ["sort", "title", "search", "viewOptions"] });
+
+    for (const close of [
+      () => fireEvent.keyDown(window, { key: "Escape" }),
+      () => fireEvent.pointerDown(document.body),
+      () => fireEvent(window, new Event("blur")),
+    ]) {
+      fireEvent.click(screen.getByRole("button", { name: "Sort By" }));
+      const menu = document.querySelector(".toolbar-sort-menu") as HTMLElement;
+      fireEvent.pointerDown(menu);
+      expect(document.querySelector(".toolbar-sort-menu")).toBe(menu);
+      act(close);
+      expect(document.querySelector(".toolbar-sort-menu")).toBeNull();
+    }
+  });
+
+  it("closes the View Options menu on Escape, a click elsewhere or the window going to the back", () => {
+    renderExplorerWorkspace();
+
+    for (const close of [
+      () => fireEvent.keyDown(window, { key: "Escape" }),
+      () => fireEvent.pointerDown(document.body),
+      () => fireEvent(window, new Event("blur")),
+    ]) {
+      fireEvent.click(screen.getByRole("button", { name: "View Options" }));
+      const menu = screen.getByRole("menu", { name: "View Options" });
+      fireEvent.pointerDown(menu);
+      expect(screen.getByRole("menu", { name: "View Options" })).toBe(menu);
+      act(close);
+      expect(screen.queryByRole("menu", { name: "View Options" })).toBeNull();
+    }
+  });
+
+  describe("those without room, under »", () => {
+    function renderNarrow(overrides: Partial<ComponentProps<typeof ExplorerWorkspace>> = {}) {
+      toolbarRowWidth = 120;
+      const props = {
+        goBack: vi.fn(),
+        goForward: vi.fn(),
+        navigateToParentFolder: vi.fn(),
+        onViewModeChange: vi.fn(),
+        onSortChange: vi.fn(),
+        onToggleFoldersFirst: vi.fn(),
+        onToggleHidden: vi.fn(),
+        onToggleFolderTree: vi.fn(),
+        onToggleInfoPanel: vi.fn(),
+        onToggleInfoRow: vi.fn(),
+        onSelectTheme: vi.fn(),
+        onRendererCommand: vi.fn(),
+      };
+      renderExplorerWorkspace({
+        topToolbarItems: [
+          "back",
+          "forward",
+          "up",
+          "view",
+          "sort",
+          ...TOGGLES,
+          "theme",
+          "refresh",
+          "title",
+          "clipboard",
+          "search",
+          "viewOptions",
+        ],
+        canGoBack: true,
+        canGoForward: false,
+        ...props,
+        ...overrides,
+      });
+      return props;
+    }
+
+    function choose(name: string) {
+      fireEvent.click(screen.getByRole("button", { name: "More Toolbar Items" }));
+      const menu = screen.getByRole("menu", { name: "More Toolbar Items" });
+      const entry = Array.from(menu.querySelectorAll<HTMLButtonElement>(".toolbar-menu-item")).find(
+        (item) => item.textContent === name,
+      );
+      if (!entry) {
+        throw new Error(`No entry ${name}`);
+      }
+      fireEvent.click(entry);
+    }
+
+    it("are listed as the menu bar words them, ticked when on", () => {
+      renderNarrow({ viewMode: "details", sortBy: "size", theme: "dark", foldersFirst: true });
+
+      fireEvent.click(screen.getByRole("button", { name: "More Toolbar Items" }));
+      const menu = screen.getByRole("menu", { name: "More Toolbar Items" });
+      const entries = Array.from(menu.querySelectorAll<HTMLButtonElement>(".toolbar-menu-item"));
+      expect(entries.map((entry) => entry.textContent)).toEqual([
+        "Back",
+        "Forward",
+        "Enclosing Folder",
+        "as Icons",
+        "as List",
+        "as Compact List",
+        "Sort by Name",
+        "Sort by Kind",
+        "Sort by Date Modified",
+        "Sort by Size",
+        "Folders First",
+        "Hidden Files",
+        "Folder Tree",
+        "Info Panel",
+        "Info Row",
+        "Auto",
+        "Light",
+        "Dark",
+        "Refresh",
+      ]);
+      const checked = entries
+        .filter((entry) => entry.getAttribute("aria-checked") === "true")
+        .map((entry) => entry.textContent);
+      expect(checked).toEqual(["as List", "Sort by Size", "Folders First", "Folder Tree", "Dark"]);
+      expect(entries.find((entry) => entry.textContent === "Forward")).toBeDisabled();
+    });
+
+    it("run what they stand for", () => {
+      const props = renderNarrow();
+
+      for (const name of [
+        "Back",
+        "Enclosing Folder",
+        "as Icons",
+        "Sort by Size",
+        "Sort by Name",
+        "Folders First",
+        "Hidden Files",
+        "Folder Tree",
+        "Info Panel",
+        "Info Row",
+        "Light",
+        "Refresh",
+      ]) {
+        choose(name);
+      }
+
+      expect(props.goBack).toHaveBeenCalledTimes(1);
+      expect(props.navigateToParentFolder).toHaveBeenCalledTimes(1);
+      expect(props.onViewModeChange).toHaveBeenCalledWith("icons");
+      // The sort already on is left as it is.
+      expect(props.onSortChange.mock.calls).toEqual([["size"]]);
+      expect(props.onToggleFoldersFirst).toHaveBeenCalledTimes(1);
+      expect(props.onToggleHidden).toHaveBeenCalledTimes(1);
+      expect(props.onToggleFolderTree).toHaveBeenCalledTimes(1);
+      expect(props.onToggleInfoPanel).toHaveBeenCalledTimes(1);
+      expect(props.onToggleInfoRow).toHaveBeenCalledTimes(1);
+      expect(props.onSelectTheme).toHaveBeenCalledWith("light");
+      expect(props.onRendererCommand).toHaveBeenCalledWith("refreshOrApplySearchSort");
+    });
+  });
 });
