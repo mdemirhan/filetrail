@@ -69,6 +69,88 @@ describe("ContentPane", () => {
     expect(screen.getByRole("button", { name: /^Show \d+ More Folders$/ })).toHaveTextContent("…");
   });
 
+  function renderDeepFolder(props: Partial<Parameters<typeof ContentPane>[0]> = {}) {
+    return render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo/src/filetrail/apps/desktop"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        hiddenItemCount={0}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        {...props}
+      />,
+    );
+  }
+
+  it("shows the whole path from …, and folds it again when the pointer goes elsewhere", () => {
+    renderDeepFolder();
+    const segments = () =>
+      document.querySelectorAll(".pathbar-segment:not(.pathbar-segment-collapsed)");
+    const folded = segments().length;
+
+    fireEvent.click(screen.getByRole("button", { name: /^Show \d+ More Folders$/ }));
+    expect(segments().length).toBeGreaterThan(folded);
+    // Moving within the path bar keeps it open.
+    fireEvent.mouseMove(document.querySelector(".pathbar-segment") as Element);
+    expect(segments().length).toBeGreaterThan(folded);
+
+    fireEvent.mouseMove(document.body);
+    expect(segments().length).toBe(folded);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Show \d+ More Folders$/ }));
+    fireEvent.pointerDown(document.body);
+    expect(segments().length).toBe(folded);
+  });
+
+  it("turns the wheel's up and down into List view's sideways scroll", () => {
+    renderDeepFolder({
+      entries: [
+        {
+          path: "/Users/demo/src/filetrail/apps/desktop/a.txt",
+          name: "a.txt",
+          extension: "txt",
+          kind: "file",
+          isHidden: false,
+          isSymlink: false,
+        },
+      ],
+    });
+    const list = document.querySelector<HTMLElement>(".flow-list");
+    expect(list).not.toBeNull();
+    let scrollLeft = 0;
+    Object.defineProperty(list, "scrollLeft", {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (value: number) => {
+        scrollLeft = value;
+      },
+    });
+
+    fireEvent.wheel(list as HTMLElement, { deltaY: 120, deltaX: 0 });
+    expect(scrollLeft).toBe(120);
+    // A sideways swipe scrolls by itself, and ⌃ with the wheel is the system's zoom.
+    fireEvent.wheel(list as HTMLElement, { deltaY: 10, deltaX: 40 });
+    fireEvent.wheel(list as HTMLElement, { deltaY: 120, ctrlKey: true });
+    expect(scrollLeft).toBe(120);
+  });
+
   // ⌘D, ⌘⌫, ⇧⌘N or ⌘O while typing a path must not act on the selected items, so the
   // path field takes the keyboard away from the list, as the search field does.
   it("gives up the keyboard while the path field is being typed in, and takes it back after", async () => {
