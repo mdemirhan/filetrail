@@ -2,7 +2,9 @@ import { basename, dirname, join } from "node:path";
 
 import type { UndoDirection, WriteOperationResult } from "@filetrail/contracts";
 import {
+  LOCK_FLAGS,
   NO_TRASH_ERROR_CODE,
+  USER_LOCK_FLAGS,
   type UndoStep,
   type UndoUnit,
   describeCopyPasteError,
@@ -85,6 +87,9 @@ export async function runUndo(args: {
   signal: AbortSignal;
   // The home folder's disk: an item from there lands in the home folder's Trash.
   homeDev: number | null;
+  // Whether the disk holding a path has a Trash (createDiskHasTrash), to tell a Trash that
+  // failed without saying why from a disk that has none.
+  diskHasTrash?: ((path: string) => boolean) | undefined;
   onStepStart?: (path: string, completedItemCount: number) => void;
 }): Promise<UndoRun> {
   const run: UndoRun = {
@@ -217,6 +222,97 @@ async function describeFailure(
   return locked?.message ?? describeCopyPasteError(error);
 }
 
+// What a write that failed means for its step:
+// - "outside_change": the item went away, or another item took the name just then. Like a
+//   change the disk check finds, the step is skipped, and dropped from the list.
+// - "permanent": it would fail the same way every time (a disk with no Trash, a read-only
+//   disk, another disk, a lock only the system can clear). Skipped and dropped too, and
+//   said, so older operations can still be undone.
+// - "retry": anything else (no permission, a lock the person can clear, the Trash refusing
+//   for a reason it didn't give). The step stays on the list, and the next Undo tries it.
+export function classifyUndoWriteError(
+  code: string | undefined,
+): "outside_change" | "permanent" | "retry" {
+  switch (code) {
+    case "ENOENT":
+    case "ENOTDIR":
+    case "EEXIST":
+      return "outside_change";
+    case NO_TRASH_ERROR_CODE:
+    case SYSTEM_LOCKED_CODE:
+    case "EROFS":
+    case "EXDEV":
+      return "permanent";
+    default:
+      return "retry";
+  }
+}
+
+// The code an item locked by the system (a flag only root can clear) fails with here.
+const SYSTEM_LOCKED_CODE = "ESYSLOCKED";
+
+// The code a failure of the write to the item at `path` counts as. "No Trash" only when the
+// disk is known to have none: macOS said the Trash isn't supported there, or the disk is a
+// network share; a Trash that failed without saying why may work next time.
+async function failureCode(
+  fs: WriteOperationFs,
+  error: unknown,
+  path: string,
+  diskHasTrash: ((path: string) => boolean) | undefined,
+): Promise<string | undefined> {
+  const code = errorCode(error);
+  if (code === NO_TRASH_ERROR_CODE) {
+    const said = errorCode((error as { cause?: unknown }).cause);
+    const noTrash = said === "ENOTSUP" || said === "EOPNOTSUPP" || diskHasTrash?.(path) === false;
+    return noTrash ? code : undefined;
+  }
+  if (code === undefined || code === "EPERM" || code === "EACCES") {
+    const flags = fs.getFlags ? await fs.getFlags(path).catch(() => 0) : 0;
+    if ((flags & LOCK_FLAGS & ~USER_LOCK_FLAGS) !== 0) {
+      return SYSTEM_LOCKED_CODE;
+    }
+  }
+  return code;
+}
+
+// Why a step can never be done, said about its item.
+function permanentReason(code: string | undefined, path: string): string {
+  const name = `“${basename(path)}”`;
+  switch (code) {
+    case NO_TRASH_ERROR_CODE:
+      return `${name} couldn't be moved to the Trash because its disk has no Trash.`;
+    case SYSTEM_LOCKED_CODE:
+      return `${name} is locked by the system, so it can't be moved.`;
+    case "EROFS":
+      return `${name} is on a disk that can only be read.`;
+    default:
+      return `${name} is on another disk now.`;
+  }
+}
+
+// A step whose write (the rename, the Trash, or unlocking the item for them) failed:
+// skipped, or kept to be tried again, as classifyUndoWriteError says.
+async function writeFailed(
+  error: unknown,
+  step: { original: UndoStep; from: string; to: string | null; around: string[] },
+  args: Parameters<typeof runUndo>[0],
+): Promise<StepOutcome> {
+  const { fs } = args;
+  const code = await failureCode(fs, error, step.from, args.diskHasTrash);
+  const kind = classifyUndoWriteError(code);
+  if (kind === "retry") {
+    const reason = await describeFailure(fs, error, [step.from, ...step.around]);
+    return failedStep(step.original, step.from, step.to, reason);
+  }
+  const reason =
+    kind === "permanent"
+      ? permanentReason(code, step.from)
+      : code === "EEXIST" && step.to !== null
+        ? takenReason(step.to)
+        : await missingReason(fs, step.from);
+  return { status: "skipped", items: [skippedItem(step.from, step.to, reason)], missing: false };
+}
+
 // A rename or move back, or an item put back from the Trash.
 async function moveBack(
   planned: Extract<PlannedStep, { kind: "move" }>,
@@ -240,10 +336,10 @@ async function moveBack(
     try {
       flags = await unlockForMove(fs, planned.from);
     } catch (error) {
-      return failedStep(original, planned.from, planned.to, await describeFailure(fs, error, []));
+      return writeFailed(error, { original, from: planned.from, to: planned.to, around: [] }, args);
     }
   }
-  const renamed = await renameInto(fs, planned, check, original);
+  const renamed = await renameInto(planned, check, original, args);
   const lockedAgain =
     flags === null ||
     (await lockAgain(fs, renamed.status === "renamed" ? renamed.target : planned.from, flags));
@@ -314,11 +410,12 @@ function notLockedAgain(items: ResultItem[]): ResultItem[] {
 // Renames the item of a move step to where it goes back, with a number when its name is
 // taken; where it went, or why it didn't.
 async function renameInto(
-  fs: WriteOperationFs,
   planned: Extract<PlannedStep, { kind: "move" }>,
   check: Extract<MoveCheck, { ok: true }>,
   original: UndoStep,
+  args: Parameters<typeof runUndo>[0],
 ): Promise<{ status: "renamed"; target: string } | StepOutcome> {
+  const { fs } = args;
   let target = planned.to;
   for (let attempt = 1; ; attempt += 1) {
     if (check.nameTaken || attempt > 1) {
@@ -332,32 +429,20 @@ async function renameInto(
       }
       return { status: "renamed", target };
     } catch (error) {
-      const taken = errorCode(error) === "EEXIST";
-      if (taken && attempt < KEEP_BOTH_ATTEMPTS) {
+      // Another item took the name just then: the next number is tried, a few times.
+      if (errorCode(error) === "EEXIST" && attempt < KEEP_BOTH_ATTEMPTS) {
         continue;
       }
-      // Other items kept taking the name, or the item (or its folder) went away just then:
-      // changes outside the app, like those the check finds.
-      if (taken) {
-        return {
-          status: "skipped",
-          items: [skippedItem(planned.from, planned.to, takenReason(target))],
-          missing: false,
-        };
-      }
-      if (errorCode(error) === "ENOENT") {
-        return {
-          status: "skipped",
-          items: [skippedItem(planned.from, planned.to, await missingReason(fs, planned.from))],
-          missing: false,
-        };
-      }
-      const reason = await describeFailure(fs, error, [
-        planned.from,
-        dirname(planned.from),
-        dirname(target),
-      ]);
-      return failedStep(original, planned.from, target, reason);
+      return writeFailed(
+        error,
+        {
+          original,
+          from: planned.from,
+          to: target,
+          around: [dirname(planned.from), dirname(target)],
+        },
+        args,
+      );
     }
   }
 }
@@ -425,7 +510,7 @@ async function moveToTrash(
     try {
       flags = await unlockForMove(fs, planned.path);
     } catch (error) {
-      return failedStep(original, planned.path, null, await describeFailure(fs, error, []));
+      return writeFailed(error, { original, from: planned.path, to: null, around: [] }, args);
     }
   }
   let trashPath: string | null;
@@ -433,7 +518,11 @@ async function moveToTrash(
     trashPath = await fs.trash(planned.path);
   } catch (error) {
     const lockedAgain = flags === null || (await lockAgain(fs, planned.path, flags));
-    const outcome = await trashRefused(fs, error, planned, original);
+    const outcome = await writeFailed(
+      error,
+      { original, from: planned.path, to: null, around: [dirname(planned.path)] },
+      args,
+    );
     return lockedAgain ? outcome : { ...outcome, items: notLockedAgain(outcome.items) };
   }
   const lockedAgain =
@@ -461,27 +550,6 @@ async function moveToTrash(
       intoHomeTrash: before === null || args.homeDev === null ? null : before.dev === args.homeDev,
     },
   };
-}
-
-// Why the Trash refused an item, and whether to try again.
-async function trashRefused(
-  fs: WriteOperationFs,
-  error: unknown,
-  planned: Extract<PlannedStep, { kind: "trash" }>,
-  original: UndoStep,
-): Promise<StepOutcome> {
-  // A disk with no Trash won't have one the next time either: like a change the check
-  // finds, it can't be undone, and isn't kept to be tried again.
-  if (errorCode(error) === NO_TRASH_ERROR_CODE) {
-    const reason = `“${basename(planned.path)}” couldn't be moved to the Trash because its disk has no Trash.`;
-    return {
-      status: "skipped",
-      items: [skippedItem(planned.path, null, reason)],
-      missing: false,
-    };
-  }
-  const reason = await describeFailure(fs, error, [planned.path, dirname(planned.path)]);
-  return failedStep(original, planned.path, null, reason);
 }
 
 // The items of a batch rename get their names back, as one batch again: that handles
@@ -516,9 +584,10 @@ async function renameBack(
   if (running.length === 0) {
     return { status: "skipped", items, missing: false };
   }
+  const errors = recordingErrors(fs);
   const batch = await runBatchRename({
     request: { items: toRename, onConflict: "number", numberSeparator: " " },
-    fs,
+    fs: errors.fs,
     signal: args.signal,
   });
   // Every item has a result, in the order asked for. Names are compared in the folder the
@@ -591,6 +660,15 @@ async function renameBack(
       items.push(skippedItem(from, item.to, await missingReason(fs, from)));
       continue;
     }
+    if (result.status === "failed") {
+      const code = await failureCode(fs, { code: errors.codeOf(from) }, at, args.diskHasTrash);
+      const kind = classifyUndoWriteError(code);
+      if (kind !== "retry") {
+        const reason = kind === "permanent" ? permanentReason(code, from) : result.error;
+        items.push(skippedItem(from, item.to, reason ?? takenReason(item.to)));
+        continue;
+      }
+    }
     if (result.status !== "cancelled") {
       items.push(result);
     }
@@ -618,6 +696,36 @@ async function renameBack(
 }
 
 type BatchItem = Extract<PlannedStep, { kind: "batch" }>["items"][number];
+
+// `fs` for a batch rename, keeping the error each item's rename failed with, by where the
+// item was before it: an item moved aside under a hidden name keeps its own. A name found
+// taken is kept only when nothing else went wrong (the batch numbers it).
+function recordingErrors(fs: WriteOperationFs): {
+  fs: WriteOperationFs;
+  codeOf: (path: string) => string | undefined;
+} {
+  const startedAt = new Map<string, string>();
+  const codes = new Map<string, string | undefined>();
+  const recording =
+    (rename: WriteOperationFs["rename"]) =>
+    async (from: string, to: string): Promise<void> => {
+      const item = startedAt.get(from) ?? from;
+      try {
+        await rename(from, to);
+        startedAt.set(to, item);
+      } catch (error) {
+        const code = errorCode(error);
+        if (code !== "EEXIST" || !codes.has(item)) {
+          codes.set(item, code);
+        }
+        throw error;
+      }
+    };
+  return {
+    fs: { ...fs, rename: recording(fs.rename), renameExclusive: recording(fs.renameExclusive) },
+    codeOf: (path) => codes.get(path),
+  };
+}
 
 // A folder of the batch renamed straight back takes along the items inside it.
 function followRename(outcomes: Array<{ at: string }>, from: string, to: string): void {

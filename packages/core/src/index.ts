@@ -1,7 +1,9 @@
 export * from "./fs/explorerService";
 export * from "./fs/writeService";
 export {
+  LOCK_FLAGS,
   NO_TRASH_ERROR_CODE,
+  USER_LOCK_FLAGS,
   describeCopyPasteError,
   errorCode,
   findLockedRefusal,

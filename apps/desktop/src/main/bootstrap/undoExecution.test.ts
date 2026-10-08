@@ -45,6 +45,14 @@ function setUp(fsOverrides: Partial<WriteOperationFs> = {}) {
   return setUpUndo(root, trashDir, fsOverrides);
 }
 
+// The Trash failing on a disk macOS says has none.
+function noTrash(): NodeJS.ErrnoException {
+  return Object.assign(new Error("no Trash"), {
+    code: "ENOTRASH",
+    cause: Object.assign(new Error("not supported"), { code: "ENOTSUP" }),
+  });
+}
+
 describe("round trips", () => {
   it("renames back, and again on Redo", async () => {
     writeFileSync(join(root, "a.txt"), "a");
@@ -672,7 +680,7 @@ describe("running an Undo", () => {
     writeFileSync(join(root, "src", "a.txt"), "a");
     const t = setUp({
       trash: async () => {
-        throw Object.assign(new Error("no Trash"), { code: "ENOTRASH" });
+        throw noTrash();
       },
     });
     await paste(

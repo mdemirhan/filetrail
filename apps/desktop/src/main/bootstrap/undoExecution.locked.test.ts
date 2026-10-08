@@ -222,7 +222,7 @@ describe("undoing a copy of a locked item", () => {
     await t.coordinator.shutdown();
   });
 
-  it("leaves a copy locked by the system, and says it is locked", async () => {
+  it("lets go of a copy locked by the system, and says why", async () => {
     const t = setUpUndo(root, trashDir, {
       getFlags: async () => SF_IMMUTABLE,
       setFlags: async () => {
@@ -235,11 +235,13 @@ describe("undoing a copy of a locked item", () => {
 
     expect(undone.result?.items).toEqual([
       expect.objectContaining({
-        status: "failed",
-        error: "“F” is locked. Unlock it in Finder's Get Info and try again.",
+        status: "skipped",
+        error: "“F” is locked by the system, so it can't be moved.",
       }),
     ]);
     expect(existsSync(join(root, "F"))).toBe(true);
+    // It never can be: not kept to be tried again.
+    expect(t.history.menu().undo).toBeNull();
     await t.coordinator.shutdown();
   });
 });

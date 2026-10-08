@@ -19,6 +19,7 @@ import {
 } from "@filetrail/core/fs/testNativePaste";
 
 import { originalRenameExclusive } from "../originalFileSystem";
+import { classifyUndoWriteError } from "./undoExecution";
 import { folderTrash, paste, setUpUndo, snapshotOf } from "./undoRealDisk.testkit";
 
 // What an Undo leaves to do: a step whose write failed stays on the Undo list to be tried
@@ -44,6 +45,14 @@ function snapshot(): string[] {
 
 function permissionDenied(): NodeJS.ErrnoException {
   return Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+}
+
+// The Trash failing on a disk macOS says has none.
+function noTrash(): NodeJS.ErrnoException {
+  return Object.assign(new Error("no Trash"), {
+    code: "ENOTRASH",
+    cause: Object.assign(new Error("not supported"), { code: "ENOTSUP" }),
+  });
 }
 
 describe("a write that fails", () => {
@@ -318,7 +327,7 @@ describe("a write that fails", () => {
   it("lets go of a copy on a disk without a Trash, which would fail each time, and says why", async () => {
     const t = setUpUndo(root, trashDir, {
       trash: async () => {
-        throw Object.assign(new Error("no Trash"), { code: "ENOTRASH" });
+        throw noTrash();
       },
     });
     await t.newFolder(root, "F");
@@ -339,6 +348,146 @@ describe("a write that fails", () => {
     expect(existsSync(join(root, "F"))).toBe(true);
     // Not kept to be tried again: an older operation is next.
     expect(t.history.menu()).toEqual({ undo: null, redo: null, cantUndo: false });
+    await t.coordinator.shutdown();
+  });
+
+  it("keeps a copy the Trash refused without saying why, on a disk that has a Trash", async () => {
+    const unsaid = () => Object.assign(new Error("couldn't be moved"), { code: "ENOTRASH" });
+    const t = setUpUndo(root, trashDir, {
+      trash: async () => {
+        throw unsaid();
+      },
+    });
+    await t.newFolder(root, "F");
+
+    expect((await t.undo()).result?.items).toEqual([
+      expect.objectContaining({ status: "failed", error: "couldn't be moved" }),
+    ]);
+    expect(t.history.menu().undo).toBe("New Folder");
+    await t.coordinator.shutdown();
+
+    // On a network share, which has none, it is let go.
+    const share = setUpUndo(
+      root,
+      trashDir,
+      {
+        trash: async () => {
+          throw unsaid();
+        },
+      },
+      { diskHasTrash: () => false },
+    );
+    await share.newFolder(root, "G");
+    expect((await share.undo()).result?.items).toEqual([
+      expect.objectContaining({ status: "skipped", error: expect.stringContaining("no Trash") }),
+    ]);
+    expect(share.history.menu().undo).toBeNull();
+    await share.coordinator.shutdown();
+  });
+});
+
+// Each error a write can fail with, and what Undo does then: an item gone or a name taken
+// is a change outside the app (skipped and let go, as the disk check does); what would fail
+// every time is let go and said; anything else stays to be tried again.
+describe("a write that fails, by its error", () => {
+  function failing(code: string): NodeJS.ErrnoException {
+    return Object.assign(new Error(`${code}: failed on purpose`), { code });
+  }
+
+  it("classifies each error code", () => {
+    expect(classifyUndoWriteError("ENOENT")).toBe("outside_change");
+    expect(classifyUndoWriteError("ENOTDIR")).toBe("outside_change");
+    expect(classifyUndoWriteError("EEXIST")).toBe("outside_change");
+    expect(classifyUndoWriteError("ENOTRASH")).toBe("permanent");
+    expect(classifyUndoWriteError("EROFS")).toBe("permanent");
+    expect(classifyUndoWriteError("EXDEV")).toBe("permanent");
+    expect(classifyUndoWriteError("EACCES")).toBe("retry");
+    expect(classifyUndoWriteError("EPERM")).toBe("retry");
+    expect(classifyUndoWriteError("EBUSY")).toBe("retry");
+    expect(classifyUndoWriteError(undefined)).toBe("retry");
+  });
+
+  it.each([
+    ["EACCES", "failed", "You don't have permission to access this item.", "Rename"],
+    ["EROFS", "skipped", "“b.txt” is on a disk that can only be read.", null],
+    ["EXDEV", "skipped", "“b.txt” is on another disk now.", null],
+    ["ENOENT", "skipped", "“b.txt” is no longer in", null],
+    ["EEXIST", "skipped", "An item named “a", null],
+  ])("renaming back fails with %s", async (code, status, error, left) => {
+    writeFileSync(join(root, "a.txt"), "a");
+    let denied = false;
+    const t = setUpUndo(root, trashDir, {
+      renameExclusive: async (from, to) => {
+        if (denied) {
+          throw failing(code);
+        }
+        renameSync(from, to);
+      },
+    });
+    await t.rename(join(root, "a.txt"), "b.txt");
+    denied = true;
+
+    const undone = await t.undo();
+
+    expect(undone.result?.items).toEqual([
+      expect.objectContaining({ status, error: expect.stringContaining(error) }),
+    ]);
+    expect(existsSync(join(root, "b.txt"))).toBe(true);
+    expect(t.history.menu().undo).toBe(left);
+    await t.coordinator.shutdown();
+  });
+
+  it.each([
+    ["EACCES", "failed", "New Folder"],
+    ["ENOENT", "skipped", null],
+    ["EROFS", "skipped", null],
+  ])("the Trash fails with %s", async (code, status, left) => {
+    const t = setUpUndo(root, trashDir, {
+      trash: async () => {
+        throw failing(code);
+      },
+    });
+    await t.newFolder(root, "F");
+
+    expect((await t.undo()).result?.items).toEqual([expect.objectContaining({ status })]);
+    expect(t.history.menu().undo).toBe(left);
+    await t.coordinator.shutdown();
+  });
+
+  it.each([
+    ["EACCES", "failed"],
+    ["EROFS", "skipped"],
+  ])("an item of a batch fails with %s", async (code, status) => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    let denied = false;
+    const t = setUpUndo(root, trashDir, {
+      renameExclusive: async (from, to) => {
+        if (denied && from === join(root, "x.txt")) {
+          throw failing(code);
+        }
+        renameSync(from, to);
+      },
+    });
+    await t.batchRename([
+      [join(root, "a.txt"), "x.txt"],
+      [join(root, "b.txt"), "y.txt"],
+    ]);
+    denied = true;
+
+    const undone = await t.undo();
+
+    expect(undone.result?.items.map((item) => item.status).sort()).toEqual(
+      ["completed", status].sort(),
+    );
+    expect(existsSync(join(root, "x.txt"))).toBe(true);
+    // What failed for good is let go; what may work next time stays, with the item the
+    // batch did on Redo.
+    expect(t.history.menu()).toEqual({
+      undo: status === "failed" ? "Rename" : null,
+      redo: "Rename",
+      cantUndo: false,
+    });
     await t.coordinator.shutdown();
   });
 });

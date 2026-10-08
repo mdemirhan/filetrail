@@ -1520,6 +1520,7 @@ export function createWriteOperationCoordinator(
         fs,
         signal: controller.signal,
         homeDev: home && home !== "missing" ? home.dev : null,
+        diskHasTrash: options.diskHasTrash,
         onStepStart: (path, completedItemCount) =>
           emitLocalWriteOperationEvent({
             operationId,

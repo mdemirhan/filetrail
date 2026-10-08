@@ -51,6 +51,7 @@ export function setUpUndo(
   root: string,
   trashDir: string,
   fsOverrides: Partial<WriteOperationFs> = {},
+  options: { diskHasTrash?: (path: string) => boolean } = {},
 ) {
   const history = createUndoHistory();
   const fs: WriteOperationFs = {
@@ -63,7 +64,7 @@ export function setUpUndo(
       cancelOperation: vi.fn(),
     } as unknown as WriteService,
     fs,
-    { homePath: root, recordUndo: history.record, undoHistory: history },
+    { homePath: root, recordUndo: history.record, undoHistory: history, ...options },
   );
   const sender = { send: vi.fn<(channel: string, payload: unknown) => void>() };
 
