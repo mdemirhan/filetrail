@@ -38,7 +38,9 @@ import {
   createAppHarness,
   createDirectoryEntry,
   createMockDataTransfer,
+  dragBetween,
   installDragEventWithModifiers,
+  openDirectory,
   pressKey,
   renderApp,
 } from "./test/appHarness";
@@ -369,6 +371,40 @@ describe("a drag of the window's own while an operation starts", () => {
 
     expect(readsOf(harness)).toBe(0);
     await endDrag(harness, "none");
+    expect(analyzeRequests(harness)).toEqual([]);
+  });
+});
+
+describe("a drop the disks turn into a move", () => {
+  it("is refused when the move would be into the items' own folder", async () => {
+    // A disk in /Volumes dragged onto /Volumes: by their paths, a copy to another disk; by
+    // the disks, a move onto the one /Volumes is on, into the folder it is in.
+    const harness = createAppHarness({
+      directorySnapshots: {
+        [home]: {
+          path: home,
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry(source, "file"),
+            createDirectoryEntry("/Volumes", "directory"),
+          ],
+        },
+        "/Volumes": {
+          path: "/Volumes",
+          parentPath: "/",
+          entries: [createDirectoryEntry("/Volumes/Backup", "directory")],
+        },
+      },
+    });
+    renderApp(harness);
+    await openDirectory("/Volumes");
+    await pressKey({ key: "t", metaKey: true });
+
+    await dragBetween(await screen.findByTitle("/Volumes/Backup"), tabs()[1]);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
     expect(analyzeRequests(harness)).toEqual([]);
   });
 });

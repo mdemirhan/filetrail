@@ -780,9 +780,11 @@ export function useExplorerDragAndDrop(args: {
     targetSupportsMove: boolean;
     targetIsSelected?: boolean | undefined;
     operation: InternalDropOperation;
+    // The drag on its way; a drop waiting on the disks holds on to its own.
+    session?: InternalDragSession | null;
   }): Exclude<DropIndicatorState, null> {
     const validation = validateInternalDrop({
-      session: dragSessionRef.current,
+      session: args.session !== undefined ? args.session : dragSessionRef.current,
       blocked,
       targetSurface: args.surface,
       targetPath: args.path,
@@ -838,13 +840,16 @@ export function useExplorerDragAndDrop(args: {
     const session = dragSessionRef.current;
     const modifiers = dragModifiers(event);
     let operation = resolveDropOperation(path, modifiers);
-    const validity = resolveDropValidity({
-      surface,
-      path,
-      targetSupportsMove: options.targetSupportsMove,
-      targetIsSelected: options.targetIsSelected,
-      operation,
-    });
+    const validityFor = (dropOperation: InternalDropOperation) =>
+      resolveDropValidity({
+        surface,
+        path,
+        targetSupportsMove: options.targetSupportsMove,
+        targetIsSelected: options.targetIsSelected,
+        operation: dropOperation,
+        session,
+      });
+    const validity = validityFor(operation);
     applyDropEffect(event, validity, operation);
     if (validity !== "valid" || !session || !path) {
       return;
@@ -868,18 +873,24 @@ export function useExplorerDragAndDrop(args: {
     // The drag ends (and forgets its answers) as soon as the drop is in, so this drop keeps
     // its own hold on them while it waits.
     const diskIds = diskIdsRef.current;
+    let stillValid = true;
     if (!modifiers.altKey && !modifiers.metaKey && knownOnSameDisk(session, path) === undefined) {
       const sourceFolders = getSourceFolderPaths(session.sourceItems.map((item) => item.path));
       await requestDiskIds([...sourceFolders, path]);
       const onSameDisk = knownOnSameDisk(session, path, diskIds);
       if (onSameDisk !== undefined) {
         operation = allowedBySource(onSameDisk ? "move" : "copy", modifiers.effectAllowed);
+        // A move where the paths suggested a copy may be one into the items' own folder.
+        stillValid = validityFor(operation) === "valid";
       }
     }
     if (externalDrag) {
       endExternalDrag(externalDrag);
     } else {
       clearDragSession();
+    }
+    if (!stillValid) {
+      return;
     }
     await onDropItems(
       session.sourceItems.map((item) => item.path),
