@@ -28,6 +28,7 @@ export {
   itemIdOf,
   kindOfStats,
   readFolderId,
+  readFolderIdOnce,
   readItemId,
   readItemRef,
   readItemStamp,

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import {
   lstat,
@@ -27,6 +28,10 @@ import type {
   CopyPastePolicy,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
+
+// What copying a file costs in lstat calls, one of them the look for Undo once it is made
+// (it was 8 when Undo read the file's id on its own).
+const LSTATS_PER_COPIED_FILE = 7;
 
 // What a paste records for Undo: one unit per item picked, with the steps it really took,
 // or why the paste can't be undone.
@@ -67,6 +72,29 @@ function undoLogOf(result: CopyPasteOperationResult | null): UndoLog {
     throw new Error("The paste recorded nothing for Undo.");
   }
   return result.undoLog;
+}
+
+// Counts the calls of each kind the paste makes to `fileSystem`, from `calls.clear()` on.
+function countingFileSystem(base: WriteServiceFileSystem): {
+  fileSystem: WriteServiceFileSystem;
+  calls: Map<string, number>;
+} {
+  const calls = new Map<string, number>();
+  const count = (name: string) => calls.set(name, (calls.get(name) ?? 0) + 1);
+  return {
+    calls,
+    fileSystem: {
+      ...base,
+      lstat: (path) => {
+        count("lstat");
+        return base.lstat(path);
+      },
+      stat: (path) => {
+        count("stat");
+        return base.stat(path);
+      },
+    },
+  };
 }
 
 function stepsOf(log: UndoLog): UndoStep[][] {
@@ -110,6 +138,32 @@ describe("what a copy records", () => {
     // Taken once the folder was complete, its date included.
     const folder = await lstat(join(dst, "Folder"));
     expect(units[1]?.[0]).toMatchObject({ stamp: { mtimeMs: folder.mtimeMs } });
+  });
+
+  // A file's id is read along with how it looks once it is copied.
+  it("looks at each file it made once for Undo", async () => {
+    const callsFor = async (count: number, into: string) => {
+      const names = Array.from({ length: count }, (_, index) => `copy ${count}-${index}.txt`);
+      for (const name of names) {
+        await writeFile(join(src, name), "a");
+      }
+      const { fileSystem, calls } = countingFileSystem(nativeFileSystem);
+      const { result } = await runPaste({
+        mode: "copy",
+        sourcePaths: names.map((name) => join(src, name)),
+        destinationDirectoryPath: into,
+        fileSystem,
+        beforeExecute: async () => calls.clear(),
+      });
+      expect(stepsOf(undoLogOf(result))).toHaveLength(count);
+      return calls;
+    };
+    await mkdir(join(dst, "two"));
+    await mkdir(join(dst, "five"));
+    const two = await callsFor(2, join(dst, "two"));
+    const five = await callsFor(5, join(dst, "five"));
+
+    expect(((five.get("lstat") ?? 0) - (two.get("lstat") ?? 0)) / 3).toBe(LSTATS_PER_COPIED_FILE);
   });
 
   it("records a duplicate under the name it was given", async () => {
@@ -472,6 +526,49 @@ describe("what a move records", () => {
           id: movedId,
         }),
       ],
+    ]);
+  });
+
+  // A move on one disk keeps the item's id: it isn't looked at again where it went, and the
+  // folder the items came from is looked at once for all of them.
+  it("looks at each moved item twice, and at the folder it was in once", async () => {
+    const callsFor = async (count: number, into: string) => {
+      const names = Array.from({ length: count }, (_, index) => `move ${count}-${index}.txt`);
+      for (const name of names) {
+        await writeFile(join(src, name), "a");
+      }
+      const { fileSystem, calls } = countingFileSystem(nativeFileSystem);
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: names.map((name) => join(src, name)),
+        destinationDirectoryPath: into,
+        fileSystem,
+        beforeExecute: async () => calls.clear(),
+      });
+      expect(stepsOf(undoLogOf(result))).toHaveLength(count);
+      return calls;
+    };
+    await mkdir(join(dst, "two"));
+    await mkdir(join(dst, "five"));
+    const two = await callsFor(2, join(dst, "two"));
+    const five = await callsFor(5, join(dst, "five"));
+
+    expect(((five.get("lstat") ?? 0) - (two.get("lstat") ?? 0)) / 3).toBe(2);
+    expect(five.get("stat")).toBe(two.get("stat"));
+  });
+
+  it("records a moved item that is neither a file, a folder nor a link as such", async () => {
+    execFileSync("mkfifo", [join(src, "pipe")]);
+    const pipeId = await idOf(join(src, "pipe"));
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "pipe")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(stepsOf(undoLogOf(result))).toEqual([
+      [expect.objectContaining({ kind: "moved", id: pipeId, itemKind: "other" })],
     ]);
   });
 

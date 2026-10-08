@@ -115,6 +115,21 @@ export function readFolderId(
   return readItemId(stat, path);
 }
 
+// readFolderId, each folder read once for `known` (one operation's): an operation's items
+// are mostly in one folder, and they then share one id.
+export function readFolderIdOnce(
+  known: Map<string, Promise<ItemId | null>>,
+  stat: (path: string) => Promise<IdStats>,
+  path: string,
+): Promise<ItemId | null> {
+  let id = known.get(path);
+  if (id === undefined) {
+    id = readFolderId(stat, path);
+    known.set(path, id);
+  }
+  return id;
+}
+
 // The id and kind of the item at `path` now; both null when it can't be read.
 export async function readItemRef(
   lstat: (path: string) => Promise<KindStats>,
@@ -152,19 +167,30 @@ type StampStats = IdStats & {
   isSymbolicLink?: () => boolean;
 };
 
+type StampFileSystem = {
+  lstat: (path: string) => Promise<StampStats>;
+  readdir?: (path: string) => Promise<string[]>;
+};
+
 // How the item at `path` looks now, or null when it can't be read.
 export async function readItemStamp(
-  fileSystem: {
-    lstat: (path: string) => Promise<StampStats>;
-    readdir?: (path: string) => Promise<string[]>;
-  },
+  fileSystem: StampFileSystem,
   path: string,
 ): Promise<ItemStamp | null> {
+  return (await readItemIdAndStamp(fileSystem, path)).stamp;
+}
+
+// The id of the item at `path` and how it looks now, from one look at it; both null when
+// it can't be read.
+export async function readItemIdAndStamp(
+  fileSystem: StampFileSystem,
+  path: string,
+): Promise<{ id: ItemId | null; stamp: ItemStamp | null }> {
   let stats: StampStats;
   try {
     stats = await fileSystem.lstat(path);
   } catch {
-    return null;
+    return { id: null, stamp: null };
   }
   const kind = kindOfStats(stats);
   const entryCount =
@@ -175,10 +201,13 @@ export async function readItemStamp(
         )
       : null;
   return {
-    kind,
-    size: kind === "file" && typeof stats.size === "number" ? stats.size : null,
-    mtimeMs: typeof stats.mtimeMs === "number" ? stats.mtimeMs : null,
-    entryCount,
+    id: itemIdOf(stats),
+    stamp: {
+      kind,
+      size: kind === "file" && typeof stats.size === "number" ? stats.size : null,
+      mtimeMs: typeof stats.mtimeMs === "number" ? stats.mtimeMs : null,
+      entryCount,
+    },
   };
 }
 

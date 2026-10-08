@@ -36,14 +36,15 @@ import {
 } from "./copyPastePolicy";
 import {
   type CantUndoReason,
+  type ItemId,
+  type ItemKind,
   type UndoLog,
   type UndoStep,
   type UndoUnit,
   itemIdOf,
-  readFolderId,
+  readFolderIdOnce,
   readItemId,
-  readItemRef,
-  readItemStamp,
+  readItemIdAndStamp,
   stampWithoutId,
 } from "./undoLog";
 import type {
@@ -104,6 +105,8 @@ type ExecutionContext = {
   folderListings: Map<string, FolderListing>;
   // What this paste did, for Undo. Shared by every step, like `progress`.
   undo: UndoRecorder;
+  // The ids of the folders items were in, read once per paste (see readFolderIdOnce).
+  folderIds: Map<string, Promise<ItemId | null>>;
   // False while a Replace builds its new item under a hidden name: that isn't a step
   // anyone could undo, only the swap that follows is.
   recordsUndo: boolean;
@@ -116,12 +119,16 @@ type ExecutionContext = {
 type UndoRecorder = {
   topLevelNodeIds: ReadonlySet<string>;
   // The steps of the picked item being worked on, or null between items.
-  unit: UndoStep[] | null;
+  unit: RecordingStep[] | null;
   units: UndoUnit[];
   cantUndo: CantUndoReason | null;
   // Why the picked item being worked on can't be undone, should it change anything.
   pendingCantUndo: CantUndoReason | null;
 };
+
+// A step of the picked item being worked on. A file it made has its id read when the item
+// is done, in the same look as its stamp (see closeUndoUnit).
+type RecordingStep = UndoStep | { kind: "createdFile"; path: string };
 
 // Something appeared at the destination while writing to it (EEXIST). Handled like a
 // runtime conflict: the person decides what happens to the item.
@@ -200,6 +207,7 @@ export async function executeCopyPasteFromAnalysis(args: {
       cantUndo: null,
       pendingCantUndo: null,
     },
+    folderIds: new Map(),
     recordsUndo: true,
   };
   const itemResults: CopyPasteItemResult[] = [];
@@ -299,11 +307,17 @@ async function closeUndoUnit(context: ExecutionContext): Promise<void> {
   }
   const stamped: UndoStep[] = [];
   for (const step of steps) {
-    stamped.push(
-      step.kind === "created"
-        ? { ...step, stamp: await readItemStamp(context.fileSystem, step.path) }
-        : step,
-    );
+    if (step.kind === "created" || step.kind === "createdFile") {
+      const now = await readItemIdAndStamp(context.fileSystem, step.path);
+      stamped.push({
+        kind: "created",
+        path: step.path,
+        id: step.kind === "created" ? step.id : now.id,
+        stamp: now.stamp,
+      });
+    } else {
+      stamped.push(step);
+    }
   }
   context.undo.units.push({ steps: stamped });
 }
@@ -330,7 +344,7 @@ function noteChanged(context: ExecutionContext): void {
 function recordUndoStep(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
-  step: UndoStep,
+  step: RecordingStep,
 ): void {
   if (
     context.recordsUndo &&
@@ -349,32 +363,56 @@ async function recordCreated(
   if (!context.recordsUndo || !context.undo.topLevelNodeIds.has(node.node.id)) {
     return;
   }
-  recordUndoStep(context, node, {
-    kind: "created",
-    path,
-    id: await readItemId(context.fileSystem.lstat, path),
-    stamp: null,
-  });
+  // A folder's id is read now: filling it can take long, and what is at its path once it
+  // is done may by then be another item. A file is done right away.
+  recordUndoStep(
+    context,
+    node,
+    node.node.sourceKind === "directory"
+      ? { kind: "created", path, id: await readItemId(context.fileSystem.lstat, path), stamp: null }
+      : { kind: "createdFile", path },
+  );
 }
 
+// `moved` is the item as the check just before the move saw it: a move on one disk keeps
+// the item's id, so it isn't read again at its new place.
 async function recordMoved(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
   to: string,
+  moved: NodeFingerprint,
 ): Promise<void> {
   if (!context.recordsUndo || !context.undo.topLevelNodeIds.has(node.node.id)) {
     return;
   }
   const from = node.node.sourcePath;
-  const moved = await readItemRef(context.fileSystem.lstat, to);
   recordUndoStep(context, node, {
     kind: "moved",
     from,
     to,
-    id: moved.id,
-    itemKind: moved.kind,
-    parentId: await readFolderId(context.fileSystem.stat, dirname(from)),
+    id: fingerprintId(moved),
+    itemKind: fingerprintItemKind(moved),
+    parentId: await readFolderIdOnce(context.folderIds, context.fileSystem.stat, dirname(from)),
   });
+}
+
+function fingerprintId(fingerprint: NodeFingerprint): ItemId | null {
+  return fingerprint.dev !== null && fingerprint.ino !== null
+    ? { dev: fingerprint.dev, ino: fingerprint.ino }
+    : null;
+}
+
+const S_IFMT = 0o170000;
+const S_IFREG = 0o100000;
+
+// The kind as kindOfStats reads it: a fingerprint takes anything that isn't a folder or a
+// link (a FIFO, a socket) for a file; its mode says what it really is.
+function fingerprintItemKind(fingerprint: NodeFingerprint): ItemKind | null {
+  if (fingerprint.kind === "missing") {
+    return null;
+  }
+  const type = (fingerprint.mode ?? 0) & S_IFMT;
+  return fingerprint.kind === "file" && type !== 0 && type !== S_IFREG ? "other" : fingerprint.kind;
 }
 
 type ExecuteNodeResult = {
@@ -476,13 +514,14 @@ async function executeResolvedNode(
     return skippedOutcome("planned_conflict_policy", currentNode.destinationPath);
   }
 
-  let runtimeConflict = await detectRuntimeConflict(
+  let check = await detectRuntimeConflict(
     currentNode,
     context.report.analysisId,
     context.fileSystem,
   );
   for (let attempt = 1; ; attempt += 1) {
-    for (let question = 1; runtimeConflict; question += 1) {
+    for (let question = 1; check.conflict; question += 1) {
+      const runtimeConflict = check.conflict;
       if (question > MAX_RUNTIME_ATTEMPTS) {
         throw new Error(
           `“${basename(currentNode.node.sourcePath)}” kept changing, so it was left.`,
@@ -503,12 +542,12 @@ async function executeResolvedNode(
       if (currentNode.action === "skip") {
         return skippedOutcome("runtime_conflict_resolution", currentNode.destinationPath);
       }
-      runtimeConflict = aboutSource
+      check = aboutSource
         ? await detectRuntimeConflict(currentNode, context.report.analysisId, context.fileSystem)
-        : null;
+        : { ...check, conflict: null };
     }
     try {
-      const outcome = await performNode(context, currentNode);
+      const outcome = await performNode(context, currentNode, check.source);
       if (outcome.itemStatus !== "skipped") {
         context.writtenPaths.add(
           destinationPathKey(outcome.destinationPath, context.caseSensitive),
@@ -536,7 +575,7 @@ async function executeResolvedNode(
       }
       // Something took the name while this item was being written: decide again from
       // what is there now.
-      runtimeConflict = await detectRuntimeConflict(
+      check = await detectRuntimeConflict(
         currentNode,
         context.report.analysisId,
         context.fileSystem,
@@ -713,15 +752,17 @@ async function keepPlannedDestinations(
   };
 }
 
+// `source` is the item being pasted as the check just before saw it.
 async function performNode(
   context: ExecutionContext,
   currentNode: ResolvedCopyPasteNode,
+  source: NodeFingerprint,
 ): Promise<ExecuteNodeResult> {
   if (currentNode.action === "overwrite") {
     const destination = await captureFingerprint(context.fileSystem, currentNode.destinationPath);
     // Gone already: nothing is left to replace, so this simply becomes a copy.
     if (destination.exists) {
-      return executeReplace(context, currentNode, destination);
+      return executeReplace(context, currentNode, destination, source);
     }
   }
 
@@ -729,7 +770,7 @@ async function performNode(
   // source and destination are on the same device. Skipped for merge actions
   // (can't atomically rename a directory into an existing one).
   if (canRenameForCut(context, currentNode)) {
-    const renameResult = await tryRenameForCut(context, currentNode);
+    const renameResult = await tryRenameForCut(context, currentNode, source);
     if (renameResult) {
       return renameResult;
     }
@@ -1056,6 +1097,7 @@ async function executeReplace(
   context: ExecutionContext,
   currentNode: ResolvedCopyPasteNode,
   destination: NodeFingerprint,
+  source: NodeFingerprint,
 ): Promise<ExecuteNodeResult> {
   const { fileSystem } = context;
   const finalPath = currentNode.destinationPath;
@@ -1078,7 +1120,7 @@ async function executeReplace(
     if ((await removeReplacedItem(context, currentNode, destination)) === "skipped") {
       return skippedOutcome("runtime_conflict_resolution", finalPath);
     }
-    return performNode(context, { ...currentNode, action: "create" });
+    return performNode(context, { ...currentNode, action: "create" }, source);
   }
 
   // A move that copies (to another disk) removes the originals only after the swap, and
@@ -1153,6 +1195,7 @@ async function executeReplace(
             ),
         },
         staged,
+        source,
       );
     } catch (error) {
       await undoStaging().catch(() => undefined);
@@ -1235,7 +1278,7 @@ async function executeReplace(
       );
       await moveExclusive(fileSystem, temporaryPath, visiblePath);
       await restoreAfterMove(fileSystem, visiblePath, stagedMode, stagedFlags);
-      await recordReplacement(context, currentNode, visiblePath, movedByRename);
+      await recordReplacement(context, currentNode, visiblePath, movedByRename, source);
       await journal?.remove(journalEntry.id).catch(() => undefined);
       return {
         itemStatus: "failed",
@@ -1246,7 +1289,7 @@ async function executeReplace(
       };
     }
     await restoreAfterMove(fileSystem, finalPath, stagedMode, stagedFlags);
-    await recordReplacement(context, currentNode, finalPath, movedByRename);
+    await recordReplacement(context, currentNode, finalPath, movedByRename, source);
   } catch (error) {
     if (oldItemRemoved && journal && errorCode(error) !== "EEXIST") {
       // Neither name could be used: the journal keeps the new item, and the next start
@@ -1284,9 +1327,10 @@ async function recordReplacement(
   node: ResolvedCopyPasteNode,
   path: string,
   movedByRename: boolean,
+  source: NodeFingerprint,
 ): Promise<void> {
   if (movedByRename) {
-    await recordMoved(context, node, path);
+    await recordMoved(context, node, path, source);
   } else if (context.mode === "copy") {
     await recordCreated(context, node, path);
   }
@@ -1380,7 +1424,11 @@ async function removeReplacedItem(
           from,
           trashPath,
           id,
-          parentId: await readFolderId(fileSystem.stat, dirname(node.destinationPath)),
+          parentId: await readFolderIdOnce(
+            context.folderIds,
+            fileSystem.stat,
+            dirname(node.destinationPath),
+          ),
           ...looks,
         });
       }
@@ -1792,6 +1840,7 @@ async function writeFileContents(
 async function tryRenameForCut(
   context: ExecutionContext,
   currentNode: ResolvedCopyPasteNode,
+  source: NodeFingerprint,
 ): Promise<ExecuteNodeResult | null> {
   try {
     // Exclusive: an item that appeared at the destination is asked about, never replaced.
@@ -1810,7 +1859,7 @@ async function tryRenameForCut(
       : await explainMissingFolder(context.fileSystem, currentNode.destinationPath, error);
   }
   noteChanged(context);
-  await recordMoved(context, currentNode, currentNode.destinationPath);
+  await recordMoved(context, currentNode, currentNode.destinationPath, source);
   // Rename succeeded — count all items in the subtree as completed
   context.progress.completedItemCount += countExecutableSteps([currentNode]);
   context.progress.completedByteCount += sumSubtreeBytes([currentNode]);
@@ -1871,15 +1920,25 @@ async function conflictClassFor(
   return (await classifyConflict(fileSystem, source, destination)) ?? "type_mismatch";
 }
 
+// What changed since the review, if anything, along with the item being pasted as it is now.
 async function detectRuntimeConflict(
   resolvedNode: ResolvedCopyPasteNode,
   analysisId: string,
   fileSystem: WriteServiceFileSystem,
+): Promise<{ conflict: CopyPasteRuntimeConflict | null; source: NodeFingerprint }> {
+  const source = await captureFingerprint(fileSystem, resolvedNode.node.sourcePath);
+  return {
+    conflict: await findRuntimeConflict(resolvedNode, analysisId, fileSystem, source),
+    source,
+  };
+}
+
+async function findRuntimeConflict(
+  resolvedNode: ResolvedCopyPasteNode,
+  analysisId: string,
+  fileSystem: WriteServiceFileSystem,
+  currentSourceFingerprint: NodeFingerprint,
 ): Promise<CopyPasteRuntimeConflict | null> {
-  const currentSourceFingerprint = await captureFingerprint(
-    fileSystem,
-    resolvedNode.node.sourcePath,
-  );
   const currentDestinationFingerprint = await captureFingerprint(
     fileSystem,
     resolvedNode.destinationPath,
