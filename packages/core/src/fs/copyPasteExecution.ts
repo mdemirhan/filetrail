@@ -107,13 +107,16 @@ type ExecutionContext = {
 
 // Steps are kept only for the items the person picked: undoing one undoes everything
 // inside it. A merge, a move to another disk or a permanent delete anywhere makes the
-// whole paste one that can't be undone.
+// whole paste one that can't be undone, but only once it has changed something: a merge
+// whose items were all there already leaves Undo as it was.
 type UndoRecorder = {
   topLevelNodeIds: ReadonlySet<string>;
   // The steps of the picked item being worked on, or null between items.
   unit: UndoStep[] | null;
   units: UndoUnit[];
   cantUndo: CantUndoReason | null;
+  // Why the picked item being worked on can't be undone, should it change anything.
+  pendingCantUndo: CantUndoReason | null;
 };
 
 // Something appeared at the destination while writing to it (EEXIST). Handled like a
@@ -185,6 +188,7 @@ export async function executeCopyPasteFromAnalysis(args: {
       unit: null,
       units: [],
       cantUndo: null,
+      pendingCantUndo: null,
     },
     recordsUndo: true,
   };
@@ -279,6 +283,7 @@ export async function executeCopyPasteFromAnalysis(args: {
 async function closeUndoUnit(context: ExecutionContext): Promise<void> {
   const steps = context.undo.unit;
   context.undo.unit = null;
+  context.undo.pendingCantUndo = null;
   if (steps === null || steps.length === 0) {
     return;
   }
@@ -295,6 +300,19 @@ async function closeUndoUnit(context: ExecutionContext): Promise<void> {
 
 function markCantUndo(context: ExecutionContext, reason: CantUndoReason): void {
   context.undo.cantUndo ??= reason;
+}
+
+// The picked item can't be undone if it goes on to change anything (see noteChanged).
+function expectCantUndo(context: ExecutionContext, reason: CantUndoReason): void {
+  context.undo.pendingCantUndo ??= reason;
+}
+
+// Something was written or removed for the picked item. Not while a Replace builds its
+// new item under a hidden name: that is taken away again if the Replace doesn't happen.
+function noteChanged(context: ExecutionContext): void {
+  if (context.recordsUndo && context.undo.pendingCantUndo !== null) {
+    markCantUndo(context, context.undo.pendingCantUndo);
+  }
 }
 
 // Adds a step to the picked item's steps. Steps inside it (a file in a copied folder) are
@@ -712,7 +730,11 @@ async function performNode(
   // copied either: that would leave it in both places.
   if (context.mode === "cut") {
     await assertRemovableAfterCopy(context, currentNode, { deep: false });
-    markCantUndo(context, "other_disk_move");
+    // A folder merged into isn't copied itself: its items are, each moved as its own disk
+    // allows.
+    if (currentNode.action !== "merge") {
+      expectCantUndo(context, "other_disk_move");
+    }
   }
 
   if (currentNode.node.sourceKind === "directory") {
@@ -804,6 +826,7 @@ async function executeLeafNode(
   currentNode: ResolvedCopyPasteNode,
 ): Promise<ExecuteNodeResult> {
   await writeLeaf(context, currentNode, currentNode.destinationPath);
+  noteChanged(context);
   if (context.mode === "copy") {
     await recordCreated(context, currentNode, currentNode.destinationPath);
   }
@@ -910,6 +933,7 @@ async function executeDirectoryNode(
         ? new DestinationTakenError(error)
         : await explainMissingFolder(context.fileSystem, currentNode.destinationPath, error);
     }
+    noteChanged(context);
     if (context.mode === "copy") {
       await recordCreated(context, currentNode, currentNode.destinationPath);
     }
@@ -919,7 +943,7 @@ async function executeDirectoryNode(
     emitProgress(context, "running", currentNode, null);
   }
   if (currentNode.action === "merge") {
-    markCantUndo(context, "merge");
+    expectCantUndo(context, "merge");
   }
   let hasChildFailure = false;
   const bubbledChildItems: CopyPasteItemResult[] = [];
@@ -969,7 +993,9 @@ async function executeDirectoryNode(
   }
   let dirDeleteError: string | null = null;
   if (context.mode === "cut") {
-    dirDeleteError = await tryRemoveEmptySourceDirectory(currentNode, context.fileSystem);
+    dirDeleteError = await tryRemoveEmptySourceDirectory(currentNode, context.fileSystem, () =>
+      noteChanged(context),
+    );
   } else {
     dirDeleteError = await describeAddedDuringCopy(currentNode, context.fileSystem);
   }
@@ -1077,7 +1103,7 @@ async function executeReplace(
   }
   if (!movedByRename) {
     if (context.mode === "cut") {
-      markCantUndo(context, "other_disk_move");
+      expectCantUndo(context, "other_disk_move");
     }
     await journal?.add(journalEntry);
   }
@@ -1323,6 +1349,7 @@ async function removeReplacedItem(
           ? await spelledAsOnDisk(fileSystem, node.destinationPath, destination)
           : node.destinationPath;
       const trashPath = await fileSystem.trash(node.destinationPath);
+      noteChanged(context);
       if (context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)) {
         recordUndoStep(context, node, {
           kind: "trashed",
@@ -1375,6 +1402,7 @@ async function removeReplacedItem(
     }
   }
   markCantUndo(context, "deleted_for_good");
+  noteChanged(context);
   await fileSystem.rm(node.destinationPath, {
     recursive: destination.kind === "directory",
     force: true,
@@ -1698,6 +1726,7 @@ async function tryRenameForCut(
       ? new DestinationTakenError(error)
       : await explainMissingFolder(context.fileSystem, currentNode.destinationPath, error);
   }
+  noteChanged(context);
   await recordMoved(context, currentNode, currentNode.destinationPath);
   // Rename succeeded — count all items in the subtree as completed
   context.progress.completedItemCount += countExecutableSteps([currentNode]);
@@ -1955,10 +1984,12 @@ async function tryDeleteMovedSource(
 }
 
 /** Attempts to remove an empty source directory after its children were moved.
- *  Returns null on success or intentional skip, or an error message if removal failed. */
+ *  Returns null on success or intentional skip, or an error message if removal failed.
+ *  `onRemoved` is told when this removed it. */
 async function tryRemoveEmptySourceDirectory(
   node: ResolvedCopyPasteNode,
   fileSystem: WriteServiceFileSystem,
+  onRemoved: () => void = () => undefined,
 ): Promise<string | null> {
   const sourcePath = node.node.sourcePath;
   const currentFingerprint = await captureFingerprint(fileSystem, sourcePath);
@@ -1974,6 +2005,7 @@ async function tryRemoveEmptySourceDirectory(
     // rmdir only removes an empty folder, so anything left inside (skipped items, or
     // something added in the meantime) keeps the folder in place.
     await fileSystem.rmdir(sourcePath);
+    onRemoved();
     return null;
   } catch (error) {
     const code = errorCode(error);
@@ -1981,7 +2013,7 @@ async function tryRemoveEmptySourceDirectory(
       return null;
     }
     if (code === "ENOTEMPTY" || code === "EEXIST") {
-      return describeLeftInMovedFolder(node, fileSystem);
+      return describeLeftInMovedFolder(node, fileSystem, onRemoved);
     }
     return `Its items were moved, but the original folder couldn't be removed. ${describeCopyPasteError(error)}`;
   }
@@ -1993,6 +2025,7 @@ async function tryRemoveEmptySourceDirectory(
 async function describeLeftInMovedFolder(
   node: ResolvedCopyPasteNode,
   fileSystem: WriteServiceFileSystem,
+  onRemoved: () => void,
 ): Promise<string | null> {
   const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
   const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
@@ -2008,7 +2041,7 @@ async function describeLeftInMovedFolder(
         .rm(join(node.node.sourcePath, entry), { force: true })
         .catch(() => undefined);
     }
-    await fileSystem.rmdir(node.node.sourcePath).catch(() => undefined);
+    await fileSystem.rmdir(node.node.sourcePath).then(onRemoved, () => undefined);
     return null;
   }
   const newItems = entries.filter((entry) => !plannedNames.has(entry) && !isLeftover(entry));

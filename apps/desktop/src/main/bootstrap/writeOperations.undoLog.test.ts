@@ -3,9 +3,10 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
-import type { UndoLog, WriteService } from "@filetrail/core";
+import { type UndoLog, type WriteService, createWriteService } from "@filetrail/core";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
+import { createUndoHistory } from "./undoHistory";
 import {
   type FinishedWrite,
   type WriteOperationFs,
@@ -533,5 +534,56 @@ describe("what a paste records", () => {
   it("records nothing for a paste that did nothing", async () => {
     expect(await paste({ undoable: true, units: [] })).toEqual([]);
     expect(await paste(undefined)).toEqual([]);
+  });
+});
+
+describe("a paste that changed nothing", () => {
+  // Add Missing where every item is there already: nothing is written, so what came
+  // before can still be undone.
+  it("leaves the history as it was", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    mkdirSync(join(root, "src", "Folder"), { recursive: true });
+    writeFileSync(join(root, "src", "Folder", "x.txt"), "new");
+    mkdirSync(join(root, "dst", "Folder"), { recursive: true });
+    writeFileSync(join(root, "dst", "Folder", "x.txt"), "old");
+    const history = createUndoHistory();
+    const coordinator = createWriteOperationCoordinator(
+      createWriteService(),
+      createOriginalWriteOperationFs(folderTrash()),
+      { homePath: root, recordUndo: history.record, undoHistory: history },
+    );
+    const sender = createSender();
+    await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: join(root, "a.txt"), destinationName: "b.txt" },
+      { sender },
+    );
+    await waitForTerminalEvent(sender, "write-op-1");
+    const generation = history.generation();
+
+    const { analysisId } = await coordinator.handlers["copyPaste:analyzeStart"](
+      {
+        mode: "copy",
+        sourcePaths: [join(root, "src", "Folder")],
+        destinationDirectoryPath: join(root, "dst"),
+        action: "paste",
+      },
+      { sender },
+    );
+    while (!coordinator.handlers["copyPaste:analyzeGetUpdate"]({ analysisId }, { sender }).done) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 0));
+    }
+    const { operationId } = await coordinator.handlers["copyPaste:start"](
+      {
+        analysisId,
+        action: "paste",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      },
+      { sender },
+    );
+    expect((await waitForTerminalEvent(sender, operationId)).status).toBe("partial");
+
+    expect(history.generation()).toBe(generation);
+    expect(history.menu()).toEqual({ undo: "Rename", redo: null, cantUndo: false });
+    await coordinator.shutdown();
   });
 });

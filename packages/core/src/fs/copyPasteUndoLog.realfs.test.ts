@@ -11,7 +11,7 @@ import {
   runPaste,
 } from "./testNativePaste";
 import type { ItemId, UndoLog, UndoStep } from "./undoLog";
-import type { CopyPasteOperationResult } from "./writeServiceTypes";
+import type { CopyPasteOperationResult, WriteServiceFileSystem } from "./writeServiceTypes";
 
 // What a paste records for Undo: one unit per item picked, with the steps it really took,
 // or why the paste can't be undone.
@@ -250,6 +250,24 @@ describe("what a copy records", () => {
     expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
   });
 
+  // Nothing was changed, so Undo must still undo what came before.
+  it("leaves Undo as it was when a merge finds every item already there", async () => {
+    await mkdir(join(src, "Folder"));
+    await writeFile(join(src, "Folder", "a.txt"), "new");
+    await mkdir(join(dst, "Folder"));
+    await writeFile(join(dst, "Folder", "a.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      policy: KEEP_EXISTING,
+    });
+
+    expect(await readFile(join(dst, "Folder", "a.txt"), "utf8")).toBe("old");
+    expect(undoLogOf(result)).toEqual({ undoable: true, units: [] });
+  });
+
   it("can't be undone once a Replace deletes the old item for good", async () => {
     await writeFile(join(src, "a.txt"), "new");
     await writeFile(join(dst, "a.txt"), "old");
@@ -339,6 +357,55 @@ describe("what a move records", () => {
     ]);
   });
 
+  it("can't be undone once a folder is merged on its own disk, as a merge", async () => {
+    await mkdir(join(src, "Folder"));
+    await writeFile(join(src, "Folder", "new.txt"), "new");
+    await mkdir(join(dst, "Folder"));
+    await writeFile(join(dst, "Folder", "old.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      policy: KEEP_EXISTING,
+    });
+
+    expect(await readdir(join(dst, "Folder"))).toEqual(["new.txt", "old.txt"]);
+    expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
+  });
+
+  it("can't be undone once an empty folder merged into another is removed", async () => {
+    await mkdir(join(src, "Folder"));
+    await mkdir(join(dst, "Folder"));
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      policy: KEEP_EXISTING,
+    });
+
+    expect(await readdir(src)).toEqual([]);
+    expect(undoLogOf(result)).toEqual({ undoable: false, reason: "merge" });
+  });
+
+  it("leaves Undo as it was when a merging move finds every item already there", async () => {
+    await mkdir(join(src, "Folder"));
+    await writeFile(join(src, "Folder", "a.txt"), "new");
+    await mkdir(join(dst, "Folder"));
+    await writeFile(join(dst, "Folder", "a.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "Folder")],
+      destinationDirectoryPath: dst,
+      policy: KEEP_EXISTING,
+    });
+
+    expect(await readFile(join(src, "Folder", "a.txt"), "utf8")).toBe("new");
+    expect(undoLogOf(result)).toEqual({ undoable: true, units: [] });
+  });
+
   it.runIf(canMountDiskImages)(
     "can't be undone when it went to another disk",
     async () => {
@@ -360,4 +427,102 @@ describe("what a move records", () => {
     },
     30_000,
   );
+
+  describe.runIf(canMountDiskImages)("to another disk, when nothing was changed", () => {
+    let volume: ReturnType<typeof mountTestDiskImage>;
+
+    beforeEach(() => {
+      volume = mountTestDiskImage({ sizeMb: 20 });
+    });
+
+    afterEach(() => {
+      volume.detach();
+    });
+
+    function failingCopy(error: Error): WriteServiceFileSystem {
+      return {
+        ...nativeFileSystemWithTrash(trashDir),
+        copyFile: async () => {
+          throw error;
+        },
+      };
+    }
+
+    it("leaves Undo as it was when the item can't be read", async () => {
+      await writeFile(join(src, "a.txt"), "a");
+
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "a.txt")],
+        destinationDirectoryPath: volume.mountPath,
+        fileSystem: failingCopy(
+          Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" }),
+        ),
+      });
+
+      expect(result?.status).toBe("failed");
+      expect(await readdir(volume.mountPath)).not.toContain("a.txt");
+      expect(undoLogOf(result)).toEqual({ undoable: true, units: [] });
+    });
+
+    it("leaves Undo as it was when stopped before anything was written", async () => {
+      await writeFile(join(src, "a.txt"), "a");
+      const controller = new AbortController();
+
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "a.txt")],
+        destinationDirectoryPath: volume.mountPath,
+        signal: controller.signal,
+        fileSystem: {
+          ...nativeFileSystem,
+          copyFile: async () => {
+            controller.abort();
+            throw controller.signal.reason;
+          },
+        },
+      });
+
+      expect(result?.status).toBe("cancelled");
+      expect(await readFile(join(src, "a.txt"), "utf8")).toBe("a");
+      expect(undoLogOf(result)).toEqual({ undoable: true, units: [] });
+    });
+
+    it("leaves Undo as it was when a Replace couldn't copy the new item", async () => {
+      await writeFile(join(src, "a.txt"), "new");
+      await writeFile(join(volume.mountPath, "a.txt"), "old");
+
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "a.txt")],
+        destinationDirectoryPath: volume.mountPath,
+        policy: REPLACE_ALL,
+        fileSystem: failingCopy(Object.assign(new Error("EIO: i/o error"), { code: "EIO" })),
+      });
+
+      expect(result?.status).toBe("failed");
+      expect(await readFile(join(volume.mountPath, "a.txt"), "utf8")).toBe("old");
+      expect(await readdir(trashDir)).toEqual([]);
+      expect(undoLogOf(result)).toEqual({ undoable: true, units: [] });
+    });
+
+    it("can't be undone once a Replace put the new item in place", async () => {
+      await writeFile(join(src, "a.txt"), "new");
+      await writeFile(join(volume.mountPath, "a.txt"), "old");
+      // The disk's own Trash: an item can't be renamed into a folder on another disk.
+      const volumeTrash = join(volume.mountPath, ".Trash");
+      await mkdir(volumeTrash);
+
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(src, "a.txt")],
+        destinationDirectoryPath: volume.mountPath,
+        policy: REPLACE_ALL,
+        fileSystem: nativeFileSystemWithTrash(volumeTrash),
+      });
+
+      expect(await readFile(join(volume.mountPath, "a.txt"), "utf8")).toBe("new");
+      expect(undoLogOf(result)).toEqual({ undoable: false, reason: "other_disk_move" });
+    });
+  });
 });
