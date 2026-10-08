@@ -393,4 +393,4 @@ Each phase is its own commit and passes `bun run ci` before the next starts.
 - An item put back from the Trash on a disk without usable ids (FAT, exFAT) must look as it did when it went (`stamp` on the `trashed` step): kind and size, or for a folder its number of items.
 - Before an Undo starts, up to 16 units are checked at once (`mapAtMost`), in their order.
 - A New Folder made on a disk with no Trash can't be undone (`no_trash`), as a copy there can't: undoing it would mean deleting it. When the mount table can't be read, the disk counts as having no Trash.
-
+- Whether a disk has a Trash follows the path through symlinks first (its nearest part that exists), and compares it with every mount in the mount table (`nativeListMounts`), not only those under /Volumes, ignoring case: a share reached as ~/NAS, typed in another case, or mounted elsewhere counted as having a Trash.

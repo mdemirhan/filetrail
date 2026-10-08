@@ -52,6 +52,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeIsPackage: (path: string) => Promise<boolean | null>;
   nativeDatesTaken: (paths: string[]) => Promise<Array<string | null>>;
   nativeListVolumes: () => Volume[];
+  nativeListMounts: () => Array<{ path: string; isLocal: boolean }>;
   nativeTrashItem: (path: string) => Promise<string | null>;
 };
 const {
@@ -69,6 +70,7 @@ const {
   nativeSetFlags,
   nativeDatesTaken,
   nativeListVolumes,
+  nativeListMounts,
   nativeTrashItem,
 } = addon;
 
@@ -236,3 +238,9 @@ export const cancelFolderSize = nativeFolderSizeCancel;
 
 /** The disks mounted under /Volumes, from the mount table (getmntinfo). */
 export const listVolumes = nativeListVolumes;
+
+/** Every mount, wherever it is, and whether it is a local disk (getmntinfo). */
+export const listMounts = nativeListMounts;
+
+/** Where a path really is, symlinks followed, read at once (for the disk a path is on). */
+export const realpathNow = (path: string): string => originalFs.realpathSync.native(path);

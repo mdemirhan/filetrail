@@ -235,6 +235,12 @@ export type NativeVolume = {
  */
 export function nativeListVolumes(): NativeVolume[];
 
+/**
+ * Every mount in the mount table, wherever it is mounted (not only under /Volumes), read as
+ * `nativeListVolumes` reads it: at once, without asking the disks.
+ */
+export function nativeListMounts(): Array<{ path: string; isLocal: boolean }>;
+
 /** What a file drag's drop did; "delete" is the Trash in the Dock, "none" a cancel. */
 export type FileDragOperation = "copy" | "move" | "link" | "delete" | "none";
 

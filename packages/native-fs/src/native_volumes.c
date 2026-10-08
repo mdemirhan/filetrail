@@ -9,6 +9,11 @@
  * own volumes, which Finder doesn't show either. MNT_NOWAIT returns the table as the
  * kernel has it, without asking each file system (a network share that stopped answering
  * would block), so it is quick enough to call on the main thread.
+ *
+ *   nativeListMounts() → Array<{ path: string, isLocal: boolean }>
+ *
+ * Every mount in the same table, wherever it is mounted and however it is marked: what
+ * holds a path, to tell a network share from a local disk.
  */
 
 #include <node_api.h>
@@ -66,10 +71,30 @@ static napi_value native_list_volumes(napi_env env, napi_callback_info info) {
   return result;
 }
 
+static napi_value native_list_mounts(napi_env env, napi_callback_info info) {
+  (void)info;
+  napi_value result;
+  napi_create_array(env, &result);
+
+  struct statfs *mounts = NULL;
+  int count = getmntinfo(&mounts, MNT_NOWAIT);
+  for (int i = 0; i < count; i++) {
+    napi_value mount;
+    napi_create_object(env, &mount);
+    set_string(env, mount, "path", mounts[i].f_mntonname);
+    set_boolean(env, mount, "isLocal", mounts[i].f_flags & MNT_LOCAL);
+    napi_set_element(env, result, (uint32_t)i, mount);
+  }
+  return result;
+}
+
 napi_value register_volumes(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeListVolumes", NAPI_AUTO_LENGTH, native_list_volumes, NULL,
                        &fn);
   napi_set_named_property(env, exports, "nativeListVolumes", fn);
+  napi_create_function(env, "nativeListMounts", NAPI_AUTO_LENGTH, native_list_mounts, NULL,
+                       &fn);
+  napi_set_named_property(env, exports, "nativeListMounts", fn);
   return exports;
 }

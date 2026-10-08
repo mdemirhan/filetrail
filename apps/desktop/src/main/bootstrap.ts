@@ -131,6 +131,8 @@ export async function bootstrapMainProcess(
     getFolderSize,
     cancelFolderSize,
     listVolumes,
+    listMounts,
+    realpathNow,
   } = await import("./originalFileSystem");
   // The disks mounted besides the startup disk; every window hears of each change.
   const volumeWatcher = createVolumeWatcher({
@@ -224,7 +226,7 @@ export async function bootstrapMainProcess(
     createOriginalWriteOperationFs(trashItem),
     {
       // Read from the mount table each time: disks come and go.
-      diskHasTrash: createDiskHasTrash(listVolumes),
+      diskHasTrash: createDiskHasTrash(listMounts, realpathNow),
       recordUndo: undoHistory.record,
       undoHistory,
       broadcastProgress: (event, owner) =>
