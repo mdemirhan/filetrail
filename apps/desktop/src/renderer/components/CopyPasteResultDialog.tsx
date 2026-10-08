@@ -131,8 +131,10 @@ export function CopyPasteResultDialog({
       ? "Items that weren't moved are still in their original folder."
       : null,
   ].filter(Boolean);
-  // An Undo says what it left, and that the part it did can be taken back: what was left
-  // can't be undone (it is gone, or something else is in its place), but nothing is lost.
+  // An Undo says what it left, and that the part it did can be taken back. What was skipped
+  // can't be undone (it is gone, or something else is in its place), but nothing is lost;
+  // what failed (no permission, say) is still on the list, and the same command tries it
+  // again.
   const leftCount = outcome.failed.length + skippedCount;
   if (undoing) {
     sentences.length = 0;
@@ -146,6 +148,13 @@ export function CopyPasteResultDialog({
         event.action === "undo"
           ? `${DEFAULT_SHORTCUT_DISPLAY.mention("redo")} redoes what was undone.`
           : `${DEFAULT_SHORTCUT_DISPLAY.mention("undo")} undoes what was redone.`,
+      );
+    }
+    if (outcome.failed.length > 0) {
+      sentences.push(
+        event.action === "undo"
+          ? `${DEFAULT_SHORTCUT_DISPLAY.mention("undo")} tries again what couldn’t be undone.`
+          : `${DEFAULT_SHORTCUT_DISPLAY.mention("redo")} tries again what couldn’t be redone.`,
       );
     }
   }

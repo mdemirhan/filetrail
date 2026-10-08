@@ -544,6 +544,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "If an item was deleted, emptied from the Trash, renamed or moved in another app, or its folder is gone, Undo can’t take it back. It does everything else and tells you what it left and why. If you’d rather have it all as it was, {redo} brings back what Undo did.",
           },
           {
+            label: "It couldn’t be done",
+            description:
+              "If Undo couldn’t move an item, for example because you don’t have permission or the Trash refused it, the item stays on the Undo list. Fix what stopped it, and pressing {undo} again tries it again.",
+          },
+          {
             label: "A disk was ejected",
             description: "Items on a disk that isn’t connected are left as they are.",
           },

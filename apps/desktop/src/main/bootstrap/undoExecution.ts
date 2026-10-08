@@ -16,7 +16,14 @@ import {
 
 import { numberedName, runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
-import { type PlannedStep, checkBatch, checkMove, checkTrash, reverseStep } from "./undoPlan";
+import {
+  type PlannedStep,
+  checkBatch,
+  checkMove,
+  checkTrash,
+  missingReason,
+  reverseStep,
+} from "./undoPlan";
 import type { WriteOperationFs } from "./writeOperations";
 
 // Runs an Undo (or a Redo): the reverse of each step, newest first, one at a time. Each is
@@ -27,6 +34,12 @@ import type { WriteOperationFs } from "./writeOperations";
 // What the person was asked first (see findQuestions) was all or nothing: an Undo they
 // agreed to puts an item whose name is taken back with a number, and moves an item that
 // changed since to the Trash, so it is never left half done by an answer.
+//
+// A step skipped because the disk check refused it (the item was changed, moved or removed
+// outside the app) is dropped: there is nothing left to undo there. A step whose rename or
+// Trash failed (no permission, a locked folder, the Trash refusing) stays to be undone, with
+// the steps before it in its unit, so the next Undo tries it again rather than undoing an
+// older operation instead.
 
 type ResultItem = WriteOperationResult["items"][number];
 
@@ -34,7 +47,8 @@ export type UndoRun = {
   items: ResultItem[];
   // What was done, unit by unit in the order it was done: what the other direction undoes.
   done: UndoUnit[];
-  // What a stop left to do, in the order the operation did it.
+  // What is left to do, in the order the operation did it: what a stop didn't reach, and
+  // what failed to be written.
   leftover: UndoUnit[];
   removedItems: RemovedItem[];
   completedItemCount: number;
@@ -47,7 +61,11 @@ const MAX_ADDED_NUMBER = 10_000;
 
 type StepOutcome =
   | { status: "done"; produced: UndoStep; items: ResultItem[]; removed: RemovedItem | null }
+  // Refused by the disk check, or something outside the app got in the way.
   | { status: "skipped"; items: ResultItem[]; missing: boolean }
+  // The write failed: what it did (a batch may have renamed some of its items), and what
+  // is left of the step to try again.
+  | { status: "failed"; produced: UndoStep | null; items: ResultItem[]; leftover: UndoStep }
   // A batch stopped part way: what it did, and what is left of the step.
   | {
       status: "stopped";
@@ -74,6 +92,9 @@ export async function runUndo(args: {
     cancelled: false,
   };
   const units = [...args.units];
+  // What a stop didn't reach, and the units whose write failed, newest first.
+  let notReached: UndoUnit[] = [];
+  const failed: UndoUnit[] = [];
   eachUnit: for (let unitIndex = units.length - 1; unitIndex >= 0; unitIndex -= 1) {
     const unit = units[unitIndex] as UndoUnit;
     const doneSteps: UndoStep[] = [];
@@ -89,10 +110,7 @@ export async function runUndo(args: {
       }
       if (args.signal.aborted) {
         run.cancelled = true;
-        run.leftover = [
-          ...units.slice(0, unitIndex),
-          { steps: unit.steps.slice(0, stepIndex + 1) },
-        ];
+        notReached = [...units.slice(0, unitIndex), { steps: unit.steps.slice(0, stepIndex + 1) }];
         pushDone(run, doneSteps);
         break eachUnit;
       }
@@ -105,12 +123,20 @@ export async function runUndo(args: {
           doneSteps.push(outcome.produced);
         }
         run.cancelled = true;
-        run.leftover = [
+        notReached = [
           ...units.slice(0, unitIndex),
           { steps: [...unit.steps.slice(0, stepIndex), outcome.leftover] },
         ];
         pushDone(run, doneSteps);
         break eachUnit;
+      }
+      if (outcome.status === "failed") {
+        // It and the steps before it in the unit wait for the next try.
+        if (outcome.produced) {
+          doneSteps.push(outcome.produced);
+        }
+        failed.push({ steps: [...unit.steps.slice(0, stepIndex), outcome.leftover] });
+        break;
       }
       if (outcome.status === "done") {
         doneSteps.push(outcome.produced);
@@ -123,6 +149,7 @@ export async function runUndo(args: {
     }
     pushDone(run, doneSteps);
   }
+  run.leftover = [...notReached, ...failed.reverse()];
   return run;
 }
 
@@ -151,11 +178,11 @@ function runStep(
 ): Promise<StepOutcome> {
   switch (planned.kind) {
     case "move":
-      return moveBack(planned, args);
+      return moveBack(planned, original, args);
     case "trash":
-      return moveToTrash(planned, args);
+      return moveToTrash(planned, original, args);
     case "batch":
-      return renameBack(planned, original, args);
+      return renameBack(planned, args);
   }
 }
 
@@ -193,6 +220,7 @@ async function describeFailure(
 // A rename or move back, or an item put back from the Trash.
 async function moveBack(
   planned: Extract<PlannedStep, { kind: "move" }>,
+  original: UndoStep,
   args: Parameters<typeof runUndo>[0],
 ): Promise<StepOutcome> {
   const { fs } = args;
@@ -221,10 +249,19 @@ async function moveBack(
       if (taken && attempt < KEEP_BOTH_ATTEMPTS) {
         continue;
       }
+      // Other items kept taking the name, or the item (or its folder) went away just then:
+      // changes outside the app, like those the check finds.
       if (taken) {
         return {
           status: "skipped",
           items: [skippedItem(planned.from, planned.to, takenReason(target))],
+          missing: false,
+        };
+      }
+      if (errorCode(error) === "ENOENT") {
+        return {
+          status: "skipped",
+          items: [skippedItem(planned.from, planned.to, await missingReason(fs, planned.from))],
           missing: false,
         };
       }
@@ -234,9 +271,10 @@ async function moveBack(
         dirname(target),
       ]);
       return {
-        status: "skipped",
+        status: "failed",
+        produced: null,
         items: [failedItem(planned.from, target, reason)],
-        missing: false,
+        leftover: original,
       };
     }
   }
@@ -288,6 +326,7 @@ async function freeNumberedPath(
 // without one.
 async function moveToTrash(
   planned: Extract<PlannedStep, { kind: "trash" }>,
+  original: UndoStep,
   args: Parameters<typeof runUndo>[0],
 ): Promise<StepOutcome> {
   const { fs } = args;
@@ -312,7 +351,12 @@ async function moveToTrash(
       errorCode(error) === NO_TRASH_ERROR_CODE
         ? `“${basename(planned.path)}” couldn't be moved to the Trash because its disk has no Trash.`
         : await describeFailure(fs, error, [planned.path, dirname(planned.path)]);
-    return { status: "skipped", items: [failedItem(planned.path, null, reason)], missing: false };
+    return {
+      status: "failed",
+      produced: null,
+      items: [failedItem(planned.path, null, reason)],
+      leftover: original,
+    };
   }
   return {
     status: "done",
@@ -338,7 +382,6 @@ async function moveToTrash(
 // swaps ("a" and "b" trading names) and a folder renamed with items inside it.
 async function renameBack(
   planned: Extract<PlannedStep, { kind: "batch" }>,
-  original: UndoStep,
   args: Parameters<typeof runUndo>[0],
 ): Promise<StepOutcome> {
   const { fs } = args;
@@ -388,7 +431,26 @@ async function renameBack(
   }
   const produced: UndoStep | null =
     renamed.length > 0 ? { kind: "batchRenamed", items: renamed } : null;
-  if (cancelled && original.kind === "batchRenamed") {
+  // What is left of the step, as the operation named it: the items `keep` takes.
+  const leftOf = (keep: (from: string) => boolean): UndoStep => ({
+    kind: "batchRenamed",
+    items: planned.items
+      .filter((item) => keep(item.from))
+      .map((item) => ({ from: item.to, to: item.from, id: item.id, itemKind: item.itemKind })),
+  });
+  // Items whose rename failed and which are still where they were: they are tried again.
+  const failedInPlace = new Set<string>();
+  for (const item of items) {
+    if (
+      item.status === "failed" &&
+      item.sourcePath !== null &&
+      item.destinationPath === null &&
+      (await readItemRef(fs.lstat, item.sourcePath)).kind !== null
+    ) {
+      failedInPlace.add(item.sourcePath);
+    }
+  }
+  if (cancelled) {
     // The items not reached keep their place in the history, as the operation named them.
     const reached = new Set(
       items.filter((item) => item.status !== "cancelled").map((item) => item.sourcePath),
@@ -397,10 +459,15 @@ async function renameBack(
       status: "stopped",
       produced,
       items: items.filter((item) => item.status !== "cancelled"),
-      leftover: {
-        kind: "batchRenamed",
-        items: original.items.filter((item) => !reached.has(item.to)),
-      },
+      leftover: leftOf((from) => !reached.has(from) || failedInPlace.has(from)),
+    };
+  }
+  if (failedInPlace.size > 0) {
+    return {
+      status: "failed",
+      produced,
+      items,
+      leftover: leftOf((from) => failedInPlace.has(from)),
     };
   }
   return produced

@@ -178,7 +178,7 @@ function isExpectedItem(
 }
 
 // An item that isn't where it was: gone, or on a disk that is no longer connected.
-async function missingReason(fs: PlanFs, path: string): Promise<string> {
+export async function missingReason(fs: PlanFs, path: string): Promise<string> {
   const disk = /^\/Volumes\/([^/]+)\//u.exec(path)?.[1];
   if (disk !== undefined && (await lstatOrNull(fs, `/Volumes/${disk}`)) === null) {
     return `“${basename(path)}” is on “${disk}”, which isn't connected.`;

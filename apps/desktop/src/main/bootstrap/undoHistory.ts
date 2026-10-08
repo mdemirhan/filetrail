@@ -10,6 +10,9 @@ export type UndoEntry = {
   id: number;
   action: FinishedWrite["action"];
   units: UndoUnit[];
+  // Whether it moved anything, so a paste is named a Move for as long as it is in the
+  // history: what a stop leaves of a moving Replace may be only its trip to the Trash.
+  moves: boolean;
 };
 
 export type UndoHistory = ReturnType<typeof createUndoHistory>;
@@ -51,7 +54,12 @@ export function createUndoHistory() {
         changed();
         return;
       }
-      undoList.push({ id: nextId++, action: finished.action, units: finished.log.units });
+      undoList.push({
+        id: nextId++,
+        action: finished.action,
+        units: finished.log.units,
+        moves: movesAnything(finished.log.units),
+      });
       cantUndo = false;
       changed();
     },
@@ -61,8 +69,9 @@ export function createUndoHistory() {
     },
 
     // An Undo or Redo of `entryId` ended. `done` is what it did, in the order it did it,
-    // which is what the other direction reverses; `leftover` is what a stop left to do,
-    // kept on top so the next Undo goes on from there. What couldn't be done is dropped.
+    // which is what the other direction reverses; `leftover` is what a stop left to do and
+    // what failed to be written, kept on top so the next Undo goes on from there. What the
+    // disk check refused (changed outside the app) is dropped.
     finish(
       direction: UndoDirection,
       entryId: number,
@@ -82,6 +91,7 @@ export function createUndoHistory() {
           id: nextId++,
           action: entry.action,
           units: result.done,
+          moves: entry.moves,
         });
       }
       changed();
@@ -94,8 +104,8 @@ export function createUndoHistory() {
       const undo = undoList.at(-1);
       const redo = redoList.at(-1);
       return {
-        undo: undo ? labelOf(undo.action, undo.units) : null,
-        redo: redo ? labelOf(redo.action, redo.units) : null,
+        undo: undo ? labelOf(undo.action, undo.units, undo.moves) : null,
+        redo: redo ? labelOf(redo.action, redo.units, redo.moves) : null,
         cantUndo: cantUndo && undoList.length === 0,
       };
     },
@@ -110,7 +120,12 @@ export function createUndoHistory() {
 }
 
 // "Rename", "Move of “a.txt”", "Copy of 3 Items"…: what the Edit menu puts after "Undo".
-export function labelOf(action: FinishedWrite["action"], units: readonly UndoUnit[]): string {
+// A paste is a Move when it `moves` anything, a Copy otherwise.
+export function labelOf(
+  action: FinishedWrite["action"],
+  units: readonly UndoUnit[],
+  moves: boolean = movesAnything(units),
+): string {
   switch (action) {
     case "rename":
       return "Rename";
@@ -137,13 +152,12 @@ export function labelOf(action: FinishedWrite["action"], units: readonly UndoUni
     case "copy_to":
       return `Copy of ${itemsName(units)}`;
     default:
-      // A paste is a move when it moved something, a copy otherwise.
-      return `${units.some((unit) => unit.steps.some(isMove)) ? "Move" : "Copy"} of ${itemsName(units)}`;
+      return `${moves ? "Move" : "Copy"} of ${itemsName(units)}`;
   }
 }
 
-function isMove(step: UndoStep): boolean {
-  return step.kind === "moved" && !step.fromTrash;
+function movesAnything(units: readonly UndoUnit[]): boolean {
+  return units.some((unit) => unit.steps.some((step) => step.kind === "moved" && !step.fromTrash));
 }
 
 // “a.txt” for one item, "3 Items" for more.

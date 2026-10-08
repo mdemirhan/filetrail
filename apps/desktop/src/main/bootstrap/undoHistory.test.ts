@@ -134,6 +134,25 @@ describe("createUndoHistory", () => {
   });
 });
 
+describe("an entry's name", () => {
+  it("stays a Move when what is left of a moving Replace is its trip to the Trash", () => {
+    const history = createUndoHistory();
+    history.record(undoable("paste", [trashed("/F/a.txt"), moved("/a.txt", "/F/a.txt")]));
+    const entry = history.top("undo");
+
+    history.finish("undo", entry?.id ?? -1, {
+      done: units([moved("/F/a.txt", "/a.txt")]),
+      leftover: units([trashed("/F/a.txt")]),
+    });
+
+    expect(history.menu()).toEqual({
+      undo: "Move of “a.txt”",
+      redo: "Move of “a.txt”",
+      cantUndo: false,
+    });
+  });
+});
+
 describe("labelOf", () => {
   it.each([
     [undoable("rename", [moved("/a.txt", "/b.txt")]), "Rename"],

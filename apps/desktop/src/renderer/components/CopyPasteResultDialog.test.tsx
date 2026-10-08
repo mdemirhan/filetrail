@@ -484,7 +484,7 @@ describe("CopyPasteResultDialog for renaming several items", () => {
         event={event("redo", [
           { ...item("/T/a.txt", "completed"), destinationPath: "/Docs/a.txt" },
           {
-            ...item("/T/b.txt", "failed", "“b.txt” is no longer in “T”."),
+            ...item("/T/b.txt", "skipped", "“b.txt” is no longer in “T”."),
             destinationPath: "/Docs/b.txt",
           },
         ])}
@@ -500,6 +500,40 @@ describe("CopyPasteResultDialog for renaming several items", () => {
     ).toBeInTheDocument();
     // Named by where it would have gone back to.
     expect(within(dialog).getByText("b.txt")).toBeInTheDocument();
+  });
+
+  it("says that Undo tries again what failed, and Redo what failed to be redone", () => {
+    const { unmount } = render(
+      <CopyPasteResultDialog
+        event={event("undo", [
+          item("/Docs/a.txt", "completed"),
+          item("/Docs/b.txt", "failed", "You don't have permission to access this item."),
+        ])}
+        canRetry={false}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "1 item was left as it is. ⇧⌘Z redoes what was undone. ⌘Z tries again what couldn’t be undone.",
+      ),
+    ).toBeInTheDocument();
+    unmount();
+
+    render(
+      <CopyPasteResultDialog
+        event={event("redo", [
+          item("/Docs/b.txt", "failed", "You don't have permission to access this item."),
+        ])}
+        canRetry={false}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText("1 item was left as it is. ⇧⌘Z tries again what couldn’t be redone."),
+    ).toBeInTheDocument();
   });
 
   it("doesn't mention Redo when nothing was undone", () => {
