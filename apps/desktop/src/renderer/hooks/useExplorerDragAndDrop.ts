@@ -92,9 +92,10 @@ type ExternalDrag = {
 /**
  * Springing into folders in the content pane, as Finder does: a drag held over a folder
  * opens it in the tab, and a drag that ends without a drop in File Trail brings each tab it
- * sprang in back to where it started, whether that tab is on screen or not.
+ * sprang in back to where it started, whether that tab is on screen or not. `Start` is
+ * where a tab is, as the window notes it.
  */
-export type SpringLoading = {
+export type SpringLoading<Start> = {
   /** The tab on screen. */
   tabId: string;
   /**
@@ -103,17 +104,17 @@ export type SpringLoading = {
    */
   openFolder: ((path: string) => Promise<boolean>) | null;
   /** Notes where the tab on screen is before its first spring, to come back to. */
-  remember: () => unknown;
+  remember: () => Start;
   /** Brings the tab `remember` noted back there. */
-  restore: (start: unknown) => void;
+  restore: (start: Start) => void;
 };
 
 // The drag that sprang into folders, and, for each tab it sprang in, where that tab was
 // before its first spring, whether a folder has opened in it yet, and how many folders are
 // still opening in it.
-type Springs = {
+type Springs<Start> = {
   session: InternalDragSession;
-  tabs: Map<string, { start: unknown; opened: boolean; opening: number }>;
+  tabs: Map<string, { start: Start; opened: boolean; opening: number }>;
 };
 
 // The window's own system drag, from its start until its end is heard (or found to have
@@ -154,7 +155,7 @@ type ActiveTreeDropElement = {
   element: HTMLElement;
 };
 
-export function useExplorerDragAndDrop(args: {
+export function useExplorerDragAndDrop<Start>(args: {
   activeEntries: DirectoryEntry[];
   selectedPathsInViewOrder: string[];
   homePath: string;
@@ -196,7 +197,7 @@ export function useExplorerDragAndDrop(args: {
   onDraggedAway: (gonePaths: string[], options: { intoTrash: boolean }) => void;
   /** The folder on screen; once a drag has sprung into it, it takes drops itself. */
   currentPath: string;
-  springLoading: SpringLoading;
+  springLoading: SpringLoading<Start>;
   /**
    * What a drag from Finder or another app carries, while it is over the window. Without
    * it, such drags are refused.
@@ -266,7 +267,7 @@ export function useExplorerDragAndDrop(args: {
   const springRestRef = useRef<PointerPosition | null>(null);
   // The folder showing it is about to open.
   const [springWarningPath, setSpringWarningPath] = useState<string | null>(null);
-  const springRef = useRef<Springs | null>(null);
+  const springRef = useRef<Springs<Start> | null>(null);
   const ownDragRef = useRef<OwnDrag | null>(null);
   // When a drag of files was last over the window, the app's own or another app's.
   const lastFileDragOverAtRef = useRef(0);
@@ -1307,7 +1308,7 @@ export function useExplorerDragAndDrop(args: {
   // read leaves the drag as it was.
   async function springOpen(
     session: InternalDragSession,
-    springLoading: SpringLoading,
+    springLoading: SpringLoading<Start>,
     openFolder: (path: string) => Promise<boolean>,
     path: string,
   ) {

@@ -231,6 +231,65 @@ describe("springing in several tabs", () => {
   });
 });
 
+describe("the tab on screen, brought back after a spring", () => {
+  it("has the favorite it was opened from selected in the sidebar again", async () => {
+    // Documents is among the favorites the window starts with.
+    const documents = `${home}/Documents`;
+    const inner = `${documents}/Inner`;
+    const harness = createAppHarness({
+      directorySnapshots: {
+        [documents]: {
+          path: documents,
+          parentPath: home,
+          entries: [
+            createDirectoryEntry(`${documents}/notes.txt`, "file"),
+            createDirectoryEntry(inner, "directory"),
+          ],
+        },
+        [inner]: { path: inner, parentPath: documents, entries: [] },
+      },
+    });
+    renderApp(harness);
+    await screen.findByTitle(source);
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle(`favorite:${documents}`));
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent(`favorite:${documents}`);
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(`${documents}/notes.txt`);
+    await springInto(inner, dataTransfer);
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent(`fs:${inner}`);
+    await endDrag(harness, "none");
+
+    await vi.waitFor(() => {
+      expect(currentPath()).toBe(documents);
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent(`favorite:${documents}`);
+    });
+  });
+
+  it("keeps the history it has when its folder can't be opened again", async () => {
+    const harness = harnessWithFolders();
+    renderApp(harness);
+    await screen.findByTitle(source);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const dataTransfer = await startDrag(source);
+    await springInto(folder, dataTransfer);
+    harness.removeDirectory(home);
+    await endDrag(harness, "none");
+    await waitMs(100);
+
+    expect(currentPath()).toBe(folder);
+    // Back still goes where the drag came from.
+    expect(goBackDisabled(harness)).toBe(false);
+  });
+});
+
 describe("two springs in one tab, the second before the first has opened", () => {
   it("still bring the tab back when the drag ends without a drop", async () => {
     const harness = harnessWithFolders();

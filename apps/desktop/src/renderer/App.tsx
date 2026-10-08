@@ -1252,15 +1252,23 @@ export function App() {
         historyIndex,
         selectedTreeItemId,
       }),
-      restore: (start) => {
-        const noted = start as TabPlace;
+      restore: (noted) => {
         if (putBackgroundTabBack(noted.tabId, noted)) {
           return;
         }
-        setHistoryPaths(noted.historyPaths);
-        setHistoryIndex(noted.historyIndex);
+        // Its history and sidebar selection come back with its folder, once that has opened;
+        // a folder that can't (gone meanwhile) leaves the tab where the drag left it.
         void navigateTo(noted.path, "skip", undefined, undefined, undefined, undefined, {
           restoreView: true,
+          treeSelectionMode: "preserve",
+        }).then((opened) => {
+          if (!opened) {
+            return;
+          }
+          setHistoryPaths(noted.historyPaths);
+          setHistoryIndex(noted.historyIndex);
+          selectedTreeItemIdRef.current = noted.selectedTreeItemId;
+          setSelectedTreeItemId(noted.selectedTreeItemId);
         });
       },
     },
