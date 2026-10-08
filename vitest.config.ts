@@ -40,6 +40,8 @@ export default defineConfig({
         "apps/desktop/src/renderer/hooks/{useFolderSizeCache,useAutoFolderSize}.ts",
         "apps/desktop/src/shared/batchRename.ts",
         "apps/desktop/src/main/ipc.ts",
+        // What a window may change in the preferences, and what it may ask of macOS.
+        "apps/desktop/src/main/bootstrap/{preferencesPatch,systemHandlers}.ts",
         // The explorer windows' lives, the menu that follows them, and the IPC that knows
         // which window asks.
         "apps/desktop/src/main/{explorerWindowController,explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers}.ts",
@@ -118,6 +120,19 @@ export default defineConfig({
           branches: 92,
           functions: 100,
           lines: 97,
+        },
+        // A window's preference changes: every key carried, nothing else.
+        "apps/desktop/src/main/bootstrap/preferencesPatch.ts": {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
+        "apps/desktop/src/main/bootstrap/systemHandlers.ts": {
+          statements: 98,
+          branches: 92,
+          functions: 100,
+          lines: 98,
         },
         // The window. The large hooks start from where they are, so they can only go up.
         "apps/desktop/src/renderer/hooks/useExplorerActions.ts": {
