@@ -52,14 +52,17 @@ export class ApplicationMenuSync<W extends MenuWindow> {
     this.refresh();
   }
 
-  /** A window opened or closed: what a closed one said is let go of. */
+  /**
+   * A window opened or closed: what a closed one said is let go of. With the last one
+   * closed, Undo and Redo are no longer the files' and stop naming what they would do.
+   */
   windowsChanged(): void {
     for (const webContentsId of [...this.states.keys()]) {
       if (!this.deps.windows.byWebContentsId(webContentsId)) {
         this.states.delete(webContentsId);
       }
     }
-    this.sync();
+    this.refresh();
   }
 
   setUndoHistory(menu: UndoHistoryMenu): void {

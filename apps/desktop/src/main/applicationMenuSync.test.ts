@@ -135,6 +135,21 @@ describe("ApplicationMenuSync", () => {
     expect(builds()).toBe(1);
   });
 
+  it("stops naming the last operation in Undo once the last window has closed", () => {
+    const { sync, open, list, focus, builds } = setUp();
+    const a = open("a", 1);
+    focus(a);
+    sync.setUndoHistory({ undo: "Move of “a.txt”", redo: null, cantUndo: false });
+    expect(builds()).toBe(1);
+
+    list.remove("a");
+    focus(null);
+    sync.windowsChanged();
+
+    expect(builds()).toBe(2);
+    expect(sync.undoLabels().undo).toBe("Undo");
+  });
+
   it("lets go of a closed window's state", () => {
     const { sync, open, list, focus, enabled } = setUp();
     const a = open("a", 1);
