@@ -76,4 +76,32 @@ describe("UndoQuestionAlert", () => {
       "and 2 more",
     ]);
   });
+
+  it("lists items with the same name from different folders each once", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { rerender } = render(
+      <UndoQuestionAlert
+        question={{ kind: "nameTaken", names: ["a.txt", "a.txt", "b.txt"] }}
+        direction="undo"
+        action="trash"
+        onAnswer={vi.fn()}
+      />,
+    );
+    rerender(
+      <UndoQuestionAlert
+        question={{ kind: "nameTaken", names: ["a.txt", "b.txt", "a.txt"] }}
+        direction="undo"
+        action="trash"
+        onAnswer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "a.txt",
+      "b.txt",
+      "a.txt",
+    ]);
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
 });

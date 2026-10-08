@@ -26,7 +26,11 @@ export function UndoQuestionAlert({
   const text = describeUndoQuestion(question, direction, action);
   const names =
     question.kind === "nameTaken" ? question.names : question.items.map((item) => item.name);
-  const listed = names.length > 1 ? names.slice(0, LISTED_NAMES) : [];
+  // Two items can have one name (from different folders), so each is keyed by its place.
+  const listed = (names.length > 1 ? names.slice(0, LISTED_NAMES) : []).map((name, place) => ({
+    name,
+    key: `${place}:${name}`,
+  }));
   const unlisted = names.length - listed.length;
   const confirm = (
     <PushButton
@@ -70,8 +74,8 @@ export function UndoQuestionAlert({
     >
       {listed.length > 0 ? (
         <ul className="copy-paste-detail-list">
-          {listed.map((name) => (
-            <li key={name}>{name}</li>
+          {listed.map((entry) => (
+            <li key={entry.key}>{entry.name}</li>
           ))}
           {unlisted > 0 ? <li>{`and ${unlisted.toLocaleString()} more`}</li> : null}
         </ul>
