@@ -108,7 +108,10 @@ describe("createApplicationMenuTemplate", () => {
       "Close Window",
     ]);
     expect(labels(submenuOf(template, "Edit"))).toEqual([
+      // The files' Undo and Redo, each beside a text field's own.
       "Undo",
+      "Undo",
+      "Redo",
       "Redo",
       "-",
       "Cut",
@@ -673,6 +676,32 @@ describe("resolveApplicationMenuItemStates", () => {
     // The window says no while an operation runs.
     const locked = { ...INITIAL_APPLICATION_MENU_STATE, disabledCommands: ["undo" as const] };
     expect(stateOf("undo", locked, window).enabled).toBe(false);
+  });
+
+  it("shows a text field's own Undo and Redo in place of the files' while one is edited", () => {
+    const edit = submenuOf(createApplicationMenuTemplate({ send: vi.fn() }), "Edit");
+    const textUndo = edit.find((item) => item.id === "undo:text");
+    expect(textUndo).toMatchObject({
+      role: "undo",
+      accelerator: "Command+Z",
+      acceleratorWorksWhenHidden: false,
+      visible: false,
+    });
+    expect(edit.find((item) => item.id === "redo:text")?.role).toBe("redo");
+
+    const typing = { ...INITIAL_APPLICATION_MENU_STATE, textEditing: true };
+    expect(stateOf("undo", typing).visible).toBe(false);
+    expect(stateOf("undo:text", typing).visible).toBe(true);
+    expect(stateOf("undo", INITIAL_APPLICATION_MENU_STATE).visible).toBe(true);
+    expect(stateOf("redo:text", INITIAL_APPLICATION_MENU_STATE).visible).toBe(false);
+    // With no window at all there is nothing to undo.
+    expect(
+      stateOf("undo:text", INITIAL_APPLICATION_MENU_STATE, {
+        explorerFocused: false,
+        explorerWindowCount: 0,
+        otherWindowFocused: false,
+      }),
+    ).toMatchObject({ visible: true, enabled: false });
   });
 
   it("keeps a text field's Undo and Redo on, with nothing to undo in the files", () => {

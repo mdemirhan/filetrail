@@ -83,6 +83,12 @@ const FAVORITE_REMOVE_ITEM_ID = "toggleFavorite:remove";
 // Hide Folder Tree and Show Folder Tree too.
 const FOLDER_TREE_HIDE_ITEM_ID = "toggleFolderTree:hide";
 const FOLDER_TREE_SHOW_ITEM_ID = "toggleFolderTree:show";
+// Undo and Redo are two items each: the files' ("Undo Move of “a.txt”"), and a text
+// field's own (the "undo" and "redo" roles), shown while a text field or another window
+// has the keyboard. Switching between them only shows one and hides the other; the menu is
+// built again only when the files' items should say something else.
+const TEXT_UNDO_ITEM_ID = "undo:text";
+const TEXT_REDO_ITEM_ID = "redo:text";
 
 // The native menu emits high-level renderer commands; the renderer owns the actual UI
 // transitions so shortcuts, toolbar buttons, and menu items stay behaviorally aligned.
@@ -161,7 +167,10 @@ export function createApplicationMenuTemplate(
   const command = (
     type: RendererCommandType,
     label: string,
-    extra: Pick<MenuItemConstructorOptions, "id" | "type" | "visible" | "accelerator"> = {},
+    extra: Pick<
+      MenuItemConstructorOptions,
+      "id" | "type" | "visible" | "accelerator" | "acceleratorWorksWhenHidden"
+    > = {},
   ): MenuItemConstructorOptions => {
     const accelerator = isShortcutCommandId(type) ? acceleratorOf(type) : undefined;
     return {
@@ -246,14 +255,34 @@ export function createApplicationMenuTemplate(
     {
       label: "Edit",
       submenu: [
-        // Not the "undo" and "redo" roles: the window decides whether a text field or the
-        // files are undone, and sends a text field's to it (see NATIVE_EDIT_COMMANDS).
+        // The files' Undo and Redo are commands, not the roles: the window decides whether a
+        // text field or the files are undone, and sends a text field's to it (see
+        // NATIVE_EDIT_COMMANDS). Each has a text field's own beside it, and one of the two
+        // shows at a time; the hidden one's key does nothing.
         command("undo", options.undoLabels?.undo ?? "Undo", {
           accelerator: fixedAccelerator("undo"),
+          acceleratorWorksWhenHidden: false,
         }),
+        {
+          id: TEXT_UNDO_ITEM_ID,
+          role: "undo",
+          label: "Undo",
+          accelerator: fixedAccelerator("undo"),
+          acceleratorWorksWhenHidden: false,
+          visible: false,
+        },
         command("redo", options.undoLabels?.redo ?? "Redo", {
           accelerator: fixedAccelerator("redo"),
+          acceleratorWorksWhenHidden: false,
         }),
+        {
+          id: TEXT_REDO_ITEM_ID,
+          role: "redo",
+          label: "Redo",
+          accelerator: fixedAccelerator("redo"),
+          acceleratorWorksWhenHidden: false,
+          visible: false,
+        },
         separator,
         command("editCut", "Cut", { accelerator: fixedAccelerator("cut") }),
         command("editCopy", "Copy", { accelerator: fixedAccelerator("copy") }),
@@ -443,7 +472,18 @@ export function resolveApplicationMenuItemStates(
     enabled: isEnabled(type),
     ...(checked[type] === undefined ? {} : { checked: checked[type] }),
   }));
+  // A text field's own Undo and Redo while one (or another window) has the keyboard; the
+  // files' otherwise.
+  const textUndo = state.textEditing || !window.explorerFocused;
+  for (const item of items) {
+    if (item.id === "undo" || item.id === "redo") {
+      item.visible = !textUndo;
+    }
+  }
+  const textUndoEnabled = window.explorerFocused || window.otherWindowFocused !== false;
   items.push(
+    { id: TEXT_UNDO_ITEM_ID, enabled: textUndoEnabled, visible: textUndo },
+    { id: TEXT_REDO_ITEM_ID, enabled: textUndoEnabled, visible: textUndo },
     {
       id: FAVORITE_ADD_ITEM_ID,
       enabled: isEnabled("toggleFavorite"),

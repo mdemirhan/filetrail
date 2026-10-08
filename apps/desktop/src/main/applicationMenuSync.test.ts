@@ -135,8 +135,37 @@ describe("ApplicationMenuSync", () => {
     expect(builds()).toBe(1);
   });
 
+  it("switches to a text field's own Undo without building the menu again", () => {
+    const { sync, open, focus, builds, enabled } = setUp();
+    focus(open("a", 1));
+    sync.setUndoHistory({ undo: "Move of “a.txt”", redo: "Rename", cantUndo: false });
+    const built = builds();
+
+    sync.setWindowState(1, { ...INITIAL_APPLICATION_MENU_STATE, textEditing: true });
+    expect(enabled("undo").visible).toBe(false);
+    expect(enabled("undo:text").visible).toBe(true);
+    expect(enabled("redo:text").visible).toBe(true);
+    sync.setWindowState(1, INITIAL_APPLICATION_MENU_STATE);
+    expect(enabled("undo").visible).toBe(true);
+    expect(enabled("undo:text").visible).toBe(false);
+
+    expect(builds()).toBe(built);
+  });
+
+  it("uses the text field's own Undo while Settings has the keyboard and no explorer window is open", () => {
+    const { sync, focus, enabled } = setUp();
+    sync.setUndoHistory({ undo: "Move of “a.txt”", redo: null, cantUndo: false });
+    focus(fakeWindow("settings"));
+
+    sync.sync();
+
+    expect(enabled("undo").visible).toBe(false);
+    expect(enabled("undo:text")).toMatchObject({ visible: true, enabled: true });
+    expect(enabled("newWindow").enabled).toBe(true);
+  });
+
   it("stops naming the last operation in Undo once the last window has closed", () => {
-    const { sync, open, list, focus, builds } = setUp();
+    const { sync, open, list, focus, builds, enabled } = setUp();
     const a = open("a", 1);
     focus(a);
     sync.setUndoHistory({ undo: "Move of “a.txt”", redo: null, cantUndo: false });
@@ -146,8 +175,9 @@ describe("ApplicationMenuSync", () => {
     focus(null);
     sync.windowsChanged();
 
-    expect(builds()).toBe(2);
-    expect(sync.undoLabels().undo).toBe("Undo");
+    expect(enabled("undo").visible).toBe(false);
+    expect(enabled("undo:text")).toMatchObject({ visible: true, enabled: false });
+    expect(enabled("redo:text")).toMatchObject({ visible: true, enabled: false });
   });
 
   it("lets go of a closed window's state", () => {
@@ -173,6 +203,6 @@ describe("ApplicationMenuSync", () => {
     });
     sync.setUndoHistory({ undo: "Rename", redo: null, cantUndo: false });
     sync.sync();
-    expect(sync.undoLabels().undo).toBe("Undo");
+    expect(sync.undoLabels().undo).toBe("Undo Rename");
   });
 });

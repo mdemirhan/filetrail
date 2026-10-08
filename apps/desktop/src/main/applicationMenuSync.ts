@@ -70,10 +70,12 @@ export class ApplicationMenuSync<W extends MenuWindow> {
     this.refresh();
   }
 
-  /** What Undo and Redo say, for the menu being built. */
+  /**
+   * What the files' Undo and Redo say, for the menu being built. While a text field has the
+   * keyboard the menu shows its own Undo and Redo instead, so these words don't change.
+   */
   undoLabels(): { undo: string; redo: string } {
-    const { state, explorerFocused } = this.currentExplorer();
-    return undoMenuLabels(this.undoHistory, state.textEditing || !explorerFocused);
+    return undoMenuLabels(this.undoHistory, false);
   }
 
   /** Called once the host has built and set the menu. */
