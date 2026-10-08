@@ -327,6 +327,47 @@ describe("a batch rename another app got in the way of", () => {
   });
 });
 
+describe("an Undo's progress", () => {
+  it("counts what it has done out of all it has to do, steps and batch items alike", async () => {
+    mkdirSync(join(root, "src"));
+    mkdirSync(join(root, "dst"));
+    mkdirSync(join(root, "paste-trash"));
+    for (const name of ["a.txt", "b.txt", "c.txt"]) {
+      writeFileSync(join(root, "src", name), name);
+      writeFileSync(join(root, "dst", name), "old");
+    }
+    const t = setUpUndo(root, trashDir);
+    // Three Replaces: six steps.
+    await paste(t.history, {
+      mode: "copy",
+      sourcePaths: ["a.txt", "b.txt", "c.txt"].map((name) => join(root, "src", name)),
+      destinationDirectoryPath: join(root, "dst"),
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(join(root, "paste-trash")),
+    });
+    await t.undo();
+    // A batch of three: one step, three items.
+    await t.batchRename(
+      ["a.txt", "b.txt", "c.txt"].map((name) => [join(root, "dst", name), `x ${name}`]),
+    );
+    await t.undo();
+
+    const undoEvents = t.events().filter((event) => event.action === "undo");
+    const totals = [...new Set(undoEvents.map((event) => event.totalItemCount))].filter(
+      (total) => total > 0,
+    );
+    expect(totals).toEqual([6, 3]);
+    for (const event of undoEvents) {
+      expect(event.completedItemCount).toBeLessThanOrEqual(event.totalItemCount);
+    }
+    expect(undoEvents.filter((event) => event.status === "completed")).toEqual([
+      expect.objectContaining({ completedItemCount: 6, totalItemCount: 6 }),
+      expect.objectContaining({ completedItemCount: 3, totalItemCount: 3 }),
+    ]);
+    await t.coordinator.shutdown();
+  });
+});
+
 describe("Redo after a partial Undo", () => {
   it("does again only what Undo really did", async () => {
     for (const name of ["a.txt", "b.txt", "c.txt"]) {

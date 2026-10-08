@@ -1396,7 +1396,16 @@ export function createWriteOperationCoordinator(
     controller: AbortController,
   ): Promise<void> {
     const startedAt = new Date().toISOString();
-    const totalItemCount = entry.units.length;
+    // Counted as the run counts what it has done: each step, and each item of a batch.
+    const totalItemCount = entry.units.reduce(
+      (sum, unit) =>
+        sum +
+        unit.steps.reduce(
+          (stepSum, step) => stepSum + (step.kind === "batchRenamed" ? step.items.length : 1),
+          0,
+        ),
+      0,
+    );
     const home = fs.itemSize ? await readItemSize(fs.itemSize, homePath) : null;
     let run: Awaited<ReturnType<typeof runUndo>>;
     try {
@@ -1482,7 +1491,7 @@ export function createWriteOperationCoordinator(
         action: direction,
         status,
         completedItemCount: run.completedItemCount,
-        totalItemCount: run.items.length,
+        totalItemCount,
         completedByteCount: 0,
         totalBytes: null,
         currentSourcePath: null,
