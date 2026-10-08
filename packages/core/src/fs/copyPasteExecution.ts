@@ -131,10 +131,15 @@ class DestinationTakenError extends Error {
   }
 }
 
+// What was done inside a folder, for the result: its items, with the lists of the folders
+// in it kept as they are, so a deep item isn't copied again at every folder above it. Made
+// one list once, at the end (see appendItems).
+type ItemList = (CopyPasteItemResult | ItemList)[];
+
 // A stop inside a folder, carrying what was already done inside it for the result.
 class CancelledWithItemsError extends Error {
   override name = "AbortError";
-  constructor(readonly childItems: CopyPasteItemResult[]) {
+  constructor(readonly childItems: ItemList) {
     super(CANCELLED_MESSAGE);
   }
 }
@@ -224,13 +229,13 @@ export async function executeCopyPasteFromAnalysis(args: {
       const outcome = await executeResolvedNode(context, node);
       itemResults.push(outcomeItemResult(node, outcome));
       // Surface children (files, and folders that failed) in the result.
-      itemResults.push(...outcome.childItems);
+      appendItems(itemResults, outcome.childItems);
     } catch (error) {
       if (isAbortError(error) || args.signal.aborted) {
         cancelled = true;
         itemResults.push(itemResult(node, "cancelled", CANCELLED_MESSAGE));
         if (error instanceof CancelledWithItemsError) {
-          itemResults.push(...error.childItems);
+          appendItems(itemResults, error.childItems);
         }
         recordNotStarted(args.resolvedNodes.slice(nodeIndex + 1));
         break;
@@ -379,7 +384,7 @@ type ExecuteNodeResult = {
   // Where the item ended up (or was headed), after any runtime answer.
   destinationPath: string;
   // Children to surface in the result (files, and folders that failed themselves).
-  childItems: CopyPasteItemResult[];
+  childItems: ItemList;
 };
 
 function itemResult(
@@ -410,7 +415,7 @@ function outcomeItemResult(
     outcome.skipReason,
     outcome.destinationPath,
   );
-  const childFailureCount = outcome.childItems.filter((item) => item.status === "failed").length;
+  const childFailureCount = countFailedItems(outcome.childItems);
   return node.node.sourceKind === "directory" && childFailureCount > 0
     ? { ...result, childFailureCount }
     : result;
@@ -951,7 +956,7 @@ async function executeDirectoryNode(
     expectCantUndo(context, "merge");
   }
   let hasChildFailure = false;
-  const bubbledChildItems: CopyPasteItemResult[] = [];
+  const bubbledChildItems: ItemList = [];
   for (const child of currentNode.children) {
     if (context.signal.aborted) {
       // Keep what was already done inside this folder in the result.
@@ -967,7 +972,7 @@ async function executeDirectoryNode(
           child.node.sourceKind !== "directory" && !(error instanceof CancelledWithItemsError)
             ? [itemResult(child, "cancelled", CANCELLED_MESSAGE)]
             : [];
-        throw new CancelledWithItemsError([...bubbledChildItems, ...inProgress, ...nestedItems]);
+        throw new CancelledWithItemsError([bubbledChildItems, inProgress, nestedItems]);
       }
       // A failed item inside a folder is recorded and the rest of the folder continues.
       const destinationPath =
@@ -987,7 +992,9 @@ async function executeDirectoryNode(
     if (child.node.sourceKind !== "directory" || childResult.error !== null) {
       bubbledChildItems.push(outcomeItemResult(child, childResult));
     }
-    bubbledChildItems.push(...childResult.childItems);
+    if (childResult.childItems.length > 0) {
+      bubbledChildItems.push(childResult.childItems);
+    }
   }
   // The folder's metadata goes on once its items are in: writing them changes its dates,
   // and a read-only or locked folder can't take new items. As for a file, a folder whose
@@ -1155,7 +1162,11 @@ async function executeReplace(
       }
       throw error instanceof DestinationTakenError ? error.original : error;
     }
-    stagedChildItems = rebaseItemResults(stagedOutcome.childItems, temporaryPath, finalPath);
+    stagedChildItems = rebaseItemResults(
+      appendItems([], stagedOutcome.childItems),
+      temporaryPath,
+      finalPath,
+    );
     // An item inside that changed and was skipped would be in neither the new folder nor,
     // once the old one is in the Trash, where it was: the old folder is kept instead.
     const skippedInside = stagedChildItems.find(
@@ -1646,6 +1657,31 @@ function rebaseResolvedNode(
     },
     children: node.children.map((child) => rebaseResolvedNode(child, fromPath, toPath)),
   };
+}
+
+// Adds the items of `items` to `target` in order, the lists of folders in it included.
+// One at a time: spreading 125,000 items or more into one call overflows the stack.
+function appendItems(target: CopyPasteItemResult[], items: ItemList): CopyPasteItemResult[] {
+  for (const item of items) {
+    if (Array.isArray(item)) {
+      appendItems(target, item);
+    } else {
+      target.push(item);
+    }
+  }
+  return target;
+}
+
+function countFailedItems(items: ItemList): number {
+  let count = 0;
+  for (const item of items) {
+    if (Array.isArray(item)) {
+      count += countFailedItems(item);
+    } else if (item.status === "failed") {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function rebaseItemResults(
@@ -2167,7 +2203,9 @@ function countExecutableSteps(nodes: ResolvedCopyPasteNode[]): number {
     } else {
       total += 1;
     }
-    stack.push(...node.children);
+    for (const child of node.children) {
+      stack.push(child);
+    }
   }
   return total;
 }
@@ -2183,7 +2221,9 @@ function sumSubtreeBytes(nodes: ResolvedCopyPasteNode[]): number {
     if (node.node.sourceFingerprint.size !== null && node.node.sourceKind !== "directory") {
       total += node.node.sourceFingerprint.size;
     }
-    stack.push(...node.children);
+    for (const child of node.children) {
+      stack.push(child);
+    }
   }
   return total;
 }

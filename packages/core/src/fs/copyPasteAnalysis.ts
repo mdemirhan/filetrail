@@ -784,7 +784,11 @@ function summarizeAnalysis(nodes: CopyPasteAnalysisNode[]): CopyPasteAnalysisSum
     } else if (node.conflictClass === "type_mismatch") {
       summary.mismatchConflictCount += 1;
     }
-    stack.push(...node.children);
+    // One at a time: spreading a folder of 125,000 items or more into one call overflows
+    // the stack.
+    for (const child of node.children) {
+      stack.push(child);
+    }
   }
   return summary;
 }

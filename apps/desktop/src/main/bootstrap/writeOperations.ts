@@ -1250,7 +1250,9 @@ export function createWriteOperationCoordinator(
     for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
         cancelled = true;
-        items.push(...notStartedItems(paths.slice(index)));
+        for (const item of notStartedItems(paths.slice(index))) {
+          items.push(item);
+        }
         break;
       }
       emitLocalWriteOperationEvent({
@@ -1379,7 +1381,9 @@ export function createWriteOperationCoordinator(
     for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
         cancelled = true;
-        items.push(...notStartedItems(paths.slice(index)));
+        for (const item of notStartedItems(paths.slice(index))) {
+          items.push(item);
+        }
         break;
       }
       emitLocalWriteOperationEvent({
