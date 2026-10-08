@@ -1339,6 +1339,68 @@ describe("appStateStore explorer windows", () => {
     expect(ids.at(-1)).toBe("window-0");
   });
 
+  it("takes a change from a window it doesn't know as the app's alone", () => {
+    const { store } = storeWithFile({ preferences: {}, windows: [] });
+    store.addExplorerWindow({
+      id: "window-a",
+      bounds: { width: 900, height: 600, maximized: false },
+      session: store.createWindowSession(),
+    });
+    const before = store.getExplorerWindows();
+
+    const preferences = store.updateWindowPreferences("window-gone", {
+      treeWidth: 333,
+      openTabs: [tab("/Users/demo/work")],
+    });
+
+    expect(preferences.treeWidth).toBe(333);
+    expect(store.getPreferences().openTabs.map((open) => open.path)).toEqual(["/Users/demo/work"]);
+    expect(store.getExplorerWindows()).toEqual(before);
+    expect(store.getWindowPreferences("window-gone").treeWidth).toBe(333);
+  });
+
+  it("opens as the window closed last ended when the list of windows is damaged", () => {
+    const { store } = storeWithFile({
+      preferences: { openTabs: [tab("/Users/demo/stale")] },
+      windows: "not a list",
+      lastClosedWindow: {
+        id: "window-a",
+        bounds: { x: 40, y: 60, width: 900, height: 600 },
+        session: { openTabs: [tab("/Users/demo/work")] },
+      },
+    });
+
+    // Not a window made up from the preferences, as for a file from before there were
+    // several: this file had them.
+    expect(store.getExplorerWindows()).toEqual([]);
+    expect(store.getLastClosedWindow()?.session.openTabs.map((open) => open.path)).toEqual([
+      "/Users/demo/work",
+    ]);
+  });
+
+  it("brings back the window closed last on a tab it has, whatever its front tab says", () => {
+    const { store } = storeWithFile({
+      preferences: {},
+      windows: [
+        {
+          id: "window-b",
+          session: { openTabs: [tab("/Users/demo/a"), tab("/Users/demo/b")], activeTabIndex: 7 },
+        },
+      ],
+      lastClosedWindow: {
+        id: "window-a",
+        session: { openTabs: [tab("/Users/demo/work")], activeTabIndex: 3 },
+      },
+    });
+
+    expect(store.getLastClosedWindow()?.session.activeTabIndex).toBe(0);
+    expect(store.getWindowPreferences("window-b").activeTabIndex).toBe(1);
+    store.rememberClosedWindow("window-b");
+    expect(store.getLastClosedWindow()?.session.openTabs.map((open) => open.path)).toEqual([
+      "/Users/demo/b",
+    ]);
+  });
+
   it("keeps the windows of a damaged file that make sense", () => {
     const { store } = storeWithFile({
       preferences: { treeWidth: 300 },

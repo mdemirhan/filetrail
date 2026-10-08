@@ -357,7 +357,7 @@ export class AppStateStore {
     if (!window) {
       return;
     }
-    const frontTab = window.session.openTabs[window.session.activeTabIndex];
+    const frontTab = window.session.openTabs[frontTabIndex(window.session)];
     const lastClosedWindow: StoredExplorerWindow = {
       ...window,
       session: { ...window.session, openTabs: frontTab ? [frontTab] : [], activeTabIndex: 0 },
@@ -524,15 +524,21 @@ function readState(
     return {
       preferences,
       ...(lastClosedWindow ? { lastClosedWindow } : {}),
-      windows: sanitizeExplorerWindows(parsed.windows, preferences) ?? [
-        // Saved before there could be more than one window: the one window, with the tabs
-        // and panels the preferences held.
-        {
-          id: LEGACY_WINDOW_ID,
-          bounds: sanitizeWindowState(parsed.window),
-          session: pickWindowSession(preferences),
-        },
-      ],
+      windows:
+        sanitizeExplorerWindows(parsed.windows, preferences) ??
+        // A file with a window closed last was saved with several windows, and has lost its
+        // list of them: one window opens, as the window closed last ended.
+        (lastClosedWindow
+          ? []
+          : [
+              // Saved before there could be more than one window: the one window, with the
+              // tabs and panels the preferences held.
+              {
+                id: LEGACY_WINDOW_ID,
+                bounds: sanitizeWindowState(parsed.window),
+                session: pickWindowSession(preferences),
+              },
+            ]),
     };
   } catch (error) {
     onReadError(error);
@@ -1078,22 +1084,28 @@ function sanitizeExplorerWindows(
     ) {
       continue;
     }
-    const session = isPlainObject(candidate.session) ? candidate.session : {};
+    const saved = isPlainObject(candidate.session) ? candidate.session : {};
+    const session = pickWindowSession(
+      sanitizePreferences(
+        { ...preferences, ...pickWindowSession(saved as Partial<AppPreferences>) },
+        preferences,
+      ),
+    );
     windows.push({
       id: candidate.id,
       bounds: sanitizeWindowState(candidate.bounds),
-      session: pickWindowSession(
-        sanitizePreferences(
-          { ...preferences, ...pickWindowSession(session as Partial<AppPreferences>) },
-          preferences,
-        ),
-      ),
+      session: { ...session, activeTabIndex: frontTabIndex(session) },
     });
     if (windows.length === STORED_EXPLORER_WINDOWS_LIMIT) {
       break;
     }
   }
   return windows;
+}
+
+// Which of a window's tabs is in front: an index past its last tab is its last tab.
+function frontTabIndex(session: Pick<WindowSession, "openTabs" | "activeTabIndex">): number {
+  return Math.min(session.activeTabIndex, Math.max(0, session.openTabs.length - 1));
 }
 
 function sanitizeWindowState(value: unknown): StoredWindowState {
