@@ -59,7 +59,11 @@ import {
   isLocationsRootItemId,
   isPathInsideTrash,
 } from "../lib/favorites";
-import { getFlowListColumnStep, getFlowListLayout } from "../lib/flowListLayout";
+import {
+  getFlowListColumnStep,
+  getFlowListLayout,
+  getFlowListRevealScrollLeft,
+} from "../lib/flowListLayout";
 import { resolveFocusedEditTarget } from "../lib/focusedEditTarget";
 import {
   CONTENT_SCROLL_SELECTOR,
@@ -67,7 +71,7 @@ import {
   rememberFolderView,
 } from "../lib/folderViewMemory";
 import { type FolderVisitTracker, createFolderVisitTracker } from "../lib/folderVisitTracker";
-import { getIconGridLayout } from "../lib/iconGridLayout";
+import { getIconGridLayout, getIconGridRevealScrollTop } from "../lib/iconGridLayout";
 import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
 import { LIST_FILTER_SPACE_WINDOW_MS, findListFilterSelection } from "../lib/listFilter";
 import { createRendererLogger } from "../lib/logging";
@@ -428,9 +432,42 @@ export function useExplorerNavigationController(args: {
     return element ? { axis: "horizontal", element } : null;
   }
 
-  // Moves the selection of the focused pane by half a page or a page, and scrolls the pane as
-  // far as the selection moves, so the selection stays where it was on screen. In the file
-  // list, `selectContentPath` sets the selection (⇧ extends it instead). Whether it moved.
+  // Whether the item at `index` of the file list shows whole in `element`, the view's
+  // scroller, as the view itself reckons when it keeps the selection in view.
+  function isContentItemInView(element: HTMLElement, index: number): boolean {
+    if (viewMode === "list") {
+      const scrollLeft = getFlowListRevealScrollLeft({
+        currentScrollLeft: element.scrollLeft,
+        viewportWidth: element.clientWidth,
+        itemIndex: index,
+        rowsPerColumn: contentColumns,
+        compact: compactListView,
+        maxScrollLeft: Math.max(0, element.scrollWidth - element.clientWidth),
+      });
+      return Math.abs(scrollLeft - element.scrollLeft) <= 1;
+    }
+    if (viewMode === "icons") {
+      const scrollTop = getIconGridRevealScrollTop({
+        currentScrollTop: element.scrollTop,
+        viewportHeight: element.clientHeight,
+        itemIndex: index,
+        itemCount: activeContentEntries.length,
+        columns: contentColumns,
+        layout: getIconGridLayout(compactIconView),
+      });
+      return Math.abs(scrollTop - element.scrollTop) <= 1;
+    }
+    const rowHeight = getDetailsRowHeight(compactDetailsView);
+    const rowTop = index * rowHeight;
+    return (
+      rowTop >= element.scrollTop && rowTop + rowHeight <= element.scrollTop + element.clientHeight
+    );
+  }
+
+  // Moves the selection of the focused pane by half a page or a page. Where it lands is on
+  // screen, the pane stays still; otherwise it scrolls as far as the selection moved, so the
+  // selection keeps its place on screen. In the file list, `selectContentPath` sets the
+  // selection (⇧ extends it instead). Whether it moved.
   function handlePagedMove(
     direction: "backward" | "forward",
     size: PageSize,
@@ -463,15 +500,16 @@ export function useExplorerNavigationController(args: {
       if (!nextItemId || nextItemId === currentItemId) {
         return false;
       }
-      // The rows differ in height (the headings), so the distance is read from the page.
-      const rowTop = (itemId: string | null) =>
+      // The rows differ in height (the headings), so where they are is read from the page.
+      const rowRect = (itemId: string | null) =>
         Array.from(element.querySelectorAll<HTMLElement>(".tree-row[data-tree-item-id]"))
           .find((row) => row.dataset.treeItemId === itemId)
-          ?.getBoundingClientRect().top;
-      const fromTop = rowTop(currentItemId);
-      const toTop = rowTop(nextItemId);
-      if (fromTop !== undefined && toTop !== undefined) {
-        scrollElementByAmount(element, axis, toTop - fromTop);
+          ?.getBoundingClientRect();
+      const fromRect = rowRect(currentItemId);
+      const toRect = rowRect(nextItemId);
+      const paneRect = element.getBoundingClientRect();
+      if (fromRect && toRect && (toRect.top < paneRect.top || toRect.bottom > paneRect.bottom)) {
+        scrollElementByAmount(element, axis, toRect.top - fromRect.top);
       }
       void selectTreeItem(nextItemId, "push");
       return true;
@@ -527,7 +565,7 @@ export function useExplorerNavigationController(args: {
     if (!nextEntry || (nextIndex === currentIndex && contentSelection.paths.length === 1)) {
       return false;
     }
-    if (currentIndex >= 0) {
+    if (currentIndex >= 0 && !isContentItemInView(element, nextIndex)) {
       scrollElementByAmount(element, axis, move.movedLines * lineExtent);
     }
     selectContentPath(nextEntry.path);

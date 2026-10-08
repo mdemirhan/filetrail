@@ -97,22 +97,24 @@ const PAGE_UP = { key: "PageUp" };
 describe("paging through the file list", () => {
   const rowHeight = getDetailsRowHeight(false);
 
-  it("moves the selection half a page or a page in the List view, and the rows with it", async () => {
+  it("moves the selection half a page or a page in the List view, scrolling only to follow it off screen", async () => {
     const harness = createHarness();
     renderApp(harness);
     await selectItem(FILES[0] as string);
     // Four rows show: half a page is two rows, a page is three.
     const scroller = sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
 
+    // Still on screen: the rows stay still.
     await pressKey(HALF_DOWN);
     expect(selectedPaths()).toEqual([FILES[2]]);
-    expect(scroller.scrollTop).toBe(rowHeight * 2);
+    expect(scroller.scrollTop).toBe(0);
+    // Off screen: the rows move as far as the selection did, keeping its place on screen.
     await pressKey(PAGE_DOWN);
     expect(selectedPaths()).toEqual([FILES[5]]);
-    expect(scroller.scrollTop).toBe(rowHeight * 5);
+    expect(scroller.scrollTop).toBe(rowHeight * 3);
     await pressKey(PAGE_UP);
     expect(selectedPaths()).toEqual([FILES[2]]);
-    expect(scroller.scrollTop).toBe(rowHeight * 2);
+    expect(scroller.scrollTop).toBe(0);
     await pressKey(HALF_UP);
     expect(selectedPaths()).toEqual([FILES[0]]);
     expect(scroller.scrollTop).toBe(0);
@@ -126,11 +128,26 @@ describe("paging through the file list", () => {
     renderApp(harness);
     await selectItem(FILES[6] as string);
     const scroller = sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
-    scroller.scrollTop = rowHeight * 6;
+    scroller.scrollTop = rowHeight * 5;
 
     await pressKey(PAGE_DOWN);
     expect(selectedPaths()).toEqual([FILES[9]]);
     expect(scroller.scrollTop).toBe(rowHeight * 7);
+  });
+
+  it("scrolls when the selection lands on a row only partly on screen", async () => {
+    const harness = createHarness();
+    renderApp(harness);
+    await selectItem(FILES[2] as string);
+    // Four and a half rows show: the fifth is cut off.
+    const scroller = sizeScroller({
+      clientHeight: rowHeight * 4.5,
+      scrollHeight: rowHeight * 11,
+    });
+
+    await pressKey(HALF_DOWN);
+    expect(selectedPaths()).toEqual([FILES[4]]);
+    expect(scroller.scrollTop).toBe(rowHeight * 2);
   });
 
   it("starts from the first item when nothing is selected", async () => {
@@ -165,11 +182,13 @@ describe("paging through the file list", () => {
 
     await pressKey({ ...PAGE_DOWN, shiftKey: true });
     expect(selectedPaths()).toEqual(FILES.slice(0, 4));
-    expect(scroller.scrollTop).toBe(rowHeight * 3);
+    expect(scroller.scrollTop).toBe(0);
     await pressKey({ key: "D", ctrlKey: true, shiftKey: true });
     expect(selectedPaths()).toEqual(FILES.slice(0, 6));
+    expect(scroller.scrollTop).toBe(rowHeight * 2);
     await pressKey({ key: "U", ctrlKey: true, shiftKey: true });
     expect(selectedPaths()).toEqual(FILES.slice(0, 4));
+    expect(scroller.scrollTop).toBe(rowHeight * 2);
   });
 
   it("keeps the rows still when they all fit", async () => {
@@ -196,10 +215,10 @@ describe("paging through the file list", () => {
 
     await pressKey(HALF_DOWN);
     expect(selectedPaths()).toEqual([FILES[2]]);
-    expect(scroller.scrollTop).toBe(iconRowHeight * 2);
+    expect(scroller.scrollTop).toBe(0);
     await pressKey(PAGE_DOWN);
     expect(selectedPaths()).toEqual([FILES[6]]);
-    expect(scroller.scrollTop).toBe(iconRowHeight * 6);
+    expect(scroller.scrollTop).toBe(iconRowHeight * 4);
     await pressKey(PAGE_UP);
     await pressKey(HALF_UP);
     expect(selectedPaths()).toEqual([FILES[0]]);
@@ -220,10 +239,10 @@ describe("paging through the file list", () => {
 
     await pressKey(HALF_DOWN);
     expect(selectedPaths()).toEqual([FILES[2]]);
-    expect(scroller.scrollLeft).toBe(step * 2);
+    expect(scroller.scrollLeft).toBe(0);
     await pressKey(PAGE_DOWN);
     expect(selectedPaths()).toEqual([FILES[5]]);
-    expect(scroller.scrollLeft).toBe(step * 5);
+    expect(scroller.scrollLeft).toBe(step * 3);
     await pressKey(PAGE_UP);
     await pressKey(HALF_UP);
     expect(selectedPaths()).toEqual([FILES[0]]);
