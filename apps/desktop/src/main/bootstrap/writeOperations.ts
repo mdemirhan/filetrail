@@ -24,6 +24,7 @@ import {
   WRITE_OPERATION_BUSY_ERROR,
   type WriteService,
   describeCopyPasteError,
+  errorCode,
   fileIdOf,
   findLockedRefusal,
   readItemId,
@@ -2126,11 +2127,6 @@ function hasFileId(stats: WriteOperationStats): boolean {
 // the same file id this tells a rename of the item to itself from two hard links to one file.
 function namesMatchIgnoringCase(left: string, right: string): boolean {
   return left.normalize("NFC").toLowerCase() === right.normalize("NFC").toLowerCase();
-}
-
-function errorCode(error: unknown): string | undefined {
-  const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" ? code : undefined;
 }
 
 // A plain sentence for a failed rename, new folder, or the checks before them. Where the

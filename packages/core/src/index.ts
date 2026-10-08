@@ -3,6 +3,7 @@ export * from "./fs/writeService";
 export {
   NO_TRASH_ERROR_CODE,
   describeCopyPasteError,
+  errorCode,
   findLockedRefusal,
   isLocked,
   lockedMessage,

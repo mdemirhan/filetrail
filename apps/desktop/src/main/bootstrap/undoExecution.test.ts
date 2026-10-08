@@ -12,17 +12,10 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 
-import type { WriteOperationProgressEvent } from "@filetrail/contracts";
-import type { WriteService } from "@filetrail/core";
-import {
-  REPLACE_ALL,
-  nativeFileSystemWithTrash,
-  runPaste,
-} from "@filetrail/core/fs/testNativePaste";
+import { REPLACE_ALL, nativeFileSystemWithTrash } from "@filetrail/core/fs/testNativePaste";
 
-import { createOriginalWriteOperationFs } from "../originalFileSystem";
-import { createUndoHistory } from "./undoHistory";
-import { type WriteOperationFs, createWriteOperationCoordinator } from "./writeOperations";
+import { paste, setUpUndo, snapshotOf } from "./undoRealDisk.testkit";
+import type { WriteOperationFs } from "./writeOperations";
 
 // Undo and Redo on a real disk, through the write coordinator as the app runs them: each
 // operation's round trip, chains, and what happens when things changed in between.
@@ -40,138 +33,16 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-// Every item under the root but the Trash: path, kind and id.
 function snapshot(): string[] {
-  const lines: string[] = [];
-  const walk = (folder: string) => {
-    for (const name of readdirSync(folder).sort()) {
-      const path = join(folder, name);
-      if (path === trashDir) {
-        continue;
-      }
-      const stats = lstatSync(path);
-      lines.push(`${relative(root, path)} ${stats.isDirectory() ? "dir" : "file"} ${stats.ino}`);
-      if (stats.isDirectory()) {
-        walk(path);
-      }
-    }
-  };
-  walk(root);
-  return lines;
+  return snapshotOf(root, trashDir);
 }
 
 function inTrash(): string[] {
   return readdirSync(trashDir).sort();
 }
 
-function folderTrash(): (path: string) => Promise<string> {
-  let count = 0;
-  return async (path) => {
-    count += 1;
-    const destination = join(trashDir, `${count}-${basename(path)}`);
-    renameSync(path, destination);
-    return destination;
-  };
-}
-
-function createSender() {
-  return { send: vi.fn<(channel: string, payload: unknown) => void>() };
-}
-
 function setUp(fsOverrides: Partial<WriteOperationFs> = {}) {
-  const history = createUndoHistory();
-  const fs: WriteOperationFs = {
-    ...createOriginalWriteOperationFs(folderTrash()),
-    ...fsOverrides,
-  };
-  const coordinator = createWriteOperationCoordinator(
-    {
-      subscribe: vi.fn(() => () => undefined),
-      cancelOperation: vi.fn(),
-    } as unknown as WriteService,
-    fs,
-    { homePath: root, recordUndo: history.record, undoHistory: history },
-  );
-  const sender = createSender();
-
-  async function finish(started: Promise<{ operationId: string }> | { operationId: string }) {
-    const { operationId } = await started;
-    const deadline = Date.now() + 10_000;
-    for (;;) {
-      const terminal = sender.send.mock.calls
-        .map(([, payload]) => payload as WriteOperationProgressEvent)
-        .find(
-          (event) =>
-            event.operationId === operationId &&
-            ["completed", "failed", "cancelled", "partial"].includes(event.status),
-        );
-      if (terminal) {
-        return terminal;
-      }
-      if (Date.now() > deadline) {
-        throw new Error("Timed out waiting for the end of the operation.");
-      }
-      await new Promise((resolveWait) => setTimeout(resolveWait, 0));
-    }
-  }
-
-  const handlers = coordinator.handlers;
-  return {
-    history,
-    coordinator,
-    sender,
-    finish,
-    rename: (path: string, name: string) =>
-      finish(
-        handlers["writeOperation:rename"]({ sourcePath: path, destinationName: name }, { sender }),
-      ),
-    newFolder: (parent: string, name: string) =>
-      finish(
-        handlers["writeOperation:createFolder"](
-          { parentDirectoryPath: parent, folderName: name },
-          { sender },
-        ),
-      ),
-    trash: (...paths: string[]) => finish(handlers["writeOperation:trash"]({ paths }, { sender })),
-    batchRename: (pairs: Array<[string, string, boolean?]>) =>
-      finish(
-        handlers["writeOperation:batchRename"](
-          {
-            items: pairs.map(([path, name, isFolder]) => ({
-              sourcePath: path,
-              destinationName: name,
-              isFolder: isFolder ?? false,
-            })),
-            onConflict: "number",
-            numberSeparator: " ",
-          },
-          { sender },
-        ),
-      ),
-    prepare: (direction: "undo" | "redo" = "undo") => handlers["undo:prepare"]({ direction }),
-    // Looks first, then undoes (or redoes) all of it, as when what it asked was agreed to.
-    async undo(direction: "undo" | "redo" = "undo") {
-      const prepared = await handlers["undo:prepare"]({ direction });
-      if (prepared.ticket === null) {
-        throw new Error(`Nothing to ${direction}: ${prepared.refusal}`);
-      }
-      return finish(handlers["undo:start"]({ ticket: prepared.ticket }, { sender }));
-    },
-  };
-}
-
-// A paste through the copy engine, recorded as the coordinator records one.
-async function paste(
-  history: ReturnType<typeof createUndoHistory>,
-  args: Parameters<typeof runPaste>[0],
-  action: "paste" | "duplicate" = "paste",
-) {
-  const { result } = await runPaste(args);
-  if (!result?.undoLog) {
-    throw new Error("The paste recorded nothing.");
-  }
-  history.record({ action, log: result.undoLog, items: result.items });
-  return result;
+  return setUpUndo(root, trashDir, fsOverrides);
 }
 
 describe("round trips", () => {

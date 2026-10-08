@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { IpcRequest, WriteOperationResult } from "@filetrail/contracts";
-import { describeCopyPasteError, fileIdOf, findLockedRefusal } from "@filetrail/core";
+import { describeCopyPasteError, errorCode, fileIdOf, findLockedRefusal } from "@filetrail/core";
 
 import { addNumberToName } from "../../shared/batchRename";
 
@@ -406,9 +406,4 @@ function looseKey(name: string): string {
 
 function defaultTemporaryName(): string {
   return `.filetrail-rename-${randomBytes(6).toString("hex")}`;
-}
-
-function errorCode(error: unknown): string | undefined {
-  const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" ? code : undefined;
 }
