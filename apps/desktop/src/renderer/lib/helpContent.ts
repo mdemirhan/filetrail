@@ -761,7 +761,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Folder sizes",
             description:
-              "Folders show no size until you ask: click Calculate in the Info panel, or choose Calculate Size from the right-click menu or {calculateSize}. Right-click empty space to size the folder on screen. With several items selected it sizes the folders among them. The path bar's right end shows the size of the selection, or of the folder on screen when nothing is selected, once every size in it is known. Sizing a folder also sizes every folder inside it.",
+              "With the Info panel open, a folder you select in your home folder is measured by itself (turn it off in Settings → Behavior). Other folders show no size until you ask: click Calculate in the Info panel, or choose Calculate Size from the right-click menu or {calculateSize}. Right-click empty space to size the folder on screen. With several items selected it sizes the folders among them. The path bar's right end shows the size of the selection, or of the folder on screen when nothing is selected, once every size in it is known. Sizing a folder also sizes every folder inside it.",
           },
           {
             label: "What takes the space",
