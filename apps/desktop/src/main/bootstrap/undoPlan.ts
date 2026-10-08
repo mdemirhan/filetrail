@@ -263,9 +263,28 @@ export async function checkMove(
     const nameTaken = changes.filledPlaces.has(placeKey(step.to));
     return { ok: true, nameTaken, renamesItself: false, isFolder, id: itemId };
   }
-  // On a disk that ignores case, "notes.txt" finds "Notes.txt": the item itself.
-  const renamesItself = itemId !== null && sameItemId(itemId, itemIdOf(there));
+  const renamesItself = await findsItself(fs, step, itemId, itemIdOf(there));
   return { ok: true, nameTaken: !renamesItself, renamesItself, isFolder, id: itemId };
+}
+
+// On a disk that ignores case, "notes.txt" finds "Notes.txt": the item itself, not another
+// in the way. As for a rename: the names match ignoring case and accent encoding, the ids
+// are the same or there is none to go by (FAT, exFAT), and the folder doesn't list the
+// name as it is spelled. Two hard links to one file, under two names, are two items.
+async function findsItself(
+  fs: PlanFs,
+  step: Extract<PlannedStep, { kind: "move" }>,
+  itemId: ItemId | null,
+  thereId: ItemId | null,
+): Promise<boolean> {
+  if (placeKey(step.from) !== placeKey(step.to)) {
+    return false;
+  }
+  if (itemId !== null && thereId !== null && !sameItemId(itemId, thereId)) {
+    return false;
+  }
+  const entries = fs.readdir ? await fs.readdir(dirname(step.to)).catch(() => null) : null;
+  return !(entries?.includes(basename(step.to)) ?? false);
 }
 
 export async function checkTrash(

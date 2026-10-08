@@ -1,6 +1,15 @@
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { REPLACE_ALL, nativeFileSystemWithTrash } from "@filetrail/core/fs/testNativePaste";
 
@@ -50,6 +59,39 @@ describe.each(["copy", "cut"] as const)("undoing a Replace (%s) spelled differen
     expect((await t.undo()).status).toBe("completed");
     expect(readdirSync(join(root, "dst"))).toEqual([oldName]);
     expect(readFileSync(join(root, "dst", oldName), "utf8")).toBe("old");
+    await t.coordinator.shutdown();
+  });
+});
+
+describe("renaming back a name that differs only in case", () => {
+  it("renames an item without a usable id (an empty file on FAT) back, asking nothing", async () => {
+    writeFileSync(join(root, "notes.txt"), "");
+    // The ids FAT and exFAT give empty files, too large to go by.
+    const withoutId = async (path: string) => {
+      const stats = await lstat(path);
+      return basename(path).toLowerCase() === "notes.txt"
+        ? Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, { ino: 2 ** 64 })
+        : stats;
+    };
+    const t = setUpUndo(root, trashDir, { lstat: withoutId });
+    await t.rename(join(root, "notes.txt"), "Notes.txt");
+
+    expect(await t.prepare()).toMatchObject({ nameTaken: [], changed: [] });
+    expect((await t.undo()).status).toBe("completed");
+    expect(readdirSync(root).filter((name) => name.endsWith(".txt"))).toEqual(["notes.txt"]);
+    await t.coordinator.shutdown();
+  });
+
+  it("takes a hard link to the item under its old name for another item", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    const t = setUpUndo(root, trashDir);
+    await t.rename(join(root, "a.txt"), "b.txt");
+    linkSync(join(root, "b.txt"), join(root, "a.txt"));
+
+    expect(await t.prepare()).toMatchObject({ nameTaken: ["a.txt"] });
+    expect((await t.undo()).status).toBe("completed");
+
+    expect(readdirSync(root).filter((name) => name.endsWith(".txt"))).toEqual(["a 2.txt", "a.txt"]);
     await t.coordinator.shutdown();
   });
 });
