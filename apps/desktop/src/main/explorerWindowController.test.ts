@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { OpenTabPreference } from "../shared/appPreferences";
 import {
   type AppStateStore,
+  DEFAULT_WINDOW_STATE,
   type StoredExplorerWindow,
   createAppStateStore,
   resolveAppStatePath,
@@ -402,6 +403,17 @@ describe("ExplorerWindowController opening windows", () => {
     opened?.emit("ready-to-show");
     expect(log.at(-1)).toBe(`show ${opened?.recordId}`);
     expect(controller.openWindowFrom(first.webContents.id, [], 0)).toBe(false);
+  });
+
+  it("opens a window from no window at the default size, with the app's latest panels", () => {
+    const { controller, store } = setUp();
+    store.updatePreferences({ propertiesOpen: true });
+
+    expect(controller.openWindowFrom(null, [tab("/Users/demo/x")], 0)).toBe(true);
+
+    const [record] = store.getExplorerWindows();
+    expect(record?.bounds).toEqual(DEFAULT_WINDOW_STATE);
+    expect(record?.session.propertiesOpen).toBe(true);
   });
 
   it("opens a window where the last one closed, to run a command chosen with none open", () => {
@@ -957,6 +969,17 @@ describe("ExplorerWindowController a page that crashes", () => {
     expect(log.at(-1)).toBe(`show ${opened?.recordId}`);
   });
 
+  it("leaves a window alone when its page loads without having crashed", () => {
+    const { controller, windows, log } = setUpWithWindows(1);
+    const [window] = windows;
+
+    window?.emitContents("did-finish-load");
+
+    expect(log).toEqual([]);
+    expect(controller.windowIdOf(window?.webContents.id ?? null)).toBe(window?.recordId);
+    expect(controller.windowIdOf(null)).toBeNull();
+  });
+
   it("hands an operation to a window whose page has loaded before one still loading", () => {
     const { controller, windows } = setUpWithWindows(3);
     const [first, second, third] = windows;
@@ -1055,6 +1078,22 @@ describe("ExplorerWindowController quitting", () => {
 
     expect(controller.openWindowFrom(null, [tab("/Users/demo")], 0)).toBe(false);
     expect(windows).toHaveLength(1);
+  });
+
+  it("asks once with only Settings open, and has no window to bring forward for ⌘Q again", async () => {
+    const { controller, questions, runOperation, host } = setUp();
+    runOperation("copy");
+    host.anyWindowOpen = () => true;
+
+    const quitting = controller.quit();
+    await settle();
+    await controller.quit();
+
+    expect(questions).toHaveLength(1);
+    expect(questions[0]?.parent).toBeNull();
+    questions[0]?.answer(KEEP_WORKING_BUTTON_INDEX);
+    await quitting;
+    expect(host.exit).not.toHaveBeenCalled();
   });
 
   it("quits without asking with no window open", async () => {
