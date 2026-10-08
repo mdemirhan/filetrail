@@ -163,12 +163,12 @@ export function FileThumbnail({
   return <FileIcon entry={entry} large />;
 }
 
-/** Forgets every cached preview and queued request. For tests. */
 // The preview already loaded for the file, if any; a drag shows it instead of the icon.
 export function getLoadedFileThumbnail(path: string): string | null {
   return thumbnailCache.get(path)?.dataUrl ?? null;
 }
 
+/** Forgets every cached preview and queued request. For tests. */
 export function resetFileThumbnailCache() {
   thumbnailCache.clear();
   queuedLoads.length = 0;
