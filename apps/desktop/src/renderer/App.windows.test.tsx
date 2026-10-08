@@ -541,6 +541,65 @@ describe("App windows", () => {
       );
     });
 
+    it("lets go of it when it missed its end, and says nothing ran", async () => {
+      const harness = createAppHarness();
+      await ready(harness);
+      await act(async () => {
+        harness.emitProgress(otherWindowsCopy("running"));
+      });
+      // It ended, but the message saying so never reached this window.
+      harness.setActiveOperation(null);
+
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "Backspace", metaKey: true });
+      await waitFor(() =>
+        expect(harness.menuStates.at(-1)?.disabledCommands).not.toContain("trashSelection"),
+      );
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+      await pressKey({ key: "Backspace", metaKey: true });
+      await waitFor(() =>
+        expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
+          true,
+        ),
+      );
+    });
+
+    it("lets go of it when it missed its end, as it comes to the front", async () => {
+      const harness = createAppHarness();
+      await ready(harness);
+      await selectItem("/Users/demo/source.txt");
+      await act(async () => {
+        harness.emitProgress(otherWindowsCopy("running"));
+      });
+      expect(harness.menuStates.at(-1)?.disabledCommands).toContain("trashSelection");
+      harness.setActiveOperation(null);
+
+      await act(async () => {
+        fireEvent.focus(window);
+      });
+
+      await waitFor(() =>
+        expect(harness.menuStates.at(-1)?.disabledCommands).not.toContain("trashSelection"),
+      );
+    });
+
+    it("keeps refusing while main says it still runs", async () => {
+      const harness = createAppHarness();
+      await ready(harness);
+      await act(async () => {
+        harness.emitProgress(otherWindowsCopy("running"));
+        fireEvent.focus(window);
+      });
+
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "Backspace", metaKey: true });
+      expect(
+        await screen.findByRole("dialog", { name: "Couldn’t Move to Trash" }),
+      ).toHaveTextContent("Another file operation is running.");
+      expect(harness.menuStates.at(-1)?.disabledCommands).toContain("trashSelection");
+    });
+
     // The window that ran it closed while this one's page was still loading, so the message
     // that hands it over came before anything listened: the window asks for it.
     it("takes it over when it was handed over before the window listened", async () => {

@@ -2015,6 +2015,11 @@ export function createWriteOperationCoordinator(
           },
         };
       },
+      // The operation running now, if any: a window that missed the end of another
+      // window's operation asks before it refuses to start one.
+      "writeOperation:getActive": () => ({
+        operationId: getActiveOperation()?.operationId ?? null,
+      }),
       "writeOperation:cancel": (
         payload: IpcRequest<"writeOperation:cancel">,
         event: { sender: WriteOperationSender },
@@ -2029,6 +2034,26 @@ export function createWriteOperationCoordinator(
     whenIdle,
     shutdown,
   };
+}
+
+// Sends a message to each window. One that can't be sent to (it is going away) doesn't keep
+// the others from hearing it: a window that misses the end of an operation would refuse to
+// start another until it asks main.
+export function sendToEachWindow(
+  windows: Iterable<WriteOperationSender>,
+  channel: string,
+  payload: unknown,
+): void {
+  for (const window of windows) {
+    if (isSenderDestroyed(window)) {
+      continue;
+    }
+    try {
+      window.send(channel, payload);
+    } catch (error) {
+      console.error("[filetrail] couldn't send a message to a window", { channel, error });
+    }
+  }
 }
 
 // Folders that hold the system, the apps, every user's files, or a whole disk. Deleting or

@@ -15,7 +15,11 @@ import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServi
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
 import { clearResponseCaches } from "./responseCache";
 import { createUndoHistory } from "./undoHistory";
-import { type FinishedWrite, createWriteOperationCoordinator } from "./writeOperations";
+import {
+  type FinishedWrite,
+  createWriteOperationCoordinator,
+  sendToEachWindow,
+} from "./writeOperations";
 
 // Forgetting cached listings tells the folder sizes, which can go wrong; the tests make it.
 vi.mock("./responseCache", async (importOriginal) => {
@@ -466,6 +470,49 @@ describe("a window asking for the operation handed to it", () => {
       adoption: { operationId: "copy-op-1", event: null },
     });
     emit(copyEvent("cancelled"));
+    await coordinator.shutdown();
+  });
+});
+
+describe("telling every window", () => {
+  it("tells the others when one window can't be told", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const first = createWindow();
+    const broken = createWindow();
+    broken.send.mockImplementation(() => {
+      throw new Error("Object has been destroyed");
+    });
+    const closed = createWindow();
+    closed.destroyed = true;
+    const last = createWindow();
+
+    sendToEachWindow([first, broken, closed, last], "filetrail:writeOperationProgress", "end");
+
+    expect(first.send).toHaveBeenCalledWith("filetrail:writeOperationProgress", "end");
+    expect(last.send).toHaveBeenCalledWith("filetrail:writeOperationProgress", "end");
+    expect(closed.send).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledTimes(1);
+    errors.mockRestore();
+  });
+
+  // A window that missed the end of another window's operation asks.
+  it("says which operation runs, if any", async () => {
+    const { writeService, emit } = createWriteServiceStub();
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+    );
+    const window = createWindow();
+    expect(coordinator.handlers["writeOperation:getActive"]()).toEqual({ operationId: null });
+
+    await analyze(coordinator, window);
+    await paste(coordinator, window);
+    expect(coordinator.handlers["writeOperation:getActive"]()).toEqual({
+      operationId: "copy-op-1",
+    });
+
+    emit(copyEvent("cancelled"));
+    expect(coordinator.handlers["writeOperation:getActive"]()).toEqual({ operationId: null });
     await coordinator.shutdown();
   });
 });

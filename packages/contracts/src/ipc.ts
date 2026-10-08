@@ -1283,6 +1283,11 @@ export const ipcContractSchemas = {
     request: emptyRequestSchema,
     response: z.object({ adoption: writeOperationAdoptionSchema.nullable() }),
   },
+  // The operation running now (in any window), if any.
+  "writeOperation:getActive": {
+    request: emptyRequestSchema,
+    response: z.object({ operationId: z.string().min(1).nullable() }),
+  },
   "writeOperation:cancel": {
     request: z.object({
       operationId: z.string().min(1),

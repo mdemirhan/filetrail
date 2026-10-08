@@ -68,6 +68,7 @@ import {
   type WriteOperationKind,
   assertNotSystemLocation,
   createWriteOperationCoordinator,
+  sendToEachWindow,
 } from "./bootstrap/writeOperations";
 import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
 import { type FolderWatches, createFolderWatches } from "./folderWatch";
@@ -226,17 +227,18 @@ export async function bootstrapMainProcess(
       diskHasTrash: createDiskHasTrash(listVolumes),
       recordUndo: undoHistory.record,
       undoHistory,
-      broadcastProgress: (event, owner) => {
-        for (const window of BrowserWindow.getAllWindows()) {
-          if (
-            !window.isDestroyed() &&
-            (window.webContents as unknown) !== owner &&
-            windows.explorerWindowIdOf(window.webContents.id)
-          ) {
-            window.webContents.send("filetrail:writeOperationProgress", event);
-          }
-        }
-      },
+      broadcastProgress: (event, owner) =>
+        sendToEachWindow(
+          BrowserWindow.getAllWindows()
+            .filter((window) => !window.isDestroyed())
+            .map((window) => window.webContents)
+            .filter(
+              (contents) =>
+                (contents as unknown) !== owner && windows.explorerWindowIdOf(contents.id),
+            ),
+          "filetrail:writeOperationProgress",
+          event,
+        ),
       successorOf: (sender) => {
         const senderId = (sender as Partial<WebContents>).id;
         return typeof senderId === "number" ? windows.successorWindowOf(senderId) : null;

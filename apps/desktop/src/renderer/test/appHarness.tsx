@@ -317,6 +317,8 @@ export function createAppHarness(
   menuStates: Array<IpcRequestInput<"app:setMenuState">["state"]>;
   emitCommand: (command: RendererCommand) => void;
   emitProgress: (event: TestProgressEvent) => void;
+  // What main says runs from now on, whatever the window heard (it follows emitProgress).
+  setActiveOperation: (operationId: string | null) => void;
   // Something was copied or cut in another window.
   emitClipboardChanged: (clipboard: CopyPasteClipboard) => void;
   // The window that ran an operation closed and this one takes it over.
@@ -450,6 +452,7 @@ export function createAppHarness(
   let lastAnalyzeRequest: IpcRequestInput<"copyPaste:analyzeStart"> | null = null;
 
   let heldAdoption = args.adoption ?? null;
+  let activeOperationId: string | null = null;
   const client: FiletrailClient = {
     async invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>) {
       // What the main process accepts, checked as it checks it: a request it would refuse
@@ -468,6 +471,9 @@ export function createAppHarness(
       if (channel === "folder:watch") {
         watchedPath = (payload as IpcRequestInput<"folder:watch">).path;
         return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "writeOperation:getActive") {
+        return { operationId: activeOperationId } as IpcResponse<C>;
       }
       if (channel === "writeOperation:getAdopted") {
         const adoption = heldAdoption;
@@ -1000,6 +1006,9 @@ export function createAppHarness(
     holdAdoption(adoption) {
       heldAdoption = adoption;
     },
+    setActiveOperation(operationId) {
+      activeOperationId = operationId;
+    },
     emitMergeRequest(requestId) {
       mergeRequestListener?.({ requestId });
     },
@@ -1013,6 +1022,10 @@ export function createAppHarness(
       }
     },
     emitProgress(event) {
+      // Main knows what runs from the same events.
+      activeOperationId = ["completed", "failed", "cancelled", "partial"].includes(event.status)
+        ? null
+        : event.operationId;
       if ("mode" in event) {
         const normalizedEvent = toWindowProgressEvent(event);
         for (const listener of writeOperationProgressListeners) {

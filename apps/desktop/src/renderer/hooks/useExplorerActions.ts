@@ -1107,6 +1107,19 @@ export function useExplorerActions(args: {
     askForAdoption();
   }, [client]);
 
+  // Another window's operation keeps this one from writing, and dims its menu, until this
+  // one hears its end. Should it have missed that, coming to the front asks main.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: works from refs and the client.
+  useEffect(() => {
+    const checkForeignWriteOperation = () => {
+      if (foreignWriteOperationRef.current !== null) {
+        void releaseEndedForeignWriteOperation();
+      }
+    };
+    window.addEventListener("focus", checkForeignWriteOperation);
+    return () => window.removeEventListener("focus", checkForeignWriteOperation);
+  }, [client]);
+
   function closeContextMenu() {
     setContextMenuState(null);
   }
@@ -1388,9 +1401,41 @@ export function useExplorerActions(args: {
   }
 
   // One file operation runs at a time. Every write asked for meanwhile says so the same way,
-  // in a dialog, since nothing it asked for happened.
+  // in a dialog, since nothing it asked for happened. When only another window's operation
+  // stood in the way, main is asked first whether it still runs: this window may have
+  // missed its end, and it then lets go of it instead (the next try goes ahead).
   function showWriteOperationBusyNotice(action: WriteStartAction) {
-    surfaceCopyLikePreStartFailureNotice(action, getCopyLikeBusyOutcome());
+    const showNotice = () => surfaceCopyLikePreStartFailureNotice(action, getCopyLikeBusyOutcome());
+    if (writeOperationLockedRef.current || foreignWriteOperationRef.current === null) {
+      showNotice();
+      return;
+    }
+    void releaseEndedForeignWriteOperation().then((released) => {
+      if (!released) {
+        showNotice();
+      }
+    });
+  }
+
+  // Lets go of another window's operation that main says has ended; true when it did.
+  async function releaseEndedForeignWriteOperation(): Promise<boolean> {
+    const foreign = foreignWriteOperationRef.current;
+    if (foreign === null) {
+      return false;
+    }
+    let running: string | null;
+    try {
+      running = (await client.invoke("writeOperation:getActive", {})).operationId;
+    } catch {
+      return false;
+    }
+    if (running === foreign.operationId) {
+      return false;
+    }
+    if (foreignWriteOperationRef.current?.operationId === foreign.operationId) {
+      noteForeignWriteOperation(null);
+    }
+    return true;
   }
 
   function isWriteOperationBusyError(error: unknown): boolean {
