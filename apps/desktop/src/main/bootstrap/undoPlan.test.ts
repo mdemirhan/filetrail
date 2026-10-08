@@ -92,6 +92,11 @@ describe("reverseStep", () => {
       id: id(5),
       stamp: null,
       putBack: true,
+      unlock: false,
+    });
+    expect(reverseStep({ ...moved, fromTrash: true, locked: true })).toMatchObject({
+      kind: "trash",
+      unlock: true,
     });
     expect(
       reverseStep({ kind: "trashed", from: "/a", trashPath: "/T/a", id: id(5), parentId: id(1) }),
@@ -257,7 +262,14 @@ describe("checkTrash", () => {
     const fs = disk({ "/Docs": { kind: "dir", ino: null }, "/Docs/a": { kind: "dir", ino: null } });
     const stamp = { kind: "file" as const, size: 0, mtimeMs: 1000, entryCount: null };
     expect(
-      await checkTrash(fs, { kind: "trash", path: "/Docs/a", id: id(10), stamp, putBack: false }),
+      await checkTrash(fs, {
+        kind: "trash",
+        path: "/Docs/a",
+        id: id(10),
+        stamp,
+        putBack: false,
+        unlock: true,
+      }),
     ).toMatchObject({ ok: false });
   });
 
@@ -273,7 +285,14 @@ describe("checkTrash", () => {
     const flaky: PlanFs = { lstat, stat: lstat };
     const stamp = { kind: "file" as const, size: 0, mtimeMs: 1000, entryCount: null };
     expect(
-      await checkTrash(flaky, { kind: "trash", path: "/a", id: id(10), stamp, putBack: false }),
+      await checkTrash(flaky, {
+        kind: "trash",
+        path: "/a",
+        id: id(10),
+        stamp,
+        putBack: false,
+        unlock: true,
+      }),
     ).toEqual({ ok: true, changed: true, id: id(10) });
   });
 });

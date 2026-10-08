@@ -244,12 +244,11 @@ async function moveBack(
     }
   }
   const renamed = await renameInto(fs, planned, check, original);
-  if (flags !== null) {
-    const at = renamed.status === "renamed" ? renamed.target : planned.from;
-    await fs.setFlags?.(at, flags).catch(() => undefined);
-  }
+  const lockedAgain =
+    flags === null ||
+    (await lockAgain(fs, renamed.status === "renamed" ? renamed.target : planned.from, flags));
   if (renamed.status !== "renamed") {
-    return renamed;
+    return lockedAgain ? renamed : { ...renamed, items: notLockedAgain(renamed.items) };
   }
   const target = renamed.target;
   const moved = await readItemRef(fs.lstat, target);
@@ -261,6 +260,7 @@ async function moveBack(
     itemKind: moved.kind,
     parentId: await readFolderId(fs.stat, dirname(planned.from)),
     ...(planned.putBack ? { fromTrash: true, stamp: await readItemStamp(fs, target) } : {}),
+    ...(flags !== null && lockedAgain ? { locked: true } : {}),
   };
   return {
     status: "done",
@@ -273,9 +273,42 @@ async function moveBack(
         error: null,
         skipReason: null,
       },
+      ...(lockedAgain ? [] : [lostLockItem(target)]),
     ],
     removed: null,
   };
+}
+
+// Puts back the lock taken off an item to move it; whether it could be (said in the result).
+async function lockAgain(fs: WriteOperationFs, path: string, flags: number): Promise<boolean> {
+  try {
+    await fs.setFlags?.(path, flags);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// An item an Undo moved that was locked, and is no longer: said, though the move is done.
+function lostLockItem(path: string): ResultItem {
+  return failedItem(
+    path,
+    null,
+    `“${basename(path)}” was moved, but couldn't be locked again. Lock it in Finder's Get Info.`,
+  );
+}
+
+// Items left where they were, now unlocked: said too.
+function notLockedAgain(items: ResultItem[]): ResultItem[] {
+  return items.map((item) =>
+    item.sourcePath === null
+      ? item
+      : {
+          ...item,
+          error:
+            `${item.error ?? ""} “${basename(item.sourcePath)}” couldn't be locked again. Lock it in Finder's Get Info.`.trim(),
+        },
+  );
 }
 
 // Renames the item of a move step to where it goes back, with a number when its name is
@@ -386,9 +419,9 @@ async function moveToTrash(
     : null;
   // What an operation made is its own (its id was checked): a copy of a locked item is
   // locked too, and the Trash refuses a locked item. It goes there unlocked, without asking,
-  // and is locked again there.
+  // and is locked again there. So does a copy put back locked by a Redo.
   let flags: number | null = null;
-  if (!planned.putBack && check.id !== null) {
+  if (planned.unlock && check.id !== null) {
     try {
       flags = await unlockForMove(fs, planned.path);
     } catch (error) {
@@ -399,25 +432,12 @@ async function moveToTrash(
   try {
     trashPath = await fs.trash(planned.path);
   } catch (error) {
-    if (flags !== null) {
-      await fs.setFlags?.(planned.path, flags).catch(() => undefined);
-    }
-    // A disk with no Trash won't have one the next time either: like a change the check
-    // finds, it can't be undone, and isn't kept to be tried again.
-    if (errorCode(error) === NO_TRASH_ERROR_CODE) {
-      const reason = `“${basename(planned.path)}” couldn't be moved to the Trash because its disk has no Trash.`;
-      return {
-        status: "skipped",
-        items: [skippedItem(planned.path, null, reason)],
-        missing: false,
-      };
-    }
-    const reason = await describeFailure(fs, error, [planned.path, dirname(planned.path)]);
-    return failedStep(original, planned.path, null, reason);
+    const lockedAgain = flags === null || (await lockAgain(fs, planned.path, flags));
+    const outcome = await trashRefused(fs, error, planned, original);
+    return lockedAgain ? outcome : { ...outcome, items: notLockedAgain(outcome.items) };
   }
-  if (flags !== null && trashPath !== null) {
-    await fs.setFlags?.(trashPath, flags).catch(() => undefined);
-  }
+  const lockedAgain =
+    flags === null || trashPath === null || (await lockAgain(fs, trashPath, flags));
   return {
     status: "done",
     // In the Trash, but the Trash didn't say where: done, and nothing to do it again from.
@@ -433,6 +453,7 @@ async function moveToTrash(
         error: null,
         skipReason: null,
       },
+      ...(lockedAgain ? [] : [lostLockItem(planned.path)]),
     ],
     removed: {
       path: planned.path,
@@ -440,6 +461,27 @@ async function moveToTrash(
       intoHomeTrash: before === null || args.homeDev === null ? null : before.dev === args.homeDev,
     },
   };
+}
+
+// Why the Trash refused an item, and whether to try again.
+async function trashRefused(
+  fs: WriteOperationFs,
+  error: unknown,
+  planned: Extract<PlannedStep, { kind: "trash" }>,
+  original: UndoStep,
+): Promise<StepOutcome> {
+  // A disk with no Trash won't have one the next time either: like a change the check
+  // finds, it can't be undone, and isn't kept to be tried again.
+  if (errorCode(error) === NO_TRASH_ERROR_CODE) {
+    const reason = `“${basename(planned.path)}” couldn't be moved to the Trash because its disk has no Trash.`;
+    return {
+      status: "skipped",
+      items: [skippedItem(planned.path, null, reason)],
+      missing: false,
+    };
+  }
+  const reason = await describeFailure(fs, error, [planned.path, dirname(planned.path)]);
+  return failedStep(original, planned.path, null, reason);
 }
 
 // The items of a batch rename get their names back, as one batch again: that handles

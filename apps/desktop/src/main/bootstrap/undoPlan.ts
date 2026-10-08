@@ -31,8 +31,16 @@ export type PlannedStep =
       stamp?: ItemStamp;
     }
   // Moves the item at `path` to the Trash: something an operation made, or put back from
-  // the Trash (`putBack`).
-  | { kind: "trash"; path: string; id: ItemId | null; stamp: ItemStamp | null; putBack: boolean }
+  // the Trash (`putBack`). `unlock`: it may be locked by the app's own doing (a copy of a
+  // locked item, or one put back locked), and is unlocked to go.
+  | {
+      kind: "trash";
+      path: string;
+      id: ItemId | null;
+      stamp: ItemStamp | null;
+      putBack: boolean;
+      unlock: boolean;
+    }
   // Renames each item at `from` back to the name in `to`, as one batch.
   | {
       kind: "batch";
@@ -43,7 +51,14 @@ export function reverseStep(step: UndoStep): PlannedStep {
   switch (step.kind) {
     case "moved":
       return step.fromTrash
-        ? { kind: "trash", path: step.to, id: step.id, stamp: step.stamp ?? null, putBack: true }
+        ? {
+            kind: "trash",
+            path: step.to,
+            id: step.id,
+            stamp: step.stamp ?? null,
+            putBack: true,
+            unlock: step.locked === true,
+          }
         : {
             kind: "move",
             from: step.to,
@@ -54,7 +69,14 @@ export function reverseStep(step: UndoStep): PlannedStep {
             putBack: false,
           };
     case "created":
-      return { kind: "trash", path: step.path, id: step.id, stamp: step.stamp, putBack: false };
+      return {
+        kind: "trash",
+        path: step.path,
+        id: step.id,
+        stamp: step.stamp,
+        putBack: false,
+        unlock: true,
+      };
     case "trashed":
       return {
         kind: "move",

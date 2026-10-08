@@ -25,6 +25,8 @@ export type UndoStep =
   // that an app saved under a new id. `fromTrash` marks putting an item back from the
   // Trash, whose reverse is a fresh move to the Trash (not a rename into it), and `stamp`
   // how the item looked once back, for asking before trashing it again if it changed.
+  // `locked` marks an item put back locked (a locked copy an Undo moved to the Trash): it
+  // was unlocked to be moved, and is again to go back to the Trash.
   | {
       kind: "moved";
       from: string;
@@ -34,6 +36,7 @@ export type UndoStep =
       parentId: ItemId | null;
       fromTrash?: boolean;
       stamp?: ItemStamp | null;
+      locked?: boolean;
     }
   // An item the operation made: a copy, a duplicate, a new folder.
   | { kind: "created"; path: string; id: ItemId | null; stamp: ItemStamp | null }
