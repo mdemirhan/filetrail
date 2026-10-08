@@ -20,7 +20,11 @@ function createMockNative() {
 
   return {
     getFolderSize: vi.fn(
-      (_path: string, onFinished?: (finishedJson: string) => void) =>
+      (
+        _path: string,
+        onFinished?: (finishedJson: string) => void,
+        _options?: { background: boolean },
+      ) =>
         new Promise<string>((resolve, reject) => {
           resolveActive = resolve;
           rejectActive = reject;
@@ -96,26 +100,45 @@ describe("createFolderSizeHandlers", () => {
     expect(status.folderCount).toBe(7);
   });
 
-  it("start with probeOnly returns deferred when not cached", () => {
+  it("answers a probe with the sizes it knows, measuring nothing", async () => {
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);
-
-    const result = handlers.start({ path: "/test", probeOnly: true });
-    expect(result.status).toBe("deferred");
+    expect(handlers.probeMany({ paths: ["/test"] })).toEqual({ sizes: [] });
     expect(native.getFolderSize).not.toHaveBeenCalled();
-  });
 
-  it("start with probeOnly returns ready when cached", async () => {
-    const native = createMockNative();
-    const handlers = createFolderSizeHandlers(native);
-
-    // Populate cache
     handlers.start({ path: "/test" });
     native.resolveActive(sampleJson);
     await new Promise((r) => setTimeout(r, 0));
 
-    const result = handlers.start({ path: "/test", probeOnly: true });
-    expect(result.status).toBe("ready");
+    expect(handlers.probeMany({ paths: ["/test", "/test/sub", "/elsewhere"] })).toEqual({
+      sizes: [
+        { path: "/test", sizeBytes: 1000, diskBytes: 1200, fileCount: 42, folderCount: 7 },
+        { path: "/test/sub", sizeBytes: 500, diskBytes: 600, fileCount: 20, folderCount: 3 },
+      ],
+    });
+    expect(native.getFolderSize).toHaveBeenCalledTimes(1);
+  });
+
+  // Each probe made a job, and over 256 of them between a window's polls pushed out the
+  // finished job it was about to read: "Unknown folder size job."
+  it("makes no job for a probe, so probes never push out a job a window waits on", async () => {
+    resetResponseCacheState();
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    const measured = handlers.start({ path: "/test" });
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+
+    for (let index = 0; index < 1_000; index++) {
+      handlers.probeMany({ paths: [`/probe/${index}`, "/test/sub"] });
+    }
+
+    expect(getResponseCacheSizes().folderSizeJobs).toBe(1);
+    expect(handlers.getStatus({ jobId: measured.jobId })).toMatchObject({
+      status: "ready",
+      sizeBytes: 1000,
+    });
+    resetResponseCacheState();
   });
 
   // A trashed 5 GB folder replaced by an empty one of the same name showed 5 GB.
@@ -130,10 +153,66 @@ describe("createFolderSizeHandlers", () => {
 
     clearResponseCaches(["/Users/demo/Project/src/old.txt"]);
 
-    expect(handlers.start({ path: "/Users/demo/Project", probeOnly: true }).status).not.toBe(
-      "ready",
+    expect(handlers.getCachedSize("/Users/demo/Project")).toBeUndefined();
+    expect(handlers.getCachedSize("/Users/demo/Music")).toBe(1000);
+  });
+
+  // 100,000 cached sizes against 10,000 changed paths took 55 s, asked one pair at a time.
+  it("forgets the sizes a large write touched quickly, however many are kept", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    const dirs: Record<string, [number, number, number, number]> = {};
+    for (let index = 0; index < 50_000; index++) {
+      dirs[`/Users/demo/Library/c${index % 500}/d${index}`] = [1, 1, 1, 0];
+    }
+    handlers.start({ path: "/Users/demo/Library" });
+    native.resolveActive(JSON.stringify({ ...JSON.parse(sampleJson), dirs }));
+    await new Promise((r) => setTimeout(r, 0));
+    const changed = Array.from(
+      { length: 5_000 },
+      (_, index) => `/Users/demo/Library/c7/d${index * 500 + 7}/new.txt`,
     );
-    expect(handlers.start({ path: "/Users/demo/Music", probeOnly: true }).status).toBe("ready");
+
+    const started = performance.now();
+    clearResponseCaches(changed);
+    // Well under 100 ms on a laptop; the bound only catches going back to every pair.
+    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(handlers.getCachedSize("/Users/demo/Library/c7/d7")).toBeUndefined();
+    expect(handlers.getCachedSize("/Users/demo/Library/c7")).toBeUndefined();
+    expect(handlers.getCachedSize("/Users/demo/Library")).toBeUndefined();
+    expect(handlers.getCachedSize("/Users/demo/Library/c8/d8")).toBe(1);
+  });
+
+  it("keeps the sizes used most recently, up to its limit", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers({ ...native, maxFolderSizes: 3 });
+    handlers.start({ path: "/test" });
+    native.finish({ "/test/a": [1, 1, 1, 0], "/test/b": [2, 2, 1, 0] });
+    // Asked about, so kept over the one not asked about.
+    handlers.probeMany({ paths: ["/test/a"] });
+    native.resolveActive(
+      JSON.stringify({ ...JSON.parse(sampleJson), dirs: { "/test/c": [3, 3, 1, 0] } }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(handlers.getCachedSize("/test/b")).toBeUndefined();
+    expect(handlers.getCachedSize("/test/a")).toBe(1);
+    expect(handlers.getCachedSize("/test/c")).toBe(3);
+    expect(handlers.getCachedSize("/test")).toBe(1000);
+  });
+
+  it("measures at a lower priority what the app measures by itself", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    handlers.start({ path: "/test/auto", automatic: true });
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+    handlers.start({ path: "/test/asked" });
+
+    expect(native.getFolderSize.mock.calls.map((call) => [call[0], call[2]])).toEqual([
+      ["/test/auto", { background: true }],
+      ["/test/asked", { background: false }],
+    ]);
   });
 
   // Measuring the home folder, whose walk reached its Trash or was refused it.
@@ -204,7 +283,7 @@ describe("createFolderSizeHandlers", () => {
         fileCount: 10,
         folderCount: 3,
         dev: 16,
-        dirs: {},
+        dirs: { "/Users/demo/Downloads": [600, 1_200, 6, 0] },
       }),
     );
     await new Promise((r) => setTimeout(r, 0));
@@ -212,6 +291,43 @@ describe("createFolderSizeHandlers", () => {
     clearResponseCaches([], [trashedZip]);
 
     expect(handlers.getCachedSize("/Users/demo")).toBe(800);
+  });
+
+  // Folder 100 MB holding Inner 50 MB; Inner grew to 80 MB and was measured again by
+  // itself. Moving Inner to the Trash took 80 MB off Folder: 20 MB, where 50 MB remained.
+  it("forgets a folder rather than take off what was measured again inside it", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers({ ...native, homePath: "/Users/demo" });
+    handlers.start({ path: "/Users/demo/Folder" });
+    native.resolveActive(
+      JSON.stringify({
+        total: 100,
+        diskTotal: 100,
+        fileCount: 2,
+        folderCount: 1,
+        dev: 16,
+        dirs: { "/Users/demo/Folder/Inner": [50, 50, 1, 0] },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    handlers.start({ path: "/Users/demo/Folder/Inner", recalculate: true });
+    native.resolveActive(
+      JSON.stringify({ total: 80, diskTotal: 80, fileCount: 2, folderCount: 0, dev: 16, dirs: {} }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    clearResponseCaches(
+      [],
+      [
+        {
+          path: "/Users/demo/Folder/Inner",
+          item: { kind: "folder", sizeBytes: 0, diskBytes: 0, dev: 16 },
+          intoHomeTrash: false,
+        },
+      ],
+    );
+
+    expect(handlers.getCachedSize("/Users/demo/Folder")).toBeUndefined();
   });
 
   it("measures again a folder a write changed while it was being measured", async () => {
@@ -233,6 +349,83 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.getCachedSize("/Users/demo/Project")).toBe(1000);
   });
 
+  it("stops a measurement a write has outdated, rather than let it finish for nothing", () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    handlers.start({ path: "/test" });
+
+    clearResponseCaches(["/elsewhere/new.txt"]);
+    expect(native.cancelFolderSize).not.toHaveBeenCalled();
+    clearResponseCaches(["/test/new.txt"]);
+    clearResponseCaches(["/test/another.txt"]);
+
+    expect(native.cancelFolderSize).toHaveBeenCalledTimes(1);
+  });
+
+  it("measures again, under the same job, one stopped because a write outdated it", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    const { jobId } = handlers.start({ path: "/test" });
+    clearResponseCaches(["/test/new.txt"]);
+    native.rejectActive(Object.assign(new Error("cancelled"), { code: "ECANCELLED" }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(native.getFolderSize).toHaveBeenCalledTimes(2);
+    expect(handlers.getStatus({ jobId }).status).toBe("running");
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(handlers.getStatus({ jobId })).toMatchObject({ status: "ready", sizeBytes: 1000 });
+  });
+
+  // It was left "running" for good: the window showed Calculating… and polled forever.
+  it("measures an outdated measurement again after another window's waiting one", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    const first = handlers.start({ path: "/test/a" }, 1);
+    const second = handlers.start({ path: "/test/b" }, 2);
+    clearResponseCaches(["/test/a/new.txt"]);
+    // Finished before the stop reached it.
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The other window's measurement runs first; the outdated one waits behind it.
+    expect(native.getFolderSize).toHaveBeenLastCalledWith(
+      "/test/b",
+      expect.any(Function),
+      expect.anything(),
+    );
+    expect(handlers.getStatus({ jobId: first.jobId }).status).toBe("queued");
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(handlers.getStatus({ jobId: second.jobId }).status).toBe("ready");
+
+    expect(native.getFolderSize).toHaveBeenLastCalledWith(
+      "/test/a",
+      expect.any(Function),
+      expect.anything(),
+    );
+    expect(handlers.getStatus({ jobId: first.jobId }).status).toBe("running");
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(handlers.getStatus({ jobId: first.jobId })).toMatchObject({
+      status: "ready",
+      sizeBytes: 1000,
+    });
+  });
+
+  it("lets Stop end a measurement a write had outdated", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    const { jobId } = handlers.start({ path: "/test" });
+    clearResponseCaches(["/test/new.txt"]);
+    handlers.cancel({ jobId });
+    native.rejectActive(Object.assign(new Error("cancelled"), { code: "ECANCELLED" }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(native.getFolderSize).toHaveBeenCalledTimes(1);
+    expect(handlers.getStatus({ jobId }).status).toBe("cancelled");
+  });
+
   describe("folders finished while measuring", () => {
     const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -248,11 +441,9 @@ describe("createFolderSizeHandlers", () => {
         measuredFolderCount: 2,
       });
       expect(handlers.getCachedSize("/test/a")).toBe(150);
-      const probe = handlers.start({ path: "/test/a/deep", probeOnly: true });
-      expect(handlers.getStatus({ jobId: probe.jobId })).toMatchObject({
-        status: "ready",
-        sizeBytes: 100,
-      });
+      expect(handlers.probeMany({ paths: ["/test/a/deep"] }).sizes).toMatchObject([
+        { sizeBytes: 100 },
+      ]);
 
       // The rest come with the result.
       native.resolveActive(
@@ -475,7 +666,9 @@ describe("createFolderSizeHandlers", () => {
     native.resolveActive(sampleJson);
     await new Promise((r) => setTimeout(r, 0));
     expect(handlers.getStatus({ jobId: first.jobId }).status).toBe("ready");
-    expect(native.getFolderSize).toHaveBeenLastCalledWith("/test/c", expect.any(Function));
+    expect(native.getFolderSize).toHaveBeenLastCalledWith("/test/c", expect.any(Function), {
+      background: false,
+    });
 
     // The first window's next walk stops none of the second's.
     handlers.start({ path: "/test/d" }, 1);
@@ -517,7 +710,9 @@ describe("createFolderSizeHandlers", () => {
 
     // Second job should now be running
     expect(native.getFolderSize).toHaveBeenCalledTimes(2);
-    expect(native.getFolderSize).toHaveBeenLastCalledWith("/test/b", expect.any(Function));
+    expect(native.getFolderSize).toHaveBeenLastCalledWith("/test/b", expect.any(Function), {
+      background: false,
+    });
   });
 
   it("error job has null diskBytes and counts", async () => {
@@ -550,20 +745,22 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.getCachedSize("/test")).toBeUndefined();
   });
 
-  it("keeps only the most recent finished jobs so repeated probes do not grow without bound", async () => {
+  it("keeps only the most recent finished jobs so repeated calculations do not grow without bound", async () => {
     resetResponseCacheState();
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);
+    handlers.start({ path: "/test" });
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
 
     const running = handlers.start({ path: "/walking" });
-    const probes = Array.from({ length: 1_000 }, (_, index) =>
-      handlers.start({ path: `/probe/${index}`, probeOnly: true }),
-    );
+    // Known already: each answered by a job that is ready at once.
+    const known = Array.from({ length: 1_000 }, () => handlers.start({ path: "/test/sub" }, 2));
 
     expect(getResponseCacheSizes().folderSizeJobs).toBe(257);
     expect(handlers.getStatus({ jobId: running.jobId }).status).toBe("running");
-    expect(handlers.getStatus({ jobId: probes.at(-1)?.jobId ?? "" }).status).toBe("deferred");
-    expect(handlers.getStatus({ jobId: probes[0]?.jobId ?? "" }).error).toBe(
+    expect(handlers.getStatus({ jobId: known.at(-1)?.jobId ?? "" }).status).toBe("ready");
+    expect(handlers.getStatus({ jobId: known[0]?.jobId ?? "" }).error).toBe(
       "Unknown folder size job.",
     );
 

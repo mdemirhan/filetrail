@@ -1260,7 +1260,9 @@ export const ipcContractSchemas = {
     request: z.object({
       path: z.string().min(1),
       recalculate: z.boolean().optional(),
-      probeOnly: z.boolean().optional(),
+      // Started by the app itself (the Info panel), not asked for: measured at a lower
+      // priority, giving way to the rest of the Mac.
+      automatic: z.boolean().optional(),
     }),
     response: z.object({
       jobId: z.string().min(1),
@@ -1289,6 +1291,25 @@ export const ipcContractSchemas = {
     }),
     response: z.object({
       ok: z.boolean(),
+    }),
+  },
+  // The sizes the main process knows of these folders (measured, or measured inside a folder
+  // that was), without measuring anything: those it doesn't know are left out. One request
+  // for every folder a window shows.
+  "folderSize:probeMany": {
+    request: z.object({
+      paths: absolutePathListSchema,
+    }),
+    response: z.object({
+      sizes: z.array(
+        z.object({
+          path: z.string().min(1),
+          sizeBytes: z.number().int().nonnegative(),
+          diskBytes: z.number().int().nonnegative(),
+          fileCount: z.number().int().nonnegative(),
+          folderCount: z.number().int().nonnegative(),
+        }),
+      ),
     }),
   },
   "system:openPath": {

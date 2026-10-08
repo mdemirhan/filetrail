@@ -466,6 +466,7 @@ export async function bootstrapMainProcess(
         folderSizeHandlers.start(payload, event?.sender?.id ?? null),
       "folderSize:getStatus": (payload) => folderSizeHandlers.getStatus(payload),
       "folderSize:cancel": (payload) => folderSizeHandlers.cancel(payload),
+      "folderSize:probeMany": (payload) => folderSizeHandlers.probeMany(payload),
       "system:openPath": (payload) => openPath(payload),
       "system:quickLook": (payload, event) => quickLookPath(payload, event),
       "system:getVolumeInfo": (payload) => getVolumeInfo(payload),

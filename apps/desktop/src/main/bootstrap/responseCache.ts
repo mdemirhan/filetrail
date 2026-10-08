@@ -1,7 +1,12 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { type IpcRequest, type IpcResponse, isAffectedByChange } from "@filetrail/contracts";
+import {
+  type IpcRequest,
+  type IpcResponse,
+  createChangeMatcher,
+  isAffectedByChange,
+} from "@filetrail/contracts";
 import type { ExplorerWorkerClient } from "@filetrail/core";
 import { type FolderSizeStats, type RemovedItem, adjustForRemovals } from "./folderSizeAdjust";
 
@@ -15,6 +20,10 @@ const MAX_DIRECTORY_METADATA_ENTRIES = 5_000;
 // Finished folder-size jobs are kept so repeated status polls stay answerable,
 // but only the most recent ones; queued and running jobs are never evicted.
 const MAX_FINISHED_FOLDER_SIZE_JOBS = 256;
+// Measuring the home folder stores the size of every folder in it, often hundreds of
+// thousands. The sizes used least recently go first: those a measurement finished first
+// are the deepest, and the folders near the top, finished last, are the ones shown.
+export const MAX_FOLDER_SIZES = 100_000;
 
 type TtlCacheEntry = { expiresAt: number; value: unknown };
 type TtlCache = { entries: Map<string, TtlCacheEntry>; maxEntries: number };
@@ -195,29 +204,45 @@ type MeasuredFolders = {
 };
 
 export function createFolderSizeHandlers(native: {
-  // `onFinished` is handed the folders inside `path` measured so far, as they finish.
-  getFolderSize: (path: string, onFinished?: (finishedJson: string) => void) => Promise<string>;
+  // `onFinished` is handed the folders inside `path` measured so far, as they finish. A
+  // `background` walk runs at a lower priority.
+  getFolderSize: (
+    path: string,
+    onFinished?: (finishedJson: string) => void,
+    options?: { background: boolean },
+  ) => Promise<string>;
   cancelFolderSize: () => void;
   // Where the home folder is (tests use their own): its Trash is where deleted items go.
   homePath?: string;
+  // How many folder sizes are kept (tests use fewer).
+  maxFolderSizes?: number;
 }) {
+  // Oldest first: each size stored or asked for goes to the end, and the first go when there
+  // are too many. Only a store adds one, so none goes while removals are taken off.
   const folderSizeCache = new Map<string, FolderSizeStats>();
+  const maxFolderSizes = native.maxFolderSizes ?? MAX_FOLDER_SIZES;
+  // Each measurement run stores its sizes under a number of its own (see FolderSizeStats).
+  let measurementCount = 0;
   // The folders whose sizes were stored since the latest write started.
   let storedDuringWrite = { write: 0, paths: new Set<string>() };
   const homePath = native.homePath ?? homedir();
   const homeTrashPath = join(homePath, ".Trash");
+  const homeTrash = createChangeMatcher([homeTrashPath]);
   // Whether a measurement that reached the home folder's Trash could read it, and so
   // counted what is in it (only an app with Full Disk Access can): what a move to the
   // Trash does to the sizes of the folders holding the Trash. Learned by measuring, and
   // kept apart from the sizes, which are forgotten when the Trash changes.
   let homeTrashCounted: boolean | null = null;
   // A measurement under way when a write changes what it walks may have seen part of the
-  // change: it is run again rather than kept.
+  // change: it is stopped and run again rather than kept.
   const outdatedJobIds = new Set<string>();
   folderSizeForgetters.add((changedPaths, removedItems) => {
-    for (const path of [...folderSizeCache.keys()]) {
-      if (isAffectedByChange(path, changedPaths)) {
-        folderSizeCache.delete(path);
+    if (changedPaths.length > 0) {
+      const changes = createChangeMatcher(changedPaths);
+      for (const path of folderSizeCache.keys()) {
+        if (changes.isAffected(path)) {
+          folderSizeCache.delete(path);
+        }
       }
     }
     forgetStoredDuringWrite(removedItems);
@@ -232,8 +257,15 @@ export function createFolderSizeHandlers(native: {
         removed.intoHomeTrash === false ? [removed.path] : [removed.path, homeTrashPath],
       ),
     ];
-    if (activeJobId && activeJob && isAffectedByChange(activeJob.path, touchedPaths)) {
+    if (
+      activeJobId &&
+      activeJob?.status === "running" &&
+      !outdatedJobIds.has(activeJobId) &&
+      isAffectedByChange(activeJob.path, touchedPaths)
+    ) {
       outdatedJobIds.add(activeJobId);
+      // Stopped now rather than left to finish a walk that is thrown away.
+      native.cancelFolderSize();
     }
   });
   let activeJobId: string | null = null;
@@ -243,13 +275,15 @@ export function createFolderSizeHandlers(native: {
   // The window that asked for each job. A window's new measurement stops its own earlier
   // one, never another window's: that one finishes, and the new one waits for it.
   const jobOwners = new Map<string, number | null>();
+  // The jobs the app started itself, which walk at a lower priority.
+  const backgroundJobIds = new Set<string>();
 
   function cancelQueuedJobsOf(owner: number | null): void {
     queuedJobIds = queuedJobIds.filter((queuedId) => {
       if (jobOwners.get(queuedId) !== owner) {
         return true;
       }
-      jobOwners.delete(queuedId);
+      forgetJob(queuedId);
       const queued = folderSizeJobs.get(queuedId);
       if (queued) {
         setFolderSizeJob(queuedId, { ...queued, status: "cancelled" });
@@ -258,8 +292,20 @@ export function createFolderSizeHandlers(native: {
     });
   }
 
+  function forgetJob(jobId: string): void {
+    jobOwners.delete(jobId);
+    backgroundJobIds.delete(jobId);
+  }
+
   function storeSize(path: string, stats: FolderSizeStats): void {
+    folderSizeCache.delete(path);
     folderSizeCache.set(path, stats);
+    for (const oldest of folderSizeCache.keys()) {
+      if (folderSizeCache.size <= maxFolderSizes) {
+        break;
+      }
+      folderSizeCache.delete(oldest);
+    }
     if (writesStarted === 0) {
       return;
     }
@@ -269,6 +315,16 @@ export function createFolderSizeHandlers(native: {
     storedDuringWrite.paths.add(path);
   }
 
+  // A size asked for, moved to the end so it is kept longest.
+  function useSize(path: string): FolderSizeStats | undefined {
+    const stats = folderSizeCache.get(path);
+    if (stats) {
+      folderSizeCache.delete(path);
+      folderSizeCache.set(path, stats);
+    }
+    return stats;
+  }
+
   // The sizes stored since the write started of the folders whose totals its removals
   // change (those that held a removed item, and the Trash and those holding it when it went
   // there): they may already leave the item out, so they are measured again instead.
@@ -276,12 +332,12 @@ export function createFolderSizeHandlers(native: {
     if (removedItems.length === 0 || storedDuringWrite.write !== writesStarted) {
       return;
     }
-    const removedPaths = removedItems.map((removed) => removed.path);
-    const intoTrash = removedItems.some((removed) => removed.intoHomeTrash !== false);
+    const removed = createChangeMatcher(removedItems.map((item) => item.path));
+    const intoTrash = removedItems.some((item) => item.intoHomeTrash !== false);
     for (const path of storedDuringWrite.paths) {
       if (
-        holdsAny(path, removedPaths) ||
-        (intoTrash && (path === homeTrashPath || holdsAny(path, [homeTrashPath])))
+        removed.holdsChange(path) ||
+        (intoTrash && (path === homeTrashPath || homeTrash.holdsChange(path)))
       ) {
         folderSizeCache.delete(path);
       }
@@ -305,6 +361,8 @@ export function createFolderSizeHandlers(native: {
 
   function runJob(jobId: string, path: string): void {
     activeJobId = jobId;
+    measurementCount += 1;
+    const measurement = measurementCount;
     setFolderSizeJob(jobId, {
       jobId,
       path,
@@ -340,14 +398,15 @@ export function createFolderSizeHandlers(native: {
           fileCount: dirStats[2],
           folderCount: dirStats[3],
           dev,
+          measurement,
         });
         count += 1;
       }
       return count;
     };
     // The folders inside `path` are stored as each is finished, even once the measurement
-    // is cancelled (each was finished whole), but not once a write has made it outdated:
-    // they may have seen part of the change, and it is run again.
+    // is cancelled or fails (each was finished whole), but not once a write has made it
+    // outdated: they may have seen part of the change, and it is run again.
     const onFinished = (finishedJson: string) => {
       const measured = JSON.parse(finishedJson) as MeasuredFolders;
       noteWalked(measured.dirs);
@@ -366,7 +425,7 @@ export function createFolderSizeHandlers(native: {
 
     let runAgain = false;
     native
-      .getFolderSize(path, onFinished)
+      .getFolderSize(path, onFinished, { background: backgroundJobIds.has(jobId) })
       .then((jsonString) => {
         const result = JSON.parse(jsonString) as MeasuredFolders & {
           total: number;
@@ -390,6 +449,7 @@ export function createFolderSizeHandlers(native: {
           fileCount: result.fileCount,
           folderCount: result.folderCount,
           dev: result.dev ?? null,
+          measurement,
         });
         const stored = storeMeasured(result);
         setFolderSizeJob(jobId, {
@@ -405,7 +465,11 @@ export function createFolderSizeHandlers(native: {
         });
       })
       .catch((err: unknown) => {
-        outdatedJobIds.delete(jobId);
+        // Stopped because a write outdated it (or failing after one did): run again.
+        if (outdatedJobIds.delete(jobId)) {
+          runAgain = true;
+          return;
+        }
         const code = (err as { code?: unknown } | null)?.code;
         if (path === homeTrashPath && (code === "EPERM" || code === "EACCES")) {
           homeTrashCounted = false;
@@ -432,17 +496,20 @@ export function createFolderSizeHandlers(native: {
         if (activeJobId === jobId) {
           activeJobId = null;
         }
-        // Measured again under the same job, which the window is still waiting on; a
-        // measurement asked for meanwhile takes its place instead.
-        if (
-          runAgain &&
-          queuedJobIds.length === 0 &&
-          folderSizeJobs.get(jobId)?.status === "running"
-        ) {
-          runJob(jobId, path);
-          return;
+        // Measured again under the same job, which the window is still waiting on: at once,
+        // or after the measurements other windows asked for meanwhile. One this window asked
+        // for meanwhile has taken its place (and cancelled it).
+        const job = folderSizeJobs.get(jobId);
+        if (runAgain && job?.status === "running") {
+          if (queuedJobIds.length === 0) {
+            runJob(jobId, path);
+            return;
+          }
+          setFolderSizeJob(jobId, { ...job, status: "queued" });
+          queuedJobIds = [...queuedJobIds, jobId];
+        } else {
+          forgetJob(jobId);
         }
-        jobOwners.delete(jobId);
         pruneFinishedFolderSizeJobs();
         processQueue();
       });
@@ -458,7 +525,7 @@ export function createFolderSizeHandlers(native: {
         folderSizeCache.delete(payload.path);
       }
 
-      const cached = folderSizeCache.get(payload.path);
+      const cached = useSize(payload.path);
       if (cached !== undefined) {
         const jobId = generateJobId();
         setFolderSizeJob(jobId, {
@@ -476,36 +543,20 @@ export function createFolderSizeHandlers(native: {
         return { jobId, status: "ready" };
       }
 
-      // probeOnly: return deferred without starting a walk. Used by the
-      // renderer to check the main-process cache without side effects.
-      if (payload.probeOnly) {
-        const jobId = generateJobId();
-        setFolderSizeJob(jobId, {
-          jobId,
-          path: payload.path,
-          status: "deferred",
-          sizeBytes: null,
-          diskBytes: null,
-          fileCount: null,
-          folderCount: null,
-          measuredFolderCount: 0,
-          error: null,
-        });
-        pruneFinishedFolderSizeJobs();
-        return { jobId, status: "deferred" };
-      }
-
       const jobId = generateJobId();
 
       jobOwners.set(jobId, owner);
+      if (payload.automatic) {
+        backgroundJobIds.add(jobId);
+      }
 
       if (activeJobId) {
         cancelQueuedJobsOf(owner);
         if (jobOwners.get(activeJobId) === owner) {
-          // Cancel this window's active walk so the new one can start promptly.
-          // The native cancel sets a volatile flag checked each fts_read
-          // iteration, so the active walk aborts quickly. We queue the new
-          // job and it will be picked up in the active job's .finally().
+          // Cancel this window's active walk so the new one can start promptly. The
+          // native cancel sets a flag its walkers check before each listing, so the walk
+          // stops quickly; the new job, queued first, starts in the active job's
+          // .finally().
           native.cancelFolderSize();
           const activeJob = folderSizeJobs.get(activeJobId);
           if (activeJob) {
@@ -534,6 +585,25 @@ export function createFolderSizeHandlers(native: {
       return { jobId, status: "running" };
     },
 
+    // The sizes known of `paths`, answered from what is stored: nothing is measured, and no
+    // job is made, so asking about every folder on screen costs one lookup each.
+    probeMany(payload: IpcRequest<"folderSize:probeMany">): IpcResponse<"folderSize:probeMany"> {
+      const sizes: IpcResponse<"folderSize:probeMany">["sizes"] = [];
+      for (const path of payload.paths) {
+        const stats = useSize(path);
+        if (stats) {
+          sizes.push({
+            path,
+            sizeBytes: stats.sizeBytes,
+            diskBytes: stats.diskBytes,
+            fileCount: stats.fileCount,
+            folderCount: stats.folderCount,
+          });
+        }
+      }
+      return { sizes };
+    },
+
     getStatus(payload: IpcRequest<"folderSize:getStatus">): IpcResponse<"folderSize:getStatus"> {
       const job = folderSizeJobs.get(payload.jobId);
       return {
@@ -557,7 +627,7 @@ export function createFolderSizeHandlers(native: {
         }
         if (queuedJobIds.includes(job.jobId)) {
           queuedJobIds = queuedJobIds.filter((queuedId) => queuedId !== job.jobId);
-          jobOwners.delete(job.jobId);
+          forgetJob(job.jobId);
         }
       }
       return { ok: true };
@@ -664,10 +734,4 @@ async function withCachedResponse<TPayload extends object, TResponse>(
     storeCacheEntry(cache, cacheKey, value, now);
   }
   return value;
-}
-
-// Whether the folder at `path` holds any of `paths` (somewhere inside it).
-function holdsAny(path: string, paths: readonly string[]): boolean {
-  const prefix = path.endsWith("/") ? path : `${path}/`;
-  return paths.some((candidate) => candidate.startsWith(prefix));
 }
