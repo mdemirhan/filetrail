@@ -288,7 +288,7 @@ describe("getFileIconHandler", () => {
     icons.getFileIcon.mockResolvedValue(Buffer.from("png"));
     await getFileIconHandler({ path: "/", size: 64, generic: "folder" });
     await getFileIconHandler({ path: "/", size: 64, generic: "executable" });
-    const [[folderSample], [executableSample]] = icons.getFileIcon.mock.calls;
+    const [folderSample, executableSample] = icons.getFileIcon.mock.calls.map(([path]) => path);
     expect(folderSample).not.toBe("/");
     expect(folderSample).toMatch(/filetrail-icon-samples/);
     expect(executableSample).toMatch(/filetrail-icon-samples/);
