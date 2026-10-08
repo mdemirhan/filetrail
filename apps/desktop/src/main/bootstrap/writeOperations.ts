@@ -780,7 +780,7 @@ export function createWriteOperationCoordinator(
     }
     if (sender) {
       deliverProgress(event.operationId, event.status, false, () =>
-        sendProgress(sender, writeOperationProgressEventSchema.parse(event)),
+        sendProgress(sender, parseOwnProgressEvent(event)),
       );
     } else {
       forgetProgress(event.operationId);
@@ -2372,12 +2372,27 @@ function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind 
   }
 }
 
+// An event main made itself, checked as every message to a window is, except for its
+// result's items: main made them, typed from the same contract, and checking 100,000 took
+// 50 ms at the end of a large paste.
+function parseOwnProgressEvent(event: WriteOperationProgressEvent): WriteOperationProgressEvent {
+  if (event.result === null) {
+    return writeOperationProgressEventSchema.parse(event);
+  }
+  const { items } = event.result;
+  const parsed = writeOperationProgressEventSchema.parse({
+    ...event,
+    result: { ...event.result, items: [] },
+  });
+  return { ...parsed, result: parsed.result && { ...parsed.result, items } };
+}
+
 // The window's view of a write service event.
 function toProgressEvent(
   event: CopyPasteProgressEvent,
   action: WriteOperationAction,
 ): WriteOperationProgressEvent {
-  return writeOperationProgressEventSchema.parse({
+  return parseOwnProgressEvent({
     operationId: event.operationId,
     action,
     status: event.status,
@@ -2398,7 +2413,8 @@ function toProgressEvent(
           startedAt: event.result.startedAt,
           finishedAt: event.result.finishedAt,
           summary: event.result.summary,
-          items: event.result.items,
+          // Without what only the copy engine uses, as checking them took it out.
+          items: event.result.items.map(({ sourceKind: _sourceKind, ...item }) => item),
           error: event.result.error,
         }
       : null,
