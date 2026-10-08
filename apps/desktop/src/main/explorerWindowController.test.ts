@@ -518,6 +518,36 @@ describe("ExplorerWindowController closing", () => {
     }
   });
 
+  it("asks once when the last two windows close together while one of them copies", async () => {
+    const { controller, windows, questions, runOperation } = setUpWithWindows(2);
+    runOperation("copy");
+    const [first, second] = windows;
+
+    // Close All, or ⌥-click on a close button: both in the same moment.
+    first?.close();
+    second?.close();
+    await settle();
+
+    expect(questions).toHaveLength(1);
+    expect(first?.destroyed).toBe(true);
+    // The copy is handed to the window still open, which asks before it goes too.
+    expect(controller.successorOf(first?.webContents.id ?? 0)).toBe(second?.webContents);
+    questions[0]?.answer(KEEP_WORKING_BUTTON_INDEX);
+    await settle();
+    expect(second?.destroyed).toBe(false);
+  });
+
+  it("doesn't hand a copy to a window that is closing too", async () => {
+    const { controller, windows } = setUpWithWindows(3);
+    const [first, second, third] = windows;
+
+    third?.close();
+    expect(controller.successorOf(first?.webContents.id ?? 0)).toBe(second?.webContents);
+    second?.close();
+    expect(controller.successorOf(first?.webContents.id ?? 0)).toBeNull();
+    await settle();
+  });
+
   it("closes the last window without asking when nothing worth asking about runs", async () => {
     const { windows, questions, runOperation } = setUpWithWindows(1);
     runOperation("rename");

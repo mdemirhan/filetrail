@@ -127,6 +127,9 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   private readonly closingWithoutAsking = new WeakSet<W>();
   // Windows closed by Merge All Windows: not remembered as the window closed last.
   private readonly merged = new WeakSet<W>();
+  // Windows whose close went ahead, on their way out until "closed": two windows closed in
+  // the same moment (Close All) aren't open for each other.
+  private readonly closing = new WeakSet<W>();
   private shuttingDown = false;
   // True while the "a copy is still in progress" question is on screen.
   private stopQuestionOpen = false;
@@ -145,10 +148,9 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     return this.shuttingDown;
   }
 
-  /** The window in front, if one is open. */
+  /** The window in front, if one is open and not closing. */
   frontWindow(): W | null {
-    const front = this.list.front()?.window;
-    return front && !front.isDestroyed() ? front : null;
+    return this.openWindows()[0]?.window ?? null;
   }
 
   /** The id of the explorer window a web contents belongs to; null for other windows. */
@@ -300,9 +302,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
 
   // The window a running operation goes to when the one that started it closes.
   successorOf(senderId: number): W["webContents"] | null {
-    const successor = this.list
-      .all()
-      .find((entry) => entry.webContentsId !== senderId && !entry.window.isDestroyed());
+    const successor = this.openWindows().find((entry) => entry.webContentsId !== senderId);
     return successor?.window.webContents ?? null;
   }
 
@@ -348,7 +348,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     if (this.shuttingDown || this.stopQuestionOpen) {
       return;
     }
-    if (this.host.anyWindowOpen() && !(await this.askToStopOperation("quit"))) {
+    if (this.host.anyWindowOpen() && !(await this.askToStopOperation("quit", this.frontWindow()))) {
       return;
     }
     if (this.shuttingDown) {
@@ -455,6 +455,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
         clearTimeout(saveTimeout);
       }
       this.list.remove(windowId);
+      this.closing.delete(window);
       this.boundsRecorders.delete(windowId);
       // Closed while the app runs: it doesn't come back at the next launch, but the next
       // window opened with none open starts as it ended. (Windows merged into another one
@@ -473,34 +474,49 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     window.on("maximize", scheduleBoundsSave);
     window.on("unmaximize", scheduleBoundsSave);
     window.on("close", recordBounds);
-    // Closing the last explorer window stops a running copy, so it asks first, as
-    // quitting does. With other windows open the copy goes on in one of them.
     window.on("close", (event) => {
-      if (this.shuttingDown || this.closingWithoutAsking.has(window)) {
-        return;
-      }
-      if (this.stopQuestionOpen) {
+      if (this.holdClose(window)) {
         event.preventDefault();
         return;
       }
-      if (this.list.count > 1) {
-        return;
-      }
-      const operation = this.host.activeOperation();
-      if (!operation || !describeQuitWhileBusy(operation.kind, "close")) {
-        return;
-      }
-      event.preventDefault();
-      void this.askToStopOperation("close").then((stop) => {
-        if (stop && !window.isDestroyed()) {
-          this.closingWithoutAsking.add(window);
-          window.close();
-        }
-      });
+      this.closing.add(window);
     });
 
     this.host.windowsChanged();
     return window;
+  }
+
+  // Closing the last explorer window stops a running copy, so it asks first, as quitting
+  // does, and the window waits for the answer. With other windows open the copy goes on in
+  // one of them.
+  private holdClose(window: W): boolean {
+    if (this.shuttingDown || this.closingWithoutAsking.has(window)) {
+      return false;
+    }
+    if (this.stopQuestionOpen) {
+      return true;
+    }
+    if (this.openWindows().some((entry) => entry.window !== window)) {
+      return false;
+    }
+    const operation = this.host.activeOperation();
+    if (!operation || !describeQuitWhileBusy(operation.kind, "close")) {
+      return false;
+    }
+    void this.askToStopOperation("close", window).then((stop) => {
+      if (stop && !window.isDestroyed()) {
+        this.closingWithoutAsking.add(window);
+        window.close();
+      }
+    });
+    return true;
+  }
+
+  // The windows open and staying open, front to back.
+  private openWindows(): ExplorerWindowEntry<W>[] {
+    return this.list
+      .all()
+      .filter((entry) => !entry.window.isDestroyed() && !this.closing.has(entry.window));
   }
 
   // The list of open windows is what says which is in front; the store keeps its order.
@@ -510,7 +526,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
 
   // Asks whether to stop the running operation, when there is one worth asking about.
   // Resolves true when it may be stopped (or nothing needs asking), false to keep working.
-  private async askToStopOperation(trigger: StopTrigger): Promise<boolean> {
+  private async askToStopOperation(trigger: StopTrigger, parent: W | null): Promise<boolean> {
     const operation = this.host.activeOperation();
     const question = operation ? describeQuitWhileBusy(operation.kind, trigger) : null;
     if (!question) {
@@ -527,7 +543,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
           defaultId: KEEP_WORKING_BUTTON_INDEX,
           cancelId: KEEP_WORKING_BUTTON_INDEX,
         },
-        this.frontWindow(),
+        parent,
       );
     } finally {
       this.stopQuestionOpen = false;
