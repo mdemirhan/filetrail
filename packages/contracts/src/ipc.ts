@@ -761,7 +761,6 @@ export const appPreferencesSchema = z.object({
 export const folderSizeJobStatusSchema = z.enum([
   "queued",
   "running",
-  "deferred",
   "ready",
   "cancelled",
   "error",

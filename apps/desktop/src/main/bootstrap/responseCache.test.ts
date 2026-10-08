@@ -476,6 +476,45 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.getStatus({ jobId }).status).toBe("cancelled");
   });
 
+  // Only a running one was marked: a stopped walk that finished all the same kept what it
+  // had seen of the change.
+  it("keeps nothing of a stopped measurement that a write outdates before it ends", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    const { jobId } = handlers.start({ path: "/test" });
+    handlers.cancel({ jobId });
+
+    clearResponseCaches(["/test/sub/new.txt"]);
+    // Still stopping: it finishes a folder, then the walk.
+    native.finish({ "/test/sub": [5, 5, 1, 0] });
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(handlers.getCachedSize("/test/sub")).toBeUndefined();
+    expect(handlers.getCachedSize("/test")).toBeUndefined();
+    expect(native.getFolderSize).toHaveBeenCalledTimes(1);
+    expect(handlers.getStatus({ jobId }).status).toBe("cancelled");
+  });
+
+  it("drops the finished jobs it keeps too many of when it measures again at once", async () => {
+    resetResponseCacheState();
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    handlers.start({ path: "/test" }, 1);
+    for (let index = 0; index < 300; index++) {
+      handlers.cancel(handlers.start({ path: `/waiting/${index}` }, 2));
+    }
+    expect(getResponseCacheSizes().folderSizeJobs).toBe(301);
+
+    clearResponseCaches(["/test/new.txt"]);
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(native.getFolderSize).toHaveBeenCalledTimes(2);
+    expect(getResponseCacheSizes().folderSizeJobs).toBe(257);
+    resetResponseCacheState();
+  });
+
   // 400,000 sizes took 7 s, one 10,000-folder take of a walk half a second: each size stored
   // looked for the oldest from the start of the cache, past all those let go before it.
   it("keeps up with a walk that stores far more sizes than it keeps", () => {

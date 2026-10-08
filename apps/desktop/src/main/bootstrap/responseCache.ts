@@ -33,7 +33,7 @@ const directoryMetadataCache: TtlCache = {
   maxEntries: MAX_DIRECTORY_METADATA_ENTRIES,
 };
 const treeChildrenCache: TtlCache = { entries: new Map(), maxEntries: MAX_TREE_CHILDREN_ENTRIES };
-type FolderSizeJobStatus = "queued" | "running" | "deferred" | "ready" | "cancelled" | "error";
+type FolderSizeJobStatus = "queued" | "running" | "ready" | "cancelled" | "error";
 type FolderSizeJob = {
   jobId: string;
   path: string;
@@ -253,15 +253,18 @@ export function createFolderSizeHandlers(native: {
           removed.intoHomeTrash === false ? [removed.path] : [removed.path, homeTrashPath],
         ),
       ];
+      // Cancelled but still stopping, it may yet finish: what it stores then is outdated too.
       if (
         activeJobId &&
-        activeJob?.status === "running" &&
+        activeJob &&
         !outdatedJobIds.has(activeJobId) &&
         isAffectedByChange(activeJob.path, touchedPaths)
       ) {
         outdatedJobIds.add(activeJobId);
-        // Stopped now rather than left to finish a walk that is thrown away.
-        native.cancelFolderSize();
+        if (activeJob.status === "running") {
+          // Stopped now rather than left to finish a walk that is thrown away.
+          native.cancelFolderSize();
+        }
       }
     },
     writeStarting: () => folderSizeCache.startRecording(),
@@ -470,6 +473,7 @@ export function createFolderSizeHandlers(native: {
         const job = folderSizeJobs.get(jobId);
         if (runAgain && job?.status === "running") {
           if (queuedJobIds.length === 0) {
+            pruneFinishedFolderSizeJobs();
             runJob(jobId, path);
             return;
           }

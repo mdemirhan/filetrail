@@ -44,6 +44,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeFolderSize: (
     folderPath: string,
     onFinished?: (finishedJson: string) => void,
+    options?: { background: boolean },
   ) => Promise<string>;
   nativeFolderSizeCancel: () => void;
   nativeItemSize: (path: string) => Promise<ItemSize>;
