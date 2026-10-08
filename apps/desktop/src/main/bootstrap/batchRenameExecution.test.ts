@@ -1,6 +1,13 @@
 import type { IpcRequest } from "@filetrail/contracts";
 
-import { type BatchRenameFs, numberedName, runBatchRename } from "./batchRenameExecution";
+import type { WriteJournalEntry } from "@filetrail/core";
+
+import {
+  type BatchRenameFs,
+  numberedName,
+  recoverBatchRename,
+  runBatchRename,
+} from "./batchRenameExecution";
 
 // An in-memory folder tree that compares names as a disk does (ignoring case unless told
 // otherwise, and accent encoding always), refuses to replace with an exclusive rename, and
@@ -707,6 +714,36 @@ describe("renaming several items", () => {
       expect(disk.names()).toEqual(["x", "y"]);
     });
 
+    // A deeper folder's item was renamed already; at this depth the stop comes after "a1"
+    // moved aside but before "b1" did. "a1" can't finish its swap: "b1" still has the name.
+    it("puts a depth back as it was when stopped before all its items moved aside", async () => {
+      const disk = new MemoryDisk(["/trip/A/x", "/trip/a1", "/trip/b1"]);
+      const controller = new AbortController();
+      const original = disk.renameExclusive;
+      disk.renameExclusive = async (from, to) => {
+        await original(from, to);
+        if (from === "/trip/a1") {
+          controller.abort();
+        }
+      };
+      const result = await run(
+        disk,
+        request([
+          ["A/x", "y"],
+          ["a1", "b1"],
+          ["b1", "a1"],
+        ]),
+        { signal: controller.signal },
+      );
+      expect(disk.names("/trip/A")).toEqual(["y"]);
+      expect(disk.names()).toEqual(["a1", "b1"]);
+      expect(result.items.map((item) => item.status)).toEqual([
+        "completed",
+        "cancelled",
+        "cancelled",
+      ]);
+    });
+
     it("puts back what was moved aside when stopped while moving items aside", async () => {
       const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
       const controller = new AbortController();
@@ -729,6 +766,205 @@ describe("renaming several items", () => {
     });
   });
 });
+
+describe("writing down the items moved aside", () => {
+  it("writes them down before any moves, once for each folder depth, and lets go after", async () => {
+    const disk = new MemoryDisk(["/trip/a", "/trip/b", "/trip/c"]);
+    const added: WriteJournalEntry[] = [];
+    const live = new Map<string, WriteJournalEntry>();
+    const journal = {
+      add: async (entry: WriteJournalEntry) => {
+        added.push(structuredClone(entry));
+        // Written down before the first item moves aside.
+        expect(disk.names()).toEqual(["a", "b", "c"]);
+        live.set(entry.id, entry);
+      },
+      remove: async (id: string) => {
+        live.delete(id);
+      },
+    };
+
+    await runBatchRename({
+      request: request([
+        ["a", "b"],
+        ["b", "a"],
+        ["c", "d"],
+      ]),
+      fs: disk,
+      signal: new AbortController().signal,
+      temporaryName: counter(),
+      journal,
+    });
+
+    expect(added).toEqual([
+      {
+        kind: "batch_rename",
+        id: expect.any(String),
+        items: [
+          { temporaryPath: "/trip/.tmp-0", originalPath: "/trip/a", newPath: "/trip/b" },
+          { temporaryPath: "/trip/.tmp-1", originalPath: "/trip/b", newPath: "/trip/a" },
+        ],
+      },
+    ]);
+    expect(live.size).toBe(0);
+    expect(disk.names()).toEqual(["a", "b", "d"]);
+  });
+
+  it("writes down another hidden name before moving there when the first is taken", async () => {
+    const disk = new MemoryDisk(["/trip/a", "/trip/b", "/trip/.tmp-0"]);
+    const added: WriteJournalEntry[] = [];
+    await runBatchRename({
+      request: request([
+        ["a", "b"],
+        ["b", "a"],
+      ]),
+      fs: disk,
+      signal: new AbortController().signal,
+      temporaryName: counter(),
+      journal: {
+        add: async (entry) => {
+          added.push(structuredClone(entry));
+        },
+        remove: async () => undefined,
+      },
+    });
+    expect(
+      added.map((entry) =>
+        entry.kind === "batch_rename" ? entry.items.map((item) => item.temporaryPath) : [],
+      ),
+    ).toEqual([
+      ["/trip/.tmp-0", "/trip/.tmp-1"],
+      ["/trip/.tmp-2", "/trip/.tmp-1"],
+    ]);
+    expect(disk.names()).toEqual([".tmp-0", "a", "b"]);
+  });
+
+  // An item that could go back nowhere stays under its hidden name: it stays written down.
+  it("keeps written down an item left under its hidden name", async () => {
+    const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
+    disk.failures.set("renameExclusive:/trip/.tmp-0->/trip/b", errno("EACCES"));
+    disk.failures.set("renameExclusive:/trip/.tmp-0->/trip/a", errno("EACCES"));
+    const live = new Map<string, WriteJournalEntry>();
+    await runBatchRename({
+      request: request([
+        ["a", "b"],
+        ["b", "a"],
+      ]),
+      fs: disk,
+      signal: new AbortController().signal,
+      temporaryName: counter(),
+      journal: {
+        add: async (entry) => {
+          live.set(entry.id, structuredClone(entry));
+        },
+        remove: async (id) => {
+          live.delete(id);
+        },
+      },
+    });
+    expect([...live.values()]).toEqual([
+      {
+        kind: "batch_rename",
+        id: expect.any(String),
+        items: [{ temporaryPath: "/trip/.tmp-0", originalPath: "/trip/a", newPath: "/trip/b" }],
+      },
+    ]);
+  });
+
+  it("renames nothing of a depth whose items can't be written down", async () => {
+    const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
+    const result = await runBatchRename({
+      request: request([
+        ["a", "b"],
+        ["b", "a"],
+      ]),
+      fs: disk,
+      signal: new AbortController().signal,
+      temporaryName: counter(),
+      journal: {
+        add: async () => {
+          throw errno("ENOSPC");
+        },
+        remove: async () => undefined,
+      },
+    });
+    expect(disk.names()).toEqual(["a", "b"]);
+    expect(result.items.map((item) => item.status)).toEqual(["failed", "failed"]);
+    expect(result.items[0]?.error).toMatch(
+      /^It wasn't renamed, as File Trail couldn't write down what it was about to do\./u,
+    );
+  });
+});
+
+describe("putting back what a crash left under hidden names", () => {
+  const hidden = (name: string) => `/trip/.filetrail-rename-${name.repeat(12).slice(0, 12)}`;
+
+  it("puts each item under its old name, else its new one, else its old one numbered", async () => {
+    const disk = new MemoryDisk([
+      hidden("a"),
+      hidden("b"),
+      hidden("c"),
+      "/trip/x.txt",
+      "/trip/y.txt",
+      "/trip/z.txt",
+      "/trip/w.txt",
+    ]);
+    const recovery = await recoverBatchRename(
+      {
+        kind: "batch_rename",
+        id: "1",
+        items: [
+          // Free: back under its old name.
+          { temporaryPath: hidden("a"), originalPath: "/trip/p.txt", newPath: "/trip/x.txt" },
+          // Old name taken: its new one.
+          { temporaryPath: hidden("b"), originalPath: "/trip/x.txt", newPath: "/trip/q.txt" },
+          // Both taken: its old name numbered.
+          { temporaryPath: hidden("c"), originalPath: "/trip/y.txt", newPath: "/trip/z.txt" },
+          // Took its name before the crash.
+          { temporaryPath: hidden("d"), originalPath: "/trip/v.txt", newPath: "/trip/w.txt" },
+          // Not a name this app gives: left alone.
+          { temporaryPath: "/trip/x.txt", originalPath: "/trip/r.txt", newPath: "/trip/s.txt" },
+        ],
+      },
+      { ...disk, lstat: withFolders(disk, ["/trip"]) },
+    );
+    expect(recovery).toEqual({
+      restored: [
+        { originalPath: "/trip/p.txt", path: "/trip/p.txt" },
+        { originalPath: "/trip/x.txt", path: "/trip/q.txt" },
+        { originalPath: "/trip/y.txt", path: "/trip/y 2.txt" },
+      ],
+      remaining: [],
+    });
+    expect(disk.names()).toEqual(["p.txt", "q.txt", "w.txt", "x.txt", "y 2.txt", "y.txt", "z.txt"]);
+  });
+
+  it("keeps written down what can't be reached or moved", async () => {
+    const disk = new MemoryDisk([hidden("a")]);
+    disk.failures.set(`renameExclusive:${hidden("a")}->/trip/p.txt`, errno("EACCES"));
+    const away = {
+      temporaryPath: "/gone/.filetrail-rename-bbbbbbbbbbbb",
+      originalPath: "/gone/q",
+      newPath: "/gone/r",
+    };
+    const stuck = {
+      temporaryPath: hidden("a"),
+      originalPath: "/trip/p.txt",
+      newPath: "/trip/o.txt",
+    };
+    const recovery = await recoverBatchRename(
+      { kind: "batch_rename", id: "1", items: [stuck, away] },
+      { ...disk, lstat: withFolders(disk, ["/trip"]) },
+    );
+    expect(recovery).toEqual({ restored: [], remaining: [stuck, away] });
+  });
+});
+
+// The disk's lstat, which also finds `folders` (as folders).
+function withFolders(disk: MemoryDisk, folders: string[]): MemoryDisk["lstat"] {
+  return async (path) =>
+    folders.includes(path) ? { isDirectory: () => true, dev: 1, ino: 1 } : disk.lstat(path);
+}
 
 describe("numbered names", () => {
   it("puts the number before the extension, and at the end of a folder's name", () => {

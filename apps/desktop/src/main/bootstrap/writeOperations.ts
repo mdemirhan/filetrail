@@ -25,6 +25,7 @@ import {
   type UndoStep,
   type UndoUnit,
   WRITE_OPERATION_BUSY_ERROR,
+  type WriteJournal,
   type WriteService,
   describeCopyPasteError,
   errorCode,
@@ -99,6 +100,7 @@ export type WriteOperationKind =
   | "trash"
   | "delete"
   | "rename"
+  | "batch_rename"
   | "new_folder"
   | "undo";
 
@@ -195,6 +197,9 @@ export function createWriteOperationCoordinator(
     diskHasTrash?: (path: string) => boolean;
     // What Undo and Redo work from. Without it there is nothing to undo.
     undoHistory?: UndoHistory;
+    // Where writes that leave items under hidden names are written down (see writeJournal):
+    // a rename of several, for a crash not to strand what it moved aside.
+    writeJournal?: WriteJournal;
     // Which item each of these clipboard paths was when copied (see clipboardItemIds).
     clipboardItemIds?: (paths: readonly string[]) => Promise<Record<string, ItemId>>;
     // Every window hears how the running operation is doing, so the others know one is
@@ -1121,6 +1126,7 @@ export function createWriteOperationCoordinator(
         request,
         fs,
         signal: controller.signal,
+        journal: options.writeJournal ?? null,
         onItemStart: (item, completedItemCount) =>
           emitLocalWriteOperationEvent({
             operationId,
@@ -1608,6 +1614,7 @@ export function createWriteOperationCoordinator(
         homeDev: home && home !== "missing" ? home.dev : null,
         diskHasTrash: options.diskHasTrash,
         changedAgreed,
+        journal: options.writeJournal ?? null,
         onStepStart: (path, completedItemCount) =>
           emitLocalWriteOperationEvent({
             operationId,
@@ -2500,8 +2507,9 @@ function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind 
     case "delete_immediately":
       return "delete";
     case "rename":
-    case "batch_rename":
       return "rename";
+    case "batch_rename":
+      return "batch_rename";
     case "new_folder":
       return "new_folder";
     case "undo":

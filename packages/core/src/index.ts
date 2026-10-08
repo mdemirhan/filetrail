@@ -21,6 +21,7 @@ export {
   type PartialFileRecoveryOutcome,
   type ReplaceRecoveryOutcome,
   type RunWriteAlone,
+  answersWithin,
   recoverInterruptedReplaces,
   recoverPartialFiles,
 } from "./fs/copyPasteRecovery";

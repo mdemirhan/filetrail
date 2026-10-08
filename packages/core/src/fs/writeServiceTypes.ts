@@ -499,7 +499,22 @@ export type PartialFileJournalEntry = {
   finalPath: string;
 };
 
-export type WriteJournalEntry = ReplaceJournalEntry | PartialFileJournalEntry;
+/**
+ * Items a rename of several moved aside under hidden names (`temporaryPath`) so others
+ * could take their names: written down before the first moves, for one folder depth at a
+ * time. A crash leaves each where the next start finds it: under its old name, its new one,
+ * or its old one with a number.
+ */
+export type BatchRenameJournalEntry = {
+  kind: "batch_rename";
+  id: string;
+  items: Array<{ temporaryPath: string; originalPath: string; newPath: string }>;
+};
+
+export type WriteJournalEntry =
+  | ReplaceJournalEntry
+  | PartialFileJournalEntry
+  | BatchRenameJournalEntry;
 
 /** Where writes that leave items under hidden names while they run are written down, so a
  *  crash can't strand one there: the next start finishes or undoes each. `add` replaces an

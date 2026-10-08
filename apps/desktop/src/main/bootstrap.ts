@@ -237,6 +237,7 @@ export async function bootstrapMainProcess(
       diskHasTrash: createDiskHasTrash(listMounts, realpathNow),
       recordUndo: undoHistory.record,
       undoHistory,
+      writeJournal,
       clipboardItemIds: clipboardItemIds.expectedIds,
       broadcastProgress: (event, owner) =>
         sendToEachWindow(

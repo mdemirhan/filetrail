@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { ReplaceJournalEntry, RunWriteAlone } from "@filetrail/core";
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
+import { createOriginalWriteOperationFs } from "../originalFileSystem";
+import { runBatchRename } from "./batchRenameExecution";
 import { getCachedResponse, getResponseCacheSizes, resetResponseCacheState } from "./responseCache";
 import { openWriteJournal, recoverWrites, retryRecovery } from "./writeJournal";
 
@@ -408,6 +410,64 @@ describe("recoverWrites", () => {
       "[filetrail] an interrupted copy wasn't removed",
       expect.objectContaining({ partialPath: unreachable }),
     );
+  });
+
+  // A rename of several ("1" becomes "2", "2" becomes "3") stops dead as the first item
+  // takes its new name, as in a crash: the items waiting under hidden names are put back at
+  // the next start, and the person is told.
+  it("puts back the items a rename of several left under hidden names", async () => {
+    const folder = join(testDir, "trip");
+    await mkdir(folder);
+    for (const name of ["1.jpg", "2.jpg", "3.jpg"]) {
+      await writeFile(join(folder, name), name);
+    }
+    const journalPath = join(testDir, "replace-journal.json");
+    const journal = await openWriteJournal(journalPath);
+    const fs = createOriginalWriteOperationFs(async () => null);
+    let crashed: () => void = () => undefined;
+    const crash = new Promise<void>((resolve) => {
+      crashed = resolve;
+    });
+    void runBatchRename({
+      request: {
+        items: ["1.jpg", "2.jpg", "3.jpg"].map((name, index) => ({
+          sourcePath: join(folder, name),
+          destinationName: `${index + 2}.jpg`,
+          isFolder: false,
+        })),
+        onConflict: "number",
+        numberSeparator: " ",
+      },
+      fs: {
+        ...fs,
+        renameExclusive: async (from, to) => {
+          if (basename(to) === "2.jpg") {
+            crashed();
+            return new Promise<void>(() => undefined);
+          }
+          return fs.renameExclusive(from, to);
+        },
+      },
+      signal: new AbortController().signal,
+      journal,
+    });
+    await crash;
+    // "2.jpg" and "3.jpg" were moved aside for the others; "1.jpg" was taking its new name.
+    expect((await readdir(folder)).filter((name) => !name.startsWith("."))).toEqual(["1.jpg"]);
+
+    const reopened = await openWriteJournal(journalPath);
+    const report = await recoverWrites(
+      reopened,
+      { ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM, renameExclusive: fs.renameExclusive },
+      { info: vi.fn(), error: vi.fn() },
+    );
+
+    expect((await readdir(folder)).sort()).toEqual(["1.jpg", "2.jpg", "3.jpg"]);
+    expect(await readFile(join(folder, "1.jpg"), "utf8")).toBe("1.jpg");
+    expect(report.notices).toEqual([
+      "A rename of several items was cut short when File Trail stopped. “2.jpg” is back under its old name; “3.jpg” is back under its old name.",
+    ]);
+    expect(reopened.entries()).toEqual([]);
   });
 
   it("reads both kinds of entry back, and leaves out what it can't read", async () => {

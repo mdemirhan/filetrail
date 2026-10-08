@@ -45,6 +45,15 @@ describe("describeQuitWhileBusy", () => {
     expect(describeQuitWhileBusy("new_folder")).toBeNull();
   });
 
+  // Thousands of items on a network disk take a while: stopping them is asked about.
+  it("asks about a rename of several items", () => {
+    expect(describeQuitWhileBusy("batch_rename", "close")).toEqual({
+      message: "Items are still being renamed.",
+      detail:
+        "If you close the window now, it stops after the current item. Items already renamed keep their new names; the rest keep their old ones.",
+    });
+  });
+
   it("makes Keep Working the default and Stop and Quit the second button", () => {
     expect(stopQuestionButtons("quit")[KEEP_WORKING_BUTTON_INDEX]).toBe("Keep Working");
     expect(stopQuestionButtons("quit")[STOP_BUTTON_INDEX]).toBe("Stop and Quit");

@@ -3,7 +3,9 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import type { IpcRequest, WriteOperationResult } from "@filetrail/contracts";
 import {
+  type BatchRenameJournalEntry,
   type UndoStep,
+  type WriteJournal,
   describeCopyPasteError,
   errorCode,
   fileIdOf,
@@ -68,8 +70,12 @@ export async function runBatchRename(args: {
   onItemStart?: (item: { sourcePath: string; destinationPath: string }, completed: number) => void;
   /** The hidden name an item waits under (tests give their own). */
   temporaryName?: (attempt: number) => string;
+  /** Where the items moved aside are written down first, so a crash can't leave them
+   *  under hidden names (see BatchRenameJournalEntry). */
+  journal?: WriteJournal | null;
 }): Promise<BatchRenameRun> {
   const { fs, signal, request } = args;
+  const journal = args.journal ?? null;
   const temporaryName = args.temporaryName ?? defaultTemporaryName;
   const planned = request.items.map((item, index): PlannedItem => {
     const sourcePath = resolve(item.sourcePath);
@@ -120,16 +126,58 @@ export async function runBatchRename(args: {
     .sort(([left], [right]) => right - left)
     .map(([, items]) => items);
 
-  let anyRenamed = false;
   for (const level of deepestFirst) {
-    // First, the items in the way move aside.
-    for (const item of level.filter(isBlocker)) {
+    const blockers = level.filter(isBlocker);
+    // The hidden names the items in the way will wait under, written down before any moves.
+    const entry: BatchRenameJournalEntry = {
+      kind: "batch_rename",
+      id: randomBytes(8).toString("hex"),
+      items: blockers.map((item) => ({
+        temporaryPath: join(item.folder, temporaryName(0)),
+        originalPath: item.sourcePath,
+        newPath: item.destinationPath,
+      })),
+    };
+    if (journal !== null && blockers.length > 0) {
+      try {
+        await journal.add(entry);
+      } catch (error) {
+        // Nothing of this depth is renamed: an item moved aside now could be stranded.
+        for (const item of level) {
+          if (results[item.index] === null) {
+            results[item.index] = failed(
+              item,
+              `It wasn't renamed, as File Trail couldn't write down what it was about to do. ${describeCopyPasteError(error)}`,
+            );
+          }
+        }
+        continue;
+      }
+    }
+
+    // First, the items in the way move aside. Only when all of them have can the swaps go
+    // on after a stop; stopped before, every item goes back as it was.
+    let allMovedAside = true;
+    for (const [position, item] of blockers.entries()) {
       if (signal.aborted) {
         cancelled = true;
+        allMovedAside = false;
         break;
       }
       try {
-        item.temporaryPath = await moveToTemporaryName(fs, item, temporaryName);
+        item.temporaryPath = await moveToTemporaryName(
+          fs,
+          item,
+          temporaryName,
+          entry.items[position]?.temporaryPath ?? null,
+          async (temporaryPath) => {
+            const written = entry.items[position];
+            if (journal !== null && written) {
+              written.temporaryPath = temporaryPath;
+              await journal.add(entry);
+            }
+          },
+        );
       } catch (error) {
         results[item.index] = failed(
           item,
@@ -138,15 +186,16 @@ export async function runBatchRename(args: {
       }
     }
 
-    // Then every item takes its new name, in the order asked for. Stopped before any has,
-    // they all go back as they were; stopped later, an item already moved aside still takes
-    // its new name, so a swap under way is finished rather than left with a name taken
-    // from it.
+    // Then every item takes its new name, in the order asked for. Stopped before any of
+    // this depth has, they all go back as they were; stopped later, an item already moved
+    // aside still takes its new name, so a swap under way is finished rather than left with
+    // a name taken from it.
+    let levelRenamed = false;
     for (const item of level) {
       if (results[item.index] !== null) {
         continue;
       }
-      const finishesSwap = anyRenamed && item.temporaryPath !== null;
+      const finishesSwap = allMovedAside && levelRenamed && item.temporaryPath !== null;
       if ((cancelled || signal.aborted) && !finishesSwap) {
         cancelled = true;
         results[item.index] = await leaveUnrenamed(fs, item, {
@@ -167,13 +216,27 @@ export async function runBatchRename(args: {
       results[item.index] = await renameItem(fs, item, request);
       if (results[item.index]?.status === "completed") {
         completedItemCount += 1;
-        anyRenamed = true;
+        levelRenamed = true;
       }
       // Renamed, or put back under another name ("sub 2"): what is inside goes along.
       followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
       if (signal.aborted) {
         cancelled = true;
       }
+    }
+    // Every item of this depth is settled. One that could go nowhere else is still under
+    // its hidden name (its result says so): it stays written down, for the next start.
+    if (journal !== null && blockers.length > 0) {
+      const stillHidden = new Set(
+        level.flatMap((item) => {
+          const at = results[item.index]?.destinationPath;
+          return at && at === item.temporaryPath ? [at] : [];
+        }),
+      );
+      entry.items = entry.items.filter((written) => stillHidden.has(written.temporaryPath));
+      await (entry.items.length > 0 ? journal.add(entry) : journal.remove(entry.id)).catch(
+        () => undefined,
+      );
     }
   }
 
@@ -311,14 +374,22 @@ async function restoreFromTemporaryName(
   }
 }
 
+// `written` is the hidden name already written down for it; another (that one was taken)
+// is written down by `rewrite` before the item moves there.
 async function moveToTemporaryName(
   fs: BatchRenameFs,
   item: PlannedItem,
   temporaryName: (attempt: number) => string,
+  written: string | null,
+  rewrite: (temporaryPath: string) => Promise<void>,
 ): Promise<string> {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < TEMPORARY_NAME_ATTEMPTS; attempt += 1) {
-    const temporaryPath = join(item.folder, temporaryName(attempt));
+    const temporaryPath =
+      attempt === 0 && written !== null ? written : join(item.folder, temporaryName(attempt));
+    if (temporaryPath !== written) {
+      await rewrite(temporaryPath);
+    }
     try {
       await fs.renameExclusive(item.sourcePath, temporaryPath);
       return temporaryPath;
@@ -446,4 +517,76 @@ function looseKey(name: string): string {
 
 function defaultTemporaryName(): string {
   return `.filetrail-rename-${randomBytes(6).toString("hex")}`;
+}
+
+// Where an item found under its hidden name goes, in order of preference.
+function* placesToPutBack(
+  written: BatchRenameJournalEntry["items"][number],
+  isFolder: boolean,
+): Generator<string> {
+  yield written.originalPath;
+  yield written.newPath;
+  const folder = dirname(written.originalPath);
+  for (let number = 2; number <= MAX_ADDED_NUMBER; number += 1) {
+    yield join(folder, numberedName(basename(written.originalPath), isFolder, " ", number));
+  }
+}
+
+// The hidden names a rename of several gives items (defaultTemporaryName).
+const TEMPORARY_NAME_PATTERN = /^\.filetrail-rename-[0-9a-f]{12}$/u;
+
+export type BatchRenameRecovery = {
+  // Each item found under its hidden name, and where it is now.
+  restored: Array<{ originalPath: string; path: string }>;
+  // What stays written down: its disk can't be read, or the item couldn't be moved.
+  remaining: BatchRenameJournalEntry["items"];
+};
+
+/**
+ * Puts back the items a crash left under hidden names in a rename of several: under the
+ * old name when it is free, else the new one asked for, else the old one with a number.
+ * Never replaces anything, and moves only what has this app's hidden naming.
+ */
+export async function recoverBatchRename(
+  entry: BatchRenameJournalEntry,
+  fs: Pick<BatchRenameFs, "lstat" | "renameExclusive">,
+): Promise<BatchRenameRecovery> {
+  const recovery: BatchRenameRecovery = { restored: [], remaining: [] };
+  for (const written of entry.items) {
+    if (!TEMPORARY_NAME_PATTERN.test(basename(written.temporaryPath))) {
+      continue;
+    }
+    let isFolder: boolean;
+    try {
+      isFolder = (await fs.lstat(written.temporaryPath)).isDirectory();
+    } catch (error) {
+      // Gone: it took its name before the crash. Unreadable: its disk may be away.
+      const folderThere = await fs.lstat(dirname(written.temporaryPath)).then(
+        (stats) => stats.isDirectory(),
+        () => false,
+      );
+      if (errorCode(error) !== "ENOENT" || !folderThere) {
+        recovery.remaining.push(written);
+      }
+      continue;
+    }
+    let path: string | null = null;
+    for (const candidate of placesToPutBack(written, isFolder)) {
+      try {
+        await fs.renameExclusive(written.temporaryPath, candidate);
+        path = candidate;
+        break;
+      } catch (error) {
+        if (errorCode(error) !== "EEXIST") {
+          break;
+        }
+      }
+    }
+    if (path === null) {
+      recovery.remaining.push(written);
+    } else {
+      recovery.restored.push({ originalPath: written.originalPath, path });
+    }
+  }
+  return recovery;
 }

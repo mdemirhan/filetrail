@@ -125,7 +125,7 @@ async function removePartialFile(
 }
 
 // Whether looking up `path` comes back (found or not) within `ms`.
-async function answersWithin(
+export async function answersWithin(
   fileSystem: WriteServiceFileSystem,
   path: string,
   ms: number,

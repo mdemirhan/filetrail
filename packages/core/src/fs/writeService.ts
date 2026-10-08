@@ -58,6 +58,7 @@ export {
   type CopyPasteRuntimeConflict,
   type CopyPasteRuntimeResolutionAction,
   type NodeFingerprint,
+  type BatchRenameJournalEntry,
   type PartialFileJournalEntry,
   type ReplaceJournalEntry,
   type WriteJournal,

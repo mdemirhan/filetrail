@@ -2,18 +2,21 @@ import { open, readFile, rename } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 
 import {
+  type BatchRenameJournalEntry,
   type PartialFileJournalEntry,
   type ReplaceJournalEntry,
   type RunWriteAlone,
   type WriteJournal,
   type WriteJournalEntry,
   type WriteServiceFileSystem,
+  answersWithin,
   isReplaceJournalEntry,
   recoverInterruptedReplaces,
   recoverPartialFiles,
 } from "@filetrail/core";
 
 import type { AppLogger } from "../appLog";
+import { type BatchRenameRecovery, recoverBatchRename } from "./batchRenameExecution";
 import { clearResponseCaches } from "./responseCache";
 
 export type FileWriteJournal = WriteJournal & {
@@ -81,6 +84,9 @@ export async function recoverWrites(
   const partialFiles = entries.filter(
     (entry): entry is PartialFileJournalEntry => entry.kind === "partial_file",
   );
+  const batchRenames = entries.filter(
+    (entry): entry is BatchRenameJournalEntry => entry.kind === "batch_rename",
+  );
   const recoveryOptions = {
     ...(options.answerWithinMs === undefined ? {} : { answerWithinMs: options.answerWithinMs }),
     ...(options.runWriteAlone === undefined ? {} : { runWriteAlone: options.runWriteAlone }),
@@ -91,7 +97,76 @@ export async function recoverWrites(
   if (partialFiles.length > 0) {
     await removePartialFiles(journal, partialFiles, fileSystem, logger, recoveryOptions);
   }
+  for (const entry of batchRenames) {
+    await putBackRenamedItems(journal, entry, fileSystem, logger, recoveryOptions, report);
+  }
   return report;
+}
+
+// A rename of several a crash cut short: the items waiting under hidden names are put
+// back, and the person is told where. What can't be reached yet waits for the retry.
+async function putBackRenamedItems(
+  journal: FileWriteJournal,
+  entry: BatchRenameJournalEntry,
+  fileSystem: WriteServiceFileSystem,
+  logger: Pick<AppLogger, "info" | "error">,
+  options: { answerWithinMs?: number; runWriteAlone?: RunWriteAlone },
+  report: RecoveryReport,
+): Promise<void> {
+  const { renameExclusive } = fileSystem;
+  if (!renameExclusive) {
+    return;
+  }
+  const fs = { lstat: fileSystem.lstat, renameExclusive };
+  const folder = dirname(entry.items[0]?.temporaryPath ?? "/");
+  if (
+    options.answerWithinMs !== undefined &&
+    !(await answersWithin(fileSystem, folder, options.answerWithinMs))
+  ) {
+    return;
+  }
+  let recovery: Awaited<ReturnType<typeof recoverBatchRename>>;
+  try {
+    if (options.runWriteAlone === undefined) {
+      recovery = await recoverBatchRename(entry, fs);
+    } else {
+      const run = await options.runWriteAlone(() => recoverBatchRename(entry, fs));
+      if (!run.ran) {
+        return;
+      }
+      recovery = run.value;
+    }
+  } catch (error) {
+    logger.error("[filetrail] couldn't put back items of an interrupted rename", error);
+    return;
+  }
+  if (recovery.restored.length > 0) {
+    clearResponseCaches(recovery.restored.map((item) => item.path));
+    report.notices.push(describePutBack(recovery.restored));
+  }
+  try {
+    await (recovery.remaining.length > 0
+      ? journal.add({ ...entry, items: recovery.remaining })
+      : journal.remove(entry.id));
+  } catch (error) {
+    logger.error("[filetrail] couldn't update the write journal", error);
+  }
+}
+
+// "A rename was cut short when File Trail stopped. “a.txt” is back under its old name;
+// “b.txt” is named “c.txt”."
+function describePutBack(restored: BatchRenameRecovery["restored"]): string {
+  const said = restored
+    .slice(0, 3)
+    .map(({ originalPath, path }) =>
+      path === originalPath
+        ? `“${basename(originalPath)}” is back under its old name`
+        : `“${basename(originalPath)}” is named “${basename(path)}”`,
+    );
+  const more = restored.length - said.length;
+  return `A rename of several items was cut short when File Trail stopped. ${said.join("; ")}${
+    more > 0 ? `; and ${more} more ${more === 1 ? "item was" : "items were"} put back` : ""
+  }.`;
 }
 
 // What a crash left of large files being copied: only part of a copy, its original in
@@ -283,7 +358,23 @@ function isEntry(value: unknown): value is WriteJournalEntry {
     return false;
   }
   const entry = value as Record<string, unknown>;
-  if (typeof entry.id !== "string" || typeof entry.finalPath !== "string") {
+  if (typeof entry.id !== "string") {
+    return false;
+  }
+  if (entry.kind === "batch_rename") {
+    return (
+      Array.isArray(entry.items) &&
+      entry.items.every(
+        (item: unknown) =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof (item as Record<string, unknown>).temporaryPath === "string" &&
+          typeof (item as Record<string, unknown>).originalPath === "string" &&
+          typeof (item as Record<string, unknown>).newPath === "string",
+      )
+    );
+  }
+  if (typeof entry.finalPath !== "string") {
     return false;
   }
   if (entry.kind === "partial_file") {

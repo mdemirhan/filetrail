@@ -486,7 +486,8 @@ describe("what a rename of several items checks first", () => {
         request(root, [["a.txt", "b.txt"]]),
         { sender },
       );
-      expect(coordinator.getActiveOperation()).toMatchObject({ kind: "rename" });
+      // Its own kind, so quitting asks before stopping it.
+      expect(coordinator.getActiveOperation()).toMatchObject({ kind: "batch_rename" });
       await expect(
         coordinator.handlers["writeOperation:batchRename"](request(root, [["a.txt", "c.txt"]]), {
           sender,

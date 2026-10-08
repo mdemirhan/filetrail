@@ -22,8 +22,9 @@ export function shouldOpenWindowOnActivate(state: {
   return !state.shutdownInProgress && state.explorerWindowCount === 0;
 }
 
-// What to ask before quitting or closing the window stops a running operation. A rename or
-// a new folder is over in a moment, so it is simply waited for: there is nothing to ask.
+// What to ask before quitting or closing the window stops a running operation. A rename of
+// one item or a new folder is over in a moment, so it is simply waited for: there is nothing
+// to ask. A rename of several can take a while (thousands of items on a network disk).
 export function describeQuitWhileBusy(
   kind: WriteOperationKind,
   trigger: StopTrigger = "quit",
@@ -57,6 +58,11 @@ export function describeQuitWhileBusy(
       return {
         message: "An Undo is still in progress.",
         detail: `${stops} What was already undone stays undone.`,
+      };
+    case "batch_rename":
+      return {
+        message: "Items are still being renamed.",
+        detail: `${stops} Items already renamed keep their new names; the rest keep their old ones.`,
       };
     case "rename":
     case "new_folder":

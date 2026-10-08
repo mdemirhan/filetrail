@@ -8,6 +8,7 @@ import {
   USER_LOCK_FLAGS,
   type UndoStep,
   type UndoUnit,
+  type WriteJournal,
   describeCopyPasteError,
   errorCode,
   findLockedRefusal,
@@ -93,6 +94,8 @@ export async function runUndo(args: {
   // The items the person agreed to move to the Trash though they changed since. Another
   // that changed once the Undo started is left, and the next Undo asks about it.
   changedAgreed?: ReadonlySet<string>;
+  // Where a rename of several writes down the items it moves aside (see writeJournal).
+  journal?: WriteJournal | null | undefined;
   onStepStart?: (path: string, completedItemCount: number) => void;
 }): Promise<UndoRun> {
   const run: UndoRun = {
@@ -629,6 +632,7 @@ async function renameBack(
     request: { items: toRename, onConflict: "number", numberSeparator: " " },
     fs: errors.fs,
     signal: args.signal,
+    journal: args.journal ?? null,
   });
   // Every item has a result, in the order asked for. Names are compared in the folder the
   // item was in: a folder renamed in the same batch takes its items' paths along.
