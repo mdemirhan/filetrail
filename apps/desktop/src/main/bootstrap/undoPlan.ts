@@ -329,47 +329,82 @@ export async function findQuestions(
   fs: PlanFs,
   units: readonly UndoUnit[],
 ): Promise<{ nameTaken: string[]; changed: ChangedItem[] }> {
+  // Units don't depend on each other, so several are looked at at once: an Undo of
+  // thousands of items would otherwise wait for each item's disk reads in turn.
+  const perUnit = await mapAtMost(QUESTION_CHECKS_AT_ONCE, [...units].reverse(), (unit) =>
+    unitQuestions(fs, unit),
+  );
+  return {
+    nameTaken: perUnit.flatMap((questions) => questions.nameTaken),
+    changed: perUnit.flatMap((questions) => questions.changed),
+  };
+}
+
+// How many units findQuestions looks at at once.
+const QUESTION_CHECKS_AT_ONCE = 16;
+
+// `run` for each of `items`, at most `limit` at a time; the results in the items' order.
+export async function mapAtMost<T, R>(
+  limit: number,
+  items: readonly T[],
+  run: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await run(items[index] as T);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+async function unitQuestions(
+  fs: PlanFs,
+  unit: UndoUnit,
+): Promise<{ nameTaken: string[]; changed: ChangedItem[] }> {
   const nameTaken: string[] = [];
   const changed: ChangedItem[] = [];
-  for (const unit of [...units].reverse()) {
-    const changes = noUnitChanges();
-    for (const step of [...unit.steps].reverse()) {
-      const planned = reverseStep(step);
-      if (planned.kind === "move") {
-        const check = await checkMove(fs, planned, changes);
-        if (!check.ok) {
-          if (check.missing) {
-            continue;
-          }
-          break;
+  const changes = noUnitChanges();
+  for (const step of [...unit.steps].reverse()) {
+    const planned = reverseStep(step);
+    if (planned.kind === "move") {
+      const check = await checkMove(fs, planned, changes);
+      if (!check.ok) {
+        if (check.missing) {
+          continue;
         }
+        break;
+      }
+      if (check.nameTaken) {
+        nameTaken.push(basename(planned.to));
+      }
+      noteMovedAway(changes, planned.from, check.id);
+      changes.filledPlaces.add(placeKey(planned.to));
+    } else if (planned.kind === "trash") {
+      const check = await checkTrash(fs, planned);
+      if (!check.ok) {
+        if (check.missing) {
+          continue;
+        }
+        break;
+      }
+      if (check.changed) {
+        changed.push({
+          name: basename(planned.path),
+          putBack: planned.putBack,
+          // A Replace's unit also has its old item's trip to the Trash.
+          replaced: !planned.putBack && unit.steps.some((other) => other.kind === "trashed"),
+        });
+      }
+      noteMovedAway(changes, planned.path, check.id);
+    } else {
+      for (const check of await checkBatch(fs, planned)) {
         if (check.nameTaken) {
-          nameTaken.push(basename(planned.to));
-        }
-        noteMovedAway(changes, planned.from, check.id);
-        changes.filledPlaces.add(placeKey(planned.to));
-      } else if (planned.kind === "trash") {
-        const check = await checkTrash(fs, planned);
-        if (!check.ok) {
-          if (check.missing) {
-            continue;
-          }
-          break;
-        }
-        if (check.changed) {
-          changed.push({
-            name: basename(planned.path),
-            putBack: planned.putBack,
-            // A Replace's unit also has its old item's trip to the Trash.
-            replaced: !planned.putBack && unit.steps.some((other) => other.kind === "trashed"),
-          });
-        }
-        noteMovedAway(changes, planned.path, check.id);
-      } else {
-        for (const check of await checkBatch(fs, planned)) {
-          if (check.nameTaken) {
-            nameTaken.push(basename(check.item.to));
-          }
+          nameTaken.push(basename(check.item.to));
         }
       }
     }

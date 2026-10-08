@@ -1,3 +1,5 @@
+import { basename } from "node:path";
+
 import type { UndoStep, UndoUnit } from "@filetrail/core";
 
 import {
@@ -431,5 +433,57 @@ describe("findQuestions", () => {
         },
       ]),
     ).toEqual({ nameTaken: ["a"], changed: [] });
+  });
+
+  it("looks at several units at once, and answers in their order", async () => {
+    const items: Parameters<typeof disk>[0] = { "/D": { kind: "dir", ino: 1 } };
+    const units: UndoUnit[] = [];
+    for (let index = 0; index < 40; index += 1) {
+      // Every item came back from the Trash and changed since; every third one's old
+      // name is taken too.
+      items[`/D/T/${index}`] = { kind: "file", ino: 100 + index };
+      if (index % 3 === 0) {
+        items[`/D/${index}`] = { kind: "file", ino: 500 + index };
+      }
+      units.push({
+        steps: [
+          {
+            kind: "trashed",
+            from: `/D/${index}`,
+            trashPath: `/D/T/${index}`,
+            id: id(100 + index),
+            parentId: id(1),
+          },
+        ],
+      });
+    }
+    const memory = disk(items);
+    let reading = 0;
+    let mostAtOnce = 0;
+    const slow: PlanFs = {
+      ...memory,
+      lstat: async (path) => {
+        reading += 1;
+        mostAtOnce = Math.max(mostAtOnce, reading);
+        // Later units answer sooner, so an order kept by luck would show.
+        for (let tick = Number(basename(path)); tick < 40; tick += 1) {
+          await Promise.resolve();
+        }
+        reading -= 1;
+        return memory.lstat(path);
+      },
+    };
+
+    const questions = await findQuestions(slow, units);
+
+    expect(questions.nameTaken).toEqual(
+      units
+        .map((_unit, index) => index)
+        .filter((index) => index % 3 === 0)
+        .reverse()
+        .map(String),
+    );
+    expect(mostAtOnce).toBeGreaterThan(1);
+    expect(mostAtOnce).toBeLessThanOrEqual(16);
   });
 });
