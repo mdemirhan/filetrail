@@ -13,12 +13,15 @@ import {
 import type { ExplorerWindowList } from "./explorerWindows";
 
 // What the application menu shows: the state of the explorer window it acts on (the
-// focused one, or the one in front while another window has the keyboard), and what Undo
-// and Redo would do. The menu is one for the whole app and is built by the host.
+// focused one, the one in front while another window has the keyboard, or with no window
+// focused the one in front while it is on screen), and what Undo and Redo would do. The
+// menu is one for the whole app and is built by the host.
 
 type MenuWindow = {
   readonly webContents: { send(channel: string, ...args: unknown[]): void };
   isDestroyed(): boolean;
+  isVisible(): boolean;
+  isMinimized(): boolean;
 };
 
 export type UndoHistoryMenu = { undo: string | null; redo: string | null; cantUndo: boolean };
@@ -85,7 +88,9 @@ export class ApplicationMenuSync<W extends MenuWindow> {
   }
 
   // The explorer window a menu command goes to: the focused window when it is one, else
-  // the one in front (while Settings has the keyboard, or no window has).
+  // the one in front while Settings has the keyboard. With no window focused (every window
+  // minimized, say) it is the one in front only while it is on screen: a command must not
+  // act unseen on a minimized window's selection.
   explorerFor(focusedWindow: unknown): ExplorerCommandTarget | null {
     const focused = isLiveWindow(focusedWindow) ? focusedWindow : null;
     const focusedEntry = focused ? this.deps.windows.byWindow(focused as W) : null;
@@ -94,6 +99,9 @@ export class ApplicationMenuSync<W extends MenuWindow> {
     }
     const front = this.deps.windows.front();
     if (!front || front.window.isDestroyed()) {
+      return null;
+    }
+    if (focused === null && !isOnScreen(front.window)) {
       return null;
     }
     return { contents: front.window.webContents, focused: focused === null };
@@ -135,8 +143,8 @@ export class ApplicationMenuSync<W extends MenuWindow> {
   }
 
   // The explorer window the menu shows, and whether it has the keyboard. With no window
-  // focused (the app is in the background) the front window's state stays; with no
-  // explorer window open there is none to show.
+  // focused (the app is in the background) the front window's state stays while it is on
+  // screen; with every explorer window minimized or none open there is none to act on.
   private currentExplorer(): {
     state: ApplicationMenuState;
     explorerFocused: boolean;
@@ -145,15 +153,21 @@ export class ApplicationMenuSync<W extends MenuWindow> {
     const focusedWindow = this.deps.focusedWindow();
     const focused = isLiveWindow(focusedWindow) ? focusedWindow : null;
     const focusedEntry = focused ? this.deps.windows.byWindow(focused as W) : null;
-    const entry = focusedEntry ?? this.deps.windows.front();
+    const front = this.deps.windows.front();
+    const entry = focusedEntry ?? front;
+    const frontOnScreen = front !== null && !front.window.isDestroyed() && isOnScreen(front.window);
     return {
       state:
         (entry ? this.states.get(entry.webContentsId) : undefined) ??
         INITIAL_APPLICATION_MENU_STATE,
-      explorerFocused: focusedEntry !== null || (focused === null && this.deps.windows.count > 0),
+      explorerFocused: focusedEntry !== null || (focused === null && frontOnScreen),
       otherWindowFocused: focused !== null && focusedEntry === null,
     };
   }
+}
+
+function isOnScreen(window: MenuWindow): boolean {
+  return window.isVisible() && !window.isMinimized();
 }
 
 function isLiveWindow(value: unknown): value is { isDestroyed(): boolean } {

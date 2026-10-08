@@ -8,11 +8,22 @@ import { ExplorerWindowList } from "./explorerWindows";
 type FakeWindow = {
   name: string;
   webContents: { send: ReturnType<typeof vi.fn> };
+  minimized: boolean;
   isDestroyed: () => boolean;
+  isVisible: () => boolean;
+  isMinimized: () => boolean;
 };
 
 function fakeWindow(name: string): FakeWindow {
-  return { name, webContents: { send: vi.fn() }, isDestroyed: () => false };
+  const window: FakeWindow = {
+    name,
+    webContents: { send: vi.fn() },
+    minimized: false,
+    isDestroyed: () => false,
+    isVisible: () => !window.minimized,
+    isMinimized: () => window.minimized,
+  };
+  return window;
 }
 
 type FakeItem = { enabled: boolean; visible: boolean; checked: boolean; type: string };
@@ -122,6 +133,53 @@ describe("ApplicationMenuSync", () => {
       focused: false,
     });
     expect(sync.explorerFor(undefined)).toEqual({ contents: b.webContents, focused: true });
+  });
+
+  it("acts on no window, and offers only what opens one, while every window is minimized", () => {
+    const { sync, open, focus, enabled } = setUp();
+    const a = open("a", 1);
+    const b = open("b", 2);
+    sync.setWindowState(2, INITIAL_APPLICATION_MENU_STATE);
+    focus(b);
+    sync.sync();
+    expect(enabled("trashSelection").enabled).toBe(true);
+
+    a.minimized = true;
+    b.minimized = true;
+    focus(null);
+    sync.refresh();
+
+    // ⌘⌫ or ⌘W would act on a window that can't be seen.
+    expect(sync.explorerFor(null)).toBeNull();
+    expect(sync.explorerFor(undefined)).toBeNull();
+    expect(enabled("trashSelection").enabled).toBe(false);
+    expect(enabled("closeTab").enabled).toBe(false);
+    expect(enabled("renameSelection").enabled).toBe(false);
+    expect(enabled("undo:text").enabled).toBe(false);
+    expect(enabled("newWindow").enabled).toBe(true);
+    expect(enabled("goDesktop").enabled).toBe(true);
+
+    // One comes back on screen, and the menu acts on it again.
+    b.minimized = false;
+    sync.refresh();
+    expect(sync.explorerFor(null)).toEqual({ contents: b.webContents, focused: true });
+    expect(enabled("trashSelection").enabled).toBe(true);
+  });
+
+  it("acts on the window in front once Settings closes and leaves no window focused", () => {
+    const { sync, open, focus, enabled } = setUp();
+    open("a", 1);
+    sync.setWindowState(1, INITIAL_APPLICATION_MENU_STATE);
+    const settings = fakeWindow("settings");
+    focus(settings);
+    sync.sync();
+    expect(enabled("trashSelection").enabled).toBe(false);
+
+    focus(null);
+    sync.refresh();
+
+    expect(enabled("trashSelection").enabled).toBe(true);
+    expect(enabled("undo").visible).toBe(true);
   });
 
   it("builds the menu again only when Undo or Redo should say something else", () => {

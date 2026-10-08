@@ -421,7 +421,9 @@ export function resolveApplicationMenuItemStates(
     // only COMMANDS_WITHOUT_EXPLORER_WINDOW do anything, besides another window's own.
     explorerWindowCount?: number;
     // Whether a window other than an explorer window (Settings) has the keyboard, rather
-    // than no window at all (left out: it has, when the explorer isn't focused).
+    // than no window at all (left out: it has, when the explorer isn't focused). With no
+    // window focused and no explorer window to act on (every one minimized), only
+    // COMMANDS_WITHOUT_EXPLORER_WINDOW do anything, as with none open.
     otherWindowFocused?: boolean;
     // Whether there is a file operation to undo and to redo (left out: there is).
     undoAvailable?: { undo: boolean; redo: boolean };
@@ -430,7 +432,10 @@ export function resolveApplicationMenuItemStates(
   const disabled = new Set<RendererCommandType>(state.disabledCommands);
   const isEnabled = (type: RendererCommandType) => {
     if (!window.explorerFocused) {
-      if (window.explorerWindowCount === 0 && COMMANDS_WITHOUT_EXPLORER_WINDOW.has(type)) {
+      if (
+        (window.explorerWindowCount === 0 || window.otherWindowFocused === false) &&
+        COMMANDS_WITHOUT_EXPLORER_WINDOW.has(type)
+      ) {
         return true;
       }
       return window.otherWindowFocused !== false && COMMANDS_FOR_ANY_WINDOW.has(type);
