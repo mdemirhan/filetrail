@@ -3,7 +3,7 @@
 // Several windows: opening one, moving tabs between them, and what they share (the
 // clipboard, the one file operation that can run at a time).
 
-import type { IpcRequestInput } from "@filetrail/contracts";
+import type { IpcChannel, IpcRequestInput, IpcResponse } from "@filetrail/contracts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("./components/ContentPane", async () =>
@@ -32,6 +32,7 @@ vi.mock("./lib/progressCardDelay", async () =>
   (await import("./test/appMocks")).progressCardDelayMock(),
 );
 
+import { OPEN_TABS_LIMIT } from "../shared/appPreferences";
 import {
   type TestProgressEvent,
   clipboardButton,
@@ -70,6 +71,28 @@ function openWindowRequests(harness: Harness): Array<IpcRequestInput<"app:openWi
   return harness.invocations
     .filter((call) => call.channel === "app:openWindow")
     .map((call) => call.payload as IpcRequestInput<"app:openWindow">);
+}
+
+function mergeAnswers(harness: Harness): Array<IpcRequestInput<"app:answerMergeRequest">> {
+  return harness.invocations
+    .filter((call) => call.channel === "app:answerMergeRequest")
+    .map((call) => call.payload as IpcRequestInput<"app:answerMergeRequest">);
+}
+
+// Holds the window's requests on `channel`, each until it is answered or refused by hand.
+function holdRequests<C extends IpcChannel>(harness: Harness, channel: C) {
+  const held: Array<{
+    answer: (response: IpcResponse<C>) => void;
+    refuse: (error: Error) => void;
+  }> = [];
+  const invoke = harness.client.invoke.bind(harness.client);
+  harness.client.invoke = ((requested: IpcChannel, payload: never) =>
+    requested === channel
+      ? new Promise((answer, refuse) => {
+          held.push({ answer, refuse });
+        })
+      : invoke(requested, payload)) as Harness["client"]["invoke"];
+  return held;
 }
 
 async function command(harness: Harness, type: Parameters<Harness["emitCommand"]>[0]["type"]) {
@@ -577,5 +600,232 @@ describe("App windows", () => {
         ),
       );
     });
+  });
+  describe("Merge All Windows under way", () => {
+    it("merges once at a time, and answers another window's merge as busy meanwhile", async () => {
+      const harness = createAppHarness({
+        explorerWindowCount: 2,
+        mergedTabs: [savedTab("/Users/demo/Folder")],
+      });
+      const merges = holdRequests(harness, "app:mergeAllWindows");
+      await ready(harness);
+
+      await command(harness, "mergeAllWindows");
+      await command(harness, "mergeAllWindows");
+      expect(merges).toHaveLength(1);
+      // Chosen in another window at the same moment: this window stays open.
+      await act(async () => {
+        harness.emitMergeRequest("merge-1");
+      });
+      await waitFor(() => expect(mergeAnswers(harness)).toHaveLength(1));
+      expect(mergeAnswers(harness)[0]).toMatchObject({ requestId: "merge-1", busy: true });
+
+      await act(async () => {
+        merges[0]?.answer({ tabs: [savedTab("/Users/demo/Folder")] });
+      });
+      await waitFor(() => expect(tabLabels()).toEqual(["demo", "Folder"]));
+      await act(async () => {
+        harness.emitMergeRequest("merge-2");
+      });
+      await waitFor(() => expect(mergeAnswers(harness)).toHaveLength(2));
+      expect(mergeAnswers(harness)[1]).toMatchObject({ requestId: "merge-2", busy: false });
+      // Over, even when the merge failed: another may start.
+      await command(harness, "mergeAllWindows");
+      expect(merges).toHaveLength(2);
+      await act(async () => {
+        merges[1]?.refuse(new Error("No window."));
+      });
+      await command(harness, "mergeAllWindows");
+      expect(merges).toHaveLength(3);
+    });
+
+    it("doesn't merge before the window has opened its first folder", async () => {
+      const harness = createAppHarness({ explorerWindowCount: 2 });
+      const merges = holdRequests(harness, "app:mergeAllWindows");
+      const launches = holdRequests(harness, "app:getLaunchContext");
+      renderApp(harness);
+      await waitFor(() => expect(launches).toHaveLength(1));
+
+      await command(harness, "mergeAllWindows");
+
+      expect(merges).toEqual([]);
+      await act(async () => {
+        launches[0]?.answer({ startupFolderPath: null });
+      });
+      await screen.findByRole("button", { name: "source.txt" });
+    });
+
+    it("brings back a merged tab with Reopen Closed Tab once it is closed", async () => {
+      const harness = createAppHarness({ mergedTabs: [savedTab("/Users/demo/Folder")] });
+      await ready(harness);
+      await command(harness, "mergeAllWindows");
+      await waitFor(() => expect(tabLabels()).toEqual(["demo", "Folder"]));
+
+      await act(async () => {
+        fireEvent.contextMenu(screen.getAllByRole("tab")[1] as HTMLElement);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Close Tab" }));
+      });
+      expect(tabLabels()).toEqual([]);
+      await pressKey({ key: "T", metaKey: true, shiftKey: true });
+
+      await waitFor(() =>
+        expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder"),
+      );
+      expect(tabLabels()).toEqual(["demo", "Folder"]);
+    });
+  });
+
+  describe("Move Tab to New Window under way", () => {
+    async function twoTabs(harness: Harness) {
+      await ready(harness);
+      await pressKey({ key: "t", metaKey: true });
+      await openDirectory("/Users/demo/Folder");
+      expect(tabLabels()).toEqual(["demo", "Folder"]);
+    }
+
+    it("keeps the tab when the new window doesn't open", async () => {
+      const harness = createAppHarness();
+      const opens = holdRequests(harness, "app:openWindow");
+      await twoTabs(harness);
+
+      await command(harness, "moveTabToNewWindow");
+      await act(async () => {
+        opens[0]?.answer({ ok: false });
+      });
+      expect(tabLabels()).toEqual(["demo", "Folder"]);
+      await command(harness, "moveTabToNewWindow");
+      await act(async () => {
+        opens[1]?.refuse(new Error("Quitting."));
+      });
+
+      expect(tabLabels()).toEqual(["demo", "Folder"]);
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    });
+
+    it("moves a tab once when Move is chosen again before the window opens", async () => {
+      const harness = createAppHarness();
+      const opens = holdRequests(harness, "app:openWindow");
+      await twoTabs(harness);
+      await pressKey({ key: "t", metaKey: true });
+
+      await command(harness, "moveTabToNewWindow");
+      await command(harness, "moveTabToNewWindow");
+      expect(opens).toHaveLength(1);
+      await act(async () => {
+        opens[0]?.answer({ ok: true });
+      });
+
+      await waitFor(() => expect(tabLabels()).toEqual(["demo", "Folder"]));
+    });
+
+    it("doesn't close the window when another tab closed while the window opened", async () => {
+      const harness = createAppHarness();
+      const opens = holdRequests(harness, "app:openWindow");
+      await twoTabs(harness);
+
+      await command(harness, "moveTabToNewWindow");
+      await act(async () => {
+        fireEvent.contextMenu(screen.getAllByRole("tab")[0] as HTMLElement);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Close Tab" }));
+      });
+      await act(async () => {
+        opens[0]?.answer({ ok: true });
+      });
+
+      expect(harness.invocations.some((call) => call.channel === "app:closeWindow")).toBe(false);
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    });
+  });
+
+  describe("a window full of tabs", () => {
+    const fullWindow = () =>
+      createAppHarness({
+        explorerWindowCount: 2,
+        preferences: {
+          openTabs: Array.from({ length: OPEN_TABS_LIMIT }, () => savedTab("/Users/demo")),
+          activeTabIndex: 0,
+        },
+      });
+
+    it("opens no more tabs than it can hand over, and says why", async () => {
+      const harness = fullWindow();
+      await ready(harness);
+      await waitFor(() => expect(tabLabels()).toHaveLength(OPEN_TABS_LIMIT));
+
+      await pressKey({ key: "t", metaKey: true });
+      await selectItem("/Users/demo/Folder");
+      await command(harness, "openSelectionInNewTab");
+
+      const viewport = await screen.findByTestId("toast-viewport");
+      await vi.waitFor(() => {
+        expect(viewport).toHaveTextContent(`A window can have up to ${OPEN_TABS_LIMIT} tabs`);
+      });
+      expect(tabLabels()).toHaveLength(OPEN_TABS_LIMIT);
+      // Merged away into another window, it loses none of them.
+      await act(async () => {
+        harness.emitMergeRequest("merge-1");
+      });
+      await waitFor(() => expect(mergeAnswers(harness)).toHaveLength(1));
+      expect(mergeAnswers(harness)[0]?.tabs).toHaveLength(OPEN_TABS_LIMIT);
+      expect(mergeAnswers(harness)[0]?.busy).toBe(false);
+    });
+
+    it("duplicates and reopens no tab past the limit", async () => {
+      const harness = fullWindow();
+      await ready(harness);
+      await waitFor(() => expect(tabLabels()).toHaveLength(OPEN_TABS_LIMIT));
+      await pressKey({ key: "w", metaKey: true });
+      await waitFor(() => expect(tabLabels()).toHaveLength(OPEN_TABS_LIMIT - 1));
+      await act(async () => {
+        fireEvent.contextMenu(screen.getAllByRole("tab")[0] as HTMLElement);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate Tab" }));
+      });
+      await waitFor(() => expect(tabLabels()).toHaveLength(OPEN_TABS_LIMIT));
+
+      await act(async () => {
+        fireEvent.contextMenu(screen.getAllByRole("tab")[0] as HTMLElement);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate Tab" }));
+      });
+      await pressKey({ key: "T", metaKey: true, shiftKey: true });
+
+      expect(tabLabels()).toHaveLength(OPEN_TABS_LIMIT);
+    });
+  });
+
+  it("marks its background tabs out of date when another window's operation ends", async () => {
+    const harness = createAppHarness();
+    await ready(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    await act(async () => {
+      harness.emitProgress(otherWindowsCopy("running"));
+    });
+    await act(async () => {
+      harness.emitProgress(otherWindowsCopy("completed"));
+    });
+    const readsBefore = harness.invocations.length;
+    const treeReads = () =>
+      harness.invocations
+        .slice(readsBefore)
+        .filter(
+          (call) =>
+            call.channel === "tree:getChildren" &&
+            (call.payload as { path: string }).path === "/Users/demo",
+        ).length;
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("tab")[0] as HTMLElement);
+    });
+
+    // The tree the tab shows is read again, as well as the folder's place in it.
+    await waitFor(() => expect(treeReads()).toBe(2));
   });
 });

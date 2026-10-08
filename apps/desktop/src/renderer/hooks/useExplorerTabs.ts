@@ -30,6 +30,7 @@ import {
 } from "../lib/favorites";
 import { CONTENT_SCROLL_SELECTOR, TREE_SCROLL_SELECTOR } from "../lib/folderViewMemory";
 import type { StartupTab } from "../lib/startupNavigation";
+import { createToastEntry, enqueueToast } from "../lib/toasts";
 import type {
   ExplorerServices,
   NavigationStore,
@@ -162,6 +163,8 @@ export function useExplorerTabs(args: {
   // The tabs that were closed, most recent last, for Reopen Closed Tab. They are not kept
   // between launches.
   const closedTabsRef = useRef<TabSnapshot[]>([]);
+  // Tabs on their way to a window of their own: each leaves once main has opened it.
+  const movingTabIdsRef = useRef(new Set<string>());
 
   function rememberClosedTab(snapshot: TabSnapshot | null) {
     if (!snapshot || snapshot.currentPath.length === 0) {
@@ -388,6 +391,28 @@ export function useExplorerTabs(args: {
     return preferences.preferencesReady && !derived.blocked && navigation.mainView === "explorer";
   }
 
+  // A window holds no more tabs than it can save, and Merge All Windows can hand over; a
+  // notification says why no tab opened.
+  function hasRoomForTab(): boolean {
+    if (stateRef.current.tabs.length < OPEN_TABS_LIMIT) {
+      return true;
+    }
+    if (preferences.notificationsEnabled) {
+      const id = `toast-${writeOperations.nextToastIdRef.current}`;
+      writeOperations.nextToastIdRef.current += 1;
+      writeOperations.setToasts((current) =>
+        enqueueToast(
+          current,
+          createToastEntry(id, {
+            kind: "info",
+            title: `A window can have up to ${OPEN_TABS_LIMIT} tabs`,
+          }),
+        ),
+      );
+    }
+    return false;
+  }
+
   function activateTab(tabId: string) {
     const current = stateRef.current;
     const target = current.tabs.find((tab) => tab.id === tabId);
@@ -442,7 +467,7 @@ export function useExplorerTabs(args: {
 
   // ⌘T: a new tab on the folder that is on screen, with a history of its own.
   function openNewTab() {
-    if (!canChangeTabs()) {
+    if (!canChangeTabs() || !hasRoomForTab()) {
       return;
     }
     const leftSnapshot = captureLiveTab();
@@ -470,7 +495,7 @@ export function useExplorerTabs(args: {
 
   // Opens `path` in a new tab and shows it.
   function openPathInNewTab(path: string) {
-    if (!canChangeTabs() || path.length === 0) {
+    if (!canChangeTabs() || path.length === 0 || !hasRoomForTab()) {
       return;
     }
     const leftSnapshot = captureLiveTab();
@@ -495,6 +520,10 @@ export function useExplorerTabs(args: {
       void client.invoke("search:cancel", { jobId }).catch(() => undefined);
     }
   }
+
+  // Closing a tab once a window has opened for it acts on the window as it is by then.
+  const closeTabRef = useRef(closeTab);
+  closeTabRef.current = closeTab;
 
   // ⌘W: closes a tab. The last view left closes the window with it, through the main
   // process: a page closing itself would skip the question asked before closing the last
@@ -586,7 +615,7 @@ export function useExplorerTabs(args: {
   function duplicateTab(tabId: string) {
     const current = stateRef.current;
     const source = current.tabs.find((tab) => tab.id === tabId);
-    if (!source || !canChangeTabs()) {
+    if (!source || !canChangeTabs() || !hasRoomForTab()) {
       return;
     }
     const leftSnapshot = captureLiveTab();
@@ -605,7 +634,7 @@ export function useExplorerTabs(args: {
   // ⇧⌘T: brings back the tab that was closed last, at its folder.
   function reopenClosedTab() {
     const snapshot = closedTabsRef.current.at(-1);
-    if (!snapshot || !canChangeTabs()) {
+    if (!snapshot || !canChangeTabs() || !hasRoomForTab()) {
       return;
     }
     closedTabsRef.current = closedTabsRef.current.slice(0, -1);
@@ -630,28 +659,39 @@ export function useExplorerTabs(args: {
 
   // Move Tab to New Window: a tab (the one on screen, from the Window menu) leaves for a
   // window of its own. Its folder, tree and view go along; its history and search don't.
+  // It leaves once the window has opened, as the window is then: a tab already moving
+  // isn't moved again, and the last tab left stays rather than close the window.
   function moveTabToNewWindow(tabId: string = stateRef.current.activeTabId) {
     const current = stateRef.current;
     const moving = current.tabs.find((tab) => tab.id === tabId);
-    if (!moving || !canChangeTabs() || current.tabs.length < 2) {
+    const movingTabIds = movingTabIdsRef.current;
+    if (
+      !moving ||
+      movingTabIds.has(tabId) ||
+      !canChangeTabs() ||
+      current.tabs.length - movingTabIds.size < 2
+    ) {
       return;
     }
     const tab =
       tabId === current.activeTabId || !moving.snapshot
         ? liveTabPreference
         : toOpenTabPreference(moving.snapshot);
-    openWindowWithTab(tab, () => closeTab(tabId, { remember: false }));
+    movingTabIds.add(tabId);
+    openWindowWithTab(tab, (opened) => {
+      movingTabIds.delete(tabId);
+      const latest = stateRef.current;
+      if (opened && latest.tabs.length > 1 && latest.tabs.some((other) => other.id === tabId)) {
+        closeTabRef.current(tabId, { remember: false });
+      }
+    });
   }
 
-  function openWindowWithTab(tab: OpenTabPreference, onOpened?: () => void) {
-    void client
-      .invoke("app:openWindow", { tabs: [tab], activeTabIndex: 0 })
-      .then((response) => {
-        if (response.ok) {
-          onOpened?.();
-        }
-      })
-      .catch(() => undefined);
+  function openWindowWithTab(tab: OpenTabPreference, onSettled?: (opened: boolean) => void) {
+    void client.invoke("app:openWindow", { tabs: [tab], activeTabIndex: 0 }).then(
+      (response) => onSettled?.(response.ok),
+      () => onSettled?.(false),
+    );
   }
 
   // Merge All Windows: the other windows' tabs join this window's, after them, waiting
@@ -956,9 +996,12 @@ export function useExplorerTabs(args: {
     return true;
   }
 
-  // A file operation that ends may have changed folders that background tabs show. Their
-  // folder is read again when they are shown anyway; this makes that read cover the tree.
-  const operationRunning = writeOperations.writeOperationCardState !== null;
+  // A file operation that ends, in this window or another, may have changed folders that
+  // background tabs show. Their folder is read again when they are shown anyway; this makes
+  // that read cover the tree.
+  const operationRunning =
+    writeOperations.writeOperationCardState !== null ||
+    writeOperations.foreignWriteOperation !== null;
   const operationWasRunningRef = useRef(operationRunning);
   useEffect(() => {
     if (operationWasRunningRef.current && !operationRunning) {
@@ -1056,6 +1099,7 @@ export function useExplorerTabs(args: {
     ),
     restoreTabs,
     addTabs,
+    canChangeTabs,
     openNewWindow,
     openPathInNewWindow,
     moveTabToNewWindow,

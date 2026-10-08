@@ -1056,6 +1056,7 @@ export function App() {
     activeTabIndex,
     restoreTabs,
     addTabs,
+    canChangeTabs,
     openNewWindow,
     openPathInNewWindow,
     moveTabToNewWindow,
@@ -1109,8 +1110,8 @@ export function App() {
   openPathInNewWindowRef.current = openPathInNewWindow;
   // Merge All Windows chosen in another window asks for this window's tabs as they are now
   // (they are saved a moment after each change). A window with something open that closing
-  // would lose (a sheet, a dialog, a name being edited, a copy being checked) says so, and
-  // stays open.
+  // would lose (a sheet, a dialog, a name being edited, a copy being checked), more tabs than
+  // can be handed over, or a merge of its own under way says so, and stays open.
   const mergeAnswerRef = useRef({ tabs: openTabs, busy: true });
   mergeAnswerRef.current = {
     tabs: openTabs,
@@ -1119,21 +1120,32 @@ export function App() {
       copyPasteDialogState !== null ||
       copyPasteModalOpen ||
       sheetOpen ||
-      actionNotice !== null,
+      actionNotice !== null ||
+      tabCount > OPEN_TABS_LIMIT,
   };
+  // True while this window's own Merge All Windows waits for the other windows.
+  const mergingRef = useRef(false);
   useEffect(
     () =>
       client.onMergeRequest?.(({ requestId }) => {
         const { tabs, busy } = mergeAnswerRef.current;
         void client
-          .invoke("app:answerMergeRequest", { requestId, tabs, busy })
+          .invoke("app:answerMergeRequest", {
+            requestId,
+            tabs,
+            busy: busy || mergingRef.current,
+          })
           .catch(() => undefined);
       }),
     [client],
   );
   // Window › Merge All Windows: the other windows close and their tabs come here, as many
-  // as fit beside this window's.
+  // as fit beside this window's. Once the window has opened its folder, and once at a time.
   const mergeAllWindows = () => {
+    if (mergingRef.current || !canChangeTabs()) {
+      return;
+    }
+    mergingRef.current = true;
     void client
       .invoke("app:mergeAllWindows", { tabCount: Math.min(tabCount, OPEN_TABS_LIMIT) })
       .then(({ tabs }) =>
@@ -1148,7 +1160,10 @@ export function App() {
           favoritesPlacement,
         ),
       )
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        mergingRef.current = false;
+      });
   };
   // A disk unmounted takes its folders with it: tabs showing one go Home.
   const mountedDiskPathsRef = useRef<ReadonlySet<string>>(new Set());
