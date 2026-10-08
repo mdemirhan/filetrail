@@ -13,6 +13,16 @@
  *   - folder count (subfolders at any depth, packages included; a package's
  *     contents count too, as they are walked like any folder)
  *
+ * The walk stays on the disk it starts on, and doesn't go through firmlinks: on the
+ * startup disk, /Users, /Applications and the like are firmlinks to the same folders under
+ * /System/Volumes/Data, which the walk reaches there, so measuring / counts them once.
+ *
+ * A folder whose listing fails part way (EIO, say), or that holds a sub-folder that
+ * couldn't be opened for a reason other than having no access to it, is incomplete: it
+ * and the folders holding it are never reported finished, and a walk whose root is
+ * incomplete fails with the error. A sub-folder the walk has no access to is counted as a
+ * folder with nothing in it, as Finder does.
+ *
  * Each folder is finished as soon as everything inside it has been walked: it
  * counts its own listing and each sub-folder not finished yet, and whichever
  * thread brings that count to zero adds the folder's totals into its parent's
@@ -20,7 +30,9 @@
  * walk runs; whatever is left on it when the walk ends comes with the result.
  *
  * Exposes four functions:
- *   nativeFolderSize(path) -> Promise<string>  -- JSON with totals + finished dirs not yet taken
+ *   nativeFolderSize(path, background?) -> Promise<string>  -- JSON with totals + finished
+ *                                              dirs not yet taken; background walks at
+ *                                              utility QoS
  *   nativeFolderSizeTakeFinished() -> string | null -- JSON of dirs finished since the last take
  *   nativeFolderSizeCancel() -> void           -- cancels active walk
  *   nativeItemSize(path) -> Promise<object>    -- one item, counted as the walk counts it
@@ -34,7 +46,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <pthread/qos.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,6 +59,10 @@
 #include <unistd.h>
 
 #include "native_errors.h"
+
+#ifndef SF_FIRMLINK
+#define SF_FIRMLINK 0x00800000 /* sys/stat.h, macOS 10.15 and later */
+#endif
 
 #define BULK_BUF_SIZE (256 * 1024)
 #define NUM_THREADS 4
@@ -110,6 +128,8 @@ typedef struct walk_dir {
   struct walk_dir *parent; /* NULL for the root */
   /* Its own listing, plus each sub-folder not finished yet: zero once all is counted. */
   atomic_int pending;
+  /* Set when part of it couldn't be read: its totals leave something out. */
+  atomic_int incomplete;
   /* Its own files and folders, plus the totals of each finished sub-folder. */
   _Atomic int64_t size_bytes;
   _Atomic int64_t disk_bytes;
@@ -130,6 +150,7 @@ static walk_dir_t *walk_dir_new(char *path, walk_dir_t *parent) {
   dir->path = path;
   dir->parent = parent;
   atomic_init(&dir->pending, 1);
+  atomic_init(&dir->incomplete, 0);
   atomic_init(&dir->size_bytes, 0);
   atomic_init(&dir->disk_bytes, 0);
   atomic_init(&dir->file_count, 0);
@@ -164,6 +185,7 @@ typedef struct {
   dev_t root_dev;
   atomic_int *cancelled;
   atomic_int failed;       /* set on allocation failure; walk aborts with ENOMEM */
+  atomic_int read_errno;   /* the first error that left a folder incomplete */
 } work_queue_t;
 
 static void wq_init(work_queue_t *wq, dev_t dev, atomic_int *cancelled) {
@@ -175,6 +197,22 @@ static void wq_init(work_queue_t *wq, dev_t dev, atomic_int *cancelled) {
   wq->root_dev = dev;
   wq->cancelled = cancelled;
   atomic_store(&wq->failed, 0);
+  atomic_store(&wq->read_errno, 0);
+}
+
+/* `dir` leaves out part of what is in it, which couldn't be read for `errnum`. */
+static void mark_incomplete(work_queue_t *wq, walk_dir_t *dir, int errnum) {
+  int none = 0;
+  atomic_compare_exchange_strong(&wq->read_errno, &none, errnum != 0 ? errnum : EIO);
+  atomic_store(&dir->incomplete, 1);
+}
+
+/* Whether a sub-folder that couldn't be opened for `errnum` is simply left out, as one
+   the walk has no access to, or one gone or replaced since it was listed; anything else
+   (no file descriptors left, an I/O error) leaves its folder incomplete. */
+static int is_skippable_open_error(int errnum) {
+  return errnum == EACCES || errnum == EPERM || errnum == ENOENT || errnum == ENOTDIR ||
+         errnum == ELOOP;
 }
 
 /* Abort the walk: all workers stop at the next cancelled/failed check. */
@@ -261,8 +299,9 @@ static void init_attrlist(void) {
   memset(&g_attrlist, 0, sizeof(g_attrlist));
   g_attrlist.bitmapcount = ATTR_BIT_MAP_COUNT;
   /* Attributes returned in bitmap bit order (lowest first):
-     ATTR_CMN_NAME (bit 0), then ATTR_CMN_OBJTYPE (bit 3). */
-  g_attrlist.commonattr = ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE;
+     ATTR_CMN_NAME (bit 0), ATTR_CMN_OBJTYPE (bit 3), then ATTR_CMN_FLAGS (bit 18). */
+  g_attrlist.commonattr =
+      ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE | ATTR_CMN_FLAGS;
   /* File attrs in bit order: ATTR_FILE_ALLOCSIZE (bit 2, 0x04)
      then ATTR_FILE_DATALENGTH (bit 9, 0x200). */
   g_attrlist.fileattr = ATTR_FILE_ALLOCSIZE | ATTR_FILE_DATALENGTH;
@@ -289,8 +328,8 @@ typedef struct {
   int64_t direct_folder_count;
 } process_dir_result_t;
 
-/* Lists `dir` and queues its sub-folders on the same disk; adds what is directly in it
-   to its totals. */
+/* Lists `dir` and queues its sub-folders on the same disk, firmlinks left out; adds what
+   is directly in it to its totals. */
 static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t *ta,
                                         char *buf) {
   work_queue_t *wq = ta->wq;
@@ -304,7 +343,12 @@ static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t
     if (wq_stopped(wq)) break;
 
     int count = getattrlistbulk(dirfd, &g_attrlist, buf, BULK_BUF_SIZE, 0);
-    if (count <= 0) break;
+    if (count < 0) {
+      /* The rest of the listing can't be read: what it holds is only partly counted. */
+      mark_incomplete(wq, dir, errno);
+      break;
+    }
+    if (count == 0) break;
 
     char *ptr = buf;
     for (int i = 0; i < count; i++) {
@@ -333,6 +377,13 @@ static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t
         p += sizeof(obj_type);
       }
 
+      /* ATTR_CMN_FLAGS (bit 18) -- uint32_t, st_flags */
+      uint32_t flags = 0;
+      if (returned.commonattr & ATTR_CMN_FLAGS) {
+        memcpy(&flags, p, sizeof(flags));
+        p += sizeof(flags);
+      }
+
       /* File attrs in bit order: ALLOCSIZE (bit 2) then DATALENGTH (bit 9) */
       int64_t alloc_size = 0;
       if (returned.fileattr & ATTR_FILE_ALLOCSIZE) {
@@ -358,21 +409,28 @@ static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t
         direct_disk_bytes += alloc_size;
         direct_file_count++;
       } else if (obj_type == VDIR && name) {
-        /* Counted even when it isn't walked (another volume, no access). */
+        /* Counted even when it isn't walked (another volume, a firmlink, no access). */
         direct_folder_count++;
-        int subfd = openat(dirfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+        /* What a firmlink leads to is walked where it is (under /System/Volumes/Data). */
+        int subfd = (flags & SF_FIRMLINK)
+                        ? -1
+                        : openat(dirfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+        if (subfd < 0 && !(flags & SF_FIRMLINK) && !is_skippable_open_error(errno)) {
+          mark_incomplete(wq, dir, errno);
+        }
         if (subfd >= 0) {
           struct stat sub_stat;
           if (fstat(subfd, &sub_stat) == 0 && sub_stat.st_dev == wq->root_dev) {
-            /* Build child path: dir_path + "/" + name */
+            /* Build child path: dir_path + "/" + name, with no second "/" after "/". */
             size_t dir_len = strlen(dir_path);
+            size_t sep_len = dir_len > 0 && dir_path[dir_len - 1] == '/' ? 0 : 1;
             size_t name_len = strlen(name);
-            char *child_path = malloc(dir_len + 1 + name_len + 1);
+            char *child_path = malloc(dir_len + sep_len + name_len + 1);
             walk_dir_t *child = NULL;
             if (child_path) {
               memcpy(child_path, dir_path, dir_len);
-              child_path[dir_len] = '/';
-              memcpy(child_path + dir_len + 1, name, name_len + 1);
+              if (sep_len) child_path[dir_len] = '/';
+              memcpy(child_path + dir_len + sep_len, name, name_len + 1);
               child = walk_dir_new(child_path, dir);
             }
             if (!child) {
@@ -415,13 +473,19 @@ static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t
 /* Marks one part of `dir` done: its own listing, or a sub-folder. The part that finishes
    the folder puts it on the finished list and adds its totals into its parent's, which
    is one part of the parent done in turn. Once the walk has stopped nothing more is
-   finished, as a listing cut short may have counted only part of a folder. */
+   finished, as a listing cut short may have counted only part of a folder. An incomplete
+   folder isn't finished either, and leaves its parent incomplete. */
 static void finish_part(thread_arg_t *ta, walk_dir_t *dir) {
   while (atomic_fetch_sub(&dir->pending, 1) == 1) {
     walk_dir_t *parent = dir->parent;
     /* The root's totals are the result. */
     if (!parent || wq_stopped(ta->wq)) {
       return;
+    }
+    if (atomic_load(&dir->incomplete)) {
+      atomic_store(&parent->incomplete, 1);
+      dir = parent;
+      continue;
     }
     dir_stats_t stats;
     stats.size_bytes = atomic_load(&dir->size_bytes);
@@ -476,6 +540,7 @@ typedef struct {
   napi_async_work work;
   napi_deferred deferred;
   char *root_path;
+  int background;       /* walked at utility QoS: a measurement the app started itself */
   atomic_int cancelled; /* written from the JS thread, read by worker pthreads */
   int errnum;
   int64_t total_bytes;
@@ -529,9 +594,12 @@ static void execute_folder_size(napi_env env, void *data) {
     return;
   }
 
-  /* Spawn worker threads. */
+  /* Spawn worker threads. The walk goes on with those that could be made; with none, it
+     fails. */
   thread_arg_t args[NUM_THREADS];
   pthread_t threads[NUM_THREADS];
+  int created = 0;
+  int create_error = 0;
   for (int i = 0; i < NUM_THREADS; i++) {
     args[i].wq = &wq;
     args[i].finished = &w->finished;
@@ -540,11 +608,24 @@ static void execute_folder_size(napi_env env, void *data) {
     args[i].total_file_count = 0;
     args[i].total_folder_count = 0;
     args[i].allocated = NULL;
-    pthread_create(&threads[i], NULL, worker_fn, &args[i]);
+  }
+  for (int i = 0; i < NUM_THREADS; i++) {
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    /* A walk nobody asked for gives way to the rest of the Mac, as Spotlight's does. */
+    if (w->background) {
+      pthread_attr_set_qos_class_np(&attr, QOS_CLASS_UTILITY, 0);
+    }
+    create_error = pthread_create(&threads[i], &attr, worker_fn, &args[i]);
+    pthread_attr_destroy(&attr);
+    if (create_error != 0) {
+      break;
+    }
+    created++;
   }
 
-  /* Wait for all workers to finish. */
-  for (int i = 0; i < NUM_THREADS; i++) {
+  /* Wait for the workers made to finish. */
+  for (int i = 0; i < created; i++) {
     pthread_join(threads[i], NULL);
   }
 
@@ -560,8 +641,12 @@ static void execute_folder_size(napi_env env, void *data) {
     w->total_folder_count += args[i].total_folder_count;
   }
 
-  if (atomic_load(&wq.failed)) {
+  if (created == 0) {
+    w->errnum = create_error;
+  } else if (atomic_load(&wq.failed)) {
     w->errnum = ENOMEM;
+  } else if (atomic_load(&root->incomplete) && !atomic_load(&w->cancelled)) {
+    w->errnum = atomic_load(&wq.read_errno);
   }
 
   for (int i = 0; i < NUM_THREADS; i++) {
@@ -661,6 +746,31 @@ static char *build_finished_json(int64_t dev, const dir_entry_t *dirs) {
 
 /* ── Completion callback on main thread ──────────────────────────── */
 
+/* An error with `message`; undefined when not even that can be made (out of memory). */
+static napi_value make_error(napi_env env, const char *message) {
+  napi_value text;
+  napi_value error;
+  if (napi_create_string_utf8(env, message, NAPI_AUTO_LENGTH, &text) != napi_ok ||
+      napi_create_error(env, NULL, text, &error) != napi_ok) {
+    napi_get_undefined(env, &error);
+  }
+  return error;
+}
+
+/* Puts the folders finished before the walk stopped or failed on its error as
+   `finished`: each is whole, so the wrapper hands them over before the error. */
+static void attach_finished(napi_env env, napi_value error, int64_t dev,
+                            const dir_entry_t *leftover) {
+  if (!leftover) return;
+  char *json = build_finished_json(dev, leftover);
+  if (!json) return;
+  napi_value dirs_val;
+  if (napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &dirs_val) == napi_ok) {
+    napi_set_named_property(env, error, "finished", dirs_val);
+  }
+  free(json);
+}
+
 static void complete_folder_size(napi_env env, napi_status status, void *data) {
   folder_size_work_t *w = (folder_size_work_t *)data;
 
@@ -669,48 +779,34 @@ static void complete_folder_size(napi_env env, napi_status status, void *data) {
   }
 
   /* Folders finished and not taken yet: every one was finished before the walk stopped,
-     so each is whole even when the walk was cancelled. */
+     so each is whole even when the walk was cancelled or failed. */
   dir_entry_t *leftover = finished_take(&w->finished);
 
   if (status == napi_cancelled || atomic_load(&w->cancelled)) {
-    napi_value err_msg;
-    napi_create_string_utf8(env, "Folder size calculation cancelled", NAPI_AUTO_LENGTH, &err_msg);
-    napi_value error;
-    napi_create_error(env, NULL, err_msg, &error);
-
+    napi_value error = make_error(env, "Folder size calculation cancelled");
     napi_value code_val;
-    napi_create_string_utf8(env, "ECANCELLED", NAPI_AUTO_LENGTH, &code_val);
-    napi_set_named_property(env, error, "code", code_val);
-
-    if (leftover && w->errnum == 0) {
-      char *json = build_finished_json(w->dev, leftover);
-      if (json) {
-        napi_value dirs_val;
-        napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &dirs_val);
-        napi_set_named_property(env, error, "finished", dirs_val);
-        free(json);
-      }
+    if (napi_create_string_utf8(env, "ECANCELLED", NAPI_AUTO_LENGTH, &code_val) == napi_ok) {
+      napi_set_named_property(env, error, "code", code_val);
     }
-
+    if (w->errnum == 0) {
+      attach_finished(env, error, w->dev, leftover);
+    }
     napi_reject_deferred(env, w->deferred, error);
   } else if (w->errnum != 0) {
     napi_value error = native_errno_error(env, w->errnum, "folder size", w->root_path, NULL);
-
+    if (w->errnum != ENOMEM) {
+      attach_finished(env, error, w->dev, leftover);
+    }
     napi_reject_deferred(env, w->deferred, error);
   } else {
     char *json = build_result_json(w, leftover);
-    if (json) {
-      napi_value result;
-      napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &result);
+    napi_value result;
+    if (json && napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &result) == napi_ok) {
       napi_resolve_deferred(env, w->deferred, result);
-      free(json);
     } else {
-      napi_value err_msg;
-      napi_create_string_utf8(env, "Out of memory building result", NAPI_AUTO_LENGTH, &err_msg);
-      napi_value error;
-      napi_create_error(env, NULL, err_msg, &error);
-      napi_reject_deferred(env, w->deferred, error);
+      napi_reject_deferred(env, w->deferred, make_error(env, "Out of memory building result"));
     }
+    free(json);
   }
 
   napi_delete_async_work(env, w->work);
@@ -720,11 +816,11 @@ static void complete_folder_size(napi_env env, napi_status status, void *data) {
   free(w);
 }
 
-/* ── JS entry: nativeFolderSize(path) -> Promise<string> ──────────── */
+/* ── JS entry: nativeFolderSize(path, background?) -> Promise<string> ── */
 
 static napi_value native_folder_size(napi_env env, napi_callback_info info) {
-  size_t argc = 1;
-  napi_value argv[1];
+  size_t argc = 2;
+  napi_value argv[2];
   napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
 
   if (argc < 1) {
@@ -733,7 +829,10 @@ static napi_value native_folder_size(napi_env env, napi_callback_info info) {
   }
 
   size_t path_len;
-  napi_get_value_string_utf8(env, argv[0], NULL, 0, &path_len);
+  if (napi_get_value_string_utf8(env, argv[0], NULL, 0, &path_len) != napi_ok) {
+    napi_throw_type_error(env, NULL, "path must be a string");
+    return NULL;
+  }
   char *root_path = (char *)malloc(path_len + 1);
   if (!root_path) {
     napi_throw_error(env, NULL, "Out of memory");
@@ -748,6 +847,11 @@ static napi_value native_folder_size(napi_env env, napi_callback_info info) {
     return NULL;
   }
   w->root_path = root_path;
+  bool background = false;
+  if (argc >= 2) {
+    napi_get_value_bool(env, argv[1], &background);
+  }
+  w->background = background ? 1 : 0;
   atomic_init(&w->cancelled, 0);
   pthread_mutex_init(&w->finished.lock, NULL);
   w->finished.head = NULL;
@@ -783,12 +887,13 @@ static napi_value native_folder_size_take_finished(napi_env env, napi_callback_i
   }
   char *json = build_finished_json(active_work->dev, dirs);
   free_dir_entries(dirs);
-  if (!json) {
+  napi_status created = json ? napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &result)
+                              : napi_generic_failure;
+  free(json);
+  if (created != napi_ok) {
     napi_throw_error(env, NULL, "Out of memory");
     return NULL;
   }
-  napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &result);
-  free(json);
   return result;
 }
 

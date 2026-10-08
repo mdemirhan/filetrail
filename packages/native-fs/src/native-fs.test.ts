@@ -2,11 +2,13 @@ import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -136,6 +138,120 @@ describe("nativeFolderSize", () => {
 
   it("handles non-existent paths", async () => {
     await expect(addon.nativeFolderSize("/nonexistent/path/xyz")).rejects.toThrow();
+  });
+
+  type Measured = {
+    total: number;
+    fileCount: number;
+    folderCount: number;
+    dirs: Record<string, [number, number, number, number]>;
+  };
+
+  it("counts a link to a folder inside as a file, and doesn't follow it", async () => {
+    symlinkSync(join(root, "sub"), join(root, "to-sub"));
+    const result = JSON.parse(await addon.nativeFolderSize(root)) as Measured;
+
+    expect(result.fileCount).toBe(6); // the 5 above + to-sub
+    expect(result.folderCount).toBe(3);
+    expect(Object.keys(result.dirs).some((path) => path.startsWith(join(root, "to-sub")))).toBe(
+      false,
+    );
+  });
+
+  // As Finder's Get Info does: each link to a file is counted, as a copy would copy it.
+  it("counts a file with several hard links once for each link", async () => {
+    linkSync(join(root, "sub", "deep", "d.txt"), join(root, "sub", "d-again.txt"));
+    const result = JSON.parse(await addon.nativeFolderSize(root)) as Measured;
+
+    expect(result.fileCount).toBe(6);
+    expect(expectDefined(result.dirs[join(root, "sub")])[0]).toBe(205);
+  });
+
+  it("counts a folder it can't open as one with nothing in it, and finishes the folder holding it", async () => {
+    const locked = join(root, "sub", "locked");
+    mkdirSync(locked);
+    writeFileSync(join(locked, "secret.txt"), "x".repeat(1_000));
+    chmodSync(locked, 0o000);
+    try {
+      const result = JSON.parse(await addon.nativeFolderSize(root)) as Measured;
+
+      expect(result.folderCount).toBe(4); // sub, sub/deep, empty, sub/locked
+      expect(result.fileCount).toBe(5);
+      expect(Object.keys(result.dirs)).not.toContain(locked);
+      expect(result.dirs[join(root, "sub")]).toEqual([105, expect.any(Number), 2, 2]);
+    } finally {
+      chmodSync(locked, 0o755);
+    }
+  });
+
+  it("names the folders inside a folder given with a slash at its end with one slash", async () => {
+    const result = JSON.parse(await addon.nativeFolderSize(`${root}/`)) as Measured;
+
+    expect(Object.keys(result.dirs).sort()).toEqual(
+      [join(root, "empty"), join(root, "sub"), join(root, "sub", "deep")].sort(),
+    );
+  });
+
+  // /usr/share/snmp is a firmlink to /System/Volumes/Data/usr/share/snmp: measuring / walks
+  // it there, so going through the firmlink as well would count it twice.
+  it.skipIf(!existsSync("/usr/share/snmp/mibs"))(
+    "doesn't go through a firmlink, but counts it as a folder",
+    async () => {
+      const result = JSON.parse(await addon.nativeFolderSize("/usr/share")) as Measured;
+      const paths = Object.keys(result.dirs);
+
+      expect(paths).toContain("/usr/share/man");
+      expect(paths.some((path) => path.startsWith("/usr/share/snmp"))).toBe(false);
+      // Measured itself, it is walked like any folder.
+      const snmp = JSON.parse(await addon.nativeFolderSize("/usr/share/snmp")) as Measured;
+      expect(Object.keys(snmp.dirs)).toContain("/usr/share/snmp/mibs");
+    },
+  );
+
+  it("measures in the background as it does in front", async () => {
+    const front = JSON.parse(await wrapper.nativeFolderSize(root)) as Measured;
+    const background = JSON.parse(
+      await wrapper.nativeFolderSize(root, undefined, { background: true }),
+    ) as Measured;
+
+    expect(background).toEqual(front);
+  });
+
+  // Each folder is opened from the one holding it, so no path is too long to open; the
+  // paths are only put together for the result.
+  it("measures folders whose paths are longer than PATH_MAX", async () => {
+    const name = (level: number) => `${String(level).padStart(3, "0")}${"n".repeat(240)}`;
+    const levels = 6;
+    // Made from the bottom up, each folder moved into a new one, so that no path used is
+    // longer than two names.
+    let top = join(root, "chain-0");
+    mkdirSync(top);
+    writeFileSync(join(top, "leaf.txt"), "x".repeat(33));
+    for (let level = 1; level < levels; level++) {
+      const holder = join(root, `chain-${level}`);
+      mkdirSync(holder);
+      renameSync(top, join(holder, name(level)));
+      top = holder;
+    }
+    try {
+      const result = JSON.parse(await addon.nativeFolderSize(top)) as Measured;
+      const names = Array.from({ length: levels - 1 }, (_, index) => name(levels - 1 - index));
+      const deepest = [top, ...names].join("/");
+
+      expect(deepest.length).toBeGreaterThan(1024);
+      expect(result.folderCount).toBe(levels - 1);
+      expect(result.total).toBe(33);
+      expect(expectDefined(result.dirs[deepest])[0]).toBe(33);
+    } finally {
+      // Taken apart the way it was made: a path that long can't be removed by name.
+      for (let level = levels - 1; level >= 1; level--) {
+        const apart = join(root, `apart-${level}`);
+        renameSync(join(top, name(level)), apart);
+        rmSync(top, { recursive: true, force: true });
+        top = apart;
+      }
+      rmSync(top, { recursive: true, force: true });
+    }
   });
 
   it("handles empty directories", async () => {
@@ -314,12 +430,26 @@ describe("nativeFolderSize finished folders", () => {
     expectReportedOnce(batches, expected);
   });
 
-  it("names a folder with a newline or quote in its name", async () => {
-    const odd = join(root, 'line\nbreak "quoted" \\ tab\t');
-    mkdirSync(odd);
-    writeFileSync(join(odd, "f.txt"), "x".repeat(7));
+  it("names a folder with a newline, quote, backslash or letters beyond ASCII in its name exactly", async () => {
+    const names = ['line\nbreak "quoted" \\ tab\t', "Résumé 日本語 🎉", "two\\\\slashes"];
+    for (const [index, name] of names.entries()) {
+      mkdirSync(join(root, name));
+      writeFileSync(join(root, name, "f.txt"), "x".repeat(7 + index));
+    }
     const result = JSON.parse(await addon.nativeFolderSize(root)) as Result;
-    expect(expectDefined(result.dirs[odd])[0]).toBe(7);
+    for (const [index, name] of names.entries()) {
+      expect(expectDefined(result.dirs[join(root, name)])[0]).toBe(7 + index);
+    }
+  });
+
+  it("has nothing to take once a walk has ended or been cancelled", async () => {
+    await addon.nativeFolderSize(root);
+    expect(addon.nativeFolderSizeTakeFinished()).toBeNull();
+
+    const cancelled = addon.nativeFolderSize(root);
+    addon.nativeFolderSizeCancel();
+    await expect(cancelled).rejects.toMatchObject({ code: "ECANCELLED" });
+    expect(addon.nativeFolderSizeTakeFinished()).toBeNull();
   });
 
   it("hands finished folders to the wrapper's callback, and the rest with the result", async () => {

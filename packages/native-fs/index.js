@@ -24,8 +24,8 @@ function deliverFinished(onFinished, json) {
   }
 }
 
-function startFolderSize(folderPath, onFinished) {
-  const promise = binding.nativeFolderSize(folderPath);
+function startFolderSize(folderPath, onFinished, options) {
+  const promise = binding.nativeFolderSize(folderPath, options?.background === true);
   activeFolderSize = promise;
   // Taken only while this walk is the active one: each take empties the list, and what is
   // left when the walk ends comes with its result (or, when cancelled, with its error).
@@ -44,7 +44,10 @@ function startFolderSize(folderPath, onFinished) {
     activeFolderSize = null;
     const next = folderSizeQueue.shift();
     if (next) {
-      startFolderSize(next.folderPath, next.onFinished).then(next.resolve, next.reject);
+      startFolderSize(next.folderPath, next.onFinished, next.options).then(
+        next.resolve,
+        next.reject,
+      );
     }
   };
   promise.then(onSettled, onSettled);
@@ -59,7 +62,8 @@ function startFolderSize(folderPath, onFinished) {
       if (timer !== null) {
         clearInterval(timer);
       }
-      // Folders finished before a cancel are whole: they are handed over before the error.
+      // Folders finished before a cancel or a failure are whole: they are handed over before
+      // the error.
       if (error && typeof error.finished === "string") {
         const finished = error.finished;
         error.finished = undefined;
@@ -72,12 +76,12 @@ function startFolderSize(folderPath, onFinished) {
   );
 }
 
-function nativeFolderSize(folderPath, onFinished) {
+function nativeFolderSize(folderPath, onFinished, options) {
   if (activeFolderSize === null) {
-    return startFolderSize(folderPath, onFinished);
+    return startFolderSize(folderPath, onFinished, options);
   }
   return new Promise((resolve, reject) => {
-    folderSizeQueue.push({ folderPath, onFinished, resolve, reject });
+    folderSizeQueue.push({ folderPath, onFinished, options, resolve, reject });
   });
 }
 
