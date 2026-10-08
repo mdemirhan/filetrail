@@ -1909,4 +1909,68 @@ describe("ContentPane", () => {
       expect(handleSelectionGesture).toHaveBeenCalledTimes(1);
     },
   );
+
+  it.each(["details", "icons"] as const)(
+    "stays where the %s view was scrolled when the folder is read again with an item more",
+    (viewMode) => {
+      const clientHeight = vi
+        .spyOn(HTMLElement.prototype, "clientHeight", "get")
+        .mockReturnValue(200);
+      const clientWidth = vi
+        .spyOn(HTMLElement.prototype, "clientWidth", "get")
+        .mockReturnValue(800);
+      const entryAt = (index: number) => ({
+        path: `/Users/demo/item-${String(index).padStart(3, "0")}.txt`,
+        name: `item-${String(index).padStart(3, "0")}.txt`,
+        extension: "txt",
+        kind: "file" as const,
+        isHidden: false,
+        isSymlink: false,
+      });
+      const entries = Array.from({ length: 200 }, (_, index) => entryAt(index));
+      const pane = (shownEntries: typeof entries) => (
+        <ContentPane
+          isFocused
+          currentPath="/Users/demo"
+          entries={shownEntries}
+          viewMode={viewMode}
+          loading={false}
+          error={null}
+          hiddenItemCount={0}
+          selectedPaths={[entries[0]?.path ?? ""]}
+          selectionLeadPath={entries[0]?.path ?? null}
+          metadataByPath={{}}
+          sortBy="name"
+          sortDirection="asc"
+          onSelectionGesture={() => undefined}
+          onClearSelection={() => undefined}
+          onActivateEntry={() => undefined}
+          onSortChange={() => undefined}
+          onLayoutColumnsChange={() => undefined}
+          onVisiblePathsChange={() => undefined}
+          onNavigatePath={() => undefined}
+          onRequestPathSuggestions={async () => ({
+            inputPath: "",
+            basePath: null,
+            suggestions: [],
+          })}
+          onFocusChange={() => undefined}
+        />
+      );
+      const { container, rerender } = render(pane(entries));
+      const scroller = container.querySelector<HTMLElement>(".content-scroll");
+      if (!scroller) {
+        throw new Error("Missing the list's scroll area.");
+      }
+      // Scrolled away from the selected item, at the top.
+      scroller.scrollTop = 2_000;
+
+      // Another app adds an item, and the folder is read again.
+      rerender(pane([...entries, entryAt(200)]));
+
+      expect(scroller.scrollTop).toBe(2_000);
+      clientHeight.mockRestore();
+      clientWidth.mockRestore();
+    },
+  );
 });

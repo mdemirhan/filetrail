@@ -28,6 +28,7 @@ import { useDragSelection } from "../hooks/useDragSelection";
 import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useRelativeDate } from "../hooks/useRelativeDate";
+import { useRevealIndex } from "../hooks/useRevealIndex";
 import {
   ClipboardMarkIcon,
   clipboardMarkClassName,
@@ -1210,16 +1211,13 @@ function FlowListView({
   // the list's height is measured: until then every item stands in a column of its own,
   // and the reveal would scroll far past the item (and past a scroll position put back by
   // Back or a tab coming back).
+  const selectedIndex = useRevealIndex(entries, selectionLeadPath);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the lead changing brings it into view even where it stands where the last one did.
   useEffect(() => {
     const container = containerRef.current;
     const effectiveViewportWidth =
       viewportWidth > 0 ? viewportWidth : (container?.clientWidth ?? 0);
-    if (!container || !selectionLeadPath || effectiveViewportWidth <= 0 || containerHeight <= 0) {
-      return;
-    }
-
-    const selectedIndex = entries.findIndex((entry) => entry.path === selectionLeadPath);
-    if (selectedIndex < 0) {
+    if (!container || selectedIndex < 0 || effectiveViewportWidth <= 0 || containerHeight <= 0) {
       return;
     }
 
@@ -1237,7 +1235,14 @@ function FlowListView({
     }
 
     container.scrollLeft = nextScrollLeft;
-  }, [compactListView, containerHeight, entries, rowsPerColumn, selectionLeadPath, viewportWidth]);
+  }, [
+    compactListView,
+    containerHeight,
+    rowsPerColumn,
+    selectedIndex,
+    selectionLeadPath,
+    viewportWidth,
+  ]);
 
   return (
     <div
@@ -1596,6 +1601,11 @@ function DetailsView({
     [],
   );
 
+  // An item whose name is being edited is the one to keep in view (a rename can start with
+  // its row scrolled away).
+  const revealPath = inlineRename?.path ?? selectionLeadPath;
+  const revealIndex = useRevealIndex(entries, revealPath);
+
   // Keep the lead selection visible using the same row height contract virtualization uses.
   // biome-ignore lint/correctness/useExhaustiveDependencies: a refused name (refusalCount) brings the row back into view, where the reason is shown.
   useLayoutEffect(() => {
@@ -1605,17 +1615,15 @@ function DetailsView({
     // clientHeight: the visible rows only (no column header, no horizontal scrollbar).
     // The measured size re-runs this when the pane is resized.
     const effectiveViewportHeight = container?.clientHeight ?? rowsViewportHeight;
-    // An item whose name is being edited is the one to keep in view (a rename can start
-    // with its row scrolled away).
-    const revealPath = inlineRename?.path ?? selectionLeadPath;
-    if (!container || !revealPath || effectiveViewportWidth <= 0 || effectiveViewportHeight <= 0) {
+    if (
+      !container ||
+      revealIndex < 0 ||
+      effectiveViewportWidth <= 0 ||
+      effectiveViewportHeight <= 0
+    ) {
       return;
     }
-    const selectedIndex = entries.findIndex((entry) => entry.path === revealPath);
-    if (selectedIndex < 0) {
-      return;
-    }
-    const itemTop = selectedIndex * rowHeight;
+    const itemTop = revealIndex * rowHeight;
     const itemBottom = itemTop + rowHeight;
     const viewTop = container.scrollTop;
     const viewBottom = viewTop + effectiveViewportHeight;
@@ -1628,12 +1636,11 @@ function DetailsView({
       container.scrollTop = itemBottom - effectiveViewportHeight;
     }
   }, [
-    entries,
-    inlineRename?.path,
+    revealIndex,
+    revealPath,
     inlineRename?.refusalCount,
     rowHeight,
     rowsViewportHeight,
-    selectionLeadPath,
     viewportWidth,
   ]);
 

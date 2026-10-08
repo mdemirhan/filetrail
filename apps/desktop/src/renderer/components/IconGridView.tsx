@@ -12,6 +12,7 @@ import type { IpcResponse } from "@filetrail/contracts";
 
 import { useDragSelection } from "../hooks/useDragSelection";
 import { useElementSize } from "../hooks/useElementSize";
+import { useRevealIndex } from "../hooks/useRevealIndex";
 import {
   ClipboardMarkIcon,
   clipboardMarkClassName,
@@ -255,26 +256,24 @@ export function IconGridView({
     onLayoutColumnsChange(columns);
   }, [columns, onLayoutColumnsChange]);
 
+  // An item whose name is being edited is the one to keep in view (a rename can start with
+  // it scrolled away, and a refused name is shown under it).
+  const revealPath = inlineRename?.path ?? selectionLeadPath;
+  const revealIndex = useRevealIndex(entries, revealPath);
+
   // Keep the lead selection visible using the same row height contract virtualization uses.
   // biome-ignore lint/correctness/useExhaustiveDependencies: a refused name (refusalCount) brings the row back into view, where the reason is shown.
   useLayoutEffect(() => {
     const container = containerRef.current;
     // The measured size re-runs this when the pane is resized.
     const effectiveViewportHeight = container?.clientHeight ?? containerHeight;
-    // An item whose name is being edited is the one to keep in view (a rename can start
-    // with it scrolled away, and a refused name is shown under it).
-    const revealPath = inlineRename?.path ?? selectionLeadPath;
-    if (!container || !revealPath || effectiveViewportHeight <= 0) {
-      return;
-    }
-    const selectedIndex = entries.findIndex((entry) => entry.path === revealPath);
-    if (selectedIndex < 0) {
+    if (!container || revealIndex < 0 || effectiveViewportHeight <= 0) {
       return;
     }
     const nextScrollTop = getIconGridRevealScrollTop({
       currentScrollTop: container.scrollTop,
       viewportHeight: effectiveViewportHeight,
-      itemIndex: selectedIndex,
+      itemIndex: revealIndex,
       itemCount: entries.length,
       columns,
       layout,
@@ -282,15 +281,7 @@ export function IconGridView({
     if (Math.abs(nextScrollTop - container.scrollTop) > 1) {
       container.scrollTop = nextScrollTop;
     }
-  }, [
-    columns,
-    containerHeight,
-    entries,
-    inlineRename?.path,
-    inlineRename?.refusalCount,
-    layout,
-    selectionLeadPath,
-  ]);
+  }, [columns, containerHeight, inlineRename?.refusalCount, layout, revealIndex, revealPath]);
 
   return (
     <div
