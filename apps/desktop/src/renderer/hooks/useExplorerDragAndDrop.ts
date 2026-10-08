@@ -66,16 +66,28 @@ type ExternalDrag = {
 
 /**
  * Springing into folders in the content pane, as Finder does: a drag held over a folder
- * opens it in the tab, and a drag that ends without a drop in File Trail brings the tab
- * back to where it started.
+ * opens it in the tab, and a drag that ends without a drop in File Trail brings each tab it
+ * sprang in back to where it started, whether that tab is on screen or not.
  */
 export type SpringLoading = {
-  /** Opens the folder in the tab on screen. */
-  openFolder: (path: string) => void;
-  /** Notes where the tab is before its first spring, to come back to. */
+  /** The tab on screen. */
+  tabId: string;
+  /**
+   * Opens the folder in the tab on screen, and answers whether it opened. Null where
+   * folders don't spring open (search results).
+   */
+  openFolder: ((path: string) => Promise<boolean>) | null;
+  /** Notes where the tab on screen is before its first spring, to come back to. */
   remember: () => unknown;
-  /** Brings the tab back to what `remember` noted. */
+  /** Brings the tab `remember` noted back there. */
   restore: (start: unknown) => void;
+};
+
+// The drag that sprang into folders, and, for each tab it sprang in, where that tab was
+// before its first spring and whether a folder has opened in it yet.
+type Springs = {
+  session: InternalDragSession;
+  tabs: Map<string, { start: unknown; opened: boolean }>;
 };
 
 type DropIndicatorState = "valid" | "invalid" | null;
@@ -132,8 +144,7 @@ export function useExplorerDragAndDrop(args: {
   onDraggedAway: (gonePaths: string[], options: { intoTrash: boolean }) => void;
   /** The folder on screen; once a drag has sprung into it, it takes drops itself. */
   currentPath: string;
-  /** Null where folders don't spring open (search results). */
-  springLoading: SpringLoading | null;
+  springLoading: SpringLoading;
   /**
    * What a drag from Finder or another app carries, while it is over the window. Without
    * it, such drags are refused.
@@ -188,11 +199,7 @@ export function useExplorerDragAndDrop(args: {
   const springRestRef = useRef<PointerPosition | null>(null);
   // The folder showing it is about to open.
   const [springWarningPath, setSpringWarningPath] = useState<string | null>(null);
-  // The drag that sprang into folders, and where the tab was before it did.
-  const springRef = useRef<{
-    session: InternalDragSession;
-    start: unknown;
-  } | null>(null);
+  const springRef = useRef<Springs | null>(null);
   const [backgroundDropIndicator, setBackgroundDropIndicator] = useState<DropIndicatorState>(null);
   // Which disk each folder of this drag is on, as far as the disks have answered.
   const diskIdsRef = useRef(new Map<string, number | null>());
@@ -411,14 +418,7 @@ export function useExplorerDragAndDrop(args: {
     const paths = session.sourceItems.map((item) => item.path);
     void startFileDrag(session.sourceItems)
       .then((result) => {
-        const spring = springRef.current?.session === session ? springRef.current : null;
-        if (spring) {
-          springRef.current = null;
-          // Only a drop in File Trail keeps the tab where the drag took it.
-          if (droppedSessionRef.current !== session) {
-            springLoadingRef.current?.restore(spring.start);
-          }
-        }
+        settleSprings(session);
         // A drop on another window of the app is that window's own: it follows what it
         // moves itself.
         if (
@@ -437,6 +437,22 @@ export function useExplorerDragAndDrop(args: {
           clearDragSession();
         }
       });
+  }
+
+  // A drag that ends without a drop in this window brings every tab it sprang in back to
+  // where it was: the tab on screen, and those it left for another.
+  function settleSprings(session: InternalDragSession) {
+    const springs = springRef.current?.session === session ? springRef.current : null;
+    if (!springs) {
+      return;
+    }
+    springRef.current = null;
+    if (droppedSessionRef.current === session) {
+      return;
+    }
+    for (const { start } of springs.tabs.values()) {
+      springLoadingRef.current.restore(start);
+    }
   }
 
   // Another app said it moved the items, or the Dock's Trash took them. Some apps say so for
@@ -557,13 +573,7 @@ export function useExplorerDragAndDrop(args: {
     if (!session) {
       return;
     }
-    const spring = springRef.current?.session === session ? springRef.current : null;
-    if (spring) {
-      springRef.current = null;
-      if (droppedSessionRef.current !== session) {
-        springLoadingRef.current?.restore(spring.start);
-      }
-    }
+    settleSprings(session);
     if (dragSessionRef.current === session) {
       clearDragSession();
     }
@@ -806,11 +816,13 @@ export function useExplorerDragAndDrop(args: {
   }
 
   // The pane's own folder takes a drag from another app wherever it is held (the empty space,
-  // a file), and the app's own drags once they have sprung into it.
+  // a file), and the app's own drags once they have sprung into it, in this tab.
   function backgroundTakesDrop(session: InternalDragSession): boolean {
     return (
       currentPath.length > 0 &&
-      (session.sourceSurface === "external" || springRef.current?.session === session)
+      (session.sourceSurface === "external" ||
+        (springRef.current?.session === session &&
+          springRef.current.tabs.get(springLoadingRef.current.tabId)?.opened === true))
     );
   }
 
@@ -824,7 +836,8 @@ export function useExplorerDragAndDrop(args: {
   function springWhenHeld(path: string, canSpring: boolean, pointer: PointerPosition) {
     const session = dragSessionRef.current;
     const springLoading = springLoadingRef.current;
-    if (!canSpring || !session || !springLoading || blocked || path === currentPath) {
+    const openFolder = springLoading.openFolder;
+    if (!canSpring || !session || !openFolder || blocked || path === currentPath) {
       resetSpringHold();
       return;
     }
@@ -859,14 +872,39 @@ export function useExplorerDragAndDrop(args: {
       return;
     }
     resetSpringHold();
-    const spring = springRef.current?.session === session ? springRef.current : null;
-    springRef.current = {
-      session,
-      start: spring ? spring.start : springLoading.remember(),
-    };
     springRestRef.current = pointer;
     setActiveDropTarget(null);
-    springLoading.openFolder(path);
+    void springOpen(session, springLoading, openFolder, path);
+  }
+
+  // Opens the folder in the tab on screen. Where the tab was before the drag's first spring
+  // in it is noted first, to come back to even if the drag ends before the folder is on
+  // screen. Only a folder that opens makes the tab's folder take drops: one that can't be
+  // read leaves the drag as it was.
+  async function springOpen(
+    session: InternalDragSession,
+    springLoading: SpringLoading,
+    openFolder: (path: string) => Promise<boolean>,
+    path: string,
+  ) {
+    let springs = springRef.current;
+    if (springs?.session !== session) {
+      springs = { session, tabs: new Map() };
+      springRef.current = springs;
+    }
+    const { tabId } = springLoading;
+    let tab = springs.tabs.get(tabId);
+    if (!tab) {
+      tab = { start: springLoading.remember(), opened: false };
+      springs.tabs.set(tabId, tab);
+    }
+    const opened = await openFolder(path).catch(() => false);
+    if (opened) {
+      tab.opened = true;
+    } else if (!tab.opened) {
+      // Nothing opened in the tab: it is where it was.
+      springs.tabs.delete(tabId);
+    }
   }
 
   // A drag over the content pane away from its folders: on a file or on empty space. The

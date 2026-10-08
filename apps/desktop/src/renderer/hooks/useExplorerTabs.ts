@@ -23,6 +23,7 @@ import {
   toReopenableSnapshot,
 } from "../lib/explorerTabs";
 import {
+  type TreeItemId,
   createFavoriteItemId,
   createFileSystemItemId,
   getFavoriteItemPath,
@@ -61,6 +62,16 @@ type PendingActivation = {
   treeRootPath: string;
   refreshExpandedTree: boolean;
   rerunSearch: boolean;
+};
+
+// Where a tab is, to bring it back there (a drag that sprang it into folders and ended
+// without a drop).
+export type TabPlace = {
+  tabId: string;
+  path: string;
+  historyPaths: string[];
+  historyIndex: number;
+  selectedTreeItemId: TreeItemId | null;
 };
 
 export type ExplorerTabItem = TabDescription & {
@@ -103,6 +114,7 @@ export function useExplorerTabs(args: {
         syncTree?: boolean;
         treeSelectionMode?: "filesystem" | "favorite" | "preserve";
         favoritePath?: string;
+        restoreView?: boolean;
       },
     ) => Promise<boolean>;
     reloadFolderInPlace: (options?: { refreshExpandedTree?: boolean }) => Promise<void>;
@@ -394,7 +406,7 @@ export function useExplorerTabs(args: {
       ),
     });
     const snapshot = getSnapshotToShow(target) ?? target.snapshot;
-    showSnapshot(snapshot, snapshot.view ? "reload" : "load", {
+    showSnapshot(snapshot, showModeOf(snapshot), {
       refreshExpandedTree: target.stale,
     });
   }
@@ -531,7 +543,7 @@ export function useExplorerTabs(args: {
         .map((tab) => (tab.id === nextTab.id ? { ...tab, snapshot: null, stale: false } : tab)),
     });
     const nextSnapshot = getSnapshotToShow(nextTab) ?? nextTab.snapshot;
-    showSnapshot(nextSnapshot, nextSnapshot.view ? "reload" : "load", {
+    showSnapshot(nextSnapshot, showModeOf(nextSnapshot), {
       refreshExpandedTree: nextTab.stale,
     });
   }
@@ -562,7 +574,7 @@ export function useExplorerTabs(args: {
     rememberClosedTab(closedSnapshot);
     commitState({ activeTabId: tabId, tabs: [{ ...kept, snapshot: null, stale: false }] });
     const keptSnapshot = getSnapshotToShow(kept) ?? kept.snapshot;
-    showSnapshot(keptSnapshot, keptSnapshot.view ? "reload" : "load", {
+    showSnapshot(keptSnapshot, showModeOf(keptSnapshot), {
       refreshExpandedTree: kept.stale,
     });
   }
@@ -583,7 +595,7 @@ export function useExplorerTabs(args: {
     openTabWithSnapshot(
       leftSnapshot,
       { ...source.snapshot, search: null },
-      source.snapshot.view ? "reload" : "load",
+      showModeOf(source.snapshot),
       tabId,
     );
   }
@@ -815,10 +827,13 @@ export function useExplorerTabs(args: {
       // A favorite is not looked up in the tree, so the tree is filled in separately.
       void navActions.loadTreeChildren(navigation.treeRootPathRef.current);
     }
+    // The folder comes back as the tab last left it, where the tab remembers that.
     void navActions.navigateToNearestExistingFolder(
       pending.path,
       pending.mode === "open" ? "push" : "skip",
-      favoritePath ? { syncTree: false, treeSelectionMode: "favorite", favoritePath } : {},
+      favoritePath
+        ? { syncTree: false, treeSelectionMode: "favorite", favoritePath, restoreView: true }
+        : { restoreView: true },
     );
   }, [activationCount]);
 
@@ -895,6 +910,48 @@ export function useExplorerTabs(args: {
       stateRef.current = next;
       setState(next);
     }
+  }
+
+  // A tab in the background goes back to `place`, history and all: a drag sprang it into
+  // folders and ended without a drop. Its folder is read when it is shown, and comes back
+  // as it was left there. Answers false for the tab on screen, which the caller takes back
+  // itself.
+  function putBackgroundTabBack(tabId: string, place: TabPlace): boolean {
+    const current = stateRef.current;
+    if (tabId === current.activeTabId) {
+      return false;
+    }
+    const tab = current.tabs.find((candidate) => candidate.id === tabId);
+    const snapshot = tab?.snapshot;
+    if (!snapshot) {
+      // Closed meanwhile.
+      return true;
+    }
+    const view = snapshot.view;
+    const next: TabSnapshot = {
+      ...snapshot,
+      currentPath: place.path,
+      historyPaths: place.historyPaths,
+      historyIndex: place.historyIndex,
+      selectedTreeItemId: place.selectedTreeItemId,
+      view: view && {
+        ...view,
+        currentEntries: [],
+        metadataByPath: {},
+        directoryError: null,
+        contentSelection: EMPTY_CONTENT_SELECTION,
+        listFilterQuery: "",
+        contentScroll: { top: 0, left: 0 },
+        listingOutOfDate: true,
+      },
+    };
+    commitState({
+      ...current,
+      tabs: current.tabs.map((candidate) =>
+        candidate.id === tabId ? { ...candidate, snapshot: next } : candidate,
+      ),
+    });
+    return true;
   }
 
   // A file operation that ends may have changed folders that background tabs show. Their
@@ -1014,7 +1071,14 @@ export function useExplorerTabs(args: {
     reopenClosedTab,
     moveTab,
     leaveUnmountedDisksInBackgroundTabs,
+    putBackgroundTabBack,
   };
+}
+
+// A tab whose folder is on screen from when it was left reads it again where it stands; one
+// with none (not shown yet, or taken elsewhere meanwhile) opens it afresh.
+function showModeOf(snapshot: TabSnapshot): PendingActivation["mode"] {
+  return snapshot.view && !snapshot.view.listingOutOfDate ? "reload" : "load";
 }
 
 function toOpenTabPreference(snapshot: TabSnapshot): OpenTabPreference {

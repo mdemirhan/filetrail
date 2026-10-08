@@ -43,7 +43,7 @@ import { useExplorerNavigationController } from "./hooks/useExplorerNavigationCo
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import { useExplorerSearchController } from "./hooks/useExplorerSearchController";
 import { useExplorerShortcuts } from "./hooks/useExplorerShortcuts";
-import { useExplorerTabs } from "./hooks/useExplorerTabs";
+import { type TabPlace, useExplorerTabs } from "./hooks/useExplorerTabs";
 import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
 import { useFolderWatch } from "./hooks/useFolderWatch";
 import { useHiddenItemCount } from "./hooks/useHiddenItemCount";
@@ -1072,6 +1072,7 @@ export function App() {
     reopenClosedTab,
     moveTab,
     leaveUnmountedDisksInBackgroundTabs,
+    putBackgroundTabBack,
   } = useExplorerTabs({
     services,
     navigation,
@@ -1199,33 +1200,31 @@ export function App() {
     onActivateTab: activateTab,
     getDiskIds: async (paths) => (await client.invoke("system:getDiskIds", { paths })).ids,
     currentPath,
-    // Folders in the content pane spring open under a held drag, as in Finder. The tab
-    // comes back to where it was, history and all, when the drag ends without a drop here.
-    springLoading: isSearchMode
-      ? null
-      : {
-          openFolder: (path) => {
-            void navigateTo(path, "push");
-          },
-          remember: () => ({ tabId: activeTabId, path: currentPath, historyPaths, historyIndex }),
-          restore: (start) => {
-            const noted = start as {
-              tabId: string;
-              path: string;
-              historyPaths: string[];
-              historyIndex: number;
-            };
-            // Another tab came to the front meanwhile: this one is left as the drag left it.
-            if (noted.tabId !== activeTabId) {
-              return;
-            }
-            setHistoryPaths(noted.historyPaths);
-            setHistoryIndex(noted.historyIndex);
-            void navigateTo(noted.path, "skip", undefined, undefined, undefined, undefined, {
-              restoreView: true,
-            });
-          },
-        },
+    // Folders in the content pane spring open under a held drag, as in Finder (not in search
+    // results). Each tab comes back to where it was, history and all, when the drag ends
+    // without a drop here, whether it is on screen then or not.
+    springLoading: {
+      tabId: activeTabId,
+      openFolder: isSearchMode ? null : (path) => navigateTo(path, "push"),
+      remember: (): TabPlace => ({
+        tabId: activeTabId,
+        path: currentPath,
+        historyPaths,
+        historyIndex,
+        selectedTreeItemId,
+      }),
+      restore: (start) => {
+        const noted = start as TabPlace;
+        if (putBackgroundTabBack(noted.tabId, noted)) {
+          return;
+        }
+        setHistoryPaths(noted.historyPaths);
+        setHistoryIndex(noted.historyIndex);
+        void navigateTo(noted.path, "skip", undefined, undefined, undefined, undefined, {
+          restoreView: true,
+        });
+      },
+    },
     startFileDrag: (items) => {
       const paths = items.map((item) => item.path);
       return client.invoke("system:startFileDrag", {

@@ -75,6 +75,10 @@ export type TabViewState = {
   sidebarSectionsScrollTop: number;
   // How the folders in the tab's history were left, for Back and Forward.
   folderViewMemories: FolderViewMemories;
+  // The listing is of another folder than the tab's (a drag that sprang the tab into
+  // folders took it back): the folder is read afresh when the tab is shown, and comes back
+  // as it was left.
+  listingOutOfDate?: true;
 };
 
 export type TabSnapshot = {
