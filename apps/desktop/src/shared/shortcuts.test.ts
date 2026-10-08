@@ -19,6 +19,7 @@ import {
   shortcutFromKeyboardEvent,
   toMenuAccelerator,
   toShortcutOverrides,
+  withoutShift,
 } from "./shortcuts";
 
 function keyEvent(init: Partial<ShortcutKeyEvent>): ShortcutKeyEvent {
@@ -47,9 +48,9 @@ describe("shortcut commands", () => {
     }
   });
 
-  it("lets 66 commands be changed and keeps the standard ones fixed", () => {
+  it("lets 68 commands be changed and keeps the standard ones fixed", () => {
     const fixed = SHORTCUT_COMMANDS.filter((command) => "fixed" in command && command.fixed);
-    expect(SHORTCUT_COMMANDS.length - fixed.length).toBe(66);
+    expect(SHORTCUT_COMMANDS.length - fixed.length).toBe(68);
     expect(fixed.map((command) => command.id)).toEqual([
       "undo",
       "redo",
@@ -104,6 +105,32 @@ describe("normalizeShortcut", () => {
     for (const value of ["", "Cmd", "Cmd+", "Cmd+Shift", "Hyper+K", "Cmd+F25", "Cmd+?", "Cmd+ab"]) {
       expect(normalizeShortcut(value), value).toBeNull();
     }
+  });
+});
+
+describe("page keys", () => {
+  it("moves half a page with ⌃D and ⌃U and a page with the page keys, any of them changeable", () => {
+    expect(DEFAULT_SHORTCUT_BINDINGS.halfPageDown).toEqual(["Ctrl+D"]);
+    expect(DEFAULT_SHORTCUT_BINDINGS.halfPageUp).toEqual(["Ctrl+U"]);
+    expect(DEFAULT_SHORTCUT_BINDINGS.pageDown).toEqual(["PageDown"]);
+    expect(DEFAULT_SHORTCUT_BINDINGS.pageUp).toEqual(["PageUp"]);
+    for (const id of ["halfPageDown", "halfPageUp", "pageDown", "pageUp"] as const) {
+      expect(
+        SHORTCUT_COMMANDS.find((command) => command.id === id),
+        id,
+      ).not.toHaveProperty("fixed");
+      expect(checkShortcutAssignment(DEFAULT_SHORTCUT_BINDINGS, id, "Ctrl+Option+J").status).toBe(
+        "ok",
+      );
+    }
+  });
+
+  it("lets go of ⇧ in a shortcut, for ⇧ with a page key to extend the selection", () => {
+    expect(withoutShift("Ctrl+Shift+D")).toBe("Ctrl+D");
+    expect(withoutShift("Shift+PageDown")).toBe("PageDown");
+    expect(withoutShift("Ctrl+Cmd+Option+Shift+Up")).toBe("Ctrl+Cmd+Option+Up");
+    expect(withoutShift("Ctrl+D")).toBeNull();
+    expect(withoutShift("not a shortcut")).toBeNull();
   });
 });
 

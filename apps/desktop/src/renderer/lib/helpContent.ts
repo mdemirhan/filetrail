@@ -126,8 +126,15 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     description: "Extend the selection (Shift+Up, the other way)",
   },
   { group: "navigation", shortcut: "Home", description: "Select the first item (End, the last)" },
-  { group: "navigation", command: "pageUp", description: "Scroll one page up" },
-  { group: "navigation", command: "pageDown", description: "Scroll one page down" },
+  { group: "navigation", command: "halfPageDown", description: "Move half a page down" },
+  { group: "navigation", command: "halfPageUp", description: "Move half a page up" },
+  { group: "navigation", command: "pageDown", description: "Move one page down" },
+  { group: "navigation", command: "pageUp", description: "Move one page up" },
+  {
+    group: "navigation",
+    shortcut: "Shift+PageDown",
+    description: "Extend the selection by a page (Shift with any of the page keys above)",
+  },
   {
     group: "navigation",
     command: "refreshOrApplySearchSort",

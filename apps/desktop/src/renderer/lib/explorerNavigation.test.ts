@@ -4,8 +4,8 @@ import {
   getForcedVisibleHiddenChildPath,
   getForcedVisiblePackageChildPath,
   getNextSelectionIndex,
-  getPageStepItemCount,
-  getPagedSelectionIndex,
+  getPageStepLineCount,
+  getPagedLineMove,
   getTreeSeedChain,
   isFolderGoneError,
   keepUnchangedEntries,
@@ -171,37 +171,47 @@ describe("explorerNavigation", () => {
     ).toBe(0);
   });
 
-  it("computes paged step counts with one-item overlap", () => {
-    expect(getPageStepItemCount(400, 56)).toBe(6);
-    expect(getPageStepItemCount(120, 38)).toBe(2);
-    expect(getPageStepItemCount(20, 38)).toBe(1);
+  it("moves a page as one line less than fit, and half a page as half of them", () => {
+    // Seven rows fit.
+    expect(getPageStepLineCount(400, 56, "full")).toBe(6);
+    expect(getPageStepLineCount(400, 56, "half")).toBe(3);
+    expect(getPageStepLineCount(120, 38, "full")).toBe(2);
+    expect(getPageStepLineCount(120, 38, "half")).toBe(1);
+    // A line or none fits: always at least one.
+    expect(getPageStepLineCount(40, 38, "full")).toBe(1);
+    expect(getPageStepLineCount(20, 38, "half")).toBe(1);
+    expect(getPageStepLineCount(0, 0, "full")).toBe(1);
   });
 
-  it("computes paged selection indices", () => {
+  it("moves by whole lines and says how many lines it moved", () => {
+    const move = (currentIndex: number, direction: "backward" | "forward", itemsPerLine = 1) =>
+      getPagedLineMove({ itemCount: 100, currentIndex, lines: 6, itemsPerLine, direction });
+    expect(move(10, "forward")).toEqual({ index: 16, movedLines: 6 });
+    expect(move(10, "backward")).toEqual({ index: 4, movedLines: -6 });
+    // Rows of four icons: the selection keeps its column.
+    expect(move(10, "forward", 4)).toEqual({ index: 34, movedLines: 6 });
+    expect(move(30, "backward", 4)).toEqual({ index: 6, movedLines: -6 });
+  });
+
+  it("stops at the first and last items, moving only the lines it could", () => {
+    const move = (currentIndex: number, direction: "backward" | "forward", itemsPerLine = 1) =>
+      getPagedLineMove({ itemCount: 22, currentIndex, lines: 3, itemsPerLine, direction });
+    expect(move(20, "forward")).toEqual({ index: 21, movedLines: 1 });
+    expect(move(1, "backward")).toEqual({ index: 0, movedLines: -1 });
+    expect(move(21, "forward")).toEqual({ index: 21, movedLines: 0 });
+    // Columns of five: from the 2nd column to the last one, which is short.
+    expect(move(7, "forward", 5)).toEqual({ index: 21, movedLines: 3 });
+    // Nothing selected counts from the first item.
+    expect(move(-1, "forward")).toEqual({ index: 3, movedLines: 3 });
     expect(
-      getPagedSelectionIndex({
-        itemCount: 100,
-        currentIndex: 10,
-        stepItems: 6,
+      getPagedLineMove({
+        itemCount: 0,
+        currentIndex: 0,
+        lines: 3,
+        itemsPerLine: 1,
         direction: "forward",
       }),
-    ).toBe(16);
-    expect(
-      getPagedSelectionIndex({
-        itemCount: 100,
-        currentIndex: 10,
-        stepItems: 6,
-        direction: "backward",
-      }),
-    ).toBe(4);
-    expect(
-      getPagedSelectionIndex({
-        itemCount: 12,
-        currentIndex: 10,
-        stepItems: 6,
-        direction: "forward",
-      }),
-    ).toBe(11);
+    ).toEqual({ index: -1, movedLines: 0 });
   });
 
   it("flattens visible tree paths in expanded order", () => {

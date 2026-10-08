@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-// Paging through the file list (⌃D, ⌃U), and the list's scroll position coming back with
-// Back.
+// Paging through the file list (half a page with ⌃D and ⌃U, a page with Page Down and Page
+// Up), and the list's scroll position coming back with Back.
 
 import { act, fireEvent, screen } from "@testing-library/react";
 
@@ -32,7 +32,8 @@ vi.mock("./lib/progressCardDelay", async () =>
 );
 
 import { getDetailsRowHeight } from "./lib/detailsLayout";
-import { getFlowListColumnStep } from "./lib/flowListLayout";
+import { getFlowListColumnStep, getFlowListLayout } from "./lib/flowListLayout";
+import { getIconGridLayout } from "./lib/iconGridLayout";
 import {
   createAppHarness,
   createDirectoryEntry,
@@ -47,8 +48,11 @@ afterEach(expectNoRefusedRequests);
 
 const FILES = Array.from({ length: 10 }, (_, index) => `/Users/demo/file-${index}.txt`);
 
-function createHarness(viewMode: "details" | "list" | "icons" = "details") {
-  const harness = createAppHarness({ preferences: { viewMode } });
+function createHarness(
+  viewMode: "details" | "list" | "icons" = "details",
+  shortcutOverrides: Record<string, string[]> = {},
+) {
+  const harness = createAppHarness({ preferences: { viewMode, shortcutOverrides } });
   harness.setDirectoryEntries("/Users/demo", [
     ...FILES.map((path) => createDirectoryEntry(path, "file")),
     createDirectoryEntry("/Users/demo/Folder", "directory"),
@@ -84,90 +88,174 @@ function selectedPaths(): string[] {
   ).filter((title): title is string => title !== null);
 }
 
+// The keys, as the window gets them.
+const HALF_DOWN = { key: "d", ctrlKey: true };
+const HALF_UP = { key: "u", ctrlKey: true };
+const PAGE_DOWN = { key: "PageDown" };
+const PAGE_UP = { key: "PageUp" };
+
 describe("paging through the file list", () => {
   const rowHeight = getDetailsRowHeight(false);
 
-  it("moves the selection down and up a page of rows in the Details view", async () => {
+  it("moves the selection half a page or a page in the List view, and the rows with it", async () => {
     const harness = createHarness();
     renderApp(harness);
     await selectItem(FILES[0] as string);
-    // Four rows show: a page is three.
+    // Four rows show: half a page is two rows, a page is three.
     const scroller = sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
 
-    await pressKey({ key: "d", ctrlKey: true });
-    expect(selectedPaths()).toEqual([FILES[3]]);
-    expect(scroller.scrollTop).toBe(rowHeight * 4);
-    await pressKey({ key: "d", ctrlKey: true });
-    expect(selectedPaths()).toEqual([FILES[6]]);
-    await pressKey({ key: "u", ctrlKey: true });
-    await pressKey({ key: "u", ctrlKey: true });
-    await pressKey({ key: "u", ctrlKey: true });
+    await pressKey(HALF_DOWN);
+    expect(selectedPaths()).toEqual([FILES[2]]);
+    expect(scroller.scrollTop).toBe(rowHeight * 2);
+    await pressKey(PAGE_DOWN);
+    expect(selectedPaths()).toEqual([FILES[5]]);
+    expect(scroller.scrollTop).toBe(rowHeight * 5);
+    await pressKey(PAGE_UP);
+    expect(selectedPaths()).toEqual([FILES[2]]);
+    expect(scroller.scrollTop).toBe(rowHeight * 2);
+    await pressKey(HALF_UP);
+    expect(selectedPaths()).toEqual([FILES[0]]);
+    expect(scroller.scrollTop).toBe(0);
+    // Already at the top: nothing to move to.
+    await pressKey(HALF_UP);
     expect(selectedPaths()).toEqual([FILES[0]]);
   });
 
-  it("only scrolls a page when nothing, or several items, are selected", async () => {
+  it("scrolls only as far as the list goes, while the selection goes on", async () => {
+    const harness = createHarness();
+    renderApp(harness);
+    await selectItem(FILES[6] as string);
+    const scroller = sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
+    scroller.scrollTop = rowHeight * 6;
+
+    await pressKey(PAGE_DOWN);
+    expect(selectedPaths()).toEqual([FILES[9]]);
+    expect(scroller.scrollTop).toBe(rowHeight * 7);
+  });
+
+  it("starts from the first item when nothing is selected", async () => {
     const harness = createHarness();
     renderApp(harness);
     await focusContentPane();
     const scroller = sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
 
-    await pressKey({ key: "d", ctrlKey: true });
-    expect(scroller.scrollTop).toBe(rowHeight * 4);
-    expect(selectedPaths()).toEqual([]);
+    await pressKey(PAGE_DOWN);
+    expect(selectedPaths()).toHaveLength(1);
+    expect(scroller.scrollTop).toBe(0);
+  });
 
+  it("moves on from the last item clicked when several are selected, keeping one", async () => {
+    const harness = createHarness();
+    renderApp(harness);
     await selectItem(FILES[0] as string);
     await act(async () => {
       fireEvent.click(screen.getByTitle(FILES[1] as string), { metaKey: true });
     });
-    await pressKey({ key: "u", ctrlKey: true });
-    expect(scroller.scrollTop).toBe(0);
-    expect(selectedPaths()).toEqual([FILES[0], FILES[1]]);
+    sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
+
+    await pressKey(HALF_DOWN);
+    expect(selectedPaths()).toEqual([FILES[3]]);
   });
 
-  it("does nothing in a list that fits", async () => {
+  it("extends the selection with ⇧ and any of the page keys", async () => {
     const harness = createHarness();
     renderApp(harness);
-    await focusContentPane();
+    await selectItem(FILES[0] as string);
+    const scroller = sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
+
+    await pressKey({ ...PAGE_DOWN, shiftKey: true });
+    expect(selectedPaths()).toEqual(FILES.slice(0, 4));
+    expect(scroller.scrollTop).toBe(rowHeight * 3);
+    await pressKey({ key: "D", ctrlKey: true, shiftKey: true });
+    expect(selectedPaths()).toEqual(FILES.slice(0, 6));
+    await pressKey({ key: "U", ctrlKey: true, shiftKey: true });
+    expect(selectedPaths()).toEqual(FILES.slice(0, 4));
+  });
+
+  it("keeps the rows still when they all fit", async () => {
+    const harness = createHarness();
+    renderApp(harness);
+    await selectItem(FILES[0] as string);
     const scroller = sizeScroller({ clientHeight: rowHeight * 20, scrollHeight: rowHeight * 11 });
 
-    await pressKey({ key: "d", ctrlKey: true });
+    await pressKey(HALF_DOWN);
+    expect(selectedPaths()).not.toEqual([FILES[0]]);
     expect(scroller.scrollTop).toBe(0);
   });
 
-  it("moves the selection by whole rows of icons in the Icons view", async () => {
+  it("moves by whole rows of icons in the Icons view", async () => {
     const harness = createHarness("icons");
     renderApp(harness);
     await selectItem(FILES[0] as string);
-    sizeScroller({ clientHeight: 1000, scrollHeight: 4000 });
+    // Five rows show (one icon to a row here): half a page is two rows, a page is four.
+    const iconRowHeight = getIconGridLayout(false).rowHeight;
+    const scroller = sizeScroller({
+      clientHeight: iconRowHeight * 5,
+      scrollHeight: iconRowHeight * 11,
+    });
 
-    await pressKey({ key: "d", ctrlKey: true });
-    const [paged] = selectedPaths();
-    expect(paged).not.toBe(FILES[0]);
-    await pressKey({ key: "u", ctrlKey: true });
+    await pressKey(HALF_DOWN);
+    expect(selectedPaths()).toEqual([FILES[2]]);
+    expect(scroller.scrollTop).toBe(iconRowHeight * 2);
+    await pressKey(PAGE_DOWN);
+    expect(selectedPaths()).toEqual([FILES[6]]);
+    expect(scroller.scrollTop).toBe(iconRowHeight * 6);
+    await pressKey(PAGE_UP);
+    await pressKey(HALF_UP);
     expect(selectedPaths()).toEqual([FILES[0]]);
+    expect(scroller.scrollTop).toBe(0);
   });
 
-  it("scrolls the List view a column at a time, or moves the selection by a column", async () => {
+  it("moves by whole columns in the Compact List, scrolling sideways", async () => {
     const harness = createHarness("list");
     renderApp(harness);
-    await focusContentPane();
-    const step = getFlowListColumnStep(false);
-    const scroller = sizeScroller({ clientWidth: step * 2, scrollWidth: step * 6 });
-
-    await pressKey({ key: "d", ctrlKey: true });
-    expect(scroller.scrollLeft).toBe(step);
-    await pressKey({ key: "u", ctrlKey: true });
-    expect(scroller.scrollLeft).toBe(0);
-
     await selectItem(FILES[0] as string);
-    await pressKey({ key: "d", ctrlKey: true });
-    const [paged] = selectedPaths();
-    expect(paged).not.toBe(FILES[0]);
-    await pressKey({ key: "u", ctrlKey: true });
+    // Four columns show (one item to a column here): half a page is two, a page is three.
+    const step = getFlowListColumnStep(false);
+    const { paddingInline, columnGap } = getFlowListLayout(false);
+    const scroller = sizeScroller({
+      clientWidth: step * 4 + paddingInline * 2 - columnGap,
+      scrollWidth: step * 12,
+    });
+
+    await pressKey(HALF_DOWN);
+    expect(selectedPaths()).toEqual([FILES[2]]);
+    expect(scroller.scrollLeft).toBe(step * 2);
+    await pressKey(PAGE_DOWN);
+    expect(selectedPaths()).toEqual([FILES[5]]);
+    expect(scroller.scrollLeft).toBe(step * 5);
+    await pressKey(PAGE_UP);
+    await pressKey(HALF_UP);
     expect(selectedPaths()).toEqual([FILES[0]]);
-    // Already at the start: nothing to move to.
-    await pressKey({ key: "u", ctrlKey: true });
+    expect(scroller.scrollLeft).toBe(0);
+  });
+
+  it("takes the keys given in Settings", async () => {
+    const harness = createHarness("details", { halfPageDown: ["Ctrl+J"], pageDown: ["F6"] });
+    renderApp(harness);
+    await selectItem(FILES[0] as string);
+    sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
+
+    await pressKey(HALF_DOWN);
+    await pressKey(PAGE_DOWN);
     expect(selectedPaths()).toEqual([FILES[0]]);
+    await pressKey({ key: "j", ctrlKey: true });
+    expect(selectedPaths()).toEqual([FILES[2]]);
+    await pressKey({ key: "F6" });
+    expect(selectedPaths()).toEqual([FILES[5]]);
+    await pressKey({ key: "F6", shiftKey: true });
+    expect(selectedPaths()).toEqual(FILES.slice(5, 9));
+  });
+
+  it("leaves ⇧ with a page key to the command that has it", async () => {
+    const harness = createHarness("details", { focusTreePane: ["Shift+PageDown"] });
+    renderApp(harness);
+    await selectItem(FILES[0] as string);
+    sizeScroller({ clientHeight: rowHeight * 4, scrollHeight: rowHeight * 11 });
+
+    await pressKey({ ...PAGE_DOWN, shiftKey: true });
+    expect(selectedPaths()).toEqual([FILES[0]]);
+    expect(screen.getByTestId("content-focused")).toHaveTextContent("false");
   });
 });
 

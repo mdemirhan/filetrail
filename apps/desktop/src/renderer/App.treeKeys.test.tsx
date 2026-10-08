@@ -252,21 +252,26 @@ describe("the folder tree from the keyboard", () => {
     }
   });
 
-  it("moves a page at a time with ⌃D and ⌃U", async () => {
+  it("moves half a page with ⌃D and ⌃U, and a page with Page Down and Page Up", async () => {
     const harness = createHarness();
     await startInTree(harness);
-    // Room for three rows: a page is two of them.
+    // Room for three rows: half a page is one of them, a page is two.
     Object.defineProperty(screen.getByTestId("tree-scroll"), "clientHeight", {
       configurable: true,
       value: getTreeRowHeight(false) * 3,
     });
 
-    await key("d", { ctrlKey: true });
+    await key("PageDown");
     await expectTreeSelection("fs:/Users/demo/Folder", "/Users/demo/Folder");
     await key("d", { ctrlKey: true });
     await expectTreeSelection("fs:/Users/demo/Projects", "/Users/demo/Projects");
+    // At the end: nothing further down.
+    await key("PageDown");
+    await expectTreeSelection("fs:/Users/demo/Projects", "/Users/demo/Projects");
     await key("u", { ctrlKey: true });
-    await expectTreeSelection("fs:/Users/demo/Archive", "/Users/demo/Archive");
+    await expectTreeSelection("fs:/Users/demo/Folder", "/Users/demo/Folder");
+    await key("PageUp");
+    await expectTreeSelection("fs:/Users/demo", "/Users/demo");
   });
 });
 

@@ -141,8 +141,16 @@ export const SHORTCUT_COMMANDS = [
   // Tab moves between the folder tree and the file list; these are there to be given keys.
   { id: "focusTreePane", label: "Focus Folder Tree", group: "navigation", defaults: [] },
   { id: "focusContentPane", label: "Focus File List", group: "navigation", defaults: [] },
-  { id: "pageUp", label: "Scroll One Page Up", group: "navigation", defaults: ["Ctrl+U"] },
-  { id: "pageDown", label: "Scroll One Page Down", group: "navigation", defaults: ["Ctrl+D"] },
+  // The selection moves, and the list scrolls as far; ⇧ with the key extends the selection.
+  { id: "pageUp", label: "Move One Page Up", group: "navigation", defaults: ["PageUp"] },
+  { id: "pageDown", label: "Move One Page Down", group: "navigation", defaults: ["PageDown"] },
+  { id: "halfPageUp", label: "Move Half a Page Up", group: "navigation", defaults: ["Ctrl+U"] },
+  {
+    id: "halfPageDown",
+    label: "Move Half a Page Down",
+    group: "navigation",
+    defaults: ["Ctrl+D"],
+  },
 
   {
     id: "newWindow",
@@ -680,6 +688,12 @@ function writeShortcut(parsed: ParsedShortcut): string {
 export function normalizeShortcut(value: string): string | null {
   const parsed = parseShortcut(value);
   return parsed ? writeShortcut(parsed) : null;
+}
+
+// The shortcut with ⇧ let go ("Ctrl+Shift+D" → "Ctrl+D"), or null when it has no ⇧.
+export function withoutShift(shortcut: string): string | null {
+  const parsed = parseShortcut(shortcut);
+  return parsed?.shift ? writeShortcut({ ...parsed, shift: false }) : null;
 }
 
 const KEY_BY_EVENT_KEY: Record<string, string> = {

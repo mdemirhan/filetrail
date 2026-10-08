@@ -23,12 +23,13 @@ import {
   resolveExplorerTreeRootPath,
 } from "../lib/explorerAppUtils";
 import {
+  type PageSize,
   getAncestorChain,
   getForcedVisibleHiddenChildPath,
   getForcedVisiblePackageChildPath,
   getNextSelectionIndex,
-  getPageStepItemCount,
-  getPagedSelectionIndex,
+  getPageStepLineCount,
+  getPagedLineMove,
   getTreeSeedChain,
   isFolderGoneError,
   keepUnchangedEntries,
@@ -58,7 +59,7 @@ import {
   isLocationsRootItemId,
   isPathInsideTrash,
 } from "../lib/favorites";
-import { getFlowListColumnStep } from "../lib/flowListLayout";
+import { getFlowListColumnStep, getFlowListLayout } from "../lib/flowListLayout";
 import { resolveFocusedEditTarget } from "../lib/focusedEditTarget";
 import {
   CONTENT_SCROLL_SELECTOR,
@@ -70,7 +71,7 @@ import { getIconGridLayout } from "../lib/iconGridLayout";
 import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
 import { LIST_FILTER_SPACE_WINDOW_MS, findListFilterSelection } from "../lib/listFilter";
 import { createRendererLogger } from "../lib/logging";
-import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
+import { scrollElementByAmount } from "../lib/pagedScroll";
 import { expandHomeShortcut } from "../lib/pathUtils";
 import { isVolumeRootPath } from "../lib/volumes";
 import type {
@@ -427,132 +428,110 @@ export function useExplorerNavigationController(args: {
     return element ? { axis: "horizontal", element } : null;
   }
 
-  function handlePagedPaneScroll(direction: "backward" | "forward") {
+  // Moves the selection of the focused pane by half a page or a page, and scrolls the pane as
+  // far as the selection moves, so the selection stays where it was on screen. In the file
+  // list, `selectContentPath` sets the selection (⇧ extends it instead). Whether it moved.
+  function handlePagedMove(
+    direction: "backward" | "forward",
+    size: PageSize,
+    selectContentPath: (path: string) => void = setSingleContentSelection,
+  ): boolean {
     const target = getFocusedScrollTarget();
     if (!target) {
       return false;
     }
+    const { axis, element } = target;
 
     if (focusedPane === "tree") {
-      const didScroll = pageScrollElement(target.element, target.axis, direction);
-      if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
-        const favoriteItemIds = getFavoriteItemIds();
-        if (favoriteItemIds.length === 0) {
-          return didScroll;
-        }
-        const currentIndex = favoriteItemIds.findIndex(
-          (itemId) => itemId === selectedTreeItemIdRef.current,
-        );
-        const stepItems = getPageStepItemCount(
-          target.element.clientHeight,
-          getTreeRowHeight(compactTreeView),
-        );
-        const nextIndex = getPagedSelectionIndex({
-          itemCount: favoriteItemIds.length,
-          currentIndex,
-          stepItems,
-          direction,
-        });
-        const nextItemId = favoriteItemIds[nextIndex];
-        if (nextItemId && nextItemId !== selectedTreeItemIdRef.current) {
-          void selectTreeItem(nextItemId, "push");
-        }
-        return didScroll || nextItemId !== undefined;
-      }
       // Paging goes past the Favorites and Locations headings, as the arrow keys do: a
       // heading is never selected.
-      const visibleItemIds = getTreePresentationState().visibleItemIds.filter(
-        (itemId) => !isFavoritesRootItemId(itemId) && !isLocationsRootItemId(itemId),
-      );
-      if (visibleItemIds.length === 0) {
-        return didScroll;
-      }
-      const currentIndex = visibleItemIds.findIndex(
-        (itemId) => itemId === selectedTreeItemIdRef.current,
-      );
-      const stepItems = getPageStepItemCount(
-        target.element.clientHeight,
-        getTreeRowHeight(compactTreeView),
-      );
-      const nextIndex = getPagedSelectionIndex({
-        itemCount: visibleItemIds.length,
-        currentIndex,
-        stepItems,
+      const itemIds =
+        favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites"
+          ? getFavoriteItemIds()
+          : getTreePresentationState().visibleItemIds.filter(
+              (itemId) => !isFavoritesRootItemId(itemId) && !isLocationsRootItemId(itemId),
+            );
+      const currentItemId = selectedTreeItemIdRef.current;
+      const { index: nextIndex } = getPagedLineMove({
+        itemCount: itemIds.length,
+        currentIndex: itemIds.findIndex((itemId) => itemId === currentItemId),
+        lines: getPageStepLineCount(element.clientHeight, getTreeRowHeight(compactTreeView), size),
+        itemsPerLine: 1,
         direction,
       });
-      const nextItemId = visibleItemIds[nextIndex];
-      if (nextItemId && nextItemId !== selectedTreeItemIdRef.current) {
-        void selectTreeItem(nextItemId, "push");
-      }
-      return didScroll || nextItemId !== undefined;
-    }
-
-    if (focusedPane !== "content") {
-      return false;
-    }
-
-    if (viewMode === "list") {
-      if (contentSelection.paths.length === 1) {
-        const currentIndex = activeContentEntries.findIndex(
-          (entry) => entry.path === contentSelection.leadPath,
-        );
-        if (currentIndex < 0) {
-          return false;
-        }
-
-        const nextIndex = getPagedSelectionIndex({
-          itemCount: activeContentEntries.length,
-          currentIndex,
-          stepItems: Math.max(1, contentColumns),
-          direction,
-        });
-        const nextEntry = activeContentEntries[nextIndex];
-        if (nextEntry && nextEntry.path !== contentSelection.leadPath) {
-          setSingleContentSelection(nextEntry.path);
-          return true;
-        }
+      const nextItemId = itemIds[nextIndex];
+      if (!nextItemId || nextItemId === currentItemId) {
         return false;
       }
-
-      return scrollElementByAmount(
-        target.element,
-        "horizontal",
-        (direction === "forward" ? 1 : -1) * getFlowListColumnStep(compactListView),
-      );
+      // The rows differ in height (the headings), so the distance is read from the page.
+      const rowTop = (itemId: string | null) =>
+        Array.from(element.querySelectorAll<HTMLElement>(".tree-row[data-tree-item-id]"))
+          .find((row) => row.dataset.treeItemId === itemId)
+          ?.getBoundingClientRect().top;
+      const fromTop = rowTop(currentItemId);
+      const toTop = rowTop(nextItemId);
+      if (fromTop !== undefined && toTop !== undefined) {
+        scrollElementByAmount(element, axis, toTop - fromTop);
+      }
+      void selectTreeItem(nextItemId, "push");
+      return true;
     }
 
-    const didScroll = pageScrollElement(target.element, target.axis, direction);
-
-    if (contentSelection.paths.length === 1) {
-      const currentIndex = activeContentEntries.findIndex(
-        (entry) => entry.path === contentSelection.leadPath,
-      );
-      if (currentIndex < 0) {
-        return didScroll;
-      }
-      // Icon view pages by rows, and every row holds a full set of columns.
-      const pagesIconRows = viewMode === "icons";
-      const stepItems =
-        getPageStepItemCount(
-          target.element.clientHeight,
-          pagesIconRows
-            ? getIconGridLayout(compactIconView).rowHeight
-            : getDetailsRowHeight(compactDetailsView),
-        ) * (pagesIconRows ? Math.max(1, contentColumns) : 1);
-      const nextIndex = getPagedSelectionIndex({
-        itemCount: activeContentEntries.length,
-        currentIndex,
-        stepItems,
-        direction,
-      });
-      const nextEntry = activeContentEntries[nextIndex];
-      if (nextEntry && nextEntry.path !== contentSelection.leadPath) {
-        setSingleContentSelection(nextEntry.path);
-        return true;
-      }
+    if (focusedPane !== "content" || activeContentEntries.length === 0) {
+      return false;
     }
-
-    return didScroll;
+    // A line is a row of the List or Icons view, or a column of the Compact List, which
+    // scrolls sideways. A page keeps the selection's place across the line.
+    let lineExtent: number;
+    let viewportSize: number;
+    let itemsPerLine: number;
+    if (viewMode === "list") {
+      const layout = getFlowListLayout(compactListView);
+      lineExtent = getFlowListColumnStep(compactListView);
+      // The last column needs no gap after it.
+      viewportSize = element.clientWidth - layout.paddingInline * 2 + layout.columnGap;
+      itemsPerLine = Math.max(1, contentColumns);
+    } else if (viewMode === "icons") {
+      lineExtent = getIconGridLayout(compactIconView).rowHeight;
+      viewportSize = element.clientHeight;
+      itemsPerLine = Math.max(1, contentColumns);
+    } else {
+      lineExtent = getDetailsRowHeight(compactDetailsView);
+      viewportSize = element.clientHeight;
+      itemsPerLine = 1;
+    }
+    const currentIndex = activeContentEntries.findIndex(
+      (entry) => entry.path === contentSelection.leadPath,
+    );
+    const move = getPagedLineMove({
+      itemCount: activeContentEntries.length,
+      currentIndex,
+      lines: getPageStepLineCount(viewportSize, lineExtent, size),
+      itemsPerLine,
+      direction,
+    });
+    // Nothing selected: the first item, or the one next to where a removed one stood, as
+    // the arrow keys start.
+    const nextIndex =
+      currentIndex < 0
+        ? getNextSelectionIndex({
+            itemCount: activeContentEntries.length,
+            currentIndex,
+            key: direction === "forward" ? "ArrowDown" : "ArrowUp",
+            columns: 1,
+            viewMode: "details",
+            gapIndex: contentSelection.gapIndex,
+          })
+        : move.index;
+    const nextEntry = activeContentEntries[nextIndex];
+    if (!nextEntry || (nextIndex === currentIndex && contentSelection.paths.length === 1)) {
+      return false;
+    }
+    if (currentIndex >= 0) {
+      scrollElementByAmount(element, axis, move.movedLines * lineExtent);
+    }
+    selectContentPath(nextEntry.path);
+    return true;
   }
 
   // The folder being opened, while it is (see navigateTo); a refresh after a write leaves it
@@ -2343,7 +2322,7 @@ export function useExplorerNavigationController(args: {
     focusContentPane,
     focusTreePane,
     restoreExplorerPaneFocus,
-    handlePagedPaneScroll,
+    handlePagedMove,
     handleTypeaheadInput,
     eraseListFilterCharacter,
     clearListFilter,

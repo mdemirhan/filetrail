@@ -9,11 +9,15 @@ import {
   isShortcutCommandId,
   isTextEditingShortcut,
   shortcutFromKeyboardEvent,
+  withoutShift,
 } from "../../shared/shortcuts";
 import type { ContentSelectionState } from "../lib/contentSelection";
 import { isDirectoryLikeEntry, resolveNewFolderTargetPath } from "../lib/explorerAppUtils";
-import { parentDirectoryPath } from "../lib/explorerNavigation";
-import { getNextSelectionIndex } from "../lib/explorerNavigation";
+import {
+  type PageSize,
+  getNextSelectionIndex,
+  parentDirectoryPath,
+} from "../lib/explorerNavigation";
 import type { DirectoryEntry } from "../lib/explorerTypes";
 import { isKeyboardOwnedFormControl, resolveFocusedEditTarget } from "../lib/focusedEditTarget";
 import { isGoMenuPlaceCommand, resolveGoMenuPlace } from "../lib/goMenuPlaces";
@@ -81,6 +85,33 @@ const SORT_COMMAND_KEYS = {
   sortByKind: "kind",
 } as const;
 
+// The keys that move the selection by half a page or a page, in the tree and the file list.
+const PAGE_MOVES = [
+  { id: "pageBackward", command: "pageUp", direction: "backward", size: "full" },
+  { id: "pageForward", command: "pageDown", direction: "forward", size: "full" },
+  { id: "halfPageBackward", command: "halfPageUp", direction: "backward", size: "half" },
+  { id: "halfPageForward", command: "halfPageDown", direction: "forward", size: "half" },
+] as const satisfies readonly {
+  id: RawExplorerShortcutId;
+  command: ShortcutCommandId;
+  direction: "backward" | "forward";
+  size: PageSize;
+}[];
+
+// The page move a key with ⇧ is, when ⇧ and the key aren't a command's keys of their own.
+function findShiftedPageMove(
+  event: KeyboardEvent,
+  commandByShortcut: ResolvedShortcuts["commandByShortcut"],
+): (typeof PAGE_MOVES)[number] | null {
+  const pressed = shortcutFromKeyboardEvent(event);
+  const unshifted = pressed ? withoutShift(pressed) : null;
+  if (!pressed || !unshifted || commandByShortcut.has(pressed)) {
+    return null;
+  }
+  const command = commandByShortcut.get(unshifted);
+  return PAGE_MOVES.find((move) => move.command === command) ?? null;
+}
+
 // A key the window acts on itself. One that belongs to a command is triggered by whatever
 // keys the command has (Settings → Shortcuts); the others are the keyboard's own way of
 // moving around and typing, and look at the key pressed.
@@ -141,7 +172,11 @@ type ExplorerShortcutActions = {
   editPaths: (paths: string[]) => Promise<void>;
   openPathInTerminal: (path: string) => Promise<void>;
   focusContentPane: () => void;
-  handlePagedPaneScroll: (direction: "backward" | "forward") => boolean;
+  handlePagedMove: (
+    direction: "backward" | "forward",
+    size: PageSize,
+    selectContentPath?: (path: string) => void,
+  ) => boolean;
   handleTypeaheadInput: (key: string, pane: "tree" | "content") => void;
   eraseListFilterCharacter: () => void;
   clearListFilter: () => void;
@@ -734,26 +769,33 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           latestArgsRef.current.rootTreeAtSelection();
         },
       },
+      ...PAGE_MOVES.map(
+        (move): RawShortcutBinding => ({
+          id: move.id,
+          command: move.command,
+          run: (keyboardEvent) => {
+            if (latestArgsRef.current.handlePagedMove(move.direction, move.size)) {
+              keyboardEvent.preventDefault();
+            }
+          },
+        }),
+      ),
       {
-        id: "pagedScrollBackward",
-        command: "pageUp",
+        // ⇧ with a paging key extends the selection as far as the key moves it, as ⇧ with an
+        // arrow does, unless ⇧ and the key are a command's keys themselves.
+        id: "pagedSelectionExtend",
+        matches: (keyboardEvent) =>
+          findShiftedPageMove(keyboardEvent, latestArgsRef.current.shortcuts.commandByShortcut) !==
+          null,
         run: (keyboardEvent) => {
-          const didHandle = latestArgsRef.current.handlePagedPaneScroll("backward");
-          if (!didHandle) {
-            return;
+          const current = latestArgsRef.current;
+          const move = findShiftedPageMove(keyboardEvent, current.shortcuts.commandByShortcut);
+          if (
+            move &&
+            current.handlePagedMove(move.direction, move.size, current.extendContentSelectionToPath)
+          ) {
+            keyboardEvent.preventDefault();
           }
-          keyboardEvent.preventDefault();
-        },
-      },
-      {
-        id: "pagedScrollForward",
-        command: "pageDown",
-        run: (keyboardEvent) => {
-          const didHandle = latestArgsRef.current.handlePagedPaneScroll("forward");
-          if (!didHandle) {
-            return;
-          }
-          keyboardEvent.preventDefault();
         },
       },
       {

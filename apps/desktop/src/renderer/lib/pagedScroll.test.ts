@@ -1,82 +1,61 @@
 // @vitest-environment jsdom
 
-import { pageScrollElement, scrollElementByAmount } from "./pagedScroll";
+import { scrollElementByAmount } from "./pagedScroll";
 
-describe("pagedScroll", () => {
-  it("pages vertically by the current viewport height", () => {
-    const element = document.createElement("div");
-    Object.defineProperties(element, {
-      clientHeight: { value: 320, configurable: true },
-      scrollHeight: { value: 1400, configurable: true },
-      clientWidth: { value: 0, configurable: true },
-      scrollWidth: { value: 0, configurable: true },
-    });
-    element.scrollTop = 120;
-
-    const didScroll = pageScrollElement(element, "vertical", "forward");
-
-    expect(didScroll).toBe(true);
-    expect(element.scrollTop).toBe(440);
+function scroller(size: {
+  clientHeight?: number;
+  scrollHeight?: number;
+  clientWidth?: number;
+  scrollWidth?: number;
+}) {
+  const element = document.createElement("div");
+  Object.defineProperties(element, {
+    clientHeight: { value: size.clientHeight ?? 0, configurable: true },
+    scrollHeight: { value: size.scrollHeight ?? 0, configurable: true },
+    clientWidth: { value: size.clientWidth ?? 0, configurable: true },
+    scrollWidth: { value: size.scrollWidth ?? 0, configurable: true },
   });
+  return element;
+}
 
-  it("pages horizontally by the current viewport width", () => {
-    const element = document.createElement("div");
-    Object.defineProperties(element, {
-      clientHeight: { value: 0, configurable: true },
-      scrollHeight: { value: 0, configurable: true },
-      clientWidth: { value: 480, configurable: true },
-      scrollWidth: { value: 1800, configurable: true },
-    });
+describe("scrollElementByAmount", () => {
+  it("scrolls sideways by the amount", () => {
+    const element = scroller({ clientWidth: 480, scrollWidth: 1800 });
     element.scrollLeft = 240;
 
-    const didScroll = pageScrollElement(element, "horizontal", "forward");
-
-    expect(didScroll).toBe(true);
-    expect(element.scrollLeft).toBe(720);
+    expect(scrollElementByAmount(element, "horizontal", 310)).toBe(true);
+    expect(element.scrollLeft).toBe(550);
   });
 
-  it("clamps paging at the available scroll bounds", () => {
-    const element = document.createElement("div");
-    Object.defineProperties(element, {
-      clientHeight: { value: 300, configurable: true },
-      scrollHeight: { value: 850, configurable: true },
-      clientWidth: { value: 0, configurable: true },
-      scrollWidth: { value: 0, configurable: true },
-    });
+  it("scrolls up and down, stopping at either end", () => {
+    const element = scroller({ clientHeight: 300, scrollHeight: 850 });
     element.scrollTop = 500;
 
-    const didScroll = pageScrollElement(element, "vertical", "forward");
-
-    expect(didScroll).toBe(true);
+    expect(scrollElementByAmount(element, "vertical", 300)).toBe(true);
     expect(element.scrollTop).toBe(550);
+    expect(scrollElementByAmount(element, "vertical", -900)).toBe(true);
+    expect(element.scrollTop).toBe(0);
   });
 
-  it("returns false when the element cannot scroll on that axis", () => {
-    const element = document.createElement("div");
-    Object.defineProperties(element, {
-      clientHeight: { value: 320, configurable: true },
-      scrollHeight: { value: 320, configurable: true },
-      clientWidth: { value: 480, configurable: true },
-      scrollWidth: { value: 480, configurable: true },
-    });
+  it("tells a scroll event, for the views that follow the scroll position", () => {
+    const element = scroller({ clientHeight: 300, scrollHeight: 850 });
+    const onScroll = vi.fn();
+    element.addEventListener("scroll", onScroll);
 
-    expect(pageScrollElement(element, "vertical", "forward")).toBe(false);
-    expect(pageScrollElement(element, "horizontal", "backward")).toBe(false);
+    scrollElementByAmount(element, "vertical", 100);
+    expect(onScroll).toHaveBeenCalledTimes(1);
   });
 
-  it("scrolls by an explicit amount instead of a full page", () => {
-    const element = document.createElement("div");
-    Object.defineProperties(element, {
-      clientHeight: { value: 0, configurable: true },
-      scrollHeight: { value: 0, configurable: true },
-      clientWidth: { value: 480, configurable: true },
-      scrollWidth: { value: 1800, configurable: true },
+  it("returns false when the element can't scroll that way, or is already at the end", () => {
+    const element = scroller({
+      clientHeight: 320,
+      scrollHeight: 320,
+      clientWidth: 480,
+      scrollWidth: 960,
     });
-    element.scrollLeft = 240;
 
-    const didScroll = scrollElementByAmount(element, "horizontal", 310);
-
-    expect(didScroll).toBe(true);
-    expect(element.scrollLeft).toBe(550);
+    expect(scrollElementByAmount(element, "vertical", 100)).toBe(false);
+    expect(scrollElementByAmount(element, "horizontal", -100)).toBe(false);
+    expect(scrollElementByAmount(element, "horizontal", 0)).toBe(false);
   });
 });

@@ -210,32 +210,44 @@ export function getNextSelectionIndex(args: {
   return clampIndex(safeIndex + step, itemCount);
 }
 
-// Page-wise selection intentionally overlaps by one visible item so Ctrl+U / Ctrl+D
-// preserve orientation instead of jumping to a completely disjoint set of entries.
-export function getPageStepItemCount(viewportSize: number, itemExtent: number): number {
-  const safeExtent = Math.max(1, itemExtent);
-  const visibleItems = Math.max(1, Math.floor(Math.max(0, viewportSize) / safeExtent));
-  return Math.max(1, visibleItems - 1);
+// How many lines (rows, or Compact List columns) a page moves: a full page is one less than
+// fit on screen, so the last one stays in view; half a page is half of those that fit.
+export type PageSize = "half" | "full";
+
+export function getPageStepLineCount(
+  viewportSize: number,
+  lineExtent: number,
+  size: PageSize,
+): number {
+  const visibleLines = Math.max(1, Math.floor(Math.max(0, viewportSize) / Math.max(1, lineExtent)));
+  return Math.max(1, size === "full" ? visibleLines - 1 : Math.floor(visibleLines / 2));
 }
 
-// Mirrors the page-step math used for scrolling so selection movement and viewport
-// movement stay aligned.
-export function getPagedSelectionIndex(args: {
+// Where a step of `lines` lines from `currentIndex` lands, stopping at the first and last
+// items, and how many lines the selection moved, for the view to scroll as far. A line
+// holds `itemsPerLine` items: a row of icons, or a Compact List column.
+export function getPagedLineMove(args: {
   itemCount: number;
   currentIndex: number;
-  stepItems: number;
+  lines: number;
+  itemsPerLine: number;
   direction: "backward" | "forward";
-}): number {
-  const { itemCount, currentIndex, stepItems, direction } = args;
+}): { index: number; movedLines: number } {
+  const { itemCount, currentIndex, lines, direction } = args;
   if (itemCount <= 0) {
-    return -1;
+    return { index: -1, movedLines: 0 };
   }
-  const safeIndex = currentIndex < 0 ? 0 : currentIndex;
-  const safeStep = Math.max(1, stepItems);
-  return clampIndex(
-    direction === "forward" ? safeIndex + safeStep : safeIndex - safeStep,
+  const itemsPerLine = Math.max(1, args.itemsPerLine);
+  const fromIndex = Math.max(0, currentIndex);
+  const step = Math.max(1, lines) * itemsPerLine;
+  const index = clampIndex(
+    direction === "forward" ? fromIndex + step : fromIndex - step,
     itemCount,
   );
+  return {
+    index,
+    movedLines: Math.floor(index / itemsPerLine) - Math.floor(fromIndex / itemsPerLine),
+  };
 }
 
 // Flattens the expanded tree into the same visual order the user sees on screen.
