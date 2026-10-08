@@ -40,9 +40,8 @@ function renderStrip(
     onItemDragOver: vi.fn(),
     onItemDragLeave: vi.fn(),
     onItemDrop: vi.fn(),
-    ...overrides,
   };
-  const view = render(<TabStrip {...props} />);
+  const view = render(<TabStrip {...props} {...overrides} />);
   return { props, view };
 }
 
