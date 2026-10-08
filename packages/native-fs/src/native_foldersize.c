@@ -13,9 +13,11 @@
  *   - folder count (subfolders at any depth, packages included; a package's
  *     contents count too, as they are walked like any folder)
  *
- * The walk stays on the disk it starts on, and doesn't go through firmlinks: on the
- * startup disk, /Users, /Applications and the like are firmlinks to the same folders under
- * /System/Volumes/Data, which the walk reaches there, so measuring / counts them once.
+ * The walk stays on the disk it starts on, and doesn't go into a folder another volume is
+ * mounted on. On the startup disk, /Users, /Applications and the like are firmlinks to the
+ * same folders under /System/Volumes/Data, where the data volume is mounted: measuring /
+ * goes through the firmlinks and leaves out /System/Volumes/Data, so each folder is
+ * counted once, under the path it is browsed at.
  *
  * A folder whose listing fails part way (EIO, say), or that holds a sub-folder that
  * couldn't be opened for a reason other than having no access to it, is incomplete: it
@@ -60,9 +62,6 @@
 
 #include "native_errors.h"
 
-#ifndef SF_FIRMLINK
-#define SF_FIRMLINK 0x00800000 /* sys/stat.h, macOS 10.15 and later */
-#endif
 
 #define BULK_BUF_SIZE (256 * 1024)
 #define NUM_THREADS 4
@@ -299,9 +298,10 @@ static void init_attrlist(void) {
   memset(&g_attrlist, 0, sizeof(g_attrlist));
   g_attrlist.bitmapcount = ATTR_BIT_MAP_COUNT;
   /* Attributes returned in bitmap bit order (lowest first):
-     ATTR_CMN_NAME (bit 0), ATTR_CMN_OBJTYPE (bit 3), then ATTR_CMN_FLAGS (bit 18). */
-  g_attrlist.commonattr =
-      ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE | ATTR_CMN_FLAGS;
+     ATTR_CMN_NAME (bit 0), then ATTR_CMN_OBJTYPE (bit 3). */
+  g_attrlist.commonattr = ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE;
+  /* Folders only, after the common attributes: whether one is mounted on. */
+  g_attrlist.dirattr = ATTR_DIR_MOUNTSTATUS;
   /* File attrs in bit order: ATTR_FILE_ALLOCSIZE (bit 2, 0x04)
      then ATTR_FILE_DATALENGTH (bit 9, 0x200). */
   g_attrlist.fileattr = ATTR_FILE_ALLOCSIZE | ATTR_FILE_DATALENGTH;
@@ -328,8 +328,8 @@ typedef struct {
   int64_t direct_folder_count;
 } process_dir_result_t;
 
-/* Lists `dir` and queues its sub-folders on the same disk, firmlinks left out; adds what
-   is directly in it to its totals. */
+/* Lists `dir` and queues its sub-folders on the same disk, those another volume is mounted
+   on left out; adds what is directly in it to its totals. */
 static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t *ta,
                                         char *buf) {
   work_queue_t *wq = ta->wq;
@@ -377,11 +377,11 @@ static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t
         p += sizeof(obj_type);
       }
 
-      /* ATTR_CMN_FLAGS (bit 18) -- uint32_t, st_flags */
-      uint32_t flags = 0;
-      if (returned.commonattr & ATTR_CMN_FLAGS) {
-        memcpy(&flags, p, sizeof(flags));
-        p += sizeof(flags);
+      /* ATTR_DIR_MOUNTSTATUS -- uint32_t, folders only */
+      uint32_t mount_status = 0;
+      if (returned.dirattr & ATTR_DIR_MOUNTSTATUS) {
+        memcpy(&mount_status, p, sizeof(mount_status));
+        p += sizeof(mount_status);
       }
 
       /* File attrs in bit order: ALLOCSIZE (bit 2) then DATALENGTH (bit 9) */
@@ -409,13 +409,14 @@ static process_dir_result_t process_dir(int dirfd, walk_dir_t *dir, thread_arg_t
         direct_disk_bytes += alloc_size;
         direct_file_count++;
       } else if (obj_type == VDIR && name) {
-        /* Counted even when it isn't walked (another volume, a firmlink, no access). */
+        /* Counted even when it isn't walked (another volume, no access). */
         direct_folder_count++;
-        /* What a firmlink leads to is walked where it is (under /System/Volumes/Data). */
-        int subfd = (flags & SF_FIRMLINK)
-                        ? -1
-                        : openat(dirfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-        if (subfd < 0 && !(flags & SF_FIRMLINK) && !is_skippable_open_error(errno)) {
+        /* A volume mounted on it is left out, even one of the startup disk's group, which
+           has the same device: /System/Volumes/Data is reached through the firmlinks. */
+        int mounted_on = (mount_status & DIR_MNTSTATUS_MNTPOINT) != 0;
+        int subfd =
+            mounted_on ? -1 : openat(dirfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+        if (subfd < 0 && !mounted_on && !is_skippable_open_error(errno)) {
           mark_incomplete(wq, dir, errno);
         }
         if (subfd >= 0) {

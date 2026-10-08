@@ -192,19 +192,26 @@ describe("nativeFolderSize", () => {
     );
   });
 
-  // /usr/share/snmp is a firmlink to /System/Volumes/Data/usr/share/snmp: measuring / walks
-  // it there, so going through the firmlink as well would count it twice.
+  // /usr/share/snmp is a firmlink to /System/Volumes/Data/usr/share/snmp: it is measured
+  // where it is browsed, and /System/Volumes/Data, where the data volume is mounted, is left
+  // out, so measuring / counts each folder once.
   it.skipIf(!existsSync("/usr/share/snmp/mibs"))(
-    "doesn't go through a firmlink, but counts it as a folder",
+    "goes through a firmlink, measuring it where it is browsed",
     async () => {
       const result = JSON.parse(await addon.nativeFolderSize("/usr/share")) as Measured;
-      const paths = Object.keys(result.dirs);
 
-      expect(paths).toContain("/usr/share/man");
-      expect(paths.some((path) => path.startsWith("/usr/share/snmp"))).toBe(false);
-      // Measured itself, it is walked like any folder.
-      const snmp = JSON.parse(await addon.nativeFolderSize("/usr/share/snmp")) as Measured;
-      expect(Object.keys(snmp.dirs)).toContain("/usr/share/snmp/mibs");
+      expect(Object.keys(result.dirs)).toContain("/usr/share/snmp/mibs");
+    },
+  );
+
+  it.skipIf(!existsSync("/System/Volumes/Data/Users"))(
+    "leaves out a folder another volume is mounted on, though it has the same device",
+    async () => {
+      const result = JSON.parse(await addon.nativeFolderSize("/System/Volumes")) as Measured;
+
+      expect(Object.keys(result.dirs).some((path) => path.startsWith("/System/Volumes/Data"))).toBe(
+        false,
+      );
     },
   );
 

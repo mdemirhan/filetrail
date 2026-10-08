@@ -130,9 +130,9 @@ export function nativeDatesTaken(paths: string[]): Promise<Array<string | null>>
  * handed to `onFinished` before the promise rejects; a cancelled walk never finishes a
  * directory it was still listing.
  *
- * The walk stays on the disk it starts on and doesn't go through firmlinks (on the startup
- * disk, /Users and the like lead to the same folders under /System/Volumes/Data, which it
- * walks there). A sub-directory it has no access to counts as one folder with nothing in
+ * The walk stays on the disk it starts on and doesn't go into a directory another volume is
+ * mounted on (on the startup disk it goes through the firmlinks, /Users and the like, and
+ * leaves out /System/Volumes/Data, where they lead). A sub-directory it has no access to counts as one folder with nothing in
  * it. A directory whose listing fails part way (EIO, say) isn't finished, nor is anything
  * holding it, and when that reaches the root the promise rejects with the error, after
  * the whole directories are handed to `onFinished`.

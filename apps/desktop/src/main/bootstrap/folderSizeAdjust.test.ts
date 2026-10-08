@@ -173,7 +173,7 @@ describe("adjustForRemovals", () => {
   });
 
   it("forgets a folder rather than reach the item through a folder measured on its own", () => {
-    // "/" was measured without going into /Users (a firmlink), which was measured later.
+    // "/" was measured, and /Users measured again by itself later.
     expect(
       adjust(
         {

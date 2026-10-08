@@ -137,8 +137,8 @@ function adjustForRemoval(
 
 // Whether the measurement of `folder` counted what is directly in `from` (inside it): it
 // walked down to `from` when every folder on the way has a size it stored, from the same
-// disk. A folder on the way without one may not have been readable (or was a firmlink, or a
-// link to a folder), or was forgotten since; one stored by another measurement may hold
+// disk. A folder on the way without one may not have been readable (or had a volume mounted on
+// it, or was a link to a folder), or was forgotten since; one stored by another measurement may hold
 // more or less than this one counted of it.
 function countedIn(cache: Map<string, FolderSizeStats>, from: string, folder: string): Counted {
   const folderStats = cache.get(folder);
