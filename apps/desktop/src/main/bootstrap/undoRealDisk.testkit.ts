@@ -51,7 +51,7 @@ export function setUpUndo(
   root: string,
   trashDir: string,
   fsOverrides: Partial<WriteOperationFs> = {},
-  options: { diskHasTrash?: (path: string) => boolean } = {},
+  options: { diskHasTrash?: (path: string) => boolean; undoCheckWithinMs?: number } = {},
 ) {
   const history = createUndoHistory();
   const fs: WriteOperationFs = {

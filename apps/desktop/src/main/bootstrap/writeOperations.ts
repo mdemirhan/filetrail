@@ -132,6 +132,11 @@ export const SHUTDOWN_WAIT_LIMIT_MS = 15_000;
 const TRASH_FOLDER_REFUSAL =
   "The Trash folder is a protected system directory and cannot be modified.";
 
+// How long the disks may take to answer when an Undo that is starting looks again at what
+// it would ask. It holds the write slot meanwhile, and a disk that doesn't answer (a
+// network share gone away) mustn't keep every other operation waiting.
+export const UNDO_CHECK_WITHIN_MS = 10_000;
+
 // Answer returned to a request that isn't allowed to act on an operation (unknown id, or
 // asked by a window other than the one that started it).
 const REJECTED_REQUEST = { ok: false } as const;
@@ -172,6 +177,8 @@ export function createWriteOperationCoordinator(
     // The window an operation goes to when the one that started it closes or its page
     // goes away; null when there is none (the app is quitting), and it is cancelled.
     successorOf?: (sender: WriteOperationSender) => WriteOperationSender | null;
+    // How long an Undo's last look before it starts may take (tests use their own).
+    undoCheckWithinMs?: number;
   } = {},
 ) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
@@ -2028,9 +2035,18 @@ export function createWriteOperationCoordinator(
         // now must have been asked and agreed to (each question is all or nothing).
         const { asked } = entryAsked();
         const now = await prepareWithReservedSlot(() =>
-          findQuestions(fs, entryAsked().entry.units),
+          answerWithin(
+            findQuestions(fs, entryAsked().entry.units),
+            options.undoCheckWithinMs ?? UNDO_CHECK_WITHIN_MS,
+          ),
         );
         const started = entryAsked();
+        if (now === null) {
+          const command = started.direction === "undo" ? "Undo" : "Redo";
+          throw new Error(
+            `A disk didn't answer while ${command} looked at its items. Choose ${command} again once it does.`,
+          );
+        }
         const unasked = describeUnaskedQuestion(asked, now, started.direction);
         if (unasked !== null) {
           throw new Error(unasked);
@@ -2320,6 +2336,19 @@ function hasFileId(stats: WriteOperationStats): boolean {
 // the same file id this tells a rename of the item to itself from two hard links to one file.
 function namesMatchIgnoringCase(left: string, right: string): boolean {
   return left.normalize("NFC").toLowerCase() === right.normalize("NFC").toLowerCase();
+}
+
+// What `promise` resolves with, or null when it takes longer than `ms`.
+async function answerWithin<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<null>((resolveTimeout) => {
+    timer = setTimeout(() => resolveTimeout(null), ms);
+  });
+  try {
+    return await Promise.race([promise, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // What an Undo (or Redo) would ask now that it didn't ask when it was chosen, as the

@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -84,6 +85,34 @@ describe("starting an Undo", () => {
       "Another item took the name “a.txt” after Undo was chosen. Choose Undo again.",
     );
     expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("a");
+    await t.coordinator.shutdown();
+  });
+
+  it("refuses, and frees the write slot, when a disk doesn't answer its last look", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    let hanging = false;
+    const t = setUpUndo(
+      root,
+      trashDir,
+      {
+        lstat: (path) =>
+          hanging && path.endsWith("b.txt") ? new Promise(() => undefined) : lstat(path),
+      },
+      { undoCheckWithinMs: 20 },
+    );
+    await t.rename(join(root, "a.txt"), "b.txt");
+    const prepared = await t.prepare();
+    hanging = true;
+
+    await expect(
+      t.coordinator.handlers["undo:start"]({ ticket: prepared.ticket ?? "" }, { sender: t.sender }),
+    ).rejects.toThrow(
+      "A disk didn't answer while Undo looked at its items. Choose Undo again once it does.",
+    );
+    expect(t.coordinator.getActiveOperation()).toBeNull();
+    expect(existsSync(join(root, "b.txt"))).toBe(true);
+    hanging = false;
+    expect((await t.undo()).status).toBe("completed");
     await t.coordinator.shutdown();
   });
 
