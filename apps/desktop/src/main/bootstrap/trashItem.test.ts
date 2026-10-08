@@ -80,6 +80,45 @@ describe("createTrashItem", () => {
     });
   });
 
+  it("marks a disk the Trash says has none (ENOTSUP) as one that may have no Trash", async () => {
+    const trashItem = createTrashItem({
+      trash: vi.fn(async () => {
+        throw Object.assign(new Error("The operation couldn’t be completed."), {
+          code: "ENOTSUP",
+        });
+      }),
+      fs: createFs({ [HOME]: STARTUP_DEV, "/Volumes/Share/a.txt": 50 }),
+      homePath: HOME,
+    });
+
+    await expect(trashItem("/Volumes/Share/a.txt")).rejects.toMatchObject({
+      code: NO_TRASH_ERROR_CODE,
+    });
+  });
+
+  // Deleting for good must never be offered for these: the disk has a Trash, the item
+  // just couldn't go to it.
+  it.each(["EACCES", "EPERM", "EROFS", "ENOENT", "EIO"])(
+    "gives the Trash's own reason on another disk for %s",
+    async (code) => {
+      const reason = Object.assign(new Error("You don’t have permission to access “a.txt”."), {
+        code,
+      });
+      const trashItem = createTrashItem({
+        trash: vi.fn(async () => {
+          throw reason;
+        }),
+        fs: createFs({ [HOME]: STARTUP_DEV, "/Volumes/USB/a.txt": 50 }),
+        homePath: HOME,
+      });
+
+      const error = await trashItem("/Volumes/USB/a.txt").catch((caught: unknown) => caught);
+
+      expect(error).toMatchObject({ message: reason.message });
+      expect((error as NodeJS.ErrnoException).code).not.toBe(NO_TRASH_ERROR_CODE);
+    },
+  );
+
   it("gives the Trash's reason for an item that is gone", async () => {
     const trashItem = createTrashItem({
       trash: vi.fn(async () => {
