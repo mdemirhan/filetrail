@@ -82,6 +82,7 @@ export function IconGridView({
   onItemDrop,
   getItemDropIndicator,
   compactIconView = false,
+  sortKey = "",
   inlineRename,
   onInlineRenameSubmit,
   onInlineRenameCancel,
@@ -116,6 +117,8 @@ export function IconGridView({
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | "springing" | null) | undefined;
   compactIconView?: boolean;
+  // The order chosen for the grid: sorted another way, it brings the selection into view.
+  sortKey?: string;
   inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
@@ -279,29 +282,39 @@ export function IconGridView({
   // An item whose name is being edited is the one to keep in view (a rename can start with
   // it scrolled away, and a refused name is shown under it).
   const revealPath = inlineRename?.path ?? selectionLeadPath;
-  const revealIndex = useRevealIndex(entries, revealPath);
+  // A refused name brings the item back into view, where the reason is shown.
+  const { keepInView } = useRevealIndex(entries, revealPath, {
+    sortKey,
+    askedAgain: inlineRename?.refusalCount ?? 0,
+  });
 
   // Keep the lead selection visible using the same row height contract virtualization uses.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a refused name (refusalCount) brings the row back into view, where the reason is shown.
   useLayoutEffect(() => {
     const container = containerRef.current;
     // The measured size re-runs this when the pane is resized.
     const effectiveViewportHeight = container?.clientHeight ?? containerHeight;
-    if (!container || revealIndex < 0 || effectiveViewportHeight <= 0) {
+    if (!container || effectiveViewportHeight <= 0) {
       return;
     }
-    const nextScrollTop = getIconGridRevealScrollTop({
-      currentScrollTop: container.scrollTop,
-      viewportHeight: effectiveViewportHeight,
-      itemIndex: revealIndex,
-      itemCount: entries.length,
-      columns,
-      layout,
+    const scrollTopFor = (index: number) =>
+      getIconGridRevealScrollTop({
+        currentScrollTop: container.scrollTop,
+        viewportHeight: effectiveViewportHeight,
+        itemIndex: index,
+        itemCount: entries.length,
+        columns,
+        layout,
+      });
+    keepInView(container, {
+      isInView: (index) => Math.abs(scrollTopFor(index) - container.scrollTop) <= 1,
+      reveal: (index) => {
+        const nextScrollTop = scrollTopFor(index);
+        if (Math.abs(nextScrollTop - container.scrollTop) > 1) {
+          container.scrollTop = nextScrollTop;
+        }
+      },
     });
-    if (Math.abs(nextScrollTop - container.scrollTop) > 1) {
-      container.scrollTop = nextScrollTop;
-    }
-  }, [columns, containerHeight, inlineRename?.refusalCount, layout, revealIndex, revealPath]);
+  }, [columns, containerHeight, entries.length, keepInView, layout]);
 
   return (
     <div

@@ -583,6 +583,7 @@ export function ContentPane({
                 onItemDrop={onItemDrop}
                 getItemDropIndicator={getItemDropIndicator}
                 compactIconView={compactIconView}
+                sortKey={`${sortBy}:${sortDirection}`}
                 inlineRename={inlineRename}
                 onInlineRenameSubmit={onInlineRenameSubmit}
                 onInlineRenameCancel={onInlineRenameCancel}
@@ -625,6 +626,7 @@ export function ContentPane({
                 onItemDrop={onItemDrop}
                 getItemDropIndicator={getItemDropIndicator}
                 compactListView={compactListView}
+                sortKey={`${sortBy}:${sortDirection}`}
                 inlineRename={inlineRename}
                 onInlineRenameSubmit={onInlineRenameSubmit}
                 onInlineRenameCancel={onInlineRenameCancel}
@@ -1104,6 +1106,7 @@ function FlowListView({
   onItemDrop,
   getItemDropIndicator,
   compactListView = false,
+  sortKey,
   inlineRename,
   onInlineRenameSubmit,
   onInlineRenameCancel,
@@ -1119,6 +1122,8 @@ function FlowListView({
   selectionLeadPath: string | null;
   viewportWidth: number;
   viewportHeight: number;
+  // The order chosen for the list: sorted another way, it brings the selection into view.
+  sortKey: string;
   onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
   onSelectPaths: ((paths: string[], leadPath: string | null) => void) | undefined;
   onClearSelection: () => void;
@@ -1224,41 +1229,38 @@ function FlowListView({
 
   // Selection reveal is horizontal in list view because vertical movement stays within
   // the current column while additional columns live off-screen to the right. Not before
-  // the list's height is measured: until then every item stands in a column of its own,
-  // and the reveal would scroll far past the item (and past a scroll position put back by
-  // Back or a tab coming back).
-  const selectedIndex = useRevealIndex(entries, selectionLeadPath);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the lead changing brings it into view even where it stands where the last one did.
-  useEffect(() => {
+  // the list's height is known: until then every item stands in a column of its own, and
+  // the reveal would scroll far past the item. A layout effect, read from the page when not
+  // measured yet, so a scroll position put back by Back or a tab coming back (the window's
+  // own layout effect, after this one) is where the list ends up.
+  const { keepInView } = useRevealIndex(entries, selectionLeadPath, { sortKey });
+  useLayoutEffect(() => {
     const container = containerRef.current;
     const effectiveViewportWidth =
       viewportWidth > 0 ? viewportWidth : (container?.clientWidth ?? 0);
-    if (!container || selectedIndex < 0 || effectiveViewportWidth <= 0 || containerHeight <= 0) {
+    const height = containerHeight > 0 ? containerHeight : (container?.clientHeight ?? 0);
+    if (!container || effectiveViewportWidth <= 0 || height <= 0) {
       return;
     }
-
-    const nextScrollLeft = getFlowListRevealScrollLeft({
-      currentScrollLeft: container.scrollLeft,
-      viewportWidth: effectiveViewportWidth,
-      itemIndex: selectedIndex,
-      rowsPerColumn,
-      compact: compactListView,
-      maxScrollLeft: Math.max(0, container.scrollWidth - container.clientWidth),
+    const scrollLeftFor = (index: number) =>
+      getFlowListRevealScrollLeft({
+        currentScrollLeft: container.scrollLeft,
+        viewportWidth: effectiveViewportWidth,
+        itemIndex: index,
+        rowsPerColumn: computeRowsPerColumn(height, listLayout),
+        compact: compactListView,
+        maxScrollLeft: Math.max(0, container.scrollWidth - container.clientWidth),
+      });
+    keepInView(container, {
+      isInView: (index) => Math.abs(scrollLeftFor(index) - container.scrollLeft) <= 1,
+      reveal: (index) => {
+        const nextScrollLeft = scrollLeftFor(index);
+        if (Math.abs(nextScrollLeft - container.scrollLeft) > 1) {
+          container.scrollLeft = nextScrollLeft;
+        }
+      },
     });
-
-    if (Math.abs(nextScrollLeft - container.scrollLeft) <= 1) {
-      return;
-    }
-
-    container.scrollLeft = nextScrollLeft;
-  }, [
-    compactListView,
-    containerHeight,
-    rowsPerColumn,
-    selectedIndex,
-    selectionLeadPath,
-    viewportWidth,
-  ]);
+  }, [compactListView, containerHeight, keepInView, listLayout, viewportWidth]);
 
   return (
     <div
@@ -1621,10 +1623,13 @@ function DetailsView({
   // An item whose name is being edited is the one to keep in view (a rename can start with
   // its row scrolled away).
   const revealPath = inlineRename?.path ?? selectionLeadPath;
-  const revealIndex = useRevealIndex(entries, revealPath);
+  // A refused name brings the row back into view, where the reason is shown.
+  const { keepInView } = useRevealIndex(entries, revealPath, {
+    sortKey: `${columns.sortBy}:${columns.sortDirection}`,
+    askedAgain: inlineRename?.refusalCount ?? 0,
+  });
 
   // Keep the lead selection visible using the same row height contract virtualization uses.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a refused name (refusalCount) brings the row back into view, where the reason is shown.
   useLayoutEffect(() => {
     const container = containerRef.current;
     const effectiveViewportWidth =
@@ -1632,34 +1637,30 @@ function DetailsView({
     // clientHeight: the visible rows only (no column header, no horizontal scrollbar).
     // The measured size re-runs this when the pane is resized.
     const effectiveViewportHeight = container?.clientHeight ?? rowsViewportHeight;
-    if (
-      !container ||
-      revealIndex < 0 ||
-      effectiveViewportWidth <= 0 ||
-      effectiveViewportHeight <= 0
-    ) {
+    if (!container || effectiveViewportWidth <= 0 || effectiveViewportHeight <= 0) {
       return;
     }
-    const itemTop = revealIndex * rowHeight;
-    const itemBottom = itemTop + rowHeight;
-    const viewTop = container.scrollTop;
-    const viewBottom = viewTop + effectiveViewportHeight;
-
-    if (itemTop < viewTop) {
-      container.scrollTop = itemTop;
-      return;
-    }
-    if (itemBottom > viewBottom) {
-      container.scrollTop = itemBottom - effectiveViewportHeight;
-    }
-  }, [
-    revealIndex,
-    revealPath,
-    inlineRename?.refusalCount,
-    rowHeight,
-    rowsViewportHeight,
-    viewportWidth,
-  ]);
+    // Where to scroll to bring the row at `index` into view; null when it is in view.
+    const scrollTopFor = (index: number) => {
+      const itemTop = index * rowHeight;
+      const itemBottom = itemTop + rowHeight;
+      if (itemTop < container.scrollTop) {
+        return itemTop;
+      }
+      return itemBottom > container.scrollTop + effectiveViewportHeight
+        ? itemBottom - effectiveViewportHeight
+        : null;
+    };
+    keepInView(container, {
+      isInView: (index) => scrollTopFor(index) === null,
+      reveal: (index) => {
+        const nextScrollTop = scrollTopFor(index);
+        if (nextScrollTop !== null) {
+          container.scrollTop = nextScrollTop;
+        }
+      },
+    });
+  }, [keepInView, rowHeight, rowsViewportHeight, viewportWidth]);
 
   // Resizing uses global pointer listeners so the drag continues even if the pointer
   // leaves the resize handle while the user is dragging quickly.
