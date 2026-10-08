@@ -399,6 +399,7 @@ function FavoriteIconPicker({
                 gridTemplateColumns: `repeat(${FAVORITE_ICON_COLUMNS}, ${FAVORITE_ICON_CELL}px)`,
               }}
             >
+              <WindowDragRelease />
               {FAVORITE_ICON_OPTIONS.map((option) => (
                 <button
                   key={option.value}

@@ -592,6 +592,18 @@ describe("SettingsView", () => {
     expect(iconDialog).toHaveStyle({ gridTemplateColumns: "repeat(6, 30px)" });
   });
 
+  it("lets the window's drag areas close the favorite icon picker, as other menus do", () => {
+    renderSettingsView();
+    const menuOpen = () => document.documentElement.hasAttribute("data-menu-open");
+
+    fireEvent.click(screen.getByLabelText("Favorite icon for Home"));
+    expect(menuOpen()).toBe(true);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Favorite icon for Home options" })).toBeNull();
+    expect(menuOpen()).toBe(false);
+  });
+
   it("forwards Open With add, change, move, and remove actions", () => {
     const onAddOpenWithApplication = vi.fn();
     const onBrowseOpenWithApplication = vi.fn();
