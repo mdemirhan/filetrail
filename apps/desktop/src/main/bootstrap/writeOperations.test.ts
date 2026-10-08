@@ -2128,6 +2128,26 @@ describe("emptying the Trash", () => {
     await emptying;
     coordinator.shutdown();
   });
+
+  // The main process forgot the Trash's size, but each window kept showing its own.
+  it("tells the windows once the Trash was emptied, or tried to be, and not when refused", async () => {
+    const onTrashEmptied = vi.fn();
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs(),
+      { onTrashEmptied },
+    );
+
+    await coordinator.emptyTrash(async () => ({ ok: true, error: null }));
+    expect(onTrashEmptied).toHaveBeenCalledTimes(1);
+    // Part of it may be gone all the same.
+    await coordinator.emptyTrash(async () => ({ ok: false, error: "Finder stopped." }));
+    expect(onTrashEmptied).toHaveBeenCalledTimes(2);
+
+    coordinator.shutdown();
+    await coordinator.emptyTrash(async () => ({ ok: true, error: null }));
+    expect(onTrashEmptied).toHaveBeenCalledTimes(2);
+  });
 });
 
 // Finishing a Replace that a crash cut short happens in the background, while the app is in

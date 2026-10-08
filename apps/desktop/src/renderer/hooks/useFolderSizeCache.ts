@@ -430,8 +430,7 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     (changedPaths: readonly string[], options: { intoTrash: boolean }) => {
       const changes = createChangeMatcher(changedPaths);
       // Where the Trash is, the folders holding it may have changed; the Trash itself too.
-      const trashPath =
-        options.intoTrash && homePath.length > 0 ? `${homePath.replace(/\/+$/u, "")}/.Trash` : null;
+      const trashPath = options.intoTrash ? homeTrashPath(homePath) : null;
       const trash = trashPath === null ? null : createChangeMatcher([trashPath]);
       const toRefresh: string[] = [];
       let forgotten = false;
@@ -482,6 +481,17 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     [client, forgetChangedSizes],
   );
 
+  // The Trash emptied, from this window or another: its size and what holds it are asked
+  // about again, and what was in it is forgotten.
+  useEffect(
+    () =>
+      client.onTrashEmptied?.(() => {
+        const trashPath = homeTrashPath(homePath);
+        forgetChangedSizes(trashPath === null ? [] : [trashPath], { intoTrash: true });
+      }),
+    [client, forgetChangedSizes, homePath],
+  );
+
   // A folder's size, or idle when it isn't known: then the main process is asked (all the
   // folders a render asks about, in one request), unless it was asked lately.
   const getEntry = useCallback(
@@ -525,6 +535,11 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     forgetChangedSizes,
     version,
   };
+}
+
+// The home folder's Trash; null while the home folder isn't known.
+function homeTrashPath(homePath: string): string | null {
+  return homePath.length > 0 ? `${homePath.replace(/\/+$/u, "")}/.Trash` : null;
 }
 
 // Over the limit, the oldest go but those `mustKeep` keeps, a tenth at a time: one at a

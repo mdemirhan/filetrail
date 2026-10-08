@@ -246,6 +246,13 @@ export async function bootstrapMainProcess(
         const senderId = (sender as Partial<WebContents>).id;
         return typeof senderId === "number" ? windows.successorWindowOf(senderId) : null;
       },
+      onTrashEmptied: () => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.webContents.send("filetrail:trashEmptied");
+          }
+        }
+      },
     },
   );
   // What couldn't be reached at start (its disk wasn't connected, or didn't answer) is

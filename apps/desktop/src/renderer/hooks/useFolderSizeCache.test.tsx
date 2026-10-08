@@ -769,6 +769,7 @@ describe("useFolderSizeCache", () => {
   function createWriteClient(sizes: Map<string, number>) {
     let emit: ((event: unknown) => void) | null = null;
     let emitDraggedAway: ((change: DraggedAway) => void) | null = null;
+    let emitTrashEmptied: (() => void) | null = null;
     const probes: string[] = [];
     const client: FiletrailClient = {
       ...createMockFiletrailClient({
@@ -805,6 +806,10 @@ describe("useFolderSizeCache", () => {
         emitDraggedAway = listener;
         return () => undefined;
       },
+      onTrashEmptied: (listener) => {
+        emitTrashEmptied = listener;
+        return () => undefined;
+      },
     };
     const finishWrite = async (action: string, sourcePaths: string[]) => {
       probes.length = 0;
@@ -829,7 +834,15 @@ describe("useFolderSizeCache", () => {
       });
       await settle();
     };
-    return { client, probes, finishWrite, dragAwayElsewhere };
+    // The Trash emptied, from this window or another.
+    const emptyTrash = async () => {
+      probes.length = 0;
+      await act(async () => {
+        emitTrashEmptied?.();
+      });
+      await settle();
+    };
+    return { client, probes, finishWrite, dragAwayElsewhere, emptyTrash };
   }
 
   async function calculateAll(
@@ -930,6 +943,31 @@ describe("useFolderSizeCache", () => {
       expect(result.current.getEntry(path).status, path).toBe("idle");
     }
     expect(result.current.getEntry("/Users/demo/Music")).toMatchObject({ sizeBytes: 500 });
+    expect(probes).not.toContain("/Users/demo/Music");
+  });
+
+  // The main process forgot the Trash and what holds it, but a size the window had stayed
+  // shown, never asked about again.
+  it("asks again about the Trash and what holds it once the Trash is emptied", async () => {
+    const sizes = new Map([
+      ["/Users/demo", 5_000],
+      ["/Users/demo/.Trash", 2_000],
+      ["/Users/demo/.Trash/old", 1_500],
+      ["/Users/demo/Music", 500],
+    ]);
+    const { client, probes, emptyTrash } = createWriteClient(sizes);
+    const { result } = renderHook(() => useFolderSizeCache(client, "/Users/demo"));
+    await calculateAll(result, sizes.keys());
+
+    sizes.set("/Users/demo", 3_000);
+    sizes.set("/Users/demo/.Trash", 0);
+    sizes.delete("/Users/demo/.Trash/old");
+    await emptyTrash();
+
+    expect(result.current.getEntry("/Users/demo")).toMatchObject({ sizeBytes: 3_000 });
+    expect(result.current.getEntry("/Users/demo/.Trash")).toMatchObject({ sizeBytes: 0 });
+    expect(probes).not.toContain("/Users/demo/.Trash/old");
+    expect(result.current.getEntry("/Users/demo/.Trash/old").status).toBe("idle");
     expect(probes).not.toContain("/Users/demo/Music");
   });
 

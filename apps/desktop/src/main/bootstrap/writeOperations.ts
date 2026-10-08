@@ -179,6 +179,9 @@ export function createWriteOperationCoordinator(
     successorOf?: (sender: WriteOperationSender) => WriteOperationSender | null;
     // How long an Undo's last look before it starts may take (tests use their own).
     undoCheckWithinMs?: number;
+    // Told after the Trash was emptied, or tried to be: every window forgets the sizes it
+    // shows of the Trash and of what holds it.
+    onTrashEmptied?: () => void;
   } = {},
 ) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
@@ -1708,6 +1711,7 @@ export function createWriteOperationCoordinator(
     } finally {
       // The Trash's listing (and anything shown from it) is out of date now.
       clearResponseCaches([resolve(homePath, ".Trash")]);
+      options.onTrashEmptied?.();
     }
   }
 

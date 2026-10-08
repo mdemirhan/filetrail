@@ -43,6 +43,7 @@ type InvokeApi = {
   onClipboardChanged(listener: (clipboard: CopyPasteClipboard) => void): () => void;
   onWriteOperationAdopted(listener: (adoption: WriteOperationAdoption) => void): () => void;
   onDraggedAway(listener: (change: DraggedAway) => void): () => void;
+  onTrashEmptied(listener: () => void): () => void;
   onMergeRequest(listener: (request: MergeRequest) => void): () => void;
   getPathForFile(file: unknown): string;
 };
@@ -138,6 +139,15 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:draggedAway", handleChange);
     return () => {
       ipcRenderer.removeListener("filetrail:draggedAway", handleChange);
+    };
+  },
+  onTrashEmptied: (listener) => {
+    const handleEmptied = () => {
+      listener();
+    };
+    ipcRenderer.on("filetrail:trashEmptied", handleEmptied);
+    return () => {
+      ipcRenderer.removeListener("filetrail:trashEmptied", handleEmptied);
     };
   },
   onMergeRequest: (listener) => {

@@ -41,6 +41,8 @@ declare global {
       onWriteOperationAdopted?(listener: (adoption: WriteOperationAdoption) => void): () => void;
       // Items a drag out of another window took away.
       onDraggedAway?(listener: (change: DraggedAway) => void): () => void;
+      // The Trash emptied, from any window.
+      onTrashEmptied?(listener: () => void): () => void;
       // Merge All Windows in another window, asking for this window's tabs.
       onMergeRequest?(listener: (request: MergeRequest) => void): () => void;
       // Where a file dropped on the page is on disk; "" when it isn't one there.
