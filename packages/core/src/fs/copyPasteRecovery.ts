@@ -63,7 +63,11 @@ export async function recoverInterruptedReplaces(
       const run = await options.runWriteAlone(() => recoverEntry(entry, fileSystem));
       outcomes.push(run.ran ? run.value : { entry, outcome: "deferred" });
     } catch (error) {
-      outcomes.push({ entry, outcome: "failed", error: describeCopyPasteError(error) });
+      outcomes.push(
+        error instanceof StagingUnreadableError
+          ? { entry, outcome: "unreachable", error: error.message }
+          : { entry, outcome: "failed", error: describeCopyPasteError(error) },
+      );
     }
   }
   return outcomes;
@@ -265,6 +269,12 @@ async function applyFolderMetadata(
 // id when renamed into place). An external disk connected again since has another device
 // number: the folder is then known by its file id and when it was made, which the disk
 // keeps; another disk at the same place has neither.
+class StagingUnreadableError extends Error {
+  constructor(readonly original: unknown) {
+    super(describeCopyPasteError(original));
+  }
+}
+
 async function isOwnStaging(
   fileSystem: WriteServiceFileSystem,
   path: string,
@@ -274,8 +284,18 @@ async function isOwnStaging(
   if (id === undefined) {
     return false;
   }
-  const stats = await fileSystem.lstat(path).catch(() => null);
-  if (stats === null || stats.ino !== id.ino) {
+  let stats: Awaited<ReturnType<WriteServiceFileSystem["lstat"]>>;
+  try {
+    stats = await fileSystem.lstat(path);
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") {
+      return false;
+    }
+    // Not read (a disk with a moment's trouble): not known to be someone else's, so the
+    // entry is kept for later.
+    throw new StagingUnreadableError(error);
+  }
+  if (stats.ino !== id.ino) {
     return false;
   }
   return (

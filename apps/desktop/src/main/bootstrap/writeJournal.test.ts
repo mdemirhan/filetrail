@@ -507,6 +507,40 @@ describe("recoverWrites", () => {
     expect(await readdir(staging)).toEqual(["a.txt"]);
   });
 
+  // The disk had a moment's trouble as the folder was looked at: not known to be someone
+  // else's, so its record stays for the next try.
+  it("keeps the record of a hidden folder it couldn't look at", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const staging = join(testDir, ".F.filetrail-0a1b2c3d");
+    await mkdir(staging);
+    const stats = lstatSync(staging);
+    await journal.add(
+      createEntry("folder", {
+        stagingPath: staging,
+        finalPath: join(testDir, "F"),
+        sourcePath: join(testDir, "source", "F"),
+        staged: false,
+        stagingId: { dev: stats.dev, ino: stats.ino },
+      }),
+    );
+    let looks = 0;
+    const troubled = {
+      ...nativeFileSystem,
+      lstat: async (path: string) => {
+        if (path === staging && ++looks === 3) {
+          throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+        }
+        return nativeFileSystem.lstat(path);
+      },
+    };
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    await recoverWrites(journal, troubled, logger);
+
+    expect(existsSync(staging)).toBe(true);
+    expect(journal.entries().map((entry) => entry.id)).toEqual(["folder"]);
+  });
+
   // The part of a large file couldn't be removed at first (the disk had a moment's
   // trouble), but the hidden folder it was in could: its record clears on the next try.
   it("clears the record of a part whose hidden folder went before it could be removed", async () => {
