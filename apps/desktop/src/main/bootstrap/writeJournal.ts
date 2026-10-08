@@ -277,6 +277,13 @@ async function recoverReplaces(
     if (options.retry && outcome.entry.moved && "path" in outcome) {
       report.finished.push(`“${name}” is in place now, in “${dirname(outcome.path)}”.`);
     }
+    // A folder being moved to another disk, put in place whole: its original wasn't removed
+    // yet, and is still where it was.
+    if (outcome.outcome === "finished" && outcome.entry.movingCopy) {
+      report.notices.push(
+        `“${name}” was being moved when File Trail stopped. It is in “${basename(dirname(outcome.path))}” now, and the original is still in “${basename(dirname(outcome.entry.sourcePath))}” too.`,
+      );
+    }
     try {
       await journal.remove(outcome.entry.id);
     } catch (error) {

@@ -126,6 +126,27 @@ export async function runBatchRename(args: {
     .sort(([left], [right]) => right - left)
     .map(([, items]) => items);
 
+  // Items still under hidden names once their depth was done, as written down: a folder
+  // above them renamed later in the batch takes them along, and what is written follows.
+  const stillWritten: BatchRenameJournalEntry[] = [];
+  const followInJournal = async (from: string, to: string | null | undefined) => {
+    if (journal === null || !to || to === from) {
+      return;
+    }
+    for (const entry of stillWritten) {
+      const moved = entry.items.map((written) => ({
+        temporaryPath: replacePrefix(written.temporaryPath, from, to),
+        originalPath: replacePrefix(written.originalPath, from, to),
+        newPath: replacePrefix(written.newPath, from, to),
+      }));
+      if (
+        moved.some((written, index) => written.temporaryPath !== entry.items[index]?.temporaryPath)
+      ) {
+        entry.items = moved;
+        await journal.add(entry).catch(() => undefined);
+      }
+    }
+  };
   for (const level of deepestFirst) {
     const blockers = level.filter(isBlocker);
     // The hidden names the items in the way will wait under, written down before any moves.
@@ -179,6 +200,8 @@ export async function runBatchRename(args: {
           },
         );
       } catch (error) {
+        // Still under its name: an item waiting for it can't finish a swap after a stop.
+        allMovedAside = false;
         results[item.index] = failed(
           item,
           await describeRenameError(fs, error, item, item.sourcePath),
@@ -204,6 +227,7 @@ export async function runBatchRename(args: {
           skipReason: null,
         });
         followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
+        await followInJournal(item.sourcePath, results[item.index]?.destinationPath);
         continue;
       }
       // Saying how far it got must never stop it halfway, with items under hidden names.
@@ -220,6 +244,7 @@ export async function runBatchRename(args: {
       }
       // Renamed, or put back under another name ("sub 2"): what is inside goes along.
       followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
+      await followInJournal(item.sourcePath, results[item.index]?.destinationPath);
       if (signal.aborted) {
         cancelled = true;
       }
@@ -237,6 +262,9 @@ export async function runBatchRename(args: {
       await (entry.items.length > 0 ? journal.add(entry) : journal.remove(entry.id)).catch(
         () => undefined,
       );
+      if (entry.items.length > 0) {
+        stillWritten.push(entry);
+      }
     }
   }
 
@@ -520,6 +548,14 @@ function looseKey(name: string): string {
 
 function defaultTemporaryName(): string {
   return `.filetrail-rename-${randomBytes(6).toString("hex")}`;
+}
+
+// `path` with its start `from` (a folder, or the item itself) changed to `to`.
+function replacePrefix(path: string, from: string, to: string): string {
+  if (path === from) {
+    return to;
+  }
+  return path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : path;
 }
 
 // Where an item found under its hidden name goes, in order of preference.

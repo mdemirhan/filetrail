@@ -63,6 +63,7 @@ import type {
   CopyPasteRuntimeConflict,
   CopyPasteRuntimeResolutionAction,
   NodeFingerprint,
+  ReplaceJournalEntry,
   WriteJournal,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
@@ -119,6 +120,9 @@ type ExecutionContext = {
   // real name: a copied rule against deleting it (a copy of ~/Documents has one) would keep
   // it from being renamed into place.
   metadataLaterFor: string | null;
+  // The folder made already, under a name of its own reserved for it (see
+  // reserveStagingFolder): it is filled, not made again.
+  folderMadeAt: string | null;
   // Where the items a Replace moved out of the way went in the Trash, which they changed.
   // Shared by every step, like `progress`.
   trashedPaths: string[];
@@ -214,6 +218,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     writeJournal: args.writeJournal ?? null,
     stagingFor: null,
     metadataLaterFor: null,
+    folderMadeAt: null,
     folderListings: new Map(),
     undo: {
       topLevelNodeIds: new Set(args.resolvedNodes.map((node) => node.node.id)),
@@ -777,15 +782,18 @@ async function keepPlannedDestinations(
 // `source` is the item being pasted as the check just before saw it.
 async function performNode(
   context: ExecutionContext,
-  currentNode: ResolvedCopyPasteNode,
+  resolvedNode: ResolvedCopyPasteNode,
   source: NodeFingerprint,
 ): Promise<ExecuteNodeResult> {
+  let currentNode = resolvedNode;
   if (currentNode.action === "overwrite") {
     const destination = await captureFingerprint(context.fileSystem, currentNode.destinationPath);
-    // Gone already: nothing is left to replace, so this simply becomes a copy.
     if (destination.exists) {
       return executeReplace(context, currentNode, destination, source);
     }
+    // Gone already: nothing is left to replace, so this simply becomes a copy (or a move),
+    // made the way any other is.
+    currentNode = { ...currentNode, action: "create" };
   }
 
   // Same-filesystem rename fast path: use rename(2) for cut operations when
@@ -845,7 +853,9 @@ async function executeStagedDirectory(
   if (context.mode === "cut") {
     await assertRemovableAfterCopy(context, currentNode, { deep: true });
   }
-  const temporaryPath = await temporarySiblingPath(fileSystem, finalPath);
+  // Made now, under a name nothing else has: only what this paste made is ever removed.
+  const reserved = await reserveStagingFolder(fileSystem, finalPath);
+  const temporaryPath = reserved.path;
   const journal = context.writeJournal;
   const journalEntry = {
     id: randomBytes(8).toString("hex"),
@@ -854,10 +864,23 @@ async function executeStagedDirectory(
     sourcePath: currentNode.node.sourcePath,
     moved: false,
     staged: false,
+    ...(reserved.id ? { stagingId: reserved.id } : {}),
+    ...(context.mode === "cut" ? { movingCopy: true as const } : {}),
   };
-  await journal?.add(journalEntry);
+  try {
+    await journal?.add(journalEntry);
+  } catch (error) {
+    await removeOwnStaging(fileSystem, temporaryPath, reserved.id).catch(() => undefined);
+    throw error;
+  }
+  // Its record goes only once it is gone: one that can't be removed now (its disk went
+  // away) is removed at the next start.
   const discard = async () => {
-    await removeStagedItem(fileSystem, temporaryPath).catch(() => undefined);
+    try {
+      await removeOwnStaging(fileSystem, temporaryPath, reserved.id);
+    } catch {
+      return;
+    }
     await journal?.remove(journalEntry.id).catch(() => undefined);
   };
 
@@ -870,6 +893,7 @@ async function executeStagedDirectory(
         recordsUndo: false,
         stagingFor: context.mode,
         metadataLaterFor: temporaryPath,
+        folderMadeAt: temporaryPath,
         displayPath: (path) =>
           (context.displayPath ?? ((value: string) => value))(
             rebasePath(path, temporaryPath, finalPath),
@@ -885,27 +909,31 @@ async function executeStagedDirectory(
     }
     throw error instanceof DestinationTakenError ? error.original : error;
   }
+  // Stopped as the last of it was written: it goes, like any stopped part way.
+  if (context.signal.aborted) {
+    await discard();
+    throw new CancelledWithItemsError([]);
+  }
   const childItems = rebaseItemResults(
     appendItems([], outcome.childItems),
     temporaryPath,
     finalPath,
   );
   const failedItems = childItems.filter((item) => item.status === "failed");
-  if (
-    failedItems.length > 0 &&
-    (context.mode === "cut" || (await isPackageFolder(fileSystem, currentNode.node.sourcePath)))
-  ) {
+  const incompleteItems = childItems.filter((item) => item.status !== "completed");
+  const isPackage =
+    incompleteItems.length > 0 && (await isPackageFolder(fileSystem, currentNode.node.sourcePath));
+  if ((context.mode === "cut" && failedItems.length > 0) || isPackage) {
     await discard();
     return {
       itemStatus: "failed",
       skipReason: null,
-      error:
-        context.mode === "cut"
-          ? `“${name}” wasn't moved because some items in it couldn't be copied. Nothing in it was moved.`
-          : `“${name}” wasn't copied because some items in it couldn't be copied.`,
+      error: isPackage
+        ? incompletePackageMessage(currentNode, context.mode)
+        : `“${name}” wasn't moved because some items in it couldn't be copied. Nothing in it was moved.`,
       destinationPath: finalPath,
-      // Only the failures: everything else went away with the hidden copy.
-      childItems: failedItems,
+      // Only what wasn't done: everything else went away with the hidden copy.
+      childItems: incompleteItems,
     };
   }
 
@@ -1129,7 +1157,9 @@ async function executeDirectoryNode(
     try {
       // Not recursive: a folder that appeared in the meantime must not be merged into
       // without asking, and one that was deleted (the folder pasted into) isn't made again.
-      await context.fileSystem.mkdir(currentNode.destinationPath);
+      if (currentNode.destinationPath !== context.folderMadeAt) {
+        await context.fileSystem.mkdir(currentNode.destinationPath);
+      }
     } catch (error) {
       throw errorCode(error) === "EEXIST"
         ? new DestinationTakenError(error)
@@ -1148,6 +1178,8 @@ async function executeDirectoryNode(
     expectCantUndo(context, "merge");
   }
   let hasChildFailure = false;
+  // Anything inside not done (failed, skipped): a package is then not put in place at all.
+  let hasIncomplete = false;
   const bubbledChildItems: ItemList = [];
   // Items this folder's move leaves where they are (skipped, failed): never cleared away
   // with the folder, whatever their names.
@@ -1184,10 +1216,16 @@ async function executeDirectoryNode(
       hasChildFailure = true;
     }
     if (childResult.itemStatus !== "completed") {
+      hasIncomplete = true;
       keptNames.add(basename(child.node.sourcePath));
     }
-    // Bubble up file items, and folders that failed themselves, into the result.
-    if (child.node.sourceKind !== "directory" || childResult.error !== null) {
+    // Bubble up file items, and folders that failed themselves or were skipped (a move
+    // leaves those where they are), into the result.
+    if (
+      child.node.sourceKind !== "directory" ||
+      childResult.error !== null ||
+      childResult.itemStatus === "skipped"
+    ) {
       bubbledChildItems.push(outcomeItemResult(child, childResult));
     }
     if (childResult.childItems.length > 0) {
@@ -1198,6 +1236,24 @@ async function executeDirectoryNode(
   // and a read-only or locked folder can't take new items. As for a file, a folder whose
   // items were written isn't reported as failed over its dates or permissions (some
   // network volumes refuse them), and what was done inside it is never dropped.
+  // A package (an app, a Keynote document) inside a folder built under a hidden name is
+  // whole or not at all: an incomplete copy of one would look whole, and not open.
+  if (
+    hasIncomplete &&
+    context.stagingFor !== null &&
+    createsDirectory &&
+    currentNode.destinationPath !== context.folderMadeAt &&
+    (await isPackageFolder(context.fileSystem, currentNode.node.sourcePath))
+  ) {
+    await removeStagedItem(context.fileSystem, currentNode.destinationPath).catch(() => undefined);
+    return {
+      itemStatus: "failed",
+      skipReason: null,
+      error: incompletePackageMessage(currentNode),
+      destinationPath: currentNode.destinationPath,
+      childItems: appendItems([], bubbledChildItems).filter((item) => item.status !== "completed"),
+    };
+  }
   if (createsDirectory && currentNode.destinationPath !== context.metadataLaterFor) {
     await applyDirectoryMetadata(context, currentNode).catch(() => undefined);
   }
@@ -1299,11 +1355,11 @@ async function executeReplace(
     await assertRemovableAfterCopy(context, currentNode, { deep: true });
   }
 
-  const temporaryPath = await temporarySiblingPath(fileSystem, finalPath);
+  let temporaryPath = await temporarySiblingPath(fileSystem, finalPath);
   // Written down before anything is staged, so a crash can't leave the item under the
   // hidden name: the next start finishes or undoes the Replace.
   const journal = context.writeJournal;
-  const journalEntry = {
+  const journalEntry: ReplaceJournalEntry = {
     id: randomBytes(8).toString("hex"),
     stagingPath: temporaryPath,
     finalPath,
@@ -1311,6 +1367,11 @@ async function executeReplace(
     moved: false,
     staged: false,
   };
+  // Whether what is at the hidden name is this paste's own: only then is it ever removed.
+  // A folder is made there first, under a name nothing else has; a file is its own once
+  // copied there (a copy that fails leaves nothing there).
+  let stagingIsOurs = false;
+  let stagingId: ItemId | null = null;
   let movedByRename = false;
   if (canRenameForCut(context, currentNode)) {
     await journal?.add({ ...journalEntry, moved: true, staged: true });
@@ -1328,7 +1389,24 @@ async function executeReplace(
     if (context.mode === "cut") {
       expectCantUndo(context, "other_disk_move");
     }
-    await journal?.add(journalEntry);
+    if (currentNode.node.sourceKind === "directory") {
+      const reserved = await reserveStagingFolder(fileSystem, finalPath);
+      temporaryPath = reserved.path;
+      stagingId = reserved.id;
+      stagingIsOurs = true;
+      journalEntry.stagingPath = temporaryPath;
+      if (reserved.id) {
+        journalEntry.stagingId = reserved.id;
+      }
+    }
+    try {
+      await journal?.add(journalEntry);
+    } catch (error) {
+      if (stagingIsOurs) {
+        await removeOwnStaging(fileSystem, temporaryPath, stagingId).catch(() => undefined);
+      }
+      throw error;
+    }
   }
   // What the swap takes off the staged item to move it (its lock, a read-only folder's
   // mode), put back wherever it ends up.
@@ -1339,8 +1417,8 @@ async function executeReplace(
     if (movedByRename) {
       await moveExclusive(fileSystem, temporaryPath, currentNode.node.sourcePath);
       await restoreAfterMove(fileSystem, currentNode.node.sourcePath, stagedMode, stagedFlags);
-    } else {
-      await removeStagedItem(fileSystem, temporaryPath);
+    } else if (stagingIsOurs) {
+      await removeOwnStaging(fileSystem, temporaryPath, stagingId);
     }
     await journal?.remove(journalEntry.id);
   };
@@ -1365,6 +1443,7 @@ async function executeReplace(
           recordsUndo: false,
           stagingFor: context.mode,
           metadataLaterFor: temporaryPath,
+          folderMadeAt: stagingIsOurs ? temporaryPath : null,
           displayPath: (path) =>
             (context.displayPath ?? ((value: string) => value))(
               rebasePath(path, temporaryPath, finalPath),
@@ -1381,6 +1460,7 @@ async function executeReplace(
       }
       throw error instanceof DestinationTakenError ? error.original : error;
     }
+    stagingIsOurs = true;
     stagedChildItems = rebaseItemResults(
       appendItems([], stagedOutcome.childItems),
       temporaryPath,
@@ -1571,6 +1651,15 @@ async function removeMovedSources(
     }
     const keptNames = new Set<string>();
     for (const child of current.children) {
+      // A folder skipped (or stopped) wasn't copied: it and everything in it stay.
+      const childStatus = itemsBySource.get(child.node.sourcePath)?.status;
+      if (
+        child.node.sourceKind === "directory" &&
+        (childStatus === "skipped" || childStatus === "cancelled")
+      ) {
+        keptNames.add(basename(child.node.sourcePath));
+        continue;
+      }
       const childError = await removeTree(child);
       if (childError !== null) {
         keptNames.add(basename(child.node.sourcePath));
@@ -2058,12 +2147,74 @@ async function copyFileContents(
         : await explainMissingFolder(fileSystem, targetPath, error);
     }
   } finally {
-    // Complete under its name, or cleared away: nothing is left to recover. Should the
-    // entry stay (its journal can't be written), the next start finds nothing there.
-    if (journal !== null && journalId !== null) {
+    // Complete under its name, or cleared away: nothing is left to recover. A part that
+    // couldn't be cleared away (its disk went away) stays written down for the next start.
+    if (journal !== null && journalId !== null && (await isGone(fileSystem, partialPath))) {
       await journal.remove(journalId).catch(() => undefined);
     }
   }
+}
+
+// Whether nothing is at `path` for certain (not merely unreadable: a disk gone away).
+async function isGone(fileSystem: WriteServiceFileSystem, path: string): Promise<boolean> {
+  try {
+    await fileSystem.lstat(path);
+    return false;
+  } catch (error) {
+    return errorCode(error) === "ENOENT";
+  }
+}
+
+function incompletePackageMessage(
+  node: ResolvedCopyPasteNode,
+  mode: CopyPasteMode = "copy",
+): string {
+  const name = basename(node.node.sourcePath);
+  return mode === "cut"
+    ? `“${name}” wasn't moved because some items in it were skipped or couldn't be copied. Nothing in it was moved.`
+    : `“${name}” wasn't copied because some items in it were skipped or couldn't be copied.`;
+}
+
+// A folder made under a hidden name next to `finalPath` for an item to be built in, with
+// its id: made exclusively (a name found taken is passed over), so it is this paste's own.
+async function reserveStagingFolder(
+  fileSystem: WriteServiceFileSystem,
+  finalPath: string,
+): Promise<{ path: string; id: ItemId | null }> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const path = await temporarySiblingPath(fileSystem, finalPath);
+    try {
+      await fileSystem.mkdir(path);
+    } catch (error) {
+      if (errorCode(error) === "EEXIST") {
+        continue;
+      }
+      throw await explainMissingFolder(fileSystem, path, error);
+    }
+    const made = await captureFingerprint(fileSystem, path);
+    return {
+      path,
+      id: made.dev !== null && made.ino !== null ? { dev: made.dev, ino: made.ino } : null,
+    };
+  }
+  throw new Error(`Couldn't find a free temporary name next to “${basename(finalPath)}”.`);
+}
+
+// Removes what a paste built under a hidden name, only when the item there is still the one
+// it made (`id`, when the disk gives one): another item that took the name is left alone.
+async function removeOwnStaging(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  id: ItemId | null,
+): Promise<void> {
+  const there = await captureFingerprint(fileSystem, path);
+  if (!there.exists) {
+    return;
+  }
+  if (id !== null && (there.dev !== id.dev || there.ino !== id.ino)) {
+    return;
+  }
+  await removeStagedItem(fileSystem, path);
 }
 
 // Files at least this large are written down in the journal while they are copied.

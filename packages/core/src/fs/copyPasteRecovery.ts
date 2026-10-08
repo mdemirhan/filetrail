@@ -160,6 +160,14 @@ async function recoverEntry(
     return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
   }
   const staged = await captureFingerprint(fileSystem, entry.stagingPath);
+  // A folder made there for the item to be built in is known by its id: another item that
+  // took the name since isn't this paste's, and is left alone.
+  if (
+    entry.stagingId !== undefined &&
+    (staged.dev !== entry.stagingId.dev || staged.ino !== entry.stagingId.ino)
+  ) {
+    return { entry, outcome: "nothing_left" };
+  }
   const finalTaken = (await captureFingerprint(fileSystem, entry.finalPath)).exists;
   if (entry.moved) {
     // The staged item is the only copy of what was moved: it is never removed.

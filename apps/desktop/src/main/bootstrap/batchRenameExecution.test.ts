@@ -744,6 +744,34 @@ describe("renaming several items", () => {
       ]);
     });
 
+    // "b" couldn't be moved aside for "a": a stop after "z" was renamed doesn't let "a"
+    // finish into a name "b" still has.
+    it("puts a depth back when one of its items couldn't be moved aside", async () => {
+      const disk = new MemoryDisk(["/trip/z", "/trip/a", "/trip/b"]);
+      const controller = new AbortController();
+      const original = disk.renameExclusive;
+      disk.renameExclusive = async (from, to) => {
+        if (from === "/trip/b" && to.startsWith("/trip/.tmp-")) {
+          throw errno("EACCES");
+        }
+        await original(from, to);
+        if (to === "/trip/zz") {
+          controller.abort();
+        }
+      };
+      const result = await run(
+        disk,
+        request([
+          ["z", "zz"],
+          ["a", "b"],
+          ["b", "a"],
+        ]),
+        { signal: controller.signal },
+      );
+      expect(disk.names()).toEqual(["a", "b", "zz"]);
+      expect(result.cancelled).toBe(true);
+    });
+
     it("puts back what was moved aside when stopped while moving items aside", async () => {
       const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
       const controller = new AbortController();
@@ -867,6 +895,46 @@ describe("writing down the items moved aside", () => {
         kind: "batch_rename",
         id: expect.any(String),
         items: [{ temporaryPath: "/trip/.tmp-0", originalPath: "/trip/a", newPath: "/trip/b" }],
+      },
+    ]);
+  });
+
+  // "a" is stuck under its hidden name in "P"; "P" is then renamed "Q" in the same batch:
+  // what is written down follows it, so the next start finds it.
+  it("follows the folder of an item left hidden when the folder is renamed", async () => {
+    const disk = new MemoryDisk(["/trip/P", "/trip/P/a", "/trip/P/b"]);
+    disk.failures.set("renameExclusive:/trip/P/.tmp-0->/trip/P/b", errno("EACCES"));
+    disk.failures.set("renameExclusive:/trip/P/.tmp-0->/trip/P/a", errno("EACCES"));
+    const live = new Map<string, WriteJournalEntry>();
+    await runBatchRename({
+      request: request(
+        [
+          ["P/a", "b"],
+          ["P/b", "a"],
+          ["P", "Q"],
+        ],
+        { folders: ["P"] },
+      ),
+      fs: disk,
+      signal: new AbortController().signal,
+      temporaryName: counter(),
+      journal: {
+        add: async (entry) => {
+          live.set(entry.id, structuredClone(entry));
+        },
+        remove: async (id) => {
+          live.delete(id);
+        },
+      },
+    });
+    expect(disk.names("/trip")).toEqual(["Q"]);
+    expect([...live.values()]).toEqual([
+      {
+        kind: "batch_rename",
+        id: expect.any(String),
+        items: [
+          { temporaryPath: "/trip/Q/.tmp-0", originalPath: "/trip/Q/a", newPath: "/trip/Q/b" },
+        ],
       },
     ]);
   });

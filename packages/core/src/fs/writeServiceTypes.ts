@@ -485,6 +485,12 @@ export type ReplaceJournalEntry = {
   sourcePath: string;
   moved: boolean;
   staged: boolean;
+  // The id of the folder made at `stagingPath` for the item to be built in: what is there
+  // is removed or put in place only while it is that folder.
+  stagingId?: ItemId;
+  // A move to another disk (a folder copied, then its original removed): put in place by
+  // recovery, its original is still there too, and the person is told.
+  movingCopy?: true;
 };
 
 /**

@@ -620,7 +620,7 @@ describe("a folder copied or moved whole", () => {
 
     expect(result?.status).toBe("failed");
     expect(result?.items[0]?.error).toBe(
-      "“Talk.key” wasn't moved because some items in it couldn't be copied. Nothing in it was moved.",
+      "“Talk.key” wasn't moved because some items in it were skipped or couldn't be copied. Nothing in it was moved.",
     );
     expect(result?.items.filter((item) => item.status === "failed")).toHaveLength(2);
     expect(await readdir(dst)).toEqual([]);
@@ -641,7 +641,7 @@ describe("a folder copied or moved whole", () => {
     });
 
     expect(result?.items[0]?.error).toBe(
-      "“Talk.key” wasn't copied because some items in it couldn't be copied.",
+      "“Talk.key” wasn't copied because some items in it were skipped or couldn't be copied.",
     );
     expect(await readdir(dst)).toEqual([]);
   });
@@ -673,6 +673,198 @@ describe("a folder copied or moved whole", () => {
       ...(await readdir(join(dst, "Talk", "Data"))),
     ];
     expect(copied).toHaveLength(4);
+  });
+
+  // An item put at the hidden name a folder is being built under is someone else's: when
+  // the paste can't go on, only what it made goes.
+  it("leaves alone another item that took its hidden name", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    const plain = withoutRenameAtAll();
+    let hidden = "";
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: {
+        ...plain,
+        copyFile: async () => {
+          hidden = (await readdir(dst)).find((name) => name.startsWith(".F.filetrail-")) ?? "";
+          await rename(join(dst, hidden), join(testDir, "ours"));
+          await mkdir(join(dst, hidden));
+          await writeFile(join(dst, hidden, "theirs.txt"), "theirs");
+          throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+        },
+      },
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(await readdir(join(dst, hidden))).toEqual(["theirs.txt"]);
+    expect(await readdir(join(src, "F"))).toEqual(["a.txt"]);
+  });
+
+  // The item Replace was to replace went away before the paste: the package is then moved
+  // as any other, whole or not at all.
+  it("moves a package whole when the item it was to replace is gone", async () => {
+    const fileSystem = await packageWithAFailingFile();
+    await mkdir(join(dst, "Talk.key"));
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "Talk.key")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem,
+      beforeExecute: () => rm(join(dst, "Talk.key"), { recursive: true }),
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(await readdir(dst)).toEqual([]);
+    expect((await readdir(join(src, "Talk.key"))).sort()).toEqual([
+      "Data",
+      "Index.zip",
+      "Metadata.plist",
+    ]);
+  });
+
+  // A file in the package changed after the review and was skipped: the rest of it isn't
+  // a whole package, so none of it is put in place.
+  it("copies nothing of a package an item of which was skipped", async () => {
+    await mkdir(join(src, "Talk.key"));
+    await writeFile(join(src, "Talk.key", "Index.zip"), "index");
+    await writeFile(join(src, "Talk.key", "Metadata.plist"), "meta");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Talk.key")],
+      destinationDirectoryPath: dst,
+      beforeExecute: () => writeFile(join(src, "Talk.key", "Index.zip"), "changed index"),
+      resolve: () => "skip",
+    });
+
+    expect(result?.items[0]?.error).toBe(
+      "“Talk.key” wasn't copied because some items in it were skipped or couldn't be copied.",
+    );
+    expect(await readdir(dst)).toEqual([]);
+  });
+
+  // A folder in a moved folder became a file after the review and was skipped: it stays,
+  // and the rest moves.
+  it("leaves a skipped folder where it was when moving the rest", async () => {
+    await mkdir(join(src, "F", "E"), { recursive: true });
+    await writeFile(join(src, "F", "a.txt"), "a");
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: withoutRenameAtAll(),
+      beforeExecute: async () => {
+        await rm(join(src, "F", "E"), { recursive: true });
+        await writeFile(join(src, "F", "E"), "now a file");
+      },
+      resolve: () => "skip",
+    });
+
+    expect(result?.items.find((item) => item.sourcePath === join(src, "F", "E"))?.status).toBe(
+      "skipped",
+    );
+    expect(await readdir(join(dst, "F"))).toEqual(["a.txt"]);
+    expect(await readdir(join(src, "F"))).toEqual(["E"]);
+  });
+
+  // An app inside an ordinary folder is whole or not at all, like the folder's own items.
+  it("leaves out an app inside a folder that couldn't be copied whole", async () => {
+    await mkdir(join(src, "F", "Tool.app", "Contents"), { recursive: true });
+    await writeFile(join(src, "F", "readme.txt"), "readme");
+    await writeFile(join(src, "F", "Tool.app", "Contents", "a"), "a");
+    await writeFile(join(src, "F", "Tool.app", "Contents", "b"), "b");
+    const plain = nativeFileSystem;
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: {
+        ...plain,
+        copyFile: async (from, to, signal) => {
+          if (from.endsWith("Contents/b")) {
+            throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+          }
+          await plain.copyFile?.(from, to, signal);
+        },
+      },
+    });
+
+    expect(await readdir(join(dst, "F"))).toEqual(["readme.txt"]);
+    expect(
+      result?.items.find((item) => item.sourcePath === join(src, "F", "Tool.app"))?.error,
+    ).toBe("“Tool.app” wasn't copied because some items in it were skipped or couldn't be copied.");
+  });
+
+  // Stopped as its last file is written, before the folder is put in place.
+  it("moves nothing when stopped as its last item is copied", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    const controller = new AbortController();
+    const plain = withoutRenameAtAll();
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      signal: controller.signal,
+      fileSystem: {
+        ...plain,
+        copyFile: async (from, to, signal) => {
+          await plain.copyFile?.(from, to, signal);
+          controller.abort();
+        },
+      },
+    });
+
+    expect(result?.status).toBe("cancelled");
+    expect(await readdir(dst)).toEqual([]);
+    expect(await readdir(join(src, "F"))).toEqual(["a.txt"]);
+  });
+
+  // What couldn't be cleared away (its disk went away) stays written down for the next start.
+  it("keeps the record of a hidden folder it couldn't clear away", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    const plain = withoutRenameAtAll();
+    const live = new Map<string, WriteJournalEntry>();
+
+    await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: {
+        ...plain,
+        copyFile: async () => {
+          throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+        },
+        rm: async (path, options) => {
+          if (path.includes(".F.filetrail-")) {
+            throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+          }
+          await plain.rm(path, options);
+        },
+      },
+      writeJournal: {
+        add: async (entry) => {
+          live.set(entry.id, entry);
+        },
+        remove: async (id) => {
+          live.delete(id);
+        },
+      },
+    });
+
+    expect([...live.values()]).toEqual([
+      expect.objectContaining({ finalPath: join(dst, "F"), movingCopy: true }),
+    ]);
   });
 
   it("moves nothing when stopped part way, and leaves nothing hidden", async () => {
