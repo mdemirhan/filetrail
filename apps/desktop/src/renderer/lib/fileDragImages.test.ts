@@ -85,4 +85,19 @@ describe("measureFileDragImages", () => {
     // Its icon is shown, not a picture: a stale one left from Icon view isn't sent.
     expect(images[1]).toMatchObject({ nameCentered: false, thumbnail: null });
   });
+
+  it("looks through the page once, however many items are dragged", () => {
+    scrollingList(listItem("/demo/a.txt", 100), listItem("/demo/b.txt", 124));
+    const paths = Array.from({ length: 5000 }, (_, index) => `/demo/far/${index}.txt`);
+    const querySelector = vi.spyOn(document, "querySelector");
+    const querySelectorAll = vi.spyOn(document, "querySelectorAll");
+
+    const images = measureFileDragImages([...paths, "/demo/b.txt"], () => null);
+
+    expect(images.map((image) => image.index)).toEqual([5000]);
+    expect(querySelector).not.toHaveBeenCalled();
+    expect(querySelectorAll).toHaveBeenCalledTimes(1);
+    querySelector.mockRestore();
+    querySelectorAll.mockRestore();
+  });
 });

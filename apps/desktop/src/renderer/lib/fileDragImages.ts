@@ -12,12 +12,21 @@ export function measureFileDragImages(
   getThumbnail: (path: string) => string | null,
   root: ParentNode = document,
 ): FileDragImage[] {
+  // The items on the page, looked up once: a drag of everything in a large folder would
+  // otherwise search the page once for each of them.
+  const itemsByPath = new Map<string, HTMLElement>();
+  for (const item of Array.from(root.querySelectorAll<HTMLElement>("[data-drag-path]"))) {
+    const path = item.dataset.dragPath;
+    if (path !== undefined && !itemsByPath.has(path)) {
+      itemsByPath.set(path, item);
+    }
+  }
   const images: FileDragImage[] = [];
   for (const [index, path] of paths.entries()) {
     if (images.length >= MAX_FILE_DRAG_IMAGES) {
       break;
     }
-    const item = root.querySelector<HTMLElement>(`[data-drag-path="${CSS.escape(path)}"]`);
+    const item = itemsByPath.get(path);
     const icon = item?.querySelector<HTMLElement>(".file-icon");
     const name = item?.querySelector<HTMLElement>(NAME_SELECTOR);
     if (!item || !icon || !name) {
