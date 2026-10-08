@@ -383,6 +383,7 @@ describe("putting right a Replace a crash cut short", () => {
     await chmod(join(src, "F"), 0o750);
     await mkdir(join(dst, "F"));
     const stats = await stat(join(dst, "F"));
+    const source = await stat(join(src, "F"));
 
     const [outcome] = await recoverInterruptedReplaces(
       [
@@ -394,6 +395,7 @@ describe("putting right a Replace a crash cut short", () => {
           moved: false,
           staged: true,
           stagingId: { dev: stats.dev, ino: stats.ino },
+          sourceId: { dev: source.dev, ino: source.ino },
         },
       ],
       nativeFileSystem,
@@ -401,6 +403,33 @@ describe("putting right a Replace a crash cut short", () => {
 
     expect(outcome).toMatchObject({ outcome: "finished", path: join(dst, "F") });
     expect((await stat(join(dst, "F"))).mode & 0o777).toBe(0o750);
+  });
+
+  // Another folder was put where the original was: its permissions were never the copy's.
+  it("leaves a recovered folder's metadata alone when its original was replaced", async () => {
+    await mkdir(join(src, "F"));
+    await chmod(join(src, "F"), 0o700);
+    await mkdir(join(dst, "F"));
+    await chmod(join(dst, "F"), 0o755);
+    const stats = await stat(join(dst, "F"));
+
+    await recoverInterruptedReplaces(
+      [
+        {
+          id: "1",
+          stagingPath: join(dst, ".F.filetrail-0a0a0a0a"),
+          finalPath: join(dst, "F"),
+          sourcePath: join(src, "F"),
+          moved: false,
+          staged: true,
+          stagingId: { dev: stats.dev, ino: stats.ino },
+          sourceId: { dev: stats.dev, ino: 1 },
+        },
+      ],
+      nativeFileSystem,
+    );
+
+    expect((await stat(join(dst, "F"))).mode & 0o777).toBe(0o755);
   });
 
   it("finishes a Replace whose new item is locked", async () => {

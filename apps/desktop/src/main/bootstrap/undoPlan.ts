@@ -301,6 +301,15 @@ export async function checkMove(
             }),
       };
     }
+    // A folder that couldn't be listed just then says nothing about what it holds.
+    if (now.kind === "directory" && now.entryCount === null && step.stamp.entryCount !== null) {
+      return {
+        ok: false,
+        reason: `“${basename(step.from)}” couldn't be checked.`,
+        missing: false,
+        retry: true,
+      };
+    }
     if (!sameStamp(step.stamp, now)) {
       return { ok: false, reason: replacedReason(step.from, null, item), missing: false };
     }
@@ -469,7 +478,7 @@ export async function checkBatch(
     checks.push({
       item,
       refusal: null,
-      nameTaken: there !== null && !isOwn(there, target, itemId, ownPlaces),
+      nameTaken: there !== null && !isOwn(there, target, ownPlaces),
       isFolder: kindOfStats(stats) === "directory",
     });
   }
@@ -478,19 +487,13 @@ export async function checkBatch(
 
 // Whether the item found where a batch item goes back is the batch's own: the item itself,
 // or another of its items (which makes way for it).
-function isOwn(
-  there: PlanStats,
-  target: string,
-  itemId: ItemId | null,
-  ownPlaces: ReadonlyMap<string, string>,
-): boolean {
+function isOwn(there: PlanStats, target: string, ownPlaces: ReadonlyMap<string, string>): boolean {
   const thereId = itemIdOf(there);
   if (thereId === null) {
     return false;
   }
-  if (itemId !== null && sameItemId(itemId, thereId)) {
-    return true;
-  }
+  // The item itself (or another of the batch) found under another spelling of the place it
+  // is at; the same id elsewhere is a hard link to it, another entry.
   return ownPlaces.get(idKey(thereId)) === placeKey(target);
 }
 

@@ -488,6 +488,9 @@ export type ReplaceJournalEntry = {
   // The id of the folder made at `stagingPath` for the item to be built in: what is there
   // is removed or put in place only while it is that folder.
   stagingId?: ItemId;
+  // The id of the item copied: its metadata is put on the copy at recovery only while the
+  // item at `sourcePath` is still that one.
+  sourceId?: ItemId;
   // A move to another disk (a folder copied, then its original removed): put in place by
   // recovery, its original is still there too, and the person is told.
   movingCopy?: true;

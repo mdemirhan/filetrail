@@ -222,9 +222,14 @@ async function applyFolderMetadata(
   fileSystem: WriteServiceFileSystem,
   entry: ReplaceJournalEntry,
 ): Promise<void> {
+  const source = await captureFingerprint(fileSystem, entry.sourcePath);
+  // Only from the very item copied: another put at its path since would give the copy
+  // permissions that were never its own.
   if (
     !fileSystem.copyMetadata ||
-    !(await captureFingerprint(fileSystem, entry.sourcePath)).exists
+    entry.sourceId === undefined ||
+    source.dev !== entry.sourceId.dev ||
+    source.ino !== entry.sourceId.ino
   ) {
     return;
   }

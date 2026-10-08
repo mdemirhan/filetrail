@@ -873,6 +873,7 @@ async function executeStagedDirectory(
     moved: false,
     staged: false,
     ...(reserved.id ? { stagingId: reserved.id } : {}),
+    ...(sourceIdOf(currentNode) ? { sourceId: sourceIdOf(currentNode) as ItemId } : {}),
     ...(context.mode === "cut" ? { movingCopy: true as const } : {}),
   };
   try {
@@ -1419,6 +1420,10 @@ async function executeReplace(
       journalEntry.stagingPath = temporaryPath;
       if (reserved.id) {
         journalEntry.stagingId = reserved.id;
+      }
+      const sourceId = sourceIdOf(currentNode);
+      if (sourceId) {
+        journalEntry.sourceId = sourceId;
       }
     }
     try {
@@ -2216,6 +2221,12 @@ function incompletePackageMessage(
   return mode === "cut"
     ? `“${name}” wasn't moved because some items in it were skipped or couldn't be copied. Nothing in it was moved.`
     : `“${name}” wasn't copied because some items in it were skipped or couldn't be copied.`;
+}
+
+// The id of the item being pasted, as the review found it; null when its disk gives none.
+function sourceIdOf(node: ResolvedCopyPasteNode): ItemId | null {
+  const { dev, ino } = node.node.sourceFingerprint;
+  return dev !== null && ino !== null ? { dev, ino } : null;
 }
 
 // A folder made under a hidden name next to `finalPath` for an item to be built in, with
