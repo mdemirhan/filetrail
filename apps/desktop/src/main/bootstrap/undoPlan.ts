@@ -284,6 +284,13 @@ export async function checkMove(
   // In the Trash without an id to go by: only an item that looks as it did is taken.
   if (step.stamp && (step.id === null || itemIdOf(item) === null)) {
     const now = await readItemStamp(fs, step.from);
+    if (now === null) {
+      // Found a moment ago: it couldn't be read just now, which says nothing about it.
+      const again = await lookUp(fs, step.from);
+      if ("unreadable" in again) {
+        return { ok: false, ...again.unreadable };
+      }
+    }
     if (now === null || !sameStamp(step.stamp, now)) {
       return { ok: false, reason: replacedReason(step.from, null, item), missing: false };
     }
@@ -405,7 +412,7 @@ export async function checkBatch(
 ): Promise<BatchItemCheck[]> {
   // Places the batch's own items leave, compared as the disk compares names, and the items
   // themselves: on a disk that ignores case, "B" finds the batch's own item now at "b".
-  const vacated = new Set(step.items.map((item) => placeKey(item.from)));
+  const vacated = new Set(step.items.map((item) => item.from));
   const ownIds = new Set(step.items.flatMap((item) => (item.id === null ? [] : [idKey(item.id)])));
   const checks: BatchItemCheck[] = [];
   for (const item of step.items) {
@@ -436,7 +443,7 @@ export async function checkBatch(
     // The name it goes back to, in the folder it is in now (its folder may be renamed back
     // in the same batch, after it).
     const target = `${dirname(item.from)}/${basename(item.to)}`;
-    const foundThere = vacated.has(placeKey(target)) ? null : await lookUp(fs, target);
+    const foundThere = vacated.has(target) ? null : await lookUp(fs, target);
     if (foundThere !== null && "unreadable" in foundThere) {
       checks.push({ item, refusal: foundThere.unreadable, nameTaken: false, isFolder: false });
       continue;

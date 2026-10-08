@@ -804,6 +804,23 @@ describe("a folder copied or moved whole", () => {
   });
 
   // Stopped as its last file is written, before the folder is put in place.
+  // Skipped deep inside: "Contents" was done, the app it is in wasn't.
+  it("leaves out an app with an item skipped deep inside it", async () => {
+    await mkdir(join(src, "F", "App.app", "Contents"), { recursive: true });
+    await writeFile(join(src, "F", "readme.txt"), "readme");
+    await writeFile(join(src, "F", "App.app", "Contents", "a"), "a");
+
+    await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      beforeExecute: () => writeFile(join(src, "F", "App.app", "Contents", "a"), "changed"),
+      resolve: () => "skip",
+    });
+
+    expect(await readdir(join(dst, "F"))).toEqual(["readme.txt"]);
+  });
+
   it("moves nothing when stopped as its last item is copied", async () => {
     await mkdir(join(src, "F"));
     await writeFile(join(src, "F", "a.txt"), "a");

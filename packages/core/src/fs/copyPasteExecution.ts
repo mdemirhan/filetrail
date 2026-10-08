@@ -950,11 +950,11 @@ async function executeStagedDirectory(
     await discard();
     throw errorCode(error) === "EEXIST" ? new DestinationTakenError(error) : error;
   }
-  await journal?.remove(journalEntry.id).catch(() => undefined);
   // Its own metadata now that it has its name (see metadataLaterFor).
   await applyDirectoryMetadata({ ...context, stagingFor: context.mode }, currentNode).catch(
     () => undefined,
   );
+  await journal?.remove(journalEntry.id).catch(() => undefined);
   noteChanged(context);
   if (context.mode === "copy") {
     await recordCreated(context, currentNode, finalPath);
@@ -1218,6 +1218,9 @@ async function executeDirectoryNode(
     if (childResult.itemStatus !== "completed") {
       hasIncomplete = true;
       keptNames.add(basename(child.node.sourcePath));
+    } else if (hasItemNotDone(childResult.childItems)) {
+      // A folder inside done, with something deeper in it not done (skipped).
+      hasIncomplete = true;
     }
     // Bubble up file items, and folders that failed themselves or were skipped (a move
     // leaves those where they are), into the result.
@@ -1245,7 +1248,9 @@ async function executeDirectoryNode(
     currentNode.destinationPath !== context.folderMadeAt &&
     (await isPackageFolder(context.fileSystem, currentNode.node.sourcePath))
   ) {
-    await removeStagedItem(context.fileSystem, currentNode.destinationPath).catch(() => undefined);
+    // Should it stay (the disk refused), the folder it is in isn't put in place either: the
+    // error goes up and the whole hidden copy goes.
+    await removeStagedItem(context.fileSystem, currentNode.destinationPath);
     return {
       itemStatus: "failed",
       skipReason: null,
@@ -2155,14 +2160,32 @@ async function copyFileContents(
   }
 }
 
-// Whether nothing is at `path` for certain (not merely unreadable: a disk gone away).
+// Whether nothing is at `path` for certain: not merely unreadable, and not on a disk gone
+// away (its folder is still there).
 async function isGone(fileSystem: WriteServiceFileSystem, path: string): Promise<boolean> {
   try {
     await fileSystem.lstat(path);
     return false;
   } catch (error) {
-    return errorCode(error) === "ENOENT";
+    if (errorCode(error) !== "ENOENT") {
+      return false;
+    }
   }
+  try {
+    return (await fileSystem.lstat(dirname(path))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// Whether any item in `items` (at any depth) wasn't done.
+function hasItemNotDone(items: ItemList): boolean {
+  for (const item of items) {
+    if (Array.isArray(item) ? hasItemNotDone(item) : item.status !== "completed") {
+      return true;
+    }
+  }
+  return false;
 }
 
 function incompletePackageMessage(
@@ -2207,10 +2230,11 @@ async function removeOwnStaging(
   path: string,
   id: ItemId | null,
 ): Promise<void> {
-  const there = await captureFingerprint(fileSystem, path);
-  if (!there.exists) {
+  if (await isGone(fileSystem, path)) {
     return;
   }
+  // Read for certain (an error here is thrown: the record of it then stays).
+  const there = await fileSystem.lstat(path);
   if (id !== null && (there.dev !== id.dev || there.ino !== id.ino)) {
     return;
   }

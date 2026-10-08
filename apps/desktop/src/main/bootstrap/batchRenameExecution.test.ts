@@ -899,14 +899,14 @@ describe("writing down the items moved aside", () => {
     ]);
   });
 
-  // "a" is stuck under its hidden name in "P"; "P" is then renamed "Q" in the same batch:
-  // what is written down follows it, so the next start finds it.
-  it("follows the folder of an item left hidden when the folder is renamed", async () => {
+  // "a" is stuck under its hidden name in "P": "P" isn't renamed, so the next start finds
+  // it where it is written down.
+  it("doesn't rename the folder of an item left hidden", async () => {
     const disk = new MemoryDisk(["/trip/P", "/trip/P/a", "/trip/P/b"]);
     disk.failures.set("renameExclusive:/trip/P/.tmp-0->/trip/P/b", errno("EACCES"));
     disk.failures.set("renameExclusive:/trip/P/.tmp-0->/trip/P/a", errno("EACCES"));
     const live = new Map<string, WriteJournalEntry>();
-    await runBatchRename({
+    const result = await runBatchRename({
       request: request(
         [
           ["P/a", "b"],
@@ -927,13 +927,16 @@ describe("writing down the items moved aside", () => {
         },
       },
     });
-    expect(disk.names("/trip")).toEqual(["Q"]);
+    expect(disk.names("/trip")).toEqual(["P"]);
+    expect(result.items[2]?.error).toBe(
+      "“P” wasn't renamed because an item in it is still under a hidden name.",
+    );
     expect([...live.values()]).toEqual([
       {
         kind: "batch_rename",
         id: expect.any(String),
         items: [
-          { temporaryPath: "/trip/Q/.tmp-0", originalPath: "/trip/Q/a", newPath: "/trip/Q/b" },
+          { temporaryPath: "/trip/P/.tmp-0", originalPath: "/trip/P/a", newPath: "/trip/P/b" },
         ],
       },
     ]);

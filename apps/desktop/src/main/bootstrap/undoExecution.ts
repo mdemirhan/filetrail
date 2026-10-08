@@ -423,16 +423,22 @@ async function liftRestrictions(fs: WriteOperationFs, path: string): Promise<Lif
   // A locked item's mode and access rules can't be changed: its lock comes off first.
   const flags = await unlockForMove(fs, path);
   const lifted: Lifted = { flags, mode: null, acl: null };
-  const stats = await fs.lstat(path).catch(() => null);
-  const mode = typeof stats?.mode === "number" ? stats.mode & 0o7777 : null;
-  if (fs.chmod && stats?.isDirectory() && mode !== null && (mode & 0o200) === 0) {
-    await fs.chmod(path, mode | 0o200);
-    lifted.mode = mode;
-  }
-  const acl = fs.getAcl ? await fs.getAcl(path).catch(() => null) : null;
-  if (fs.setAcl && acl !== null && /:deny:/u.test(acl)) {
-    await fs.setAcl(path, null);
-    lifted.acl = acl;
+  try {
+    const stats = await fs.lstat(path).catch(() => null);
+    const mode = typeof stats?.mode === "number" ? stats.mode & 0o7777 : null;
+    if (fs.chmod && stats?.isDirectory() && mode !== null && (mode & 0o200) === 0) {
+      await fs.chmod(path, mode | 0o200);
+      lifted.mode = mode;
+    }
+    const acl = fs.getAcl ? await fs.getAcl(path).catch(() => null) : null;
+    if (fs.setAcl && acl !== null && /:deny:/u.test(acl)) {
+      await fs.setAcl(path, null);
+      lifted.acl = acl;
+    }
+  } catch (error) {
+    // Left as it was: what was taken off goes back on.
+    await restoreRestrictions(fs, path, lifted);
+    throw error;
   }
   return lifted;
 }
