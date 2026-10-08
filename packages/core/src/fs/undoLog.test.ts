@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -55,6 +55,7 @@ describe("readItemStamp", () => {
       size: null,
       mtimeMs: expect.any(Number),
       entryCount: 1,
+      entryNames: expect.any(String),
     });
     await expect(
       readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "link")),
@@ -69,12 +70,30 @@ describe("readItemStamp", () => {
   it("doesn't count the files Finder writes into a folder on its own", async () => {
     await mkdir(join(root, "Folder"));
     await writeFile(join(root, "Folder", ".DS_Store"), "");
+    await writeFile(join(root, "Folder", "a.txt"), "");
     await writeFile(join(root, "Folder", "._a.txt"), "");
     await writeFile(join(root, "Folder", ".hidden"), "");
+    // An item of its own: there is no "notes" beside it.
+    await writeFile(join(root, "Folder", "._notes"), "");
 
     await expect(
       readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder")),
-    ).resolves.toMatchObject({ entryCount: 1 });
+    ).resolves.toMatchObject({ entryCount: 3 });
+  });
+
+  // A folder whose item was renamed holds as many items, but not the same ones.
+  it("tells a folder whose items were renamed from one left as it was", async () => {
+    await mkdir(join(root, "Folder"));
+    await writeFile(join(root, "Folder", "a.txt"), "");
+    const before = await readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder"));
+    await writeFile(join(root, "Folder", ".DS_Store"), "");
+    expect(
+      (await readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder")))?.entryNames,
+    ).toBe(before?.entryNames);
+    await rename(join(root, "Folder", "a.txt"), join(root, "Folder", "b.txt"));
+    expect(
+      (await readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder")))?.entryNames,
+    ).not.toBe(before?.entryNames);
   });
 
   it("is null for an item that can't be read", async () => {

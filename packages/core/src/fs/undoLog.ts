@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { fileIdOf } from "./copyPasteFingerprint";
 
 // What an operation did to the disk, step by step, so it can be undone later. Kept in the
@@ -17,6 +19,9 @@ export type ItemStamp = {
   size: number | null;
   mtimeMs: number | null;
   entryCount: number | null;
+  // For a folder: what its items are called (a digest of their names), to tell one whose
+  // items were renamed, or swapped for others, from one left as it was.
+  entryNames?: string;
 };
 
 export type UndoStep =
@@ -188,10 +193,10 @@ export async function readItemIdAndStamp(
     return { id: null, stamp: null };
   }
   const kind = kindOfStats(stats);
-  const entryCount =
+  const entries =
     kind === "directory" && fileSystem.readdir
       ? await fileSystem.readdir(path).then(
-          (entries) => entries.filter((name) => !isFinderBookkeeping(name)).length,
+          (names) => withoutFinderBookkeeping(names),
           () => null,
         )
       : null;
@@ -201,16 +206,29 @@ export async function readItemIdAndStamp(
       kind,
       size: kind === "file" && typeof stats.size === "number" ? stats.size : null,
       mtimeMs: typeof stats.mtimeMs === "number" ? stats.mtimeMs : null,
-      entryCount,
+      entryCount: entries === null ? null : entries.length,
+      ...(entries === null ? {} : { entryNames: digestOfNames(entries) }),
     },
   };
 }
 
 // Files Finder writes into a folder on its own when it is opened or copied to some disks:
-// its view settings (.DS_Store) and AppleDouble files ("._name"). They aren't the
-// person's work, so a new folder holding only them is still empty.
-function isFinderBookkeeping(name: string): boolean {
-  return name === ".DS_Store" || name.startsWith("._");
+// its view settings (.DS_Store) and the AppleDouble files ("._name") of items beside them.
+// They aren't the person's work, so a new folder holding only them is still empty. A
+// "._name" file with no "name" beside it is an item like any other.
+function withoutFinderBookkeeping(names: readonly string[]): string[] {
+  const all = new Set(names);
+  return names.filter(
+    (name) =>
+      name !== ".DS_Store" && !(name.startsWith("._") && name.length > 2 && all.has(name.slice(2))),
+  );
+}
+
+// A short digest of a folder's item names, whatever order they were listed in.
+function digestOfNames(names: readonly string[]): string {
+  return createHash("sha1")
+    .update([...names].sort().join("\0"))
+    .digest("hex");
 }
 
 // For a `trashed` step: how the item at `path` looks, when it has no usable `id` (FAT,

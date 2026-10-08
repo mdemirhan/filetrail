@@ -1486,9 +1486,9 @@ export function createWriteOperationCoordinator(
     let completedItemCount = 0;
     let cancelled = false;
     const removedItems: RemovedItem[] = [];
-    // Whether deleting began on any item: anything it began on may be gone for good, even
-    // an item that then failed. One refused before that (it changed after the question)
-    // was never touched.
+    // Whether anything may be gone for good: an item deleted, or a folder whose delete
+    // failed part way. One refused before deleting (it changed after the question), or a
+    // file still there after its delete failed, was never touched.
     let deletingBegan = false;
     for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
@@ -1520,8 +1520,16 @@ export function createWriteOperationCoordinator(
             ? (await assertStillAskedItem(path, asked)) === "missing"
             : (await lstatUnlessMissing(path, fs.lstat)) === "missing";
         if (!gone) {
+          try {
+            await fs.rm(path, { recursive: true, force: true });
+          } catch (error) {
+            const after = await lstatUnlessMissing(path, fs.lstat);
+            if (after === "missing" || after === null || after.isDirectory()) {
+              deletingBegan = true;
+            }
+            throw error;
+          }
           deletingBegan = true;
-          await fs.rm(path, { recursive: true, force: true });
         }
         itemsWithoutTrash.get(sender)?.delete(path);
         if (before !== undefined) {

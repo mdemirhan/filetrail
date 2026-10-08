@@ -199,6 +199,7 @@ describe("what the simple operations record", () => {
                   size: null,
                   mtimeMs: lstatSync(folder).mtimeMs,
                   entryCount: 0,
+                  entryNames: expect.any(String),
                 },
               },
             ],
@@ -483,6 +484,49 @@ describe("what the simple operations record", () => {
     expect(terminal.status).toBe("completed");
     expect(readFileSync(join(root, "moved.txt"), "utf8")).toBe("asked about");
     expect(finished).toEqual([]);
+    await coordinator.shutdown();
+  });
+
+  // A file the delete couldn't remove is still there, as it was: nothing went for good.
+  it("leaves the history as it was when a file couldn't be deleted at all", async () => {
+    writeFileSync(join(trashDir, "a.txt"), "a");
+    const { coordinator, finished, sender } = setUp({
+      fs: {
+        rm: async () => {
+          throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+        },
+      },
+    });
+
+    await coordinator.handlers["writeOperation:deleteImmediately"](
+      { paths: [join(trashDir, "a.txt")] },
+      { sender },
+    );
+    expect((await waitForTerminalEvent(sender, "write-op-1")).status).toBe("failed");
+
+    expect(finished).toEqual([]);
+    await coordinator.shutdown();
+  });
+
+  it("can't undo a folder whose delete failed part way", async () => {
+    mkdirSync(join(trashDir, "F"));
+    const { coordinator, finished, sender } = setUp({
+      fs: {
+        rm: async () => {
+          throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+        },
+      },
+    });
+
+    await coordinator.handlers["writeOperation:deleteImmediately"](
+      { paths: [join(trashDir, "F")] },
+      { sender },
+    );
+    await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(finished).toEqual([
+      expect.objectContaining({ log: { undoable: false, reason: "deleted_for_good" } }),
+    ]);
     await coordinator.shutdown();
   });
 

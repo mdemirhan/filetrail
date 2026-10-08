@@ -372,15 +372,20 @@ export async function checkTrash(
   return { ok: true, changed: now === null || !sameStamp(step.stamp, now), id };
 }
 
-// A folder is the same when it holds as many items: its date changes with every item
-// added or taken out, so a file moved into a new folder and back out (two Undos) would
-// otherwise make it look changed.
+// A folder is the same when it holds the same items, by name: its date changes with every
+// item added or taken out, so a file moved into a new folder and back out (two Undos) would
+// otherwise make it look changed; its items' names don't.
 function sameStamp(left: ItemStamp, right: ItemStamp): boolean {
   if (left.kind !== right.kind) {
     return false;
   }
   if (left.kind === "directory") {
-    return left.entryCount === right.entryCount;
+    return (
+      left.entryCount === right.entryCount &&
+      (left.entryNames === undefined ||
+        right.entryNames === undefined ||
+        left.entryNames === right.entryNames)
+    );
   }
   return left.size === right.size && left.mtimeMs === right.mtimeMs;
 }
@@ -398,7 +403,10 @@ export async function checkBatch(
   fs: PlanFs,
   step: Extract<PlannedStep, { kind: "batch" }>,
 ): Promise<BatchItemCheck[]> {
-  const vacated = new Set(step.items.map((item) => item.from));
+  // Places the batch's own items leave, compared as the disk compares names, and the items
+  // themselves: on a disk that ignores case, "B" finds the batch's own item now at "b".
+  const vacated = new Set(step.items.map((item) => placeKey(item.from)));
+  const ownIds = new Set(step.items.flatMap((item) => (item.id === null ? [] : [idKey(item.id)])));
   const checks: BatchItemCheck[] = [];
   for (const item of step.items) {
     const found = await lookUp(fs, item.from);
@@ -428,7 +436,7 @@ export async function checkBatch(
     // The name it goes back to, in the folder it is in now (its folder may be renamed back
     // in the same batch, after it).
     const target = `${dirname(item.from)}/${basename(item.to)}`;
-    const foundThere = vacated.has(target) ? null : await lookUp(fs, target);
+    const foundThere = vacated.has(placeKey(target)) ? null : await lookUp(fs, target);
     if (foundThere !== null && "unreadable" in foundThere) {
       checks.push({ item, refusal: foundThere.unreadable, nameTaken: false, isFolder: false });
       continue;
@@ -438,11 +446,21 @@ export async function checkBatch(
     checks.push({
       item,
       refusal: null,
-      nameTaken: there !== null && !(itemId !== null && sameItemId(itemId, itemIdOf(there))),
+      nameTaken: there !== null && !isOwn(there, itemId, ownIds),
       isFolder: kindOfStats(stats) === "directory",
     });
   }
   return checks;
+}
+
+// Whether the item found where a batch item goes back is the batch's own: the item itself,
+// or another of its items (which makes way for it).
+function isOwn(there: PlanStats, itemId: ItemId | null, ownIds: ReadonlySet<string>): boolean {
+  const thereId = itemIdOf(there);
+  if (thereId === null) {
+    return false;
+  }
+  return (itemId !== null && sameItemId(itemId, thereId)) || ownIds.has(idKey(thereId));
 }
 
 // An item an Undo would move to the Trash though it changed since: one that was put back

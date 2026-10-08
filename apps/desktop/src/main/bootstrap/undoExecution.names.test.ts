@@ -127,3 +127,25 @@ describe("undoing a rename of a folder with an item in it that was skipped", () 
     expect(readdirSync(root).includes("Q")).toBe(false);
   });
 });
+
+// "B" became "c" and "a" became "b": on a disk that ignores case, "B" finds the batch's own
+// item (now "b"), which makes way for it. Nothing is asked.
+describe("undoing a rename of several that changed the case of a name", () => {
+  it("doesn't take the batch's own item for one in the way", async () => {
+    writeFileSync(join(root, "B"), "B");
+    writeFileSync(join(root, "a"), "a");
+    const t = setUpUndo(root, trashDir);
+    await t.batchRename([
+      [join(root, "B"), "c"],
+      [join(root, "a"), "b"],
+    ]);
+
+    expect(await t.prepare()).toMatchObject({ nameTaken: [], changed: [] });
+    expect((await t.undo()).status).toBe("completed");
+    expect(
+      readdirSync(root)
+        .filter((name) => !name.startsWith("."))
+        .sort(),
+    ).toEqual(["B", "a", "dst", "paste-trash", "src"]);
+  });
+});
