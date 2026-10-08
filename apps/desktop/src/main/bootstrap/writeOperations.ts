@@ -186,9 +186,10 @@ export function createWriteOperationCoordinator(
   >();
   // Callers waiting for the write slot to be free (see whenIdle).
   const idleWaiters: Array<() => void> = [];
-  // While a copy-paste is being started: the end of any operation that finished before
-  // the start request could record it (see "copyPaste:start").
-  let earlyTerminalEvents: Map<string, CopyPasteProgressEvent> | null = null;
+  // While a copy-paste is being started: the latest event of an operation the start
+  // request hasn't recorded yet, its "queued" or, if it finished at once, its end (see
+  // "copyPaste:start").
+  let eventsBeforeStart: Map<string, CopyPasteProgressEvent> | null = null;
   let activeWriteOperationId: string | null = null;
   let localWriteOperationSequence = 0;
   // Set once the app starts quitting; no new operation may begin after that.
@@ -315,13 +316,11 @@ export function createWriteOperationCoordinator(
       if (undoLog !== null) {
         recordFinishedWrite({ action, log: undoLog, items: event.result?.items ?? [] });
       }
-      if (earlyTerminalEvents && !writeOperationSenders.has(event.operationId)) {
-        earlyTerminalEvents.set(event.operationId, event);
-      }
       freeWriteSlot(event.operationId);
     }
     const sender = writeOperationSenders.get(event.operationId);
     if (!sender) {
+      eventsBeforeStart?.set(event.operationId, event);
       forgetProgress(event.operationId);
       return;
     }
@@ -566,12 +565,7 @@ export function createWriteOperationCoordinator(
     if (!isTerminalStatus(payload.status) && writeOperationSenders.has(payload.operationId)) {
       latestProgress.set(payload.operationId, payload);
     }
-    try {
-      options.broadcastProgress?.(payload, sender);
-    } catch (error) {
-      // The other windows miss this update; the operation, and its own window, go on.
-      console.error("[filetrail] couldn't tell the other windows about an operation", error);
-    }
+    broadcast(payload, sender);
     if (isSenderDestroyed(sender)) {
       return;
     }
@@ -579,6 +573,15 @@ export function createWriteOperationCoordinator(
       sender.send(WRITE_OPERATION_PROGRESS_CHANNEL, payload);
     } catch {
       // The window went away mid-send; there is no one left to tell.
+    }
+  }
+
+  function broadcast(payload: WriteOperationProgressEvent, owner: WriteOperationSender): void {
+    try {
+      options.broadcastProgress?.(payload, owner);
+    } catch (error) {
+      // The other windows miss this update; the operation, and its own window, go on.
+      console.error("[filetrail] couldn't tell the other windows about an operation", error);
     }
   }
 
@@ -1707,9 +1710,9 @@ export function createWriteOperationCoordinator(
         // analysis that is no longer usable fails at once). Its end is caught here, so the
         // write slot isn't claimed for an operation that is already over.
         noteWriteStarting();
-        earlyTerminalEvents = new Map();
+        eventsBeforeStart = new Map();
         let handle: ReturnType<WriteService["startCopyPaste"]>;
-        let finishedEarly: CopyPasteProgressEvent | undefined;
+        let early: CopyPasteProgressEvent | undefined;
         try {
           handle = writeService.startCopyPaste(
             {
@@ -1719,23 +1722,31 @@ export function createWriteOperationCoordinator(
             },
             analysesOfOtherWindows(event.sender),
           );
-          finishedEarly = earlyTerminalEvents.get(handle.operationId);
+          early = eventsBeforeStart.get(handle.operationId);
         } finally {
-          earlyTerminalEvents = null;
+          eventsBeforeStart = null;
         }
         // The paste has it now; the window going away stops the paste instead.
         forgetAnalysis(payload.analysisId);
-        if (finishedEarly) {
+        if (early && isTerminalStatus(early.status)) {
           // The window learns the operation id from this reply, so its end is sent just
           // after it, when the window is listening for that id.
           const sender = event.sender;
-          const progress = toDeliverableProgressEvent(finishedEarly, payload.action);
+          const progress = toDeliverableProgressEvent(early, payload.action);
           setTimeout(() => sendProgress(sender, progress), 0);
           return handle;
         }
         activeWriteOperationId = handle.operationId;
         copyPasteRequests.set(handle.operationId, payload);
         attachSender(handle.operationId, event.sender);
+        // Its "queued" came before it had a window. The window that started it knows from
+        // this reply; the others are told now, so they know one runs, and it is kept for a
+        // window that takes it over.
+        if (early) {
+          const progress = toDeliverableProgressEvent(early, payload.action);
+          latestProgress.set(handle.operationId, progress);
+          broadcast(progress, event.sender);
+        }
         return handle;
       },
       "copyPaste:cancel": (

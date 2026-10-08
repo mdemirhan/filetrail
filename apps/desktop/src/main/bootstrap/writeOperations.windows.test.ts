@@ -179,6 +179,44 @@ async function analyzed(coordinator: Coordinator, window: Window, analysisId: st
   });
 }
 
+describe("a paste starting", () => {
+  // The write service says "queued" before startCopyPaste returns, when the paste has no
+  // window yet.
+  it("tells the other windows it is queued", async () => {
+    const { writeService, emit } = createWriteServiceStub();
+    writeService.startCopyPaste.mockImplementation(() => {
+      emit(copyEvent("queued"));
+      return { operationId: "copy-op-1", status: "queued" };
+    });
+    const broadcastProgress = vi.fn();
+    const successor = createWindow();
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { broadcastProgress, successorOf: () => successor },
+    );
+    const owner = createWindow();
+    await analyze(coordinator, owner);
+
+    await paste(coordinator, owner);
+
+    expect(broadcastProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId: "copy-op-1", status: "queued", action: "paste" }),
+      owner,
+    );
+    // The window that started it knows from the reply.
+    expect(progressSentTo(owner)).toEqual([]);
+    // A window taking it over before anything else is heard knows it is queued.
+    close(owner);
+    expect(successor.send).toHaveBeenCalledWith("filetrail:writeOperationAdopted", {
+      operationId: "copy-op-1",
+      event: expect.objectContaining({ status: "queued" }),
+    });
+    emit(copyEvent("cancelled"));
+    await coordinator.shutdown();
+  });
+});
+
 describe("a window taking over an operation", () => {
   it("is told the cut a paste clears from the clipboard when it is done", async () => {
     const { writeService, emit } = createWriteServiceStub();
