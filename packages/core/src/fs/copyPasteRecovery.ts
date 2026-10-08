@@ -288,11 +288,11 @@ async function isOwnStaging(
   try {
     stats = await fileSystem.lstat(path);
   } catch (error) {
-    if (errorCode(error) === "ENOENT") {
+    if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, path))) {
       return false;
     }
-    // Not read (a disk with a moment's trouble): not known to be someone else's, so the
-    // entry is kept for later.
+    // Not read (a disk with a moment's trouble, or one gone just now): not known to be
+    // someone else's, so the entry is kept for later.
     throw new StagingUnreadableError(error);
   }
   if (stats.ino !== id.ino) {
