@@ -6,6 +6,26 @@ import {
   pathsChangedByWrite,
 } from "./writeEffects";
 
+// A small random generator, so a failure can be run again from its seed.
+function randomPaths(seed: number, count: number): string[] {
+  let state = seed;
+  const next = (limit: number) => {
+    state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return state % limit;
+  };
+  const names = ["a", "b", "ab", "a b", ".Trash", "é"];
+  return Array.from({ length: count }, () => {
+    const depth = next(5);
+    let path = "";
+    for (let level = 0; level < depth; level++) {
+      path += `/${names[next(names.length)]}`;
+    }
+    // Now and then the odd forms a path can be written in.
+    const form = next(10);
+    return path === "" ? "/" : form === 0 ? `${path}/` : form === 1 ? `/${path}` : path;
+  });
+}
+
 describe("pathsChangedByWrite", () => {
   it("lists the folder written into and every item moved, made or removed", () => {
     expect(
@@ -16,12 +36,40 @@ describe("pathsChangedByWrite", () => {
           { sourcePath: "/Users/demo/Old", destinationPath: null },
         ],
       }).sort(),
-    ).toEqual([
-      "/Users/demo/Dest",
-      "/Users/demo/Dest/a.txt",
-      "/Users/demo/Old",
-      "/Users/demo/a.txt",
-    ]);
+    ).toEqual(["/Users/demo/Dest", "/Users/demo/Old", "/Users/demo/a.txt"]);
+  });
+
+  it("leaves out a path inside another, which changes nothing it covers", () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const all = randomPaths(seed, 1 + (seed % 9));
+      const changed = pathsChangedByWrite({
+        items: all.map((path) => ({ sourcePath: path, destinationPath: null })),
+      });
+      for (const path of changed) {
+        expect(changed.some((other) => other !== path && isAffectedByChange(path, [other]))).toBe(
+          false,
+        );
+      }
+      for (const path of randomPaths(seed * 7_919, 40)) {
+        expect(
+          isAffectedByChange(path, changed),
+          `seed ${seed}, ${JSON.stringify(path)} against ${JSON.stringify(all)}`,
+        ).toBe(isAffectedByChange(path, all));
+      }
+    }
+  });
+
+  // A copied folder's files are each in the result: 200,000 paths took 86 ms to match.
+  it("keeps only the folder of a copy of many files", () => {
+    const items = Array.from({ length: 100_000 }, (_, index) => ({
+      sourcePath: `/Users/demo/Photos/${index % 100}/IMG_${index}.jpg`,
+      destinationPath: `/Volumes/Backup/Photos/${index % 100}/IMG_${index}.jpg`,
+    }));
+    items.push({ sourcePath: "/Users/demo/Photos", destinationPath: "/Volumes/Backup/Photos" });
+
+    expect(
+      pathsChangedByWrite({ destinationDirectoryPath: "/Volumes/Backup", items }).sort(),
+    ).toEqual(["/Users/demo/Photos", "/Volumes/Backup"]);
   });
 });
 
@@ -43,34 +91,15 @@ describe("isAffectedByChange", () => {
 
 describe("createChangeMatcher", () => {
   // The answers it must give, worked out one change at a time.
+  // A change somewhere inside the path, never the path itself.
   function holdsAny(path: string, changed: readonly string[]): boolean {
     const prefix = path.endsWith("/") ? path : `${path}/`;
-    return changed.some((candidate) => candidate.startsWith(prefix));
+    return changed.some((candidate) => candidate !== path && candidate.startsWith(prefix));
   }
   function isAtOrInsideAny(path: string, changed: readonly string[]): boolean {
     return changed.some((folder) => {
       const prefix = folder.endsWith("/") ? folder : `${folder}/`;
       return path === folder || path.startsWith(prefix);
-    });
-  }
-
-  // A small random generator, so a failure can be run again from its seed.
-  function randomPaths(seed: number, count: number): string[] {
-    let state = seed;
-    const next = (limit: number) => {
-      state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
-      return state % limit;
-    };
-    const names = ["a", "b", "ab", "a b", ".Trash", "é"];
-    return Array.from({ length: count }, () => {
-      const depth = next(5);
-      let path = "";
-      for (let level = 0; level < depth; level++) {
-        path += `/${names[next(names.length)]}`;
-      }
-      // Now and then the odd forms a path can be written in.
-      const form = next(10);
-      return path === "" ? "/" : form === 0 ? `${path}/` : form === 1 ? `/${path}` : path;
     });
   }
 
@@ -100,6 +129,10 @@ describe("createChangeMatcher", () => {
     expect(matcher.holdsChange("/Users/demo/Projects")).toBe(true);
     expect(matcher.holdsChange("/")).toBe(true);
     expect(matcher.holdsChange("/Users/demo/Projects/app")).toBe(false);
+    // Written with a "/" at the end, it still doesn't hold itself.
+    expect(
+      createChangeMatcher(["/Users/demo/Projects/"]).holdsChange("/Users/demo/Projects/"),
+    ).toBe(false);
     expect(matcher.isAtOrInsideChange("/Users/demo/Projects/app")).toBe(true);
     expect(matcher.isAtOrInsideChange("/Users/demo/Projects/app/src")).toBe(true);
     expect(matcher.isAffected("/Users/demo/Projects/application")).toBe(false);

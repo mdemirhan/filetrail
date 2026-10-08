@@ -1,6 +1,8 @@
 // What a finished file operation changed, for whatever was worked out from the folders it
 // touched (folder sizes): the items it moved, made, renamed or removed, and the folder it
-// wrote into. Anything at, inside or around these paths may be different now.
+// wrote into. Anything at, inside or around these paths may be different now. A path inside
+// another is left out, as what is at, inside or around it is at, inside or around the
+// other: the 100,000 files of a copied folder aren't each looked at again.
 export function pathsChangedByWrite(result: {
   targetPath?: string | null;
   destinationDirectoryPath?: string | null;
@@ -20,7 +22,42 @@ export function pathsChangedByWrite(result: {
       paths.add(item.destinationPath);
     }
   }
-  return [...paths];
+  return outermostPaths(paths);
+}
+
+// The paths not inside another of them. Each folder holding one is looked at once, so the
+// files of one folder stop at the folder.
+function outermostPaths(paths: ReadonlySet<string>): string[] {
+  // Whether each folder looked at is one of the paths, or inside one.
+  const insideOne = new Map<string, boolean>();
+  const isInsideOne = (path: string): boolean => {
+    const visited: string[] = [];
+    let inside = false;
+    for (let index = path.lastIndexOf("/"); index !== -1; ) {
+      // "/a/" holds "/a/b" as "/a" does (see foldersHolding), but not itself.
+      if (index + 1 < path.length && paths.has(path.slice(0, index + 1))) {
+        inside = true;
+        break;
+      }
+      const folder = path.slice(0, index);
+      const known = insideOne.get(folder);
+      if (known !== undefined) {
+        inside = known;
+        break;
+      }
+      visited.push(folder);
+      if (paths.has(folder)) {
+        inside = true;
+        break;
+      }
+      index = index === 0 ? -1 : path.lastIndexOf("/", index - 1);
+    }
+    for (const folder of visited) {
+      insideOne.set(folder, inside);
+    }
+    return inside;
+  };
+  return [...paths].filter((path) => !isInsideOne(path));
 }
 
 type ResultItem = { sourcePath: string | null; destinationPath: string | null; status: string };
@@ -193,10 +230,14 @@ export function createChangeMatcher(changedPaths: readonly string[]): ChangeMatc
 
 // Calls `visit` with every folder that holds `path` by isSameOrInside, until it answers
 // true: each part of the path before a "/", with and without that "/" ("/a" and "/a/" hold
-// "/a/b"), and "" before a leading "/".
+// "/a/b"), and "" before a leading "/". Not the path itself, when it ends in "/": nothing
+// holds itself.
 function foldersHolding(path: string, visit: (folder: string) => boolean): boolean {
   for (let index = path.indexOf("/"); index !== -1; index = path.indexOf("/", index + 1)) {
-    if (visit(path.slice(0, index)) || visit(path.slice(0, index + 1))) {
+    if (visit(path.slice(0, index))) {
+      return true;
+    }
+    if (index + 1 < path.length && visit(path.slice(0, index + 1))) {
       return true;
     }
   }
