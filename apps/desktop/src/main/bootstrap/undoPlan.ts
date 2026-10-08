@@ -19,6 +19,7 @@ import {
 export type PlannedStep =
   // Moves the item at `from` to `to`: a rename or move back, or putting an item back from
   // the Trash (`putBack`). `parentId` is the folder `to` must still be the one it was.
+  // `stamp` is how an item without a usable id looked when it went to the Trash.
   | {
       kind: "move";
       from: string;
@@ -27,6 +28,7 @@ export type PlannedStep =
       itemKind: ItemKind | null;
       parentId: ItemId | null;
       putBack: boolean;
+      stamp?: ItemStamp;
     }
   // Moves the item at `path` to the Trash: something an operation made, or put back from
   // the Trash (`putBack`).
@@ -59,10 +61,12 @@ export function reverseStep(step: UndoStep): PlannedStep {
         from: step.trashPath,
         to: step.from,
         id: step.id,
-        // The Trash never changes what is in it: only the very item goes back.
-        itemKind: null,
+        // The Trash never changes what is in it: only the very item goes back. Without an
+        // id, it has to look as it did when it went.
+        itemKind: step.stamp?.kind ?? null,
         parentId: step.parentId,
         putBack: true,
+        ...(step.stamp ? { stamp: step.stamp } : {}),
       };
     case "batchRenamed":
       return {
@@ -203,6 +207,13 @@ export async function checkMove(
   }
   if (!isExpectedItem(item, step.id, step.itemKind, !step.putBack)) {
     return { ok: false, reason: replacedReason(step.from), missing: false };
+  }
+  // In the Trash without an id to go by: only an item that looks as it did is taken.
+  if (step.stamp && (step.id === null || itemIdOf(item) === null)) {
+    const now = await readItemStamp(fs, step.from);
+    if (now === null || !sameStamp(step.stamp, now)) {
+      return { ok: false, reason: replacedReason(step.from), missing: false };
+    }
   }
   const folderPath = dirname(step.to);
   // Through a link, as when the step was recorded (see readFolderId).

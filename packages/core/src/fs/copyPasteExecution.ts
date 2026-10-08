@@ -44,6 +44,7 @@ import {
   readItemId,
   readItemRef,
   readItemStamp,
+  stampWithoutId,
 } from "./undoLog";
 import type {
   CopyPasteAnalysisNode,
@@ -1348,25 +1349,28 @@ async function removeReplacedItem(
     try {
       // On a disk that ignores case, "X.TXT" may have found "x.txt": Undo puts the old item
       // back under the name it really had.
-      const from =
-        context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)
-          ? await spelledAsOnDisk(context, node.destinationPath, destination)
-          : node.destinationPath;
+      const records = context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id);
+      const from = records
+        ? await spelledAsOnDisk(context, node.destinationPath, destination)
+        : node.destinationPath;
+      const id =
+        destination.dev !== null && destination.ino !== null
+          ? itemIdOf({ dev: destination.dev, ino: destination.ino })
+          : null;
+      const looks = records ? await stampWithoutId(fileSystem, node.destinationPath, id) : {};
       const trashPath = await fileSystem.trash(node.destinationPath);
       noteChanged(context);
       if (trashPath === null) {
         // In the Trash, but the Trash didn't say where: it can't be put back.
         markCantUndo(context, "trash_location_unknown");
-      } else if (context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)) {
+      } else if (records) {
         recordUndoStep(context, node, {
           kind: "trashed",
           from,
           trashPath,
-          id:
-            destination.dev !== null && destination.ino !== null
-              ? itemIdOf({ dev: destination.dev, ino: destination.ino })
-              : null,
+          id,
           parentId: await readFolderId(fileSystem.stat, dirname(node.destinationPath)),
+          ...looks,
         });
       }
       return "removed";

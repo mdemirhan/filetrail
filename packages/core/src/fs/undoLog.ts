@@ -38,12 +38,15 @@ export type UndoStep =
   // An item the operation made: a copy, a duplicate, a new folder.
   | { kind: "created"; path: string; id: ItemId | null; stamp: ItemStamp | null }
   // An item moved to the Trash: what was asked for, or an item a Replace pushed out.
+  // `stamp` is how it looked when it went, kept only for an item without a usable id (FAT,
+  // exFAT): it is the one way to tell it is still what is at `trashPath`.
   | {
       kind: "trashed";
       from: string;
       trashPath: string;
       id: ItemId | null;
       parentId: ItemId | null;
+      stamp?: ItemStamp;
     }
   // Several items renamed at once, undone as one batch.
   | {
@@ -168,6 +171,17 @@ export async function readItemStamp(
     mtimeMs: typeof stats.mtimeMs === "number" ? stats.mtimeMs : null,
     entryCount,
   };
+}
+
+// For a `trashed` step: how the item at `path` looks, when it has no usable `id` (FAT,
+// exFAT), so it can be told apart in the Trash; nothing when it has one.
+export async function stampWithoutId(
+  fileSystem: Parameters<typeof readItemStamp>[0],
+  path: string,
+  id: ItemId | null,
+): Promise<{ stamp?: ItemStamp }> {
+  const stamp = id === null ? await readItemStamp(fileSystem, path) : null;
+  return stamp ? { stamp } : {};
 }
 
 // The same item, by id, when both ids are known.

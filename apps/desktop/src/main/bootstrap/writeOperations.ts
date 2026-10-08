@@ -31,6 +31,7 @@ import {
   readItemId,
   readItemRef,
   readItemStamp,
+  stampWithoutId,
 } from "@filetrail/core";
 import { movedItemsOf, runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
@@ -1203,13 +1204,14 @@ export function createWriteOperationCoordinator(
         if (!(await isMissing(path, fs.lstat))) {
           const id = await readItemId(fs.lstat, path);
           const parentId = await readFolderId(fs.stat, dirname(path));
+          const looks = await stampWithoutId(fs, path, id);
           const trashPath = await fs.trash(path);
           if (trashPath === null) {
             // In the Trash, but the Trash didn't say where: it can't be put back.
             trashLocationUnknown = true;
           } else {
             trashedUnits.push({
-              steps: [{ kind: "trashed", from: path, trashPath, id, parentId }],
+              steps: [{ kind: "trashed", from: path, trashPath, id, parentId, ...looks }],
             });
           }
         }

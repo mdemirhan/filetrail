@@ -32,6 +32,7 @@ export {
   readItemRef,
   readItemStamp,
   sameItemId,
+  stampWithoutId,
 } from "./fs/undoLog";
 export * from "./search/fdSearch";
 export * from "./worker/explorerWorkerClient";

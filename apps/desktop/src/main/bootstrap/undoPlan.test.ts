@@ -155,6 +155,35 @@ describe("checkMove", () => {
     });
   });
 
+  it("puts back from the Trash an item without an id only when it looks as it did", async () => {
+    const trashed: UndoStep = {
+      kind: "trashed",
+      from: "/Docs/a.txt",
+      trashPath: "/T/a.txt",
+      id: null,
+      parentId: null,
+      stamp: { kind: "file", size: 5, mtimeMs: 1000, entryCount: null },
+    };
+    const step = reverseStep(trashed);
+    if (step.kind !== "move") {
+      throw new Error("A trashed step is undone by a move.");
+    }
+    const trash = { "/T": { kind: "dir" as const, ino: null } };
+
+    expect(
+      await checkMove(disk({ ...docs, ...trash, "/T/a.txt": { kind: "file", ino: null } }), step),
+    ).toMatchObject({ ok: false, reason: "The “a.txt” in “T” is another item now." });
+    expect(
+      await checkMove(
+        disk({ ...docs, ...trash, "/T/a.txt": { kind: "file", ino: null, size: 5 } }),
+        step,
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      await checkMove(disk({ ...docs, ...trash, "/T/a.txt": { kind: "dir", ino: null } }), step),
+    ).toMatchObject({ ok: false });
+  });
+
   it("says so when the item's disk isn't connected", async () => {
     expect(await checkMove(disk({}), moveBack({ from: "/Volumes/Backup/b.txt" }))).toEqual({
       ok: false,

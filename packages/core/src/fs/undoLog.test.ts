@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { itemIdOf, readItemId, readItemStamp, sameItemId } from "./undoLog";
+import { itemIdOf, readItemId, readItemStamp, sameItemId, stampWithoutId } from "./undoLog";
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "./writeServiceTypes";
 
 let root: string;
@@ -97,5 +97,17 @@ describe("readItemStamp", () => {
         "/dev/thing",
       ),
     ).resolves.toMatchObject({ kind: "other" });
+  });
+});
+
+describe("stampWithoutId", () => {
+  it("keeps how an item looks only when it has no id to go by", async () => {
+    await writeFile(join(root, "a.txt"), "abc");
+    const fs = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+    expect(await stampWithoutId(fs, join(root, "a.txt"), { dev: 1, ino: 2 })).toEqual({});
+    expect(await stampWithoutId(fs, join(root, "a.txt"), null)).toEqual({
+      stamp: expect.objectContaining({ kind: "file", size: 3 }),
+    });
+    expect(await stampWithoutId(fs, join(root, "gone"), null)).toEqual({});
   });
 });

@@ -12,6 +12,7 @@ import {
   readItemId,
   readItemRef,
   readItemStamp,
+  stampWithoutId,
   unlockForMove,
 } from "@filetrail/core";
 
@@ -378,6 +379,7 @@ async function moveToTrash(
   }
   const id = await readItemId(fs.lstat, planned.path);
   const parentId = await readFolderId(fs.stat, dirname(planned.path));
+  const looks = await stampWithoutId(fs, planned.path, id);
   const before: ItemSize | null = fs.itemSize
     ? await fs.itemSize(planned.path).catch(() => null)
     : null;
@@ -412,7 +414,9 @@ async function moveToTrash(
     status: "done",
     // In the Trash, but the Trash didn't say where: done, and nothing to do it again from.
     produced:
-      trashPath === null ? null : { kind: "trashed", from: planned.path, trashPath, id, parentId },
+      trashPath === null
+        ? null
+        : { kind: "trashed", from: planned.path, trashPath, id, parentId, ...looks },
     items: [
       {
         sourcePath: planned.path,
