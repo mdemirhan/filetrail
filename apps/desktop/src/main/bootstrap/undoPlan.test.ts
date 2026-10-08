@@ -566,3 +566,185 @@ describe("findQuestions", () => {
     expect(mostAtOnce).toBeLessThanOrEqual(16);
   });
 });
+
+// A disk that can't always be read (no permission, an error, a share not answering): each
+// look is answered by `fails` first, which names the error it throws, if any. Counted per
+// kind of look and path, from 1.
+function troubled(
+  fs: PlanFs,
+  fails: (look: "lstat" | "stat" | "readdir", path: string, count: number) => string | null,
+): PlanFs {
+  const counts = new Map<string, number>();
+  const check = (look: "lstat" | "stat" | "readdir", path: string) => {
+    const key = `${look} ${path}`;
+    const count = (counts.get(key) ?? 0) + 1;
+    counts.set(key, count);
+    const code = fails(look, path, count);
+    if (code !== null) {
+      throw Object.assign(new Error(code), { code });
+    }
+  };
+  return {
+    lstat: async (path) => {
+      check("lstat", path);
+      return fs.lstat(path);
+    },
+    stat: async (path) => {
+      check("stat", path);
+      return fs.stat(path);
+    },
+    readdir: async (path) => {
+      check("readdir", path);
+      return (await fs.readdir?.(path)) ?? [];
+    },
+  };
+}
+
+describe("a disk that can't be read", () => {
+  const docs = { "/Docs": { kind: "dir" as const, ino: 1 } };
+  const trash = { "/T": { kind: "dir" as const, ino: null } };
+  const putBackFile = {
+    kind: "move" as const,
+    from: "/T/a.txt",
+    to: "/Docs/a.txt",
+    id: null,
+    itemKind: "file" as const,
+    parentId: null,
+    putBack: true,
+    stamp: { kind: "file" as const, size: 5, mtimeMs: 1000, entryCount: null },
+  };
+  const inTrash = disk({ ...docs, ...trash, "/T/a.txt": { kind: "file", ino: null, size: 5 } });
+  const cantCheck = (name: string) => ({
+    ok: false,
+    reason: `“${name}” couldn't be checked: A disk error occurred.`,
+    missing: false,
+    retry: true,
+  });
+
+  it("keeps a step whose item in the Trash can't be looked at again", async () => {
+    // Found, then not read for how it looks: looked for again.
+    const lookedAgain = (third: string | null) =>
+      troubled(inTrash, (look, path, count) =>
+        look === "lstat" && path === "/T/a.txt" && count >= 2
+          ? count === 2
+            ? "EIO"
+            : third
+          : null,
+      );
+
+    expect(await checkMove(lookedAgain("ENOENT"), putBackFile)).toMatchObject({
+      ok: false,
+      missing: true,
+    });
+    expect(await checkMove(lookedAgain("EIO"), putBackFile)).toEqual(cantCheck("a.txt"));
+    expect(await checkMove(lookedAgain(null), putBackFile)).toEqual({
+      ok: false,
+      reason: "“a.txt” couldn't be checked.",
+      missing: false,
+      retry: true,
+    });
+  });
+
+  it("keeps a step whose folder in the Trash can't be listed", async () => {
+    const folder = disk({ ...docs, ...trash, "/T/F": { kind: "dir", ino: null } });
+    const unlisted = troubled(folder, (look) => (look === "readdir" ? "EACCES" : null));
+
+    expect(
+      await checkMove(unlisted, {
+        ...putBackFile,
+        from: "/T/F",
+        to: "/Docs/F",
+        itemKind: "directory",
+        stamp: { kind: "directory", size: null, mtimeMs: 1000, entryCount: 0 },
+      }),
+    ).toEqual({ ok: false, reason: "“F” couldn't be checked.", missing: false, retry: true });
+  });
+
+  it("keeps a step whose folder, or the place it goes back to, can't be looked at", async () => {
+    const item = disk({ ...docs, "/Docs/b.txt": { kind: "file", ino: 10 } });
+
+    expect(
+      await checkMove(
+        troubled(item, (look, path) => (look === "stat" && path === "/Docs" ? "EIO" : null)),
+        moveBack(),
+      ),
+    ).toEqual(cantCheck("Docs"));
+    expect(
+      await checkMove(
+        troubled(item, (look, path) => (look === "lstat" && path === "/Docs/a.txt" ? "EIO" : null)),
+        moveBack(),
+      ),
+    ).toEqual(cantCheck("a.txt"));
+  });
+
+  it("finds a name taken by another item that differs from it only in case", async () => {
+    const fs = disk({
+      ...docs,
+      "/Docs/b.txt": { kind: "file", ino: 10 },
+      "/Docs/B.txt": { kind: "file", ino: 11 },
+    });
+
+    expect(await checkMove(fs, moveBack({ to: "/Docs/B.txt" }))).toMatchObject({
+      ok: true,
+      nameTaken: true,
+      renamesItself: false,
+    });
+  });
+
+  it("keeps a step to move to the Trash an item it can't look at", async () => {
+    const fs = troubled(disk({ "/a": { kind: "file", ino: 10 } }), () => "EIO");
+
+    expect(
+      await checkTrash(fs, {
+        kind: "trash",
+        path: "/a",
+        id: id(10),
+        stamp: null,
+        putBack: false,
+        unlock: true,
+      }),
+    ).toEqual(cantCheck("a"));
+  });
+
+  it("finds an item changed when the very item is now another kind", async () => {
+    expect(
+      await checkTrash(disk({ "/a": { kind: "dir", ino: 10 } }), {
+        kind: "trash",
+        path: "/a",
+        id: id(10),
+        stamp: { kind: "file", size: 0, mtimeMs: 1000, entryCount: null },
+        putBack: false,
+        unlock: true,
+      }),
+    ).toEqual({ ok: true, changed: true, id: id(10) });
+  });
+
+  it("keeps the items of a batch it can't look at, or whose names it can't", async () => {
+    const fs = troubled(
+      disk({
+        "/D": { kind: "dir", ino: 1 },
+        "/D/a": { kind: "file", ino: 10 },
+        "/D/b": { kind: "file", ino: 11 },
+        "/D/c": { kind: "file", ino: 12 },
+        "/D/fat": { kind: "file", ino: null },
+      }),
+      (look, path) => (look === "lstat" && (path === "/D/a" || path === "/D/y") ? "EIO" : null),
+    );
+
+    const checks = await checkBatch(fs, {
+      kind: "batch",
+      items: [
+        { from: "/D/a", to: "/D/x", id: id(10), itemKind: "file" },
+        { from: "/D/b", to: "/D/y", id: id(11), itemKind: "file" },
+        { from: "/D/c", to: "/D/fat", id: id(12), itemKind: "file" },
+      ],
+    });
+
+    expect(checks.map((check) => [check.refusal?.reason ?? null, check.nameTaken])).toEqual([
+      ["“a” couldn't be checked: A disk error occurred.", false],
+      ["“y” couldn't be checked: A disk error occurred.", false],
+      // An item without an id in the way is never taken for one of the batch.
+      [null, true],
+    ]);
+  });
+});

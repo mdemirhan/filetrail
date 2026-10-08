@@ -147,8 +147,6 @@ type UndoRecorder = {
 // is done, in the same look as its stamp (see closeUndoUnit).
 type RecordingStep = UndoStep | { kind: "createdFile"; path: string };
 
-// Something appeared at the destination while writing to it (EEXIST). Handled like a
-// runtime conflict: the person decides what happens to the item.
 // Part of an item being built under a hidden name couldn't be cleared away (an incomplete
 // package inside it): the whole hidden copy is given up, never put in place.
 class StagingCleanupError extends Error {
@@ -157,6 +155,8 @@ class StagingCleanupError extends Error {
   }
 }
 
+// Something appeared at the destination while writing to it (EEXIST). Handled like a
+// runtime conflict: the person decides what happens to the item.
 class DestinationTakenError extends Error {
   constructor(readonly original: unknown) {
     super(original instanceof Error ? original.message : String(original));

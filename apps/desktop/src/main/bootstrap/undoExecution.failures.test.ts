@@ -753,6 +753,66 @@ describe("the Trash not saying where an item went", () => {
   });
 });
 
+describe("an item that can't be checked, with nothing else read", () => {
+  const unreadable = async () => {
+    throw permissionDenied();
+  };
+  const fs = {
+    ...nativeFileSystem,
+    lstat: unreadable,
+    stat: unreadable,
+  } as unknown as WriteOperationFs;
+
+  // Its items may swap names with each other: none of them is renamed until all can be
+  // checked, and the whole batch stays to be tried again.
+  it("keeps a whole rename of several to be tried again", async () => {
+    const items = [
+      { from: "/D/a", to: "/D/b", id: { dev: 1, ino: 10 }, itemKind: "file" as const },
+      { from: "/D/b", to: "/D/a", id: { dev: 1, ino: 11 }, itemKind: "file" as const },
+    ];
+    const run = await runUndo({
+      direction: "undo",
+      units: [{ steps: [{ kind: "batchRenamed", items }] }],
+      fs,
+      signal: new AbortController().signal,
+      homeDev: null,
+    });
+
+    expect(run.items).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        sourcePath: "/D/b",
+        error: "“b” couldn't be checked: You don't have permission to access this item.",
+      }),
+    ]);
+    expect(run.leftover).toEqual([{ steps: [{ kind: "batchRenamed", items }] }]);
+  });
+
+  it("keeps an item to move to the Trash to be tried again", async () => {
+    const step = {
+      kind: "created" as const,
+      path: "/D/a copy",
+      id: { dev: 1, ino: 10 },
+      stamp: null,
+    };
+    const run = await runUndo({
+      direction: "undo",
+      units: [{ steps: [step] }],
+      fs,
+      signal: new AbortController().signal,
+      homeDev: null,
+    });
+
+    expect(run.items).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        error: "“a copy” couldn't be checked: You don't have permission to access this item.",
+      }),
+    ]);
+    expect(run.leftover).toEqual([{ steps: [step] }]);
+  });
+});
+
 describe("an Undo of very many items", () => {
   it("reports each of them, more than a call can take at once", async () => {
     const count = 130_000;

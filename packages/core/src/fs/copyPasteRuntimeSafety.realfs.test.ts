@@ -656,6 +656,33 @@ describe("a folder copied or moved whole", () => {
     };
   }
 
+  // An incomplete package inside a folder being copied, which the disk won't let go of:
+  // the folder around it isn't put in place either, and nothing of it is left.
+  it("copies nothing of a folder whose incomplete package can't be cleared away", async () => {
+    const fileSystem = await packageWithAFailingFile();
+    await mkdir(join(src, "F"));
+    await rename(join(src, "Talk.key"), join(src, "F", "Talk.key"));
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: {
+        ...fileSystem,
+        rm: async (path, options) => {
+          if (basename(path) === "Talk.key") {
+            throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+          }
+          await fileSystem.rm(path, options);
+        },
+      },
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.items[0]?.error).toBe("You don't have permission to access this item.");
+    expect(await readdir(dst)).toEqual([]);
+  });
+
   // As to another disk: no part of the package is left in either place.
   it("moves nothing of a folder some of whose items couldn't be copied", async () => {
     const { result } = await runPaste({
