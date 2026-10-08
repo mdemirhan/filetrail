@@ -77,6 +77,11 @@ function setUp() {
   };
 }
 
+// What the history changed reaches the menu once the task that changed it is done.
+function afterTask(): Promise<void> {
+  return new Promise((resolveTask) => setImmediate(resolveTask));
+}
+
 const oneTab: ApplicationMenuState = {
   ...INITIAL_APPLICATION_MENU_STATE,
   disabledCommands: ["moveTabToNewWindow"],
@@ -182,21 +187,41 @@ describe("ApplicationMenuSync", () => {
     expect(enabled("undo").visible).toBe(true);
   });
 
-  it("builds the menu again only when Undo or Redo should say something else", () => {
+  it("builds the menu again only when Undo or Redo should say something else", async () => {
     const { sync, open, focus, builds } = setUp();
     focus(open("a", 1));
 
     sync.setUndoHistory({ undo: "Move of “a.txt”", redo: null, cantUndo: false });
+    await afterTask();
     expect(builds()).toBe(1);
     expect(sync.undoLabels().undo).toBe("Undo Move of “a.txt”");
     sync.setUndoHistory({ undo: "Move of “a.txt”", redo: null, cantUndo: false });
+    await afterTask();
     expect(builds()).toBe(1);
   });
 
-  it("switches to a text field's own Undo without building the menu again", () => {
+  // An operation's window is told it is done right after the history changes: building the
+  // menu first kept it waiting.
+  it("builds the menu after the task that changed the history, once for all its changes", async () => {
+    const { sync, open, focus, builds } = setUp();
+    focus(open("a", 1));
+    const order: string[] = [];
+
+    sync.setUndoHistory({ undo: "Move of “a.txt”", redo: null, cantUndo: false });
+    sync.setUndoHistory({ undo: "Rename", redo: null, cantUndo: false });
+    order.push(`window told, ${builds()} builds`);
+    await afterTask();
+    order.push(`${builds()} builds`);
+
+    expect(order).toEqual(["window told, 0 builds", "1 builds"]);
+    expect(sync.undoLabels().undo).toBe("Undo Rename");
+  });
+
+  it("switches to a text field's own Undo without building the menu again", async () => {
     const { sync, open, focus, builds, enabled } = setUp();
     focus(open("a", 1));
     sync.setUndoHistory({ undo: "Move of “a.txt”", redo: "Rename", cantUndo: false });
+    await afterTask();
     const built = builds();
 
     sync.setWindowState(1, { ...INITIAL_APPLICATION_MENU_STATE, textEditing: true });
@@ -222,11 +247,12 @@ describe("ApplicationMenuSync", () => {
     expect(enabled("newWindow").enabled).toBe(true);
   });
 
-  it("stops naming the last operation in Undo once the last window has closed", () => {
+  it("stops naming the last operation in Undo once the last window has closed", async () => {
     const { sync, open, list, focus, builds, enabled } = setUp();
     const a = open("a", 1);
     focus(a);
     sync.setUndoHistory({ undo: "Move of “a.txt”", redo: null, cantUndo: false });
+    await afterTask();
     expect(builds()).toBe(1);
 
     list.remove("a");
@@ -250,7 +276,7 @@ describe("ApplicationMenuSync", () => {
     expect(enabled("moveTabToNewWindow").enabled).toBe(true);
   });
 
-  it("does nothing before the menu is built", () => {
+  it("does nothing before the menu is built", async () => {
     const sync = new ApplicationMenuSync<FakeWindow>({
       windows: new ExplorerWindowList<FakeWindow>(),
       focusedWindow: () => null,
@@ -260,6 +286,7 @@ describe("ApplicationMenuSync", () => {
       },
     });
     sync.setUndoHistory({ undo: "Rename", redo: null, cantUndo: false });
+    await afterTask();
     sync.sync();
     expect(sync.undoLabels().undo).toBe("Undo Rename");
   });

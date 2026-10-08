@@ -33,6 +33,9 @@ export class ApplicationMenuSync<W extends MenuWindow> {
   private undoHistory: UndoHistoryMenu = { undo: null, redo: null, cantUndo: false };
   // The words the menu was last built with.
   private builtUndoLabels = "";
+  // Whether the menu is to be brought up to date with the history once the task that
+  // changed it is done.
+  private undoRefreshQueued = false;
 
   constructor(
     private readonly deps: {
@@ -68,9 +71,21 @@ export class ApplicationMenuSync<W extends MenuWindow> {
     this.refresh();
   }
 
+  /**
+   * The history changes as an operation ends, just before its window is told: the menu,
+   * which can take a while to build, is brought up to date after that, once for all the
+   * changes made in the meantime.
+   */
   setUndoHistory(menu: UndoHistoryMenu): void {
     this.undoHistory = menu;
-    this.refresh();
+    if (this.undoRefreshQueued) {
+      return;
+    }
+    this.undoRefreshQueued = true;
+    setImmediate(() => {
+      this.undoRefreshQueued = false;
+      this.refresh();
+    });
   }
 
   /**
