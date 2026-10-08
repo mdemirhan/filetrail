@@ -158,8 +158,11 @@ export function useExplorerDragAndDrop(args: {
    * take them as files; answers when the drag ends.
    */
   startFileDrag: (items: InternalDragItem[]) => Promise<FileDragResult>;
-  /** Which of the paths are gone from where they were (`system:findDraggedAway`). */
-  findDraggedAway: (paths: string[]) => Promise<string[]>;
+  /**
+   * Which of the paths are gone from where they were (`system:findDraggedAway`); `intoTrash`
+   * when the Dock's Trash took them.
+   */
+  findDraggedAway: (paths: string[], options: { intoTrash: boolean }) => Promise<string[]>;
   /** Items dragged out that another app moved away or put in the Trash. */
   onDraggedAway: (gonePaths: string[], options: { intoTrash: boolean }) => void;
   /** The folder on screen; once a drag has sprung into it, it takes drops itself. */
@@ -585,7 +588,7 @@ export function useExplorerDragAndDrop(args: {
       await wait(delayMs);
       let gone: string[];
       try {
-        gone = await findDraggedAway(remaining);
+        gone = await findDraggedAway(remaining, options);
       } catch {
         return;
       }

@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppLogEntry,
   CopyPasteClipboard,
+  DraggedAway,
   FolderChange,
   HelpTopic,
   IpcChannel,
@@ -40,6 +41,7 @@ type InvokeApi = {
   onFolderChanged(listener: (change: FolderChange) => void): () => void;
   onClipboardChanged(listener: (clipboard: CopyPasteClipboard) => void): () => void;
   onWriteOperationAdopted(listener: (adoption: WriteOperationAdoption) => void): () => void;
+  onDraggedAway(listener: (change: DraggedAway) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -124,6 +126,15 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:writeOperationAdopted", handleAdoption);
     return () => {
       ipcRenderer.removeListener("filetrail:writeOperationAdopted", handleAdoption);
+    };
+  },
+  onDraggedAway: (listener) => {
+    const handleChange = (_event: unknown, change: DraggedAway) => {
+      listener(change);
+    };
+    ipcRenderer.on("filetrail:draggedAway", handleChange);
+    return () => {
+      ipcRenderer.removeListener("filetrail:draggedAway", handleChange);
     };
   },
   onShowSettingsTab: (listener) => {

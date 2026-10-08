@@ -2979,7 +2979,7 @@ describe("dragging items out to Finder and other apps", () => {
     await endDrag(harness, "move");
     await waitMs(300);
 
-    expect(checksFor(harness)).toEqual([{ paths: [source] }]);
+    expect(checksFor(harness)).toEqual([{ paths: [source], intoTrash: false }]);
     expect(clipboardButton()).toBeNull();
   });
 
@@ -2996,6 +2996,8 @@ describe("dragging items out to Finder and other apps", () => {
     await endDrag(harness, "delete");
     await waitMs(300);
 
+    // The main process measures the Trash again too.
+    expect(checksFor(harness)).toEqual([{ paths: [source], intoTrash: true }]);
     expect(clipboardButton()).toBeNull();
   });
 

@@ -3,6 +3,7 @@ import { createContext, useContext, useRef } from "react";
 import type {
   AppLogEntry,
   CopyPasteClipboard,
+  DraggedAway,
   FolderChange,
   HelpTopic,
   IpcChannel,
@@ -36,6 +37,8 @@ export type FiletrailClient = {
   onClipboardChanged?(listener: (clipboard: CopyPasteClipboard) => void): () => void;
   // A running operation this window takes over from one that closed.
   onWriteOperationAdopted?(listener: (adoption: WriteOperationAdoption) => void): () => void;
+  // Items a drag out of another window took away.
+  onDraggedAway?(listener: (change: DraggedAway) => void): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =

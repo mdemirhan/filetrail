@@ -1,8 +1,10 @@
 import { createRequire } from "node:module";
+import { join } from "node:path";
 
 import type { Stats } from "node:fs";
 
 import {
+  type DraggedAway,
   type FileDragImage,
   type IpcRequest,
   type IpcResponse,
@@ -103,12 +105,15 @@ export function decodeImageDataUrl(dataUrl: string | null): Buffer | null {
 
 // The dragged items no longer where they were. A link counts as itself, not what it points
 // to, and an item that can't be looked at for another reason (a disk gone to sleep) is not
-// taken for gone. The listings and sizes of what they left are read again.
+// taken for gone. The listings and sizes of what they left are read again, and of the Trash
+// when it took them; the other windows are told, to forget the sizes they show.
 export async function findDraggedAway(
   payload: IpcRequest<"system:findDraggedAway">,
   deps: {
     lstatFn?: (path: string) => Promise<unknown>;
     clearCaches?: (changedPaths: readonly string[]) => void;
+    homePath?: string;
+    tellOtherWindows?: (change: DraggedAway) => void;
   } = {},
 ): Promise<IpcResponse<"system:findDraggedAway">> {
   const lstatFn = deps.lstatFn ?? originalFs().promises.lstat;
@@ -124,7 +129,11 @@ export async function findDraggedAway(
   );
   const gone = payload.paths.filter((_path, index) => answers[index]);
   if (gone.length > 0) {
-    (deps.clearCaches ?? clearResponseCaches)(gone);
+    const intoTrash = payload.intoTrash === true;
+    (deps.clearCaches ?? clearResponseCaches)(
+      intoTrash ? [...gone, join(deps.homePath ?? app.getPath("home"), ".Trash")] : gone,
+    );
+    deps.tellOtherWindows?.({ gone, intoTrash });
   }
   return { gone };
 }

@@ -471,7 +471,16 @@ export async function bootstrapMainProcess(
       "system:getVolumeInfo": (payload) => getVolumeInfo(payload),
       "system:getDiskIds": (payload) => getDiskIds(payload),
       "system:startFileDrag": (payload, event) => startFileDrag(payload, event),
-      "system:findDraggedAway": (payload) => findDraggedAway(payload),
+      "system:findDraggedAway": (payload, event) =>
+        findDraggedAway(payload, {
+          tellOtherWindows: (change) => {
+            for (const window of BrowserWindow.getAllWindows()) {
+              if (!window.isDestroyed() && window.webContents !== event.sender) {
+                window.webContents.send("filetrail:draggedAway", change);
+              }
+            }
+          },
+        }),
       "system:readDraggedIn": () => readDraggedIn(),
       "system:bringWindowToFront": (_payload, event) => bringWindowToFront(event),
       "system:pickApplication": (_payload, event) => pickApplication(event),

@@ -1239,8 +1239,8 @@ export function App() {
         images: measureFileDragImages(paths, getLoadedFileThumbnail),
       });
     },
-    findDraggedAway: async (paths) =>
-      (await client.invoke("system:findDraggedAway", { paths })).gone,
+    findDraggedAway: async (paths, { intoTrash }) =>
+      (await client.invoke("system:findDraggedAway", { paths, intoTrash })).gone,
     onDraggedAway: (gonePaths, { intoTrash }) => {
       folderSizeCache.forgetChangedSizes(gonePaths, { intoTrash });
       followItemsGoneElsewhere(gonePaths);

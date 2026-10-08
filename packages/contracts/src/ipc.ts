@@ -1343,10 +1343,12 @@ export const ipcContractSchemas = {
   },
   // Which of the items a drag took out of the app are gone from where they were (another
   // app moved them, or put them in the Trash). Their folders' listings and sizes are read
-  // again, as after a move of the app's own.
+  // again, as after a move of the app's own; `intoTrash` when the Dock's Trash took them,
+  // so the Trash's size is measured again too.
   "system:findDraggedAway": {
     request: z.object({
       paths: absolutePathListSchema,
+      intoTrash: z.boolean().optional(),
     }),
     response: z.object({
       gone: z.array(z.string()),
@@ -1522,6 +1524,9 @@ export type WriteOperationAdoption = {
   event: WriteOperationProgressEvent | null;
   clearsCutClipboard?: string;
 };
+// Items a drag out of another window took away (another app moved them, or the Dock's Trash
+// took them), as `system:findDraggedAway` found them gone.
+export type DraggedAway = { gone: string[]; intoTrash: boolean };
 export type SettingsTab = z.output<typeof settingsTabSchema>;
 export type Volume = z.output<typeof volumeSchema>;
 export type FolderChange = z.output<typeof folderChangeSchema>;

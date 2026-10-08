@@ -1,6 +1,7 @@
 import type {
   AppLogEntry,
   CopyPasteClipboard,
+  DraggedAway,
   FolderChange,
   HelpTopic,
   IpcChannel,
@@ -37,6 +38,8 @@ declare global {
       onClipboardChanged?(listener: (clipboard: CopyPasteClipboard) => void): () => void;
       // A running operation this window takes over from one that closed.
       onWriteOperationAdopted?(listener: (adoption: WriteOperationAdoption) => void): () => void;
+      // Items a drag out of another window took away.
+      onDraggedAway?(listener: (change: DraggedAway) => void): () => void;
     };
   }
 }

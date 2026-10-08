@@ -127,6 +127,26 @@ describe("findDraggedAway", () => {
     expect(clearCaches).toHaveBeenCalledWith(["/Users/demo/moved.txt"]);
   });
 
+  it("has the Trash measured again when the Dock's Trash took them, and tells the other windows", async () => {
+    const clearCaches = vi.fn();
+    const tellOtherWindows = vi.fn();
+    await findDraggedAway(
+      { paths: ["/Users/demo/old.zip"], intoTrash: true },
+      {
+        lstatFn: async () => Promise.reject(missing()),
+        clearCaches,
+        homePath: "/Users/demo",
+        tellOtherWindows,
+      },
+    );
+
+    expect(clearCaches).toHaveBeenCalledWith(["/Users/demo/old.zip", "/Users/demo/.Trash"]);
+    expect(tellOtherWindows).toHaveBeenCalledWith({
+      gone: ["/Users/demo/old.zip"],
+      intoTrash: true,
+    });
+  });
+
   it("leaves the caches alone when everything is still there", async () => {
     const clearCaches = vi.fn();
     await expect(
