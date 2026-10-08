@@ -1,13 +1,19 @@
 import { dirname } from "node:path";
 
-// A folder's measured size, and the disk it was measured on: a measurement never leaves
-// the disk it starts on, so only the folders below on the same disk are in its total.
+import { createChangeMatcher } from "@filetrail/contracts";
+
+// A folder's measured size, the disk it was measured on, and the measurement that stored
+// it. A measurement never leaves the disk it starts on, so only the folders below on the
+// same disk are in its total. The sizes one measurement stores add up: a folder's total is
+// what it measured of the folders inside. Sizes from different measurements may not (the
+// folder inside measured again after it grew), so one is never taken off the other.
 export type FolderSizeStats = {
   sizeBytes: number;
   diskBytes: number;
   fileCount: number;
   folderCount: number;
   dev: number | null;
+  measurement: number;
 };
 
 // One item as a measurement counts it inside its folder (nativeItemSize): a file or symlink
@@ -35,7 +41,7 @@ export type RemovedItem = {
 export type HomeTrash = { path: string; counted: boolean | null };
 
 type Counted = "yes" | "no" | "unknown";
-type Contribution = Omit<FolderSizeStats, "dev">;
+type Contribution = Omit<FolderSizeStats, "dev" | "measurement">;
 
 // After a delete, each measured folder that held a removed item has the item taken off
 // its size instead of being forgotten, when its measurement is known to have counted the
@@ -106,7 +112,9 @@ function adjustForRemoval(
     if (sign === 0) {
       continue;
     }
-    const contribution = item ? contributionTo(cache, path, item, folder) : null;
+    // Taken off, it is what this folder's measurement counted of it; added (it landed in
+    // the Trash), it brings its own size as last measured.
+    const contribution = item ? contributionTo(cache, path, item, folder, sign < 0) : null;
     changes.push({
       folder,
       change: contribution ? scale(contribution, sign) : null,
@@ -128,11 +136,13 @@ function adjustForRemoval(
 }
 
 // Whether the measurement of `folder` counted what is directly in `from` (inside it): it
-// walked down to `from` when every folder on the way has a size from the same disk. A
-// folder on the way without one may not have been readable, or was forgotten since.
+// walked down to `from` when every folder on the way has a size it stored, from the same
+// disk. A folder on the way without one may not have been readable (or was a firmlink, or a
+// link to a folder), or was forgotten since; one stored by another measurement may hold
+// more or less than this one counted of it.
 function countedIn(cache: Map<string, FolderSizeStats>, from: string, folder: string): Counted {
-  const folderDev = cache.get(folder)?.dev ?? null;
-  if (folderDev === null) {
+  const folderStats = cache.get(folder);
+  if (!folderStats || folderStats.dev === null) {
     return "unknown";
   }
   let current = from;
@@ -141,8 +151,11 @@ function countedIn(cache: Map<string, FolderSizeStats>, from: string, folder: st
     if (!stats || stats.dev === null) {
       return "unknown";
     }
-    if (stats.dev !== folderDev) {
+    if (stats.dev !== folderStats.dev) {
       return "no";
+    }
+    if (stats.measurement !== folderStats.measurement) {
+      return "unknown";
     }
     if (current === folder) {
       return "yes";
@@ -155,12 +168,15 @@ function countedIn(cache: Map<string, FolderSizeStats>, from: string, folder: st
   }
 }
 
-// What the item added to the measurement of `folder`, which counted its parent folder.
+// What the item added to the measurement of `folder`, which counted its parent folder. A
+// folder's contents count as its own size, which with `sameMeasurement` must be the one
+// `folder`'s measurement stored.
 function contributionTo(
   cache: Map<string, FolderSizeStats>,
   path: string,
   item: ItemSize,
   folder: string,
+  sameMeasurement: boolean,
 ): Contribution | null {
   if (item.kind === "file") {
     return {
@@ -173,12 +189,13 @@ function contributionTo(
   if (item.kind === "other") {
     return { sizeBytes: 0, diskBytes: 0, fileCount: 0, folderCount: 0 };
   }
+  const holder = cache.get(folder);
   // A folder on another disk is counted as a folder, and nothing inside it.
-  if (item.dev !== cache.get(folder)?.dev) {
+  if (item.dev !== holder?.dev) {
     return { sizeBytes: 0, diskBytes: 0, fileCount: 0, folderCount: 1 };
   }
   const own = cache.get(path);
-  if (!own || own.dev !== item.dev) {
+  if (!own || own.dev !== item.dev || (sameMeasurement && own.measurement !== holder.measurement)) {
     return null;
   }
   return {
@@ -207,20 +224,21 @@ function add(stats: FolderSizeStats, change: Contribution): FolderSizeStats | nu
     fileCount: stats.fileCount + change.fileCount,
     folderCount: stats.folderCount + change.folderCount,
     dev: stats.dev,
+    measurement: stats.measurement,
   };
   return next.sizeBytes < 0 || next.diskBytes < 0 || next.fileCount < 0 || next.folderCount < 0
     ? null
     : next;
 }
 
-// One pass over the cache: each path is looked up with each of its folders.
+// One pass over the cache, each path looked up with each of its folders.
 function forgetAtOrInside(cache: Map<string, FolderSizeStats>, paths: readonly string[]): void {
   if (paths.length === 0) {
     return;
   }
-  const removed = new Set(paths);
-  for (const cachedPath of [...cache.keys()]) {
-    if (removed.has(cachedPath) || ancestorsOf(cachedPath).some((folder) => removed.has(folder))) {
+  const removed = createChangeMatcher(paths);
+  for (const cachedPath of cache.keys()) {
+    if (removed.isAtOrInsideChange(cachedPath)) {
       cache.delete(cachedPath);
     }
   }
