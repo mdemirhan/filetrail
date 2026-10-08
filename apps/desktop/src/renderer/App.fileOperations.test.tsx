@@ -3020,6 +3020,43 @@ describe("dragging items out to Finder and other apps", () => {
     expect(clipboardButton()).toBeNull();
   });
 
+  it("notices a move that finishes long after the drag ended, for a minute", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem(source);
+    await pressKey({ key: "c", metaKey: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(source);
+    await endDrag(harness, "move");
+    // A move to another disk: copied, then the original deleted.
+    await waitMs(20_000);
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
+    harness.markGoneFromDisk([source]);
+    await waitMs(15_000);
+
+    expect(clipboardButton()).toBeNull();
+    const checks = checksFor(harness).length;
+    await waitMs(120_000);
+    expect(checksFor(harness)).toHaveLength(checks);
+  });
+
+  it("stops looking a minute after the drag ended", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(source);
+    await endDrag(harness, "move");
+    await waitMs(61_000);
+    const checks = checksFor(harness).length;
+    await waitMs(120_000);
+
+    expect(checks).toBe(7);
+    expect(checksFor(harness)).toHaveLength(checks);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("keeps everything when the app that took the drop moved nothing", async () => {
     // Terminal says it moved what was dropped on it, but only types the path.
     const harness = createAppHarness();

@@ -20,8 +20,9 @@ import {
 } from "../lib/internalDragAndDrop";
 
 // When the disk is asked which dragged-out items left, after the drag ends: a move in
-// Finder can finish a little after the drop.
-const DRAGGED_AWAY_CHECK_DELAYS_MS = [250, 1000, 3000];
+// Finder can finish a little after the drop, and one to another disk (a copy, then the
+// originals deleted) long after. Less and less often, for a minute.
+const DRAGGED_AWAY_CHECK_DELAYS_MS = [250, 1000, 3000, 6000, 10_000, 15_000, 25_000];
 
 type FileDragResult = {
   started: boolean;
