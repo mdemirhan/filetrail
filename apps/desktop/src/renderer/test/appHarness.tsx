@@ -356,7 +356,8 @@ export function createAppHarness(
   ) => void;
   // How many system file drags are still going.
   fileDragsGoing: () => number;
-  // What a drag from another app over the window carries, from now on.
+  // What a drag from another app over the window carries, from now on. The window's own
+  // drags put theirs there as they start (with the next change count), as the system does.
   setDraggedIn: (contents: IpcResponse<"system:readDraggedIn">) => void;
   // Whether the window is in front, as asking it to come forward finds.
   setWindowComesToFront: (comes: boolean) => void;
@@ -873,12 +874,24 @@ export function createAppHarness(
         } as IpcResponse<C>;
       }
       if (channel === "system:startFileDrag") {
+        // The drag is on the system's drag pasteboard from its start, as a new drag.
+        const { paths, directories } = payload as IpcRequestInput<"system:startFileDrag">;
+        draggedIn = {
+          changeCount: draggedIn.changeCount + 1,
+          items: paths.map((path, index) => ({
+            path,
+            kind: directories[index] ? "directory" : "file",
+          })),
+        };
         return new Promise<IpcResponse<C>>((resolve) => {
           fileDragEnds.push((response) => resolve(response as IpcResponse<C>));
         });
       }
       if (channel === "system:readDraggedIn") {
         return draggedIn as IpcResponse<C>;
+      }
+      if (channel === "system:readDragChangeCount") {
+        return { changeCount: draggedIn.changeCount } as IpcResponse<C>;
       }
       if (channel === "system:bringWindowToFront") {
         return { focused: windowComesToFront } as IpcResponse<C>;
@@ -987,6 +1000,10 @@ export function createAppHarness(
           preferencesChangedListener = null;
         }
       };
+      },
+    // A dropped file is where `createDroppedFile` says it is.
+    getPathForFile(file) {
+      return (file as File & { diskPath?: string }).diskPath ?? "";
     },
   };
 
@@ -1152,6 +1169,13 @@ export function createMockDataTransfer(): DataTransfer {
     }),
     setDragImage: vi.fn(),
   } as unknown as DataTransfer;
+}
+
+// A file a drop hands the page, at `path` on disk (as the preload bridge finds it).
+export function createDroppedFile(path: string): File {
+  return Object.assign(new File([""], path.slice(path.lastIndexOf("/") + 1)), {
+    diskPath: path,
+  });
 }
 
 export async function dragBetween(source: HTMLElement, target: HTMLElement): Promise<DataTransfer> {

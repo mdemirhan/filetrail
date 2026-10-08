@@ -21,6 +21,7 @@ import { getDiskIds } from "./bootstrap/diskIds";
 import {
   bringWindowToFront,
   findDraggedAway,
+  readDragChangeCount,
   readDraggedIn,
   startFileDrag,
 } from "./bootstrap/fileDrag";
@@ -427,6 +428,7 @@ export async function bootstrapMainProcess(
           },
         }),
       "system:readDraggedIn": () => readDraggedIn(),
+      "system:readDragChangeCount": () => readDragChangeCount(),
       "system:bringWindowToFront": (_payload, event) => bringWindowToFront(event),
       "system:pickApplication": (_payload, event) => pickApplication(event),
       "system:pickDirectory": (payload, event) => pickDirectory(payload, event),

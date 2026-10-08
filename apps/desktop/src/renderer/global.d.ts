@@ -43,6 +43,8 @@ declare global {
       onDraggedAway?(listener: (change: DraggedAway) => void): () => void;
       // Merge All Windows in another window, asking for this window's tabs.
       onMergeRequest?(listener: (request: MergeRequest) => void): () => void;
+      // Where a file dropped on the page is on disk; "" when it isn't one there.
+      getPathForFile?(file: File): string;
     };
   }
 }

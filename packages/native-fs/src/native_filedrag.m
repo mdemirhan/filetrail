@@ -3,8 +3,9 @@
  * Finder, the Dock and other apps take it as files.
  *
  * Exposes nativeStartFileDrag(viewHandle, paths, directories, images, onEnded) → boolean,
- * and nativeReadDragPasteboard() → { changeCount, paths }: the files a drag going on now
- * carries, wherever it came from.
+ * nativeReadDragPasteboard() → { changeCount, paths }: the files a drag going on now
+ * carries, wherever it came from, and nativeReadDragChangeCount() → number: only which drag
+ * that is.
  *
  * Must be called on the main thread (Electron's main process runs JS there). The drag
  * runs in AppKit's event loop; when it ends, `onEnded` is called with what the drop did:
@@ -548,6 +549,20 @@ static napi_value native_read_drag_pasteboard(napi_env env, napi_callback_info i
   return result;
 }
 
+/* ── nativeReadDragChangeCount() ─────────────────────────────────── */
+
+/* Only the drag pasteboard's change count, which every new drag changes: whether the drag
+   over a window is still the one it knows, without reading what it carries. */
+static napi_value native_read_drag_change_count(napi_env env, napi_callback_info info) {
+  (void)info;
+  napi_value result;
+  @autoreleasepool {
+    NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName:NSPasteboardNameDrag];
+    napi_create_int64(env, (int64_t)pasteboard.changeCount, &result);
+  }
+  return result;
+}
+
 /* Called from the main module init in native_copyfile.c. */
 napi_value register_file_drag(napi_env env, napi_value exports) {
   napi_value fn;
@@ -557,5 +572,8 @@ napi_value register_file_drag(napi_env env, napi_value exports) {
   napi_create_function(env, "nativeReadDragPasteboard", NAPI_AUTO_LENGTH,
                        native_read_drag_pasteboard, NULL, &fn);
   napi_set_named_property(env, exports, "nativeReadDragPasteboard", fn);
+  napi_create_function(env, "nativeReadDragChangeCount", NAPI_AUTO_LENGTH,
+                       native_read_drag_change_count, NULL, &fn);
+  napi_set_named_property(env, exports, "nativeReadDragChangeCount", fn);
   return exports;
 }

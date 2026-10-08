@@ -304,3 +304,9 @@ export type DragPasteboardContents = {
  * main thread.
  */
 export function nativeReadDragPasteboard(): DragPasteboardContents;
+
+/**
+ * The drag pasteboard's change count alone (see `DragPasteboardContents`): which drag is
+ * going on now, without reading what it carries. Call on the main thread.
+ */
+export function nativeReadDragChangeCount(): number;

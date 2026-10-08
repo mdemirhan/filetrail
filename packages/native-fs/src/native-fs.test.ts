@@ -1205,4 +1205,13 @@ describe("nativeReadDragPasteboard", () => {
 
     expect(addon.nativeReadDragPasteboard()).toEqual({ changeCount, paths: [] });
   });
+
+  it("tells which drag is going on by its change count alone", () => {
+    const changeCount = writeDragPasteboard(
+      `pasteboard.setStringForType($("some text"), $.NSPasteboardTypeString)`,
+    );
+
+    expect(addon.nativeReadDragChangeCount()).toBe(changeCount);
+    expect(addon.nativeReadDragPasteboard().changeCount).toBe(changeCount);
+  });
 });

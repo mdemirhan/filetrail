@@ -12,6 +12,7 @@ import {
 } from "@filetrail/contracts";
 import type {
   FileDragImage as NativeFileDragImage,
+  nativeReadDragChangeCount,
   nativeReadDragPasteboard,
   nativeStartFileDrag,
 } from "@filetrail/native-fs";
@@ -20,6 +21,7 @@ import { clearResponseCaches } from "./responseCache";
 
 type StartNativeFileDrag = typeof nativeStartFileDrag;
 type ReadNativeDragPasteboard = typeof nativeReadDragPasteboard;
+type ReadNativeDragChangeCount = typeof nativeReadDragChangeCount;
 type DraggedInItem = IpcResponse<"system:readDraggedIn">["items"][number];
 
 const require = createRequire(import.meta.url);
@@ -32,6 +34,12 @@ function loadNativeStartFileDrag(): StartNativeFileDrag {
 function loadNativeReadDragPasteboard(): ReadNativeDragPasteboard {
   return (require("@filetrail/native-fs") as { nativeReadDragPasteboard: ReadNativeDragPasteboard })
     .nativeReadDragPasteboard;
+}
+
+function loadNativeReadDragChangeCount(): ReadNativeDragChangeCount {
+  return (
+    require("@filetrail/native-fs") as { nativeReadDragChangeCount: ReadNativeDragChangeCount }
+  ).nativeReadDragChangeCount;
 }
 
 // A drag that couldn't start: nothing was dropped anywhere.
@@ -178,6 +186,13 @@ export async function readDraggedIn(
     changeCount,
     items: items.filter((item): item is DraggedInItem => item !== null),
   };
+}
+
+// Which drag is going on now, without reading what it carries.
+export function readDragChangeCount(
+  deps: { readDragChangeCount?: ReadNativeDragChangeCount } = {},
+): IpcResponse<"system:readDragChangeCount"> {
+  return { changeCount: (deps.readDragChangeCount ?? loadNativeReadDragChangeCount())() };
 }
 
 // How long after asking the app to come forward it is checked: activation is not at once.

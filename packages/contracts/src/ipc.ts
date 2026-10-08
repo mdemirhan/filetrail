@@ -1438,6 +1438,14 @@ export const ipcContractSchemas = {
         .max(MAX_PATHS_PER_REQUEST),
     }),
   },
+  // Which drag is going on now, by the drag pasteboard's change count alone (see
+  // `system:readDraggedIn`): whether a drag over the window is still the one it knows.
+  "system:readDragChangeCount": {
+    request: emptyRequestSchema,
+    response: z.object({
+      changeCount: z.number().int(),
+    }),
+  },
   // Brings the window and the app to the front, for a question or an error about a drop
   // from another app that came while another app was in front. Where macOS won't let the
   // app come forward, its Dock icon bounces once. `focused` says whether it was in front.

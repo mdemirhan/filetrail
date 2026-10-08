@@ -8,6 +8,7 @@ import {
   bringWindowToFront,
   decodeImageDataUrl,
   findDraggedAway,
+  readDragChangeCount,
   readDraggedIn,
   startFileDrag,
 } from "./fileDrag";
@@ -222,6 +223,12 @@ describe("readDraggedIn", () => {
       }),
     ).resolves.toEqual({ changeCount: 1, items: [] });
     expect(lstatFn).not.toHaveBeenCalled();
+  });
+});
+
+describe("readDragChangeCount", () => {
+  it("tells which drag is going on, without reading what it carries", () => {
+    expect(readDragChangeCount({ readDragChangeCount: () => 12 })).toEqual({ changeCount: 12 });
   });
 });
 

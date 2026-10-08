@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 import type {
   AppLogEntry,
@@ -44,6 +44,7 @@ type InvokeApi = {
   onWriteOperationAdopted(listener: (adoption: WriteOperationAdoption) => void): () => void;
   onDraggedAway(listener: (change: DraggedAway) => void): () => void;
   onMergeRequest(listener: (request: MergeRequest) => void): () => void;
+  getPathForFile(file: unknown): string;
 };
 
 const api: InvokeApi = {
@@ -156,6 +157,18 @@ const api: InvokeApi = {
     return () => {
       ipcRenderer.removeListener("filetrail:showSettingsTab", handleTab);
     };
+  },
+  // Where a file dropped on the page is on disk; "" for anything else (a file the page made
+  // itself, or something that isn't a file).
+  getPathForFile: (file) => {
+    // Checked by Electron itself: a File from the page's own world needn't be one of this
+    // world's.
+    try {
+      const path = webUtils.getPathForFile(file as File);
+      return typeof path === "string" ? path : "";
+    } catch {
+      return "";
+    }
   },
 };
 

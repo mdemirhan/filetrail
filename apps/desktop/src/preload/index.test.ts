@@ -3,6 +3,7 @@ const electronMock = vi.hoisted(() => ({
   invoke: vi.fn(),
   on: vi.fn(),
   removeListener: vi.fn(),
+  getPathForFile: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -13,6 +14,9 @@ vi.mock("electron", () => ({
     invoke: electronMock.invoke,
     on: electronMock.on,
     removeListener: electronMock.removeListener,
+  },
+  webUtils: {
+    getPathForFile: electronMock.getPathForFile,
   },
 }));
 
@@ -26,6 +30,7 @@ async function importPreload() {
     onWriteOperationProgress: (listener: (event: unknown) => void) => () => void;
     onCopyPasteProgress: (listener: (event: unknown) => void) => () => void;
     onPreferencesChanged: (listener: (patch: unknown) => void) => () => void;
+    getPathForFile: (file: unknown) => string;
   };
 }
 
@@ -160,5 +165,21 @@ describe("preload bridge", () => {
       "filetrail:writeOperationProgress",
       registeredHandler,
     );
+  });
+
+  it("tells where a dropped file is on disk, and nothing for what isn't a file", async () => {
+    const api = await importPreload();
+    const file = { name: "a.txt" };
+    electronMock.getPathForFile.mockImplementation((candidate: unknown) => {
+      if (candidate !== file) {
+        throw new TypeError("not a File");
+      }
+      return "/Users/other/a.txt";
+    });
+
+    expect(api.getPathForFile(file)).toBe("/Users/other/a.txt");
+    expect(api.getPathForFile("a.txt")).toBe("");
+    electronMock.getPathForFile.mockReturnValue(undefined);
+    expect(api.getPathForFile(file)).toBe("");
   });
 });
