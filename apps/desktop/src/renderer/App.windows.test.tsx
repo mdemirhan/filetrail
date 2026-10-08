@@ -1001,6 +1001,72 @@ describe("App windows", () => {
     });
   });
 
+  // The tabs behind it followed; the tab on screen found its folder gone instead.
+  it("follows a folder on screen that another window renamed, in place in its history", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo/Renamed": {
+          path: "/Users/demo/Renamed",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+    });
+    await ready(harness);
+    await openDirectory("/Users/demo/Folder");
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "other-rename",
+        action: "rename",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "other-rename",
+          action: "rename",
+          status: "completed",
+          targetPath: "/Users/demo/Renamed",
+          startedAt: "2026-10-08T10:00:00.000Z",
+          finishedAt: "2026-10-08T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: null,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/Folder",
+              destinationPath: "/Users/demo/Renamed",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Renamed"),
+    );
+    // It took the folder's place in the history: Back goes where it went before.
+    await pressKey({ key: "[", metaKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/),
+    );
+  });
+
   it("marks its background tabs out of date when another window's operation ends", async () => {
     const harness = createAppHarness();
     await ready(harness);

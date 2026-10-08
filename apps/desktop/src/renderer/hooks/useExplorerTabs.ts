@@ -892,8 +892,9 @@ export function useExplorerTabs(args: {
     return () => window.clearInterval(timer);
   }, [hasBackgroundSearch]);
 
-  // A folder renamed or moved by this window takes the background tabs showing it (or a
-  // folder inside it) along to its new place.
+  // A folder renamed or moved, by this window or another, takes the background tabs showing
+  // it (or a folder inside it) along to its new place. The tab on screen follows it too
+  // (useExplorerActions).
   useEffect(
     () =>
       client.onWriteOperationProgress((event) => {

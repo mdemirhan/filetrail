@@ -66,6 +66,7 @@ import {
 import { createEarlyWriteOperationEvents } from "../lib/earlyWriteOperationEvents";
 import { resolveEntriesAtPaths } from "../lib/entriesAtPaths";
 import {
+  collectFollowedMoves,
   collectRetrySourcePaths,
   createOpenItemLimitMessage,
   describeDragRefusedWhileBusy,
@@ -79,6 +80,7 @@ import {
   isExpectedPlannedSkipResult,
   isFolderSizeEligibleKind,
   isTerminalWriteStatus,
+  movedItems,
   pathsLeftByWrite,
   resolveFreeNewFolderName,
   resolveNewFolderTargetPath,
@@ -89,6 +91,7 @@ import {
   shouldRenderCopyPasteResultDialog,
 } from "../lib/explorerAppUtils";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
+import { followMovedPath } from "../lib/explorerTabs";
 import type { DirectoryEntry } from "../lib/explorerTypes";
 import {
   createFavorite,
@@ -936,6 +939,20 @@ export function useExplorerActions(args: {
     }
   }
 
+  // A folder another window renamed or moved takes the tab on screen along (or one inside
+  // it), in place in its history, as this window's own operations and its tabs in the
+  // background do (useExplorerTabs).
+  function followForeignMoveOnScreen(event: WriteOperationProgressEvent) {
+    if (!event.result || !movedItems(event.result)) {
+      return;
+    }
+    const path = currentPathRef.current;
+    const followedPath = followMovedPath(path, collectFollowedMoves(event.result));
+    if (path.length > 0 && followedPath !== path) {
+      void refreshDirectory({ path: followedPath });
+    }
+  }
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: write-operation progress should stay subscribed to stable refs without resubscribing on every ref.current mutation.
   useEffect(() => {
     const handleProgress = (event: WriteOperationProgressEvent) => {
@@ -950,6 +967,7 @@ export function useExplorerActions(args: {
           if (foreignWriteOperationRef.current?.operationId === event.operationId) {
             noteForeignWriteOperation(null);
           }
+          followForeignMoveOnScreen(event);
         } else {
           noteForeignWriteOperation({
             operationId: event.operationId,

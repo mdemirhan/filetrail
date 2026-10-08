@@ -341,7 +341,23 @@ export function leaveUnmountedDisks(
   };
 }
 
-// A background tab shows a folder that was renamed or moved (by this window): it follows
+// Where `path` is after `moves`: a path moved, or one inside a folder moved, goes along.
+export function followMovedPath(
+  path: string,
+  moves: ReadonlyArray<{ from: string; to: string }>,
+): string {
+  for (const move of moves) {
+    if (path === move.from) {
+      return move.to;
+    }
+    if (path.startsWith(`${move.from}/`)) {
+      return `${move.to}${path.slice(move.from.length)}`;
+    }
+  }
+  return path;
+}
+
+// A background tab shows a folder that was renamed or moved (by any window): it follows
 // the folder, as a Finder window does, instead of finding it gone and falling back to the
 // folder above. `moves` maps each item's old path to its new one. The tab's listing is
 // read again, at the new place, when it is shown.
@@ -349,17 +365,7 @@ export function followMovedItems(
   snapshot: TabSnapshot,
   moves: ReadonlyArray<{ from: string; to: string }>,
 ): TabSnapshot {
-  const follow = (path: string): string => {
-    for (const move of moves) {
-      if (path === move.from) {
-        return move.to;
-      }
-      if (path.startsWith(`${move.from}/`)) {
-        return `${move.to}${path.slice(move.from.length)}`;
-      }
-    }
-    return path;
-  };
+  const follow = (path: string) => followMovedPath(path, moves);
   const currentPath = follow(snapshot.currentPath);
   const historyPaths = snapshot.historyPaths.map(follow);
   const treeRootPath = follow(snapshot.treeRootPath);
