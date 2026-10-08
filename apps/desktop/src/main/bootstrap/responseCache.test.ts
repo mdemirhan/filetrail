@@ -9,6 +9,7 @@ import {
   getCachedMetadataBatch,
   getCachedResponse,
   getResponseCacheSizes,
+  noteWriteEnded,
   noteWriteStarting,
   resetResponseCacheState,
   withTiming,
@@ -475,6 +476,26 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.getStatus({ jobId }).status).toBe("cancelled");
   });
 
+  // 400,000 sizes took 7 s, one 10,000-folder take of a walk half a second: each size stored
+  // looked for the oldest from the start of the cache, past all those let go before it.
+  it("keeps up with a walk that stores far more sizes than it keeps", () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    handlers.start({ path: "/Users/demo" });
+    const started = performance.now();
+    for (let take = 0; take < 40; take++) {
+      const dirs: Record<string, [number, number, number, number]> = {};
+      for (let index = take * 10_000; index < (take + 1) * 10_000; index++) {
+        dirs[`/Users/demo/Library/c${index % 400}/d${index}`] = [1, 1, 1, 0];
+      }
+      native.finish(dirs);
+    }
+    // About a second on a laptop; the bound only catches going back to one at a time.
+    expect(performance.now() - started).toBeLessThan(6_000);
+    expect(handlers.getCachedSize("/Users/demo/Library/c399/d399999")).toBe(1);
+    expect(handlers.getCachedSize("/Users/demo/Library/c0/d0")).toBeUndefined();
+  });
+
   describe("folders finished while measuring", () => {
     const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -608,6 +629,42 @@ describe("createFolderSizeHandlers", () => {
       expect(handlers.getCachedSize("/Users/demo/Work/old")).toBe(900);
       expect(handlers.getCachedSize("/Users/demo/Work")).toBe(4_900);
       resetResponseCacheState();
+    });
+
+    // Every size stored after a write started was noted until the next one started.
+    it("adjusts a folder stored while a write ran once that write's end is cleared", async () => {
+      resetResponseCacheState();
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers({ ...native, homePath: "/Users/demo" });
+      noteWriteStarting();
+      handlers.start({ path: "/Users/demo/Projects" });
+      native.finish({ "/Users/demo/Projects/app": [300, 600, 3, 0] });
+      native.resolveActive(
+        JSON.stringify({
+          total: 800,
+          diskTotal: 1_600,
+          fileCount: 6,
+          folderCount: 1,
+          dev: 16,
+          dirs: {},
+        }),
+      );
+      await tick();
+      noteWriteEnded();
+
+      clearResponseCaches(
+        [],
+        [
+          {
+            path: "/Users/demo/Projects/app/a.txt",
+            item: { kind: "file", sizeBytes: 100, diskBytes: 200, dev: 16 },
+            intoHomeTrash: false,
+          },
+        ],
+      );
+
+      expect(handlers.getCachedSize("/Users/demo/Projects/app")).toBe(200);
+      expect(handlers.getCachedSize("/Users/demo/Projects")).toBe(700);
     });
 
     it("learns whether the Trash was read from the folders as they are finished", async () => {

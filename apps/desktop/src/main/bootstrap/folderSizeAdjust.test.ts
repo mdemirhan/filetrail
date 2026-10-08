@@ -7,6 +7,7 @@ import {
   type RemovedItem,
   adjustForRemovals,
 } from "./folderSizeAdjust";
+import { FolderSizeCache } from "./folderSizeCache";
 
 const DISK = 16;
 const OTHER_DISK = 17;
@@ -49,9 +50,12 @@ function adjust(
   removals: RemovedItem[],
   counted: HomeTrash["counted"] = null,
 ): Record<string, FolderSizeStats> {
-  const cache = new Map(Object.entries(entries));
+  const cache = new FolderSizeCache(Number.POSITIVE_INFINITY);
+  for (const [path, entry] of Object.entries(entries)) {
+    cache.store(path, entry);
+  }
   adjustForRemovals(cache, removals, { path: TRASH, counted });
-  return Object.fromEntries(cache);
+  return Object.fromEntries(cache.entries());
 }
 
 describe("adjustForRemovals", () => {

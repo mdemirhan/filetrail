@@ -36,7 +36,7 @@ export default defineConfig({
         "packages/contracts/src/{copyPasteChoices,itemName,paths,trash,writeEffects}.ts",
         "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds,diskHasTrash,batchRenameExecution,batchRenameInspect,undoHistory,undoPlan,undoExecution}.ts",
         // Folder sizes: what a write does to the sizes shown, and how they are measured.
-        "apps/desktop/src/main/bootstrap/{responseCache,folderSizeAdjust}.ts",
+        "apps/desktop/src/main/bootstrap/{responseCache,folderSizeAdjust,folderSizeCache}.ts",
         "apps/desktop/src/renderer/hooks/{useFolderSizeCache,useAutoFolderSize}.ts",
         "apps/desktop/src/shared/batchRename.ts",
         "apps/desktop/src/main/ipc.ts",
@@ -104,6 +104,12 @@ export default defineConfig({
           branches: 95,
           functions: 100,
           lines: 96,
+        },
+        "apps/desktop/src/main/bootstrap/folderSizeCache.ts": {
+          statements: 98,
+          branches: 95,
+          functions: 100,
+          lines: 98,
         },
         "apps/desktop/src/renderer/hooks/useFolderSizeCache.ts": {
           statements: 95,

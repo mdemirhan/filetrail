@@ -39,7 +39,7 @@ import {
 } from "@filetrail/core";
 import { movedItemsOf, runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
-import { clearResponseCaches, noteWriteStarting } from "./responseCache";
+import { clearResponseCaches, noteWriteEnded, noteWriteStarting } from "./responseCache";
 import { runUndo } from "./undoExecution";
 import { type UndoEntry, type UndoHistory, itemStepCount } from "./undoHistory";
 import { type UndoQuestions, findQuestions } from "./undoPlan";
@@ -389,7 +389,9 @@ export function createWriteOperationCoordinator(
       copyPasteRequests.delete(event.operationId);
       copyPasteModes.delete(event.operationId);
       try {
+        // Folder listings read before the operation finished may show the old contents.
         forgetCachedResponses(event.result ? pathsChangedByWrite(event.result) : []);
+        noteWriteEnded();
         const undoLog = pasteUndoLog(event);
         if (undoLog !== null) {
           recordFinishedWrite({ action, log: undoLog, items: event.result?.items ?? [] });
@@ -787,6 +789,7 @@ export function createWriteOperationCoordinator(
           : [],
         removedItems,
       );
+      noteWriteEnded();
       if (undoLog !== undefined) {
         recordFinishedWrite({
           action: event.action,

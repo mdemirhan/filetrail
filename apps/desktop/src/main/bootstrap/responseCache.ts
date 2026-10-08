@@ -1,14 +1,10 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import {
-  type IpcRequest,
-  type IpcResponse,
-  createChangeMatcher,
-  isAffectedByChange,
-} from "@filetrail/contracts";
+import { type IpcRequest, type IpcResponse, isAffectedByChange } from "@filetrail/contracts";
 import type { ExplorerWorkerClient } from "@filetrail/core";
-import { type FolderSizeStats, type RemovedItem, adjustForRemovals } from "./folderSizeAdjust";
+import { type RemovedItem, adjustForRemovals } from "./folderSizeAdjust";
+import { FolderSizeCache } from "./folderSizeCache";
 
 const CACHE_TTL_MS = 3_000;
 // Entries expire after a few seconds. Inserts also sweep expired entries and cap
@@ -59,20 +55,30 @@ const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 // kept if no clear happened while it was loading.
 let cacheGeneration = 0;
 
-// Counts the writes started. A size stored after the latest one started may have been
-// measured after it had already removed something, so taking the removal off it when the
-// write ends could count the removal twice.
-let writesStarted = 0;
+// Each folder-size cache, told what a write changed, and when one starts and ends: a size
+// stored while a write runs may have been measured after it had already removed something,
+// so taking the removal off it when the write ends could count the removal twice.
+type FolderSizeListener = {
+  forget: (changedPaths: readonly string[], removedItems: readonly RemovedItem[]) => void;
+  writeStarting: () => void;
+  writeEnded: () => void;
+};
+const folderSizeListeners = new Set<FolderSizeListener>();
 
 // Called as a write starts changing what is on disk.
 export function noteWriteStarting(): void {
-  writesStarted += 1;
+  for (const listener of folderSizeListeners) {
+    listener.writeStarting();
+  }
 }
 
-// Each folder-size cache, told what a write changed.
-const folderSizeForgetters = new Set<
-  (changedPaths: readonly string[], removedItems: readonly RemovedItem[]) => void
->();
+// Called once what a write changed has been cleared (clearResponseCaches), or when it
+// ended without saying.
+export function noteWriteEnded(): void {
+  for (const listener of folderSizeListeners) {
+    listener.writeEnded();
+  }
+}
 
 // After a write: listings are read again, and the sizes of the folders it touched (what
 // holds them, and what is inside them) are measured again when next asked for. Items a
@@ -87,8 +93,8 @@ export function clearResponseCaches(
   directoryMetadataCache.entries.clear();
   treeChildrenCache.entries.clear();
   if (changedPaths.length > 0 || removedItems.length > 0) {
-    for (const forget of folderSizeForgetters) {
-      forget(changedPaths, removedItems);
+    for (const listener of folderSizeListeners) {
+      listener.forget(changedPaths, removedItems);
     }
   }
 }
@@ -195,7 +201,7 @@ function pruneFinishedFolderSizeJobs(): void {
 export function resetResponseCacheState(): void {
   clearResponseCaches();
   folderSizeJobs.clear();
-  writesStarted = 0;
+  noteWriteEnded();
 }
 
 type MeasuredFolders = {
@@ -217,17 +223,13 @@ export function createFolderSizeHandlers(native: {
   // How many folder sizes are kept (tests use fewer).
   maxFolderSizes?: number;
 }) {
-  // Oldest first: each size stored or asked for goes to the end, and the first go when there
-  // are too many. Only a store adds one, so none goes while removals are taken off.
-  const folderSizeCache = new Map<string, FolderSizeStats>();
-  const maxFolderSizes = native.maxFolderSizes ?? MAX_FOLDER_SIZES;
+  // Only a store adds a size, so none goes while removals are taken off. What was stored
+  // while a write ran is noted there, until its end has been cleared.
+  const folderSizeCache = new FolderSizeCache(native.maxFolderSizes ?? MAX_FOLDER_SIZES);
   // Each measurement run stores its sizes under a number of its own (see FolderSizeStats).
   let measurementCount = 0;
-  // The folders whose sizes were stored since the latest write started.
-  let storedDuringWrite = { write: 0, paths: new Set<string>() };
   const homePath = native.homePath ?? homedir();
   const homeTrashPath = join(homePath, ".Trash");
-  const homeTrash = createChangeMatcher([homeTrashPath]);
   // Whether a measurement that reached the home folder's Trash could read it, and so
   // counted what is in it (only an app with Full Disk Access can): what a move to the
   // Trash does to the sizes of the folders holding the Trash. Learned by measuring, and
@@ -236,37 +238,34 @@ export function createFolderSizeHandlers(native: {
   // A measurement under way when a write changes what it walks may have seen part of the
   // change: it is stopped and run again rather than kept.
   const outdatedJobIds = new Set<string>();
-  folderSizeForgetters.add((changedPaths, removedItems) => {
-    if (changedPaths.length > 0) {
-      const changes = createChangeMatcher(changedPaths);
-      for (const path of folderSizeCache.keys()) {
-        if (changes.isAffected(path)) {
-          folderSizeCache.delete(path);
-        }
+  folderSizeListeners.add({
+    forget: (changedPaths, removedItems) => {
+      folderSizeCache.forgetAffected(changedPaths);
+      forgetStoredDuringWrite(removedItems);
+      adjustForRemovals(folderSizeCache, removedItems, {
+        path: homeTrashPath,
+        counted: homeTrashCounted,
+      });
+      const activeJob = activeJobId ? folderSizeJobs.get(activeJobId) : undefined;
+      const touchedPaths = [
+        ...changedPaths,
+        ...removedItems.flatMap((removed) =>
+          removed.intoHomeTrash === false ? [removed.path] : [removed.path, homeTrashPath],
+        ),
+      ];
+      if (
+        activeJobId &&
+        activeJob?.status === "running" &&
+        !outdatedJobIds.has(activeJobId) &&
+        isAffectedByChange(activeJob.path, touchedPaths)
+      ) {
+        outdatedJobIds.add(activeJobId);
+        // Stopped now rather than left to finish a walk that is thrown away.
+        native.cancelFolderSize();
       }
-    }
-    forgetStoredDuringWrite(removedItems);
-    adjustForRemovals(folderSizeCache, removedItems, {
-      path: homeTrashPath,
-      counted: homeTrashCounted,
-    });
-    const activeJob = activeJobId ? folderSizeJobs.get(activeJobId) : undefined;
-    const touchedPaths = [
-      ...changedPaths,
-      ...removedItems.flatMap((removed) =>
-        removed.intoHomeTrash === false ? [removed.path] : [removed.path, homeTrashPath],
-      ),
-    ];
-    if (
-      activeJobId &&
-      activeJob?.status === "running" &&
-      !outdatedJobIds.has(activeJobId) &&
-      isAffectedByChange(activeJob.path, touchedPaths)
-    ) {
-      outdatedJobIds.add(activeJobId);
-      // Stopped now rather than left to finish a walk that is thrown away.
-      native.cancelFolderSize();
-    }
+    },
+    writeStarting: () => folderSizeCache.startRecording(),
+    writeEnded: () => folderSizeCache.stopRecording(),
   });
   let activeJobId: string | null = null;
   // Measurements waiting for the one that runs, in the order they run. Each window has at
@@ -297,50 +296,19 @@ export function createFolderSizeHandlers(native: {
     backgroundJobIds.delete(jobId);
   }
 
-  function storeSize(path: string, stats: FolderSizeStats): void {
-    folderSizeCache.delete(path);
-    folderSizeCache.set(path, stats);
-    for (const oldest of folderSizeCache.keys()) {
-      if (folderSizeCache.size <= maxFolderSizes) {
-        break;
-      }
-      folderSizeCache.delete(oldest);
-    }
-    if (writesStarted === 0) {
-      return;
-    }
-    if (storedDuringWrite.write !== writesStarted) {
-      storedDuringWrite = { write: writesStarted, paths: new Set() };
-    }
-    storedDuringWrite.paths.add(path);
-  }
-
-  // A size asked for, moved to the end so it is kept longest.
-  function useSize(path: string): FolderSizeStats | undefined {
-    const stats = folderSizeCache.get(path);
-    if (stats) {
-      folderSizeCache.delete(path);
-      folderSizeCache.set(path, stats);
-    }
-    return stats;
-  }
-
   // The sizes stored since the write started of the folders whose totals its removals
   // change (those that held a removed item, and the Trash and those holding it when it went
   // there): they may already leave the item out, so they are measured again instead.
   function forgetStoredDuringWrite(removedItems: readonly RemovedItem[]): void {
-    if (removedItems.length === 0 || storedDuringWrite.write !== writesStarted) {
+    if (removedItems.length === 0) {
       return;
     }
-    const removed = createChangeMatcher(removedItems.map((item) => item.path));
-    const intoTrash = removedItems.some((item) => item.intoHomeTrash !== false);
-    for (const path of storedDuringWrite.paths) {
-      if (
-        removed.holdsChange(path) ||
-        (intoTrash && (path === homeTrashPath || homeTrash.holdsChange(path)))
-      ) {
-        folderSizeCache.delete(path);
-      }
+    folderSizeCache.forgetRecordedHolding(
+      removedItems.map((item) => item.path),
+      false,
+    );
+    if (removedItems.some((item) => item.intoHomeTrash !== false)) {
+      folderSizeCache.forgetRecordedHolding([homeTrashPath], true);
     }
   }
 
@@ -392,7 +360,7 @@ export function createFolderSizeHandlers(native: {
       const dev = measured.dev ?? null;
       let count = 0;
       for (const [dirPath, dirStats] of Object.entries(measured.dirs)) {
-        storeSize(dirPath, {
+        folderSizeCache.store(dirPath, {
           sizeBytes: dirStats[0],
           diskBytes: dirStats[1],
           fileCount: dirStats[2],
@@ -443,7 +411,7 @@ export function createFolderSizeHandlers(native: {
           runAgain = true;
           return;
         }
-        storeSize(path, {
+        folderSizeCache.store(path, {
           sizeBytes: result.total,
           diskBytes: result.diskTotal,
           fileCount: result.fileCount,
@@ -525,7 +493,7 @@ export function createFolderSizeHandlers(native: {
         folderSizeCache.delete(payload.path);
       }
 
-      const cached = useSize(payload.path);
+      const cached = folderSizeCache.use(payload.path);
       if (cached !== undefined) {
         const jobId = generateJobId();
         setFolderSizeJob(jobId, {
@@ -590,7 +558,7 @@ export function createFolderSizeHandlers(native: {
     probeMany(payload: IpcRequest<"folderSize:probeMany">): IpcResponse<"folderSize:probeMany"> {
       const sizes: IpcResponse<"folderSize:probeMany">["sizes"] = [];
       for (const path of payload.paths) {
-        const stats = useSize(path);
+        const stats = folderSizeCache.use(path);
         if (stats) {
           sizes.push({
             path,
