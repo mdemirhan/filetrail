@@ -98,11 +98,56 @@ export type PlanFs = {
 // the item was: no other item is in the way of the steps after it.
 export type Refusal = { reason: string; missing: boolean };
 
+// `id` is the item's id now, when it has one.
 export type MoveCheck =
-  | { ok: true; nameTaken: boolean; renamesItself: boolean; isFolder: boolean }
+  | { ok: true; nameTaken: boolean; renamesItself: boolean; isFolder: boolean; id: ItemId | null }
   | ({ ok: false } & Refusal);
 
-export type TrashCheck = { ok: true; changed: boolean } | ({ ok: false } & Refusal);
+export type TrashCheck =
+  | { ok: true; changed: boolean; id: ItemId | null }
+  | ({ ok: false } & Refusal);
+
+// What the steps before one in the same unit will have done by the time it runs (a Replace
+// moves its new item away before it puts the old one back): the items they move away, by
+// id (and by place, for an item without one: only FAT and exFAT, which ignore case), and
+// the places they move items into.
+export type UnitChanges = {
+  movedAwayIds: Set<string>;
+  movedAwayPaths: Set<string>;
+  filledPlaces: Set<string>;
+};
+
+export function noUnitChanges(): UnitChanges {
+  return { movedAwayIds: new Set(), movedAwayPaths: new Set(), filledPlaces: new Set() };
+}
+
+function idKey(id: ItemId): string {
+  return `${id.dev}:${id.ino}`;
+}
+
+// A place compared as a disk that ignores case and accent encoding does, as the Mac's disks
+// do: on one that minds case, two names that differ only in case are at worst asked about
+// though only one of them is taken.
+function placeKey(path: string): string {
+  return path.normalize("NFD").toLowerCase();
+}
+
+// The item at `path` leaves before the step runs. It is found by id, so "x.txt" finds the
+// "X.TXT" a step before moved away, on a disk that takes them for one name.
+function leavesBefore(stats: PlanStats, path: string, changes: UnitChanges): boolean {
+  const id = itemIdOf(stats);
+  return id !== null
+    ? changes.movedAwayIds.has(idKey(id))
+    : changes.movedAwayPaths.has(placeKey(path));
+}
+
+function noteMovedAway(changes: UnitChanges, path: string, id: ItemId | null): void {
+  if (id !== null) {
+    changes.movedAwayIds.add(idKey(id));
+  }
+  changes.movedAwayPaths.add(placeKey(path));
+  changes.filledPlaces.delete(placeKey(path));
+}
 
 async function lstatOrNull(fs: PlanFs, path: string): Promise<PlanStats | null> {
   try {
@@ -145,12 +190,12 @@ function replacedReason(path: string): string {
   return `The “${basename(path)}” in “${basename(dirname(path))}” is another item now.`;
 }
 
-// Whether `step` can be done now. `vacated` holds paths that steps before it in the same
-// unit will have emptied by then (a Replace puts its old item back where the new one was).
+// Whether `step` can be done now, or once the steps before it in the same unit have made
+// `changes` (a Replace puts its old item back where the new one was).
 export async function checkMove(
   fs: PlanFs,
   step: Extract<PlannedStep, { kind: "move" }>,
-  vacated: ReadonlySet<string> = new Set(),
+  changes: UnitChanges = noUnitChanges(),
 ): Promise<MoveCheck> {
   const item = await lstatOrNull(fs, step.from);
   if (item === null) {
@@ -178,14 +223,16 @@ export async function checkMove(
     };
   }
   const isFolder = kindOfStats(item) === "directory";
+  const itemId = itemIdOf(item);
   const there = await lstatOrNull(fs, step.to);
-  if (there === null || vacated.has(step.to)) {
-    return { ok: true, nameTaken: false, renamesItself: false, isFolder };
+  if (there === null || leavesBefore(there, step.to, changes)) {
+    // Free by then, unless a step before puts another item there.
+    const nameTaken = changes.filledPlaces.has(placeKey(step.to));
+    return { ok: true, nameTaken, renamesItself: false, isFolder, id: itemId };
   }
   // On a disk that ignores case, "notes.txt" finds "Notes.txt": the item itself.
-  const itemId = itemIdOf(item);
   const renamesItself = itemId !== null && sameItemId(itemId, itemIdOf(there));
-  return { ok: true, nameTaken: !renamesItself, renamesItself, isFolder };
+  return { ok: true, nameTaken: !renamesItself, renamesItself, isFolder, id: itemId };
 }
 
 export async function checkTrash(
@@ -199,11 +246,12 @@ export async function checkTrash(
   if (!isExpectedItem(item, step.id, step.stamp?.kind ?? null, false)) {
     return { ok: false, reason: replacedReason(step.path), missing: false };
   }
+  const id = itemIdOf(item);
   if (step.stamp === null) {
-    return { ok: true, changed: false };
+    return { ok: true, changed: false, id };
   }
   const now = await readItemStamp(fs, step.path);
-  return { ok: true, changed: now === null || !sameStamp(step.stamp, now) };
+  return { ok: true, changed: now === null || !sameStamp(step.stamp, now), id };
 }
 
 // A folder is the same when it holds as many items: its date changes with every item
@@ -275,8 +323,8 @@ export type ChangedItem = { name: string; putBack: boolean; replaced: boolean };
 
 // What to ask before undoing `units`: the names that are taken where items would go back,
 // and the items that would go to the Trash though they changed since. Checked as things
-// will be by then: a step after one that can't be done isn't looked at, and a path a step
-// before it empties counts as free.
+// will be by then: a step after one that can't be done isn't looked at, a place a step
+// before it empties counts as free, and one a step before it fills as taken.
 export async function findQuestions(
   fs: PlanFs,
   units: readonly UndoUnit[],
@@ -284,11 +332,11 @@ export async function findQuestions(
   const nameTaken: string[] = [];
   const changed: ChangedItem[] = [];
   for (const unit of [...units].reverse()) {
-    const vacated = new Set<string>();
+    const changes = noUnitChanges();
     for (const step of [...unit.steps].reverse()) {
       const planned = reverseStep(step);
       if (planned.kind === "move") {
-        const check = await checkMove(fs, planned, vacated);
+        const check = await checkMove(fs, planned, changes);
         if (!check.ok) {
           if (check.missing) {
             continue;
@@ -298,7 +346,8 @@ export async function findQuestions(
         if (check.nameTaken) {
           nameTaken.push(basename(planned.to));
         }
-        vacated.add(planned.from);
+        noteMovedAway(changes, planned.from, check.id);
+        changes.filledPlaces.add(placeKey(planned.to));
       } else if (planned.kind === "trash") {
         const check = await checkTrash(fs, planned);
         if (!check.ok) {
@@ -315,7 +364,7 @@ export async function findQuestions(
             replaced: !planned.putBack && unit.steps.some((other) => other.kind === "trashed"),
           });
         }
-        vacated.add(planned.path);
+        noteMovedAway(changes, planned.path, check.id);
       } else {
         for (const check of await checkBatch(fs, planned)) {
           if (check.nameTaken) {

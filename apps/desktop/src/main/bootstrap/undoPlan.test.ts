@@ -7,6 +7,7 @@ import {
   checkMove,
   checkTrash,
   findQuestions,
+  noUnitChanges,
   reverseStep,
 } from "./undoPlan";
 
@@ -193,10 +194,30 @@ describe("checkMove", () => {
       "/Docs/a.txt": { kind: "file", ino: 11 },
     });
     expect(await checkMove(fs, moveBack())).toMatchObject({ ok: true, nameTaken: true });
-    expect(await checkMove(fs, moveBack(), new Set(["/Docs/a.txt"]))).toMatchObject({
+    const changes = noUnitChanges();
+    changes.movedAwayIds.add("1:11");
+    expect(await checkMove(fs, moveBack(), changes)).toMatchObject({
       ok: true,
       nameTaken: false,
     });
+  });
+
+  it("finds a name taken when a step before it fills it", async () => {
+    const fs = disk({ ...docs, "/Docs/b.txt": { kind: "file", ino: 10 } });
+    const changes = noUnitChanges();
+    changes.filledPlaces.add("/docs/a.txt");
+    expect(await checkMove(fs, moveBack(), changes)).toMatchObject({ ok: true, nameTaken: true });
+  });
+
+  it("finds an item without an id gone by its place, whatever its case", async () => {
+    const fs = disk({
+      ...docs,
+      "/Docs/b.txt": { kind: "file", ino: 10 },
+      "/Docs/a.txt": { kind: "file", ino: null },
+    });
+    const changes = noUnitChanges();
+    changes.movedAwayPaths.add("/docs/a.txt");
+    expect(await checkMove(fs, moveBack(), changes)).toMatchObject({ ok: true, nameTaken: false });
   });
 });
 
@@ -222,10 +243,7 @@ describe("checkTrash", () => {
     const stamp = { kind: "file" as const, size: 0, mtimeMs: 1000, entryCount: null };
     expect(
       await checkTrash(flaky, { kind: "trash", path: "/a", id: id(10), stamp, putBack: false }),
-    ).toEqual({
-      ok: true,
-      changed: true,
-    });
+    ).toEqual({ ok: true, changed: true, id: id(10) });
   });
 });
 
@@ -347,6 +365,48 @@ describe("findQuestions", () => {
           steps: [
             { kind: "trashed", from: "/D/x", trashPath: "/D/T/x", id: id(20), parentId: id(1) },
             created("/D/x", 0),
+          ],
+        },
+      ]),
+    ).toEqual({ nameTaken: [], changed: [] });
+  });
+
+  it("asks when a step before puts another item where an item goes back", async () => {
+    const fs = disk({
+      "/D": { kind: "dir", ino: 1 },
+      "/D/T": { kind: "dir", ino: 2 },
+      "/D/T/1": { kind: "file", ino: 20 },
+      "/D/T/2": { kind: "file", ino: 21 },
+    });
+    // Two items that were both at "/D/x", one after the other: the second goes back there
+    // first, so the first finds its name taken.
+    expect(
+      await findQuestions(fs, [
+        {
+          steps: [
+            { kind: "trashed", from: "/D/x", trashPath: "/D/T/1", id: id(20), parentId: id(1) },
+            { kind: "trashed", from: "/D/X", trashPath: "/D/T/2", id: id(21), parentId: id(1) },
+          ],
+        },
+      ]),
+    ).toEqual({ nameTaken: ["x"], changed: [] });
+  });
+
+  it("finds the old item's name free once the new item spelled otherwise moves away", async () => {
+    const fs = disk({
+      "/D": { kind: "dir", ino: 1 },
+      "/D/T": { kind: "dir", ino: 2 },
+      "/D/T/x": { kind: "file", ino: 20 },
+      // "X" over "x" on a disk that takes them for one name: the new item is found by both.
+      "/D/X": { kind: "file", ino: 4 },
+      "/D/x": { kind: "file", ino: 4 },
+    });
+    expect(
+      await findQuestions(fs, [
+        {
+          steps: [
+            { kind: "trashed", from: "/D/x", trashPath: "/D/T/x", id: id(20), parentId: id(1) },
+            { kind: "created", path: "/D/X", id: id(4), stamp: null },
           ],
         },
       ]),
