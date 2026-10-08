@@ -1536,13 +1536,14 @@ export function createWriteOperationCoordinator(
           }),
       });
     } catch (error) {
-      // Nothing expected gets here. What it did is unknown, so it can't be redone, and is
-      // not tried again either.
+      // Nothing expected gets here. What it did is unknown, so nothing can be redone; all
+      // of it stays to be tried again (each step is checked on disk first, so one done
+      // already is then skipped).
       console.error("[filetrail] an Undo stopped unexpectedly", error);
       run = {
         items: [],
         done: [],
-        leftover: [],
+        leftover: entry.units,
         removedItems: [],
         completedItemCount: 0,
         cancelled: false,

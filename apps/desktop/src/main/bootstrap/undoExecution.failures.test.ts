@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
   REPLACE_ALL,
@@ -758,6 +758,67 @@ describe("Redo after a partial Undo", () => {
       join(root, "c.txt"),
     ]);
     expect(readdirSync(trashDir).sort()).toEqual(["4-a.txt", "5-c.txt", "renamed.txt"]);
+    await t.coordinator.shutdown();
+  });
+});
+
+describe("an item of a batch that goes away as it is renamed back", () => {
+  it("is skipped, as one the check finds gone, and not kept", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    let removing = false;
+    const t = setUpUndo(root, trashDir, {
+      renameExclusive: async (from, to) => {
+        if (removing && from === join(root, "x.txt")) {
+          rmSync(from);
+        }
+        await originalRenameExclusive(from, to);
+      },
+    });
+    await t.batchRename([
+      [join(root, "a.txt"), "x.txt"],
+      [join(root, "b.txt"), "y.txt"],
+    ]);
+    removing = true;
+
+    const undone = await t.undo();
+
+    expect(undone.result?.items).toEqual([
+      expect.objectContaining({
+        status: "skipped",
+        error: `“x.txt” is no longer in “${basename(root)}”.`,
+      }),
+      expect.objectContaining({ status: "completed" }),
+    ]);
+    expect(t.history.menu()).toEqual({ undo: null, redo: "Rename", cantUndo: false });
+    await t.coordinator.shutdown();
+  });
+});
+
+describe("an Undo that stops unexpectedly", () => {
+  it("keeps the operation on the Undo list, to be tried again", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let broken = false;
+    const t = setUpUndo(root, trashDir, {
+      itemSize: (path) => {
+        if (broken && path === join(root, "F")) {
+          throw new Error("Disk gone.");
+        }
+        return Promise.reject(new Error("not measured"));
+      },
+    });
+    await t.newFolder(root, "F");
+    broken = true;
+
+    const undone = await t.undo();
+
+    expect(undone.status).toBe("failed");
+    expect(undone.result?.error).toBe("The Undo stopped unexpectedly: Disk gone.");
+    expect(t.history.menu()).toEqual({ undo: "New Folder", redo: null, cantUndo: false });
+    broken = false;
+    expect((await t.undo()).status).toBe("completed");
+    expect(existsSync(join(root, "F"))).toBe(false);
+    quiet.mockRestore();
     await t.coordinator.shutdown();
   });
 });
