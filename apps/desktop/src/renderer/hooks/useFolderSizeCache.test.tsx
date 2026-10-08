@@ -724,6 +724,47 @@ describe("useFolderSizeCache", () => {
     expect(probedPaths(handlers.probeHandler)).toEqual(["/dir/0"]);
   });
 
+  // One at a time, each size stored walked past the places of all those let go before it:
+  // up to 20 ms for one probe's answer of 5,000 sizes.
+  it("lets the oldest tenth go at once when full, but not a calculation under way", async () => {
+    const handlers = createHandlers();
+    handlers.probeHandler.mockImplementation(async ({ paths }: ProbeRequest) => ({
+      sizes: paths.map((path) => known(path, 1)),
+    }));
+    const { result } = renderHook(() => useFolderSizeCache(createClient(handlers)));
+    await act(async () => {
+      await result.current.calculateFolderSize("/calculating");
+    });
+    const paths = Array.from(
+      { length: MAX_FOLDER_SIZE_CACHE_ENTRIES },
+      (_, index) => `/d/${index}`,
+    );
+
+    await show(result.current.getEntry, ...paths);
+
+    expect(result.current.getEntry("/calculating").status).toBe("calculating");
+    expect(result.current.getEntry("/d/0").status).toBe("idle");
+    expect(result.current.getEntry("/d/500").status).toBe("idle");
+    expect(result.current.getEntry("/d/501").status).toBe("ready");
+  });
+
+  it("asks again at once about the oldest tenth of the folders it didn't know, when full", async () => {
+    const handlers = createHandlers();
+    // Not answered while the test runs.
+    handlers.probeHandler.mockImplementation(() => new Promise(() => undefined));
+    const { result } = renderHook(() => useFolderSizeCache(createClient(handlers)));
+    const paths = Array.from(
+      { length: MAX_FOLDER_SIZE_CACHE_ENTRIES + 1 },
+      (_, index) => `/d/${index}`,
+    );
+    await show(result.current.getEntry, ...paths);
+    handlers.probeHandler.mockClear();
+
+    await show(result.current.getEntry, "/d/1", "/d/500", "/d/501");
+
+    expect(probedPaths(handlers.probeHandler)).toEqual(["/d/1", "/d/500"]);
+  });
+
   // A main process holding the sizes in `sizes`, which a test changes as a write would.
   function createWriteClient(sizes: Map<string, number>) {
     let emit: ((event: unknown) => void) | null = null;

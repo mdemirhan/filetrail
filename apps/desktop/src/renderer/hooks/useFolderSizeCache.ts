@@ -106,16 +106,8 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     const cache = cacheRef.current;
     cache.delete(path);
     cache.set(path, entry);
-    for (const [cachedPath, cachedEntry] of cache) {
-      if (cache.size <= MAX_FOLDER_SIZE_CACHE_ENTRIES) {
-        break;
-      }
-      // Never drop an in-flight calculation; its poller still reports into it.
-      if (cachedEntry.status === "calculating") {
-        continue;
-      }
-      cache.delete(cachedPath);
-    }
+    // Never drop an in-flight calculation; its poller still reports into it.
+    trimOldest(cache, (cachedEntry) => cachedEntry.status === "calculating");
     if (entry.status !== "calculating") {
       const waiters = finishWaiters.current.get(path);
       finishWaiters.current.delete(path);
@@ -137,12 +129,7 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     const missedAt = probeMissedAt.current;
     missedAt.delete(path);
     missedAt.set(path, Date.now());
-    for (const oldest of missedAt.keys()) {
-      if (missedAt.size <= MAX_FOLDER_SIZE_CACHE_ENTRIES) {
-        break;
-      }
-      missedAt.delete(oldest);
-    }
+    trimOldest(missedAt, () => false);
   }, []);
 
   // Sends the questions queued, as few requests as fit, and stores the answers: a folder
@@ -538,6 +525,28 @@ export function useFolderSizeCache(client: FiletrailClient, homePath = "") {
     forgetChangedSizes,
     version,
   };
+}
+
+// Over the limit, the oldest go but those `mustKeep` keeps, a tenth at a time: one at a
+// time, each entry stored would walk past the places of all those let go before it.
+function trimOldest<Value>(map: Map<string, Value>, mustKeep: (value: Value) => boolean): void {
+  if (map.size <= MAX_FOLDER_SIZE_CACHE_ENTRIES) {
+    return;
+  }
+  let over = map.size - Math.ceil(MAX_FOLDER_SIZE_CACHE_ENTRIES * 0.9);
+  const oldest: string[] = [];
+  for (const [path, value] of map) {
+    if (over === 0) {
+      break;
+    }
+    if (!mustKeep(value)) {
+      oldest.push(path);
+      over -= 1;
+    }
+  }
+  for (const path of oldest) {
+    map.delete(path);
+  }
 }
 
 function isSameSize(entry: FolderSizeEntry, size: ReadyEntry): boolean {
