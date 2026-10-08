@@ -98,6 +98,8 @@ type ExecutionContext = {
   // new item under a hidden name, progress and questions still show the final name.
   displayPath?: (path: string) => string;
   replaceJournal: ReplaceJournal | null;
+  // Folder listings read once per paste (see readFolderListing).
+  folderListings: Map<string, FolderListing>;
   // What this paste did, for Undo. Shared by every step, like `progress`.
   undo: UndoRecorder;
   // False while a Replace builds its new item under a hidden name: that isn't a step
@@ -183,6 +185,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     totalBytes: args.report.summary.totalBytes,
     progress: { completedItemCount: 0, completedByteCount: 0 },
     replaceJournal: args.replaceJournal ?? null,
+    folderListings: new Map(),
     undo: {
       topLevelNodeIds: new Set(args.resolvedNodes.map((node) => node.node.id)),
       unit: null,
@@ -1346,7 +1349,7 @@ async function removeReplacedItem(
       // back under the name it really had.
       const from =
         context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id)
-          ? await spelledAsOnDisk(fileSystem, node.destinationPath, destination)
+          ? await spelledAsOnDisk(context, node.destinationPath, destination)
           : node.destinationPath;
       const trashPath = await fileSystem.trash(node.destinationPath);
       noteChanged(context);
@@ -1413,32 +1416,68 @@ async function removeReplacedItem(
 // `path` as its folder spells the item `fingerprint` describes ("x.txt" for "X.TXT" on a
 // disk that ignores case), or `path` itself when that can't be told.
 async function spelledAsOnDisk(
-  fileSystem: WriteServiceFileSystem,
+  context: ExecutionContext,
   path: string,
   fingerprint: NodeFingerprint,
 ): Promise<string> {
   const folder = dirname(path);
-  const wanted = basename(path).normalize("NFD").toLowerCase();
-  let names: string[];
+  const name = basename(path);
+  for (let reread = false; ; reread = true) {
+    const read = await readFolderListing(context, folder, reread);
+    if (read === null) {
+      return path;
+    }
+    if (read.listing.names.has(name)) {
+      return path;
+    }
+    for (const spelled of read.listing.byFoldedName.get(foldedName(name)) ?? []) {
+      const candidate = join(folder, spelled);
+      const found = await captureFingerprint(context.fileSystem, candidate);
+      if (found.ino !== null && found.ino === fingerprint.ino && found.dev === fingerprint.dev) {
+        return candidate;
+      }
+    }
+    // Not in a listing read earlier in this paste: the item came since, so the folder is
+    // read again, once.
+    if (read.fresh) {
+      return path;
+    }
+  }
+}
+
+type FolderListing = { names: Set<string>; byFoldedName: Map<string, string[]> };
+
+// A folder's entries, read once per paste: replacing many items in a big folder would read
+// it whole for each one otherwise. Each item looked up is the one about to be replaced,
+// which was there before this paste began or is found by reading the folder again (see
+// spelledAsOnDisk); what the paste itself writes there never takes an item's name in
+// another spelling (assertNotWrittenByThisPaste).
+async function readFolderListing(
+  context: ExecutionContext,
+  folder: string,
+  reread: boolean,
+): Promise<{ listing: FolderListing; fresh: boolean } | null> {
+  const cached = reread ? undefined : context.folderListings.get(folder);
+  if (cached) {
+    return { listing: cached, fresh: false };
+  }
+  let entries: string[];
   try {
-    names = await fileSystem.readdir(folder);
+    entries = await context.fileSystem.readdir(folder);
   } catch {
-    return path;
+    return null;
   }
-  if (names.includes(basename(path))) {
-    return path;
+  const listing: FolderListing = { names: new Set(entries), byFoldedName: new Map() };
+  for (const entry of entries) {
+    const key = foldedName(entry);
+    listing.byFoldedName.set(key, [...(listing.byFoldedName.get(key) ?? []), entry]);
   }
-  for (const name of names) {
-    if (name.normalize("NFD").toLowerCase() !== wanted) {
-      continue;
-    }
-    const candidate = join(folder, name);
-    const found = await captureFingerprint(fileSystem, candidate);
-    if (found.ino !== null && found.ino === fingerprint.ino && found.dev === fingerprint.dev) {
-      return candidate;
-    }
-  }
-  return path;
+  context.folderListings.set(folder, listing);
+  return { listing, fresh: true };
+}
+
+function foldedName(name: string): string {
+  return name.normalize("NFD").toLowerCase();
 }
 
 // The first locked item inside a folder, at any depth, or null.
