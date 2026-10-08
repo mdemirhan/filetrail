@@ -4,6 +4,7 @@
 // when it hears they have, and the tabs they spring into folders in.
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { Profiler } from "react";
 
 vi.mock("./components/ContentPane", async () =>
   (await import("./test/appMocks")).contentPaneMock(),
@@ -406,6 +407,43 @@ describe("a drop the disks turn into a move", () => {
     });
 
     expect(analyzeRequests(harness)).toEqual([]);
+  });
+});
+
+describe("drag-overs held on one folder", () => {
+  it("don't draw the window again while nothing they show changes", async () => {
+    const harness = harnessWithFolders();
+    let commits = 0;
+    render(
+      <Profiler
+        id="app"
+        onRender={() => {
+          commits += 1;
+        }}
+      >
+        <FiletrailClientProvider value={harness.client}>
+          <App />
+        </FiletrailClientProvider>
+      </Profiler>,
+    );
+    await screen.findByTitle(source);
+    const dataTransfer = await startDrag(source);
+    const target = screen.getByTitle(folder);
+    const holdStill = async (times: number) => {
+      for (let index = 0; index < times; index += 1) {
+        await act(async () => {
+          fireEvent.dragOver(target, { dataTransfer });
+        });
+      }
+    };
+    // React may draw once more before it sees that nothing changed.
+    await holdStill(2);
+    expect(target).toHaveAttribute("data-drop-target-state", "valid");
+
+    const before = commits;
+    await holdStill(10);
+
+    expect(commits).toBe(before);
   });
 });
 

@@ -384,7 +384,12 @@ export function useExplorerDragAndDrop(args: {
     path: string,
     validity: Exclude<DropIndicatorState, null>,
   ) {
-    setActiveDropTarget({ surface, path, validity });
+    // Drag-overs come many times a second; the window draws again only when this changes.
+    setActiveDropTarget((current) =>
+      current?.surface === surface && current.path === path && current.validity === validity
+        ? current
+        : { surface, path, validity },
+    );
   }
 
   function syncTreeDropElementIndicator(
