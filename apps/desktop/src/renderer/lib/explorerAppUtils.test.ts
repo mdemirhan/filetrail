@@ -263,6 +263,34 @@ describe("explorerAppUtils", () => {
     );
   });
 
+  it("follows a folder moved by Cut and Paste or a drag, but not one copied", () => {
+    const pasted = (mode: "copy" | "cut") =>
+      ({
+        action: "paste",
+        mode,
+        targetPath: "/Users/demo/Other",
+        items: [
+          {
+            sourcePath: "/Users/demo/Folder",
+            destinationPath: "/Users/demo/Other/Folder",
+            status: "completed",
+            error: null,
+          },
+        ],
+      }) as WriteOperationResult;
+
+    expect(resolveWriteOperationRefreshPath(pasted("cut"), "/Users/demo/Folder/Inner")).toBe(
+      "/Users/demo/Other/Folder/Inner",
+    );
+    expect(resolveWriteOperationTreeSelectionPath(pasted("cut"), "/Users/demo/Folder")).toBe(
+      "/Users/demo/Other/Folder",
+    );
+    expect(resolveWriteOperationRefreshPath(pasted("copy"), "/Users/demo/Folder/Inner")).toBe(
+      "/Users/demo/Folder/Inner",
+    );
+    expect(resolveWriteOperationTreeSelectionPath(pasted("copy"), "/Users/demo/Folder")).toBe(null);
+  });
+
   it("remaps tree selection after a rename when the selected node is inside the renamed folder", () => {
     const result = {
       action: "rename",

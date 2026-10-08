@@ -358,7 +358,8 @@ export function resolveWriteOperationRefreshPath(
     }
   }
 
-  if (isRenameOrMove(result.action)) {
+  // A folder renamed or moved (by Move To, a drag, or Cut and Paste) is followed.
+  if (movedItems(result)) {
     const impactedItem = findDeepestMatchingSourceItem(result, currentPath);
     if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
       return currentPath;
@@ -391,7 +392,7 @@ export function resolveWriteOperationTreeSelectionPath(
     }
   }
 
-  if (isRenameOrMove(result.action)) {
+  if (movedItems(result)) {
     const impactedItem = findDeepestMatchingSourceItem(result, selectedTreePath);
     if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
       return null;

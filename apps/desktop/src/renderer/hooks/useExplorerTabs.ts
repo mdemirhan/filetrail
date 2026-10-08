@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { OPEN_TABS_LIMIT, type OpenTabPreference } from "../../shared/appPreferences";
 import { EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
-import { collectFollowedMoves, createTreeNode, isRenameOrMove } from "../lib/explorerAppUtils";
+import { collectFollowedMoves, createTreeNode, movedItems } from "../lib/explorerAppUtils";
 import {
   CLOSED_TABS_LIMIT,
   type ExplorerTab,
@@ -901,8 +901,8 @@ export function useExplorerTabs(args: {
           event.status === "queued" ||
           event.status === "running" ||
           event.status === "awaiting_resolution" ||
-          !isRenameOrMove(event.action) ||
-          !event.result
+          !event.result ||
+          !movedItems(event.result)
         ) {
           return;
         }
