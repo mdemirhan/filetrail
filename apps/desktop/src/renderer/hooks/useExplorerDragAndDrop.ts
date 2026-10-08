@@ -26,6 +26,8 @@ const DRAGGED_AWAY_CHECK_DELAYS_MS = [250, 1000, 3000];
 type FileDragResult = {
   started: boolean;
   operation: "copy" | "move" | "link" | "delete" | "none";
+  // Where the drag ended: a window of the app takes a drop on it itself.
+  endedOver: "this_window" | "another_window" | "elsewhere";
 };
 
 // How long a drag is held over a tab before that tab comes to the front; the same as a
@@ -51,7 +53,7 @@ const EXTERNAL_DRAG_GONE_MS = 400;
 const EXTERNAL_DRAG_CHECK_MS = 100;
 
 // What a drag from another app carries, read from the drag itself (`system:readDraggedIn`).
-export type DraggedIn = { changeCount: number; ownDrag: boolean; items: InternalDragItem[] };
+export type DraggedIn = { changeCount: number; items: InternalDragItem[] };
 
 // A drag from another app over the window: its items once read (null until then, and for a
 // drag of no files), and when it was last heard from.
@@ -123,7 +125,7 @@ export function useExplorerDragAndDrop(args: {
    * Drags the items as a system file drag (`system:startFileDrag`), so Finder and other apps
    * take them as files; answers when the drag ends.
    */
-  startFileDrag: (paths: string[]) => Promise<FileDragResult>;
+  startFileDrag: (items: InternalDragItem[]) => Promise<FileDragResult>;
   /** Which of the paths are gone from where they were (`system:findDraggedAway`). */
   findDraggedAway: (paths: string[]) => Promise<string[]>;
   /** Items dragged out that another app moved away or put in the Trash. */
@@ -407,7 +409,7 @@ export function useExplorerDragAndDrop(args: {
     // come to the handlers below, while it is still this session.
     event.preventDefault();
     const paths = session.sourceItems.map((item) => item.path);
-    void startFileDrag(paths)
+    void startFileDrag(session.sourceItems)
       .then((result) => {
         const spring = springRef.current?.session === session ? springRef.current : null;
         if (spring) {
@@ -417,7 +419,10 @@ export function useExplorerDragAndDrop(args: {
             springLoadingRef.current?.restore(spring.start);
           }
         }
+        // A drop on another window of the app is that window's own: it follows what it
+        // moves itself.
         if (
+          result.endedOver === "elsewhere" &&
           droppedSessionRef.current !== session &&
           (result.operation === "move" || result.operation === "delete")
         ) {

@@ -74,12 +74,8 @@ function dragFromOtherApp(effectAllowed = "all"): DataTransfer {
   return Object.assign(createMockDataTransfer(), { types: ["Files"], effectAllowed });
 }
 
-function draggedIn(
-  harness: Harness,
-  items: DraggedInItem[],
-  extra: { ownDrag?: boolean | undefined } = {},
-) {
-  harness.setDraggedIn({ changeCount: 1, ownDrag: extra.ownDrag ?? false, items });
+function draggedIn(harness: Harness, items: DraggedInItem[]) {
+  harness.setDraggedIn({ changeCount: 1, items });
 }
 
 function readsOf(harness: Harness): number {
@@ -156,25 +152,6 @@ describe("dropping files from other apps", () => {
         expect.objectContaining({
           mode: "cut",
           action: "move_to",
-          sourcePaths: elsewhere.map((item) => item.path),
-          destinationDirectoryPath: home,
-        }),
-      ]);
-    });
-  });
-
-  // Started in another of the app's windows: this one takes it as it would one from Finder.
-  it("takes a drag from another File Trail window like one from Finder", async () => {
-    const harness = createAppHarness();
-    draggedIn(harness, elsewhere, { ownDrag: true });
-    renderApp(harness);
-    const pane = await screen.findByTestId("content-pane");
-
-    expect(await dropFromOtherApp(harness, pane)).toBe("move");
-    await vi.waitFor(() => {
-      expect(analyzeRequests(harness)).toEqual([
-        expect.objectContaining({
-          mode: "cut",
           sourcePaths: elsewhere.map((item) => item.path),
           destinationDirectoryPath: home,
         }),
@@ -524,7 +501,6 @@ describe("springing into folders under a drag from another app", () => {
     await waitMs(600);
     harness.setDraggedIn({
       changeCount: 2,
-      ownDrag: false,
       items: [{ path: "/Volumes/Backup/b.txt", kind: "file" }],
     });
     const cursor = await dropFromOtherApp(harness, pane);

@@ -1752,7 +1752,7 @@ describe("App copy/paste integration", () => {
     // The drag is the system's, so it can leave the window; the page's own was stopped.
     expect(
       harness.invocations.find((call) => call.channel === "system:startFileDrag")?.payload,
-    ).toEqual({ paths: ["/Users/demo/source.txt"], images: [] });
+    ).toEqual({ paths: ["/Users/demo/source.txt"], directories: [false], images: [] });
     expect(dataTransfer.setDragImage).not.toHaveBeenCalled();
   });
 

@@ -229,6 +229,12 @@ export function nativeListVolumes(): NativeVolume[];
 /** What a file drag's drop did; "delete" is the Trash in the Dock, "none" a cancel. */
 export type FileDragOperation = "copy" | "move" | "link" | "delete" | "none";
 
+/**
+ * Where a file drag ended: over the window it started from, another window of this app
+ * (which takes a drop there itself), or anywhere else.
+ */
+export type FileDragEndedOver = "this_window" | "another_window" | "elsewhere";
+
 /** A dragged item as it shows in the window, in points from the window's top left. */
 export type FileDragImage = {
   /** Which of the dragged paths it is. */
@@ -245,7 +251,8 @@ export type FileDragImage = {
 /**
  * Starts a system file drag of `paths` from the window whose native handle is
  * `viewHandle` (`BrowserWindow.getNativeWindowHandle()`), at the pointer. The drag
- * carries file URLs, as Finder's do. Each item in `images` sets off from where it is on
+ * carries file URLs, as Finder's do; `directories` says which paths are folders, so
+ * they needn't be looked at on disk (a path past its end is). Each item in `images` sets off from where it is on
  * screen, its icon and its name, and they gather into a stack under the pointer, with a
  * count. Items not in `images` go along unseen; with none at all, the first is drawn at
  * the pointer. Call on the main thread while the mouse button is down; returns false (and
@@ -254,22 +261,21 @@ export type FileDragImage = {
  * Over this app's own windows the ⌥ and ⌘ keys don't change the drag's operations (the
  * page reads them itself); elsewhere they work as in a Finder drag.
  *
- * @param onEnded - Called once, when the drag ends, with what the drop reported. Apps
- *   other than Finder may report "move" for a drop that moved nothing.
+ * @param onEnded - Called once, when the drag ends, with what the drop reported and where
+ *   the drag ended. Apps other than Finder may report "move" for a drop that moved nothing.
  */
 export function nativeStartFileDrag(
   viewHandle: Buffer,
   paths: string[],
+  directories: boolean[],
   images: FileDragImage[],
-  onEnded: (operation: FileDragOperation) => void,
+  onEnded: (operation: FileDragOperation, endedOver: FileDragEndedOver) => void,
 ): boolean;
 
 /** What the drag going on now carries, as the system's drag pasteboard has it. */
 export type DragPasteboardContents = {
   /** Changes with every new drag, wherever it starts. */
   changeCount: number;
-  /** Whether the drag is one this app started (`nativeStartFileDrag`). */
-  ownDrag: boolean;
   /**
    * The files and folders it carries (file URLs, references resolved), each once. Empty
    * for a drag of promised files (Mail attachments, Photos), text or links.

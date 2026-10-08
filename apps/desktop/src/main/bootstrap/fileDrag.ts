@@ -8,19 +8,16 @@ import {
   type IpcResponse,
   MAX_PATHS_PER_REQUEST,
 } from "@filetrail/contracts";
+import type {
+  FileDragImage as NativeFileDragImage,
+  nativeReadDragPasteboard,
+  nativeStartFileDrag,
+} from "@filetrail/native-fs";
 import { BrowserWindow, type IpcMainInvokeEvent, app } from "electron";
 import { clearResponseCaches } from "./responseCache";
 
-type FileDragOperation = IpcResponse<"system:startFileDrag">["operation"];
-type NativeFileDragImage = Omit<FileDragImage, "thumbnail"> & { thumbnail: Buffer | null };
-type StartNativeFileDrag = (
-  viewHandle: Buffer,
-  paths: string[],
-  images: NativeFileDragImage[],
-  onEnded: (operation: FileDragOperation) => void,
-) => boolean;
-
-type DragPasteboardContents = { changeCount: number; ownDrag: boolean; paths: string[] };
+type StartNativeFileDrag = typeof nativeStartFileDrag;
+type ReadNativeDragPasteboard = typeof nativeReadDragPasteboard;
 type DraggedInItem = IpcResponse<"system:readDraggedIn">["items"][number];
 
 const require = createRequire(import.meta.url);
@@ -30,11 +27,17 @@ function loadNativeStartFileDrag(): StartNativeFileDrag {
     .nativeStartFileDrag;
 }
 
-function loadNativeReadDragPasteboard(): () => DragPasteboardContents {
-  return (
-    require("@filetrail/native-fs") as { nativeReadDragPasteboard: () => DragPasteboardContents }
-  ).nativeReadDragPasteboard;
+function loadNativeReadDragPasteboard(): ReadNativeDragPasteboard {
+  return (require("@filetrail/native-fs") as { nativeReadDragPasteboard: ReadNativeDragPasteboard })
+    .nativeReadDragPasteboard;
 }
+
+// A drag that couldn't start: nothing was dropped anywhere.
+const NOT_STARTED: IpcResponse<"system:startFileDrag"> = {
+  started: false,
+  operation: "none",
+  endedOver: "elsewhere",
+};
 
 // Electron's own `fs` takes .asar files for folders; `original-fs` sees them as they are.
 function originalFs(): typeof import("node:fs") {
@@ -55,18 +58,19 @@ export function startFileDrag(
 ): Promise<IpcResponse<"system:startFileDrag">> {
   const window = (deps.windowFor ?? BrowserWindow.fromWebContents)(event.sender);
   if (!window) {
-    return Promise.resolve({ started: false, operation: "none" });
+    return Promise.resolve(NOT_STARTED);
   }
   const startNativeFileDrag = deps.startNativeFileDrag ?? loadNativeStartFileDrag();
   return new Promise((resolve) => {
     const started = startNativeFileDrag(
       window.getNativeWindowHandle(),
       payload.paths,
+      payload.directories,
       toNativeImages(payload.images, event.sender.getZoomFactor()),
-      (operation) => resolve({ started: true, operation }),
+      (operation, endedOver) => resolve({ started: true, operation, endedOver }),
     );
     if (!started) {
-      resolve({ started: false, operation: "none" });
+      resolve(NOT_STARTED);
     }
   });
 }
@@ -130,17 +134,17 @@ export async function findDraggedAway(
 // item that can't be looked at is left out, so nothing is dropped that isn't there.
 export async function readDraggedIn(
   deps: {
-    readDragPasteboard?: () => DragPasteboardContents;
+    readDragPasteboard?: ReadNativeDragPasteboard;
     lstatFn?: (path: string) => Promise<Pick<Stats, "isDirectory" | "isSymbolicLink">>;
     statFn?: (path: string) => Promise<Pick<Stats, "isDirectory">>;
   } = {},
 ): Promise<IpcResponse<"system:readDraggedIn">> {
   const contents = (deps.readDragPasteboard ?? loadNativeReadDragPasteboard())();
-  const { changeCount, ownDrag } = contents;
+  const { changeCount } = contents;
   const paths = contents.paths.filter((path) => path.startsWith("/"));
   // Too many for the copy that would follow: refused as a whole, never cut short.
   if (paths.length > MAX_PATHS_PER_REQUEST) {
-    return { changeCount, ownDrag, items: [] };
+    return { changeCount, items: [] };
   }
   const lstatFn = deps.lstatFn ?? originalFs().promises.lstat;
   const statFn = deps.statFn ?? originalFs().promises.stat;
@@ -163,7 +167,6 @@ export async function readDraggedIn(
   );
   return {
     changeCount,
-    ownDrag,
     items: items.filter((item): item is DraggedInItem => item !== null),
   };
 }

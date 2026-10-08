@@ -40,7 +40,11 @@ const windowRectSchema = z.object({
 // One dragged item as it shows in the window (CSS pixels from the page's top left).
 const fileDragImageSchema = z.object({
   // Which of the dragged paths it is.
-  index: z.number().int().nonnegative(),
+  index: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(MAX_PATHS_PER_REQUEST - 1),
   iconRect: windowRectSchema,
   nameRect: windowRectSchema,
   nameFontSize: z.number().positive().max(100),
@@ -1317,11 +1321,16 @@ export const ipcContractSchemas = {
     }),
   },
   // Drags the items as a system file drag, which Finder and other apps take as files. Answers
-  // when the drag ends, with what the drop reported; `started` is false when it couldn't
-  // start. Apps other than Finder may report a move that moved nothing.
+  // when the drag ends, with what the drop reported and where the drag ended: over the
+  // window it started from, another window of the app (which takes a drop itself), or
+  // anywhere else. `started` is false when it couldn't start. Apps other than Finder may
+  // report a move that moved nothing.
   "system:startFileDrag": {
     request: z.object({
       paths: absolutePathListSchema,
+      // Whether each path is a folder, as the window knows it, so the drag needn't look at
+      // each one on disk.
+      directories: z.array(z.boolean()).max(MAX_PATHS_PER_REQUEST),
       // Where the items on screen are, so each sets off from its place before they gather
       // into a stack. Items not listed (scrolled out of sight) go along unseen.
       images: z.array(fileDragImageSchema).max(MAX_FILE_DRAG_IMAGES),
@@ -1329,6 +1338,7 @@ export const ipcContractSchemas = {
     response: z.object({
       started: z.boolean(),
       operation: z.enum(["copy", "move", "link", "delete", "none"]),
+      endedOver: z.enum(["this_window", "another_window", "elsewhere"]),
     }),
   },
   // Which of the items a drag took out of the app are gone from where they were (another
@@ -1345,14 +1355,13 @@ export const ipcContractSchemas = {
   // What a drag from another app, over the window now, carries: the files and folders it
   // holds (read from the system's drag pasteboard, since the page only gets them at the
   // drop), each with its kind as lstat has it; items no longer on disk are left out.
-  // `changeCount` changes with every new drag. `ownDrag` marks a drag this app started.
+  // `changeCount` changes with every new drag.
   // Empty for a drag of promised files, text or links, or of more items than one request
   // takes.
   "system:readDraggedIn": {
     request: emptyRequestSchema,
     response: z.object({
       changeCount: z.number().int(),
-      ownDrag: z.boolean(),
       items: z
         .array(z.object({ path: absolutePathSchema, kind: explorerEntryKindSchema }))
         .max(MAX_PATHS_PER_REQUEST),

@@ -290,8 +290,14 @@ export function createAppHarness(
   holdDirectorySnapshot: (path: string) => () => void;
   releaseTreeChildren: () => void;
   releaseSearchUpdates: () => void;
-  // Ends the oldest system file drag still going, as the drop or cancel reported it.
-  endFileDrag: (operation: IpcResponse<"system:startFileDrag">["operation"]) => void;
+  // Ends the oldest system file drag still going, as the drop or cancel reported it, over
+  // another app unless `endedOver` says otherwise.
+  endFileDrag: (
+    operation: IpcResponse<"system:startFileDrag">["operation"],
+    endedOver?: IpcResponse<"system:startFileDrag">["endedOver"],
+  ) => void;
+  // How many system file drags are still going.
+  fileDragsGoing: () => number;
   // What a drag from another app over the window carries, from now on.
   setDraggedIn: (contents: IpcResponse<"system:readDraggedIn">) => void;
   // Whether the window is in front, as asking it to come forward finds.
@@ -351,7 +357,6 @@ export function createAppHarness(
   const goneFromDisk = new Set<string>();
   let draggedIn: IpcResponse<"system:readDraggedIn"> = {
     changeCount: 0,
-    ownDrag: false,
     items: [],
   };
   let windowComesToFront = true;
@@ -960,8 +965,11 @@ export function createAppHarness(
     releaseSearchUpdates() {
       releaseSearchUpdates();
     },
-    endFileDrag(operation) {
-      fileDragEnds.shift()?.({ started: true, operation });
+    endFileDrag(operation, endedOver = "elsewhere") {
+      fileDragEnds.shift()?.({ started: true, operation, endedOver });
+    },
+    fileDragsGoing() {
+      return fileDragEnds.length;
     },
     setDraggedIn(contents) {
       draggedIn = contents;

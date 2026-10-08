@@ -967,7 +967,7 @@ describe("nativeStartFileDrag", () => {
 
   it("doesn't start, and never calls back, without a window", async () => {
     const onEnded = vi.fn();
-    expect(addon.nativeStartFileDrag(noView, ["/tmp/a.txt"], [], onEnded)).toBe(false);
+    expect(addon.nativeStartFileDrag(noView, ["/tmp/a.txt"], [false], [], onEnded)).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(onEnded).not.toHaveBeenCalled();
   });
@@ -984,17 +984,31 @@ describe("nativeStartFileDrag", () => {
       nameCentered: false,
       thumbnail: null,
     };
-    expect(start(noView, ["/tmp/a.txt"], [image], onEnded)).toBe(false);
-    expect(() => start(noView, ["/tmp/a.txt"], [])).toThrow(TypeError);
-    expect(() => start("view", ["/tmp/a.txt"], [], onEnded)).toThrow(TypeError);
-    expect(() => start(Buffer.alloc(2), ["/tmp/a.txt"], [], onEnded)).toThrow(TypeError);
-    expect(() => start(noView, "/tmp/a.txt", [], onEnded)).toThrow(TypeError);
-    expect(() => start(noView, [1], [], onEnded)).toThrow(TypeError);
-    expect(() => start(noView, ["/tmp/a.txt"], null, onEnded)).toThrow(TypeError);
-    expect(() => start(noView, ["/tmp/a.txt"], [{ ...image, iconRect: null }], onEnded)).toThrow(
-      TypeError,
-    );
-    expect(() => start(noView, ["/tmp/a.txt"], [], "callback")).toThrow(TypeError);
+    expect(start(noView, ["/tmp/a.txt"], [false], [image], onEnded)).toBe(false);
+    expect(start(noView, ["/tmp/a.txt"], [], [image], onEnded)).toBe(false);
+    expect(() => start(noView, ["/tmp/a.txt"], [false], [])).toThrow(TypeError);
+    expect(() => start("view", ["/tmp/a.txt"], [false], [], onEnded)).toThrow(TypeError);
+    expect(() => start(Buffer.alloc(2), ["/tmp/a.txt"], [false], [], onEnded)).toThrow(TypeError);
+    expect(() => start(noView, "/tmp/a.txt", [false], [], onEnded)).toThrow(TypeError);
+    expect(() => start(noView, [1], [false], [], onEnded)).toThrow(TypeError);
+    expect(() => start(noView, ["/tmp/a.txt"], null, [], onEnded)).toThrow(TypeError);
+    expect(() => start(noView, ["/tmp/a.txt"], ["yes"], [], onEnded)).toThrow(TypeError);
+    expect(() => start(noView, ["/tmp/a.txt"], [false], null, onEnded)).toThrow(TypeError);
+    expect(() =>
+      start(noView, ["/tmp/a.txt"], [false], [{ ...image, iconRect: null }], onEnded),
+    ).toThrow(TypeError);
+    expect(() => start(noView, ["/tmp/a.txt"], [false], [], "callback")).toThrow(TypeError);
+  });
+
+  it("refuses an image for a place no path can have", () => {
+    const start = addon.nativeStartFileDrag as unknown as (...args: unknown[]) => boolean;
+    const rect = { x: 0, y: 0, width: 16, height: 16 };
+    const image = { iconRect: rect, nameRect: rect, nameFontSize: 13, nameCentered: false };
+    for (const index of [-1, 0.5, 2 ** 32, 2 ** 53, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        start(noView, ["/tmp/a.txt"], [false], [{ ...image, index, thumbnail: null }], () => {}),
+      ).toThrow(TypeError);
+    }
   });
 });
 
@@ -1036,7 +1050,6 @@ describe("nativeReadDragPasteboard", () => {
       // A reference names the file where it really is (/var is /private/var).
       expect(contents.paths).toEqual([execFileSync("realpath", [file]).toString().trim(), folder]);
       expect(contents.changeCount).toBe(changeCount);
-      expect(contents.ownDrag).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1047,6 +1060,6 @@ describe("nativeReadDragPasteboard", () => {
       `pasteboard.setStringForType($("some text"), $.NSPasteboardTypeString)`,
     );
 
-    expect(addon.nativeReadDragPasteboard()).toEqual({ changeCount, ownDrag: false, paths: [] });
+    expect(addon.nativeReadDragPasteboard()).toEqual({ changeCount, paths: [] });
   });
 });

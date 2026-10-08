@@ -2974,7 +2974,7 @@ describe("dragging items out to Finder and other apps", () => {
     await startDragOut(source);
     expect(
       harness.invocations.find((call) => call.channel === "system:startFileDrag")?.payload,
-    ).toEqual({ paths: [source], images: [] });
+    ).toEqual({ paths: [source], directories: [false], images: [] });
     harness.markGoneFromDisk([source]);
     await endDrag(harness, "move");
     await waitMs(300);
@@ -3051,6 +3051,24 @@ describe("dragging items out to Finder and other apps", () => {
     await waitMs(5000);
 
     expect(checksFor(harness)).toEqual([]);
+  });
+
+  it("leaves following the moved items to another window of the app that took the drop", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem(source);
+    await pressKey({ key: "c", metaKey: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await startDragOut(source);
+    harness.markGoneFromDisk([source]);
+    await act(async () => {
+      harness.endFileDrag("move", "another_window");
+    });
+    await waitMs(5000);
+
+    expect(checksFor(harness)).toEqual([]);
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
   });
 
   it("finds the search results again when another app moved one away", async () => {

@@ -1226,11 +1226,20 @@ export function App() {
             });
           },
         },
-    startFileDrag: (paths) =>
-      client.invoke("system:startFileDrag", {
+    startFileDrag: (items) => {
+      const paths = items.map((item) => item.path);
+      return client.invoke("system:startFileDrag", {
         paths,
+        // Folders as the disk has them, a link to one and an app or package among them.
+        directories: items.map(
+          (item) =>
+            item.kind === "directory" ||
+            item.kind === "symlink_directory" ||
+            item.kind === "bundle",
+        ),
         images: measureFileDragImages(paths, getLoadedFileThumbnail),
-      }),
+      });
+    },
     findDraggedAway: async (paths) =>
       (await client.invoke("system:findDraggedAway", { paths })).gone,
     onDraggedAway: (gonePaths, { intoTrash }) => {

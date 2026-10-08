@@ -2,15 +2,18 @@
  * Starts a system file drag from a window, as Finder does: the drag carries file URLs, so
  * Finder, the Dock and other apps take it as files.
  *
- * Exposes nativeStartFileDrag(viewHandle, paths, images, onEnded) → boolean, and
- * nativeReadDragPasteboard() → { changeCount, ownDrag, paths }: the files a drag going on
- * now carries, wherever it came from.
+ * Exposes nativeStartFileDrag(viewHandle, paths, directories, images, onEnded) → boolean,
+ * and nativeReadDragPasteboard() → { changeCount, paths }: the files a drag going on now
+ * carries, wherever it came from.
  *
  * Must be called on the main thread (Electron's main process runs JS there). The drag
  * runs in AppKit's event loop; when it ends, `onEnded` is called with what the drop did:
- * "copy", "move", "link", "delete" (the Trash in the Dock) or "none" (cancelled or refused).
+ * "copy", "move", "link", "delete" (the Trash in the Dock) or "none" (cancelled or refused),
+ * and where it ended: over the window it started from ("this_window"), another window of
+ * the app ("another_window") or anywhere else ("elsewhere").
  */
 
+#include <math.h>
 #include <node_api.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -35,6 +38,16 @@ typedef enum {
   DRAG_ENDED_DELETE,
 } drag_ended_t;
 
+/* Where the drag ended: a window of the app takes a drop itself, and follows what it moved. */
+typedef enum {
+  DRAG_ENDED_ELSEWHERE = 0,
+  DRAG_ENDED_OVER_THIS_WINDOW,
+  DRAG_ENDED_OVER_ANOTHER_WINDOW,
+} drag_ended_over_t;
+
+/* What `onEnded` is told, packed into the pointer the threadsafe call carries. */
+#define DRAG_ENDED_OVER_SHIFT 4
+
 static const char *drag_ended_name(drag_ended_t ended) {
   switch (ended) {
     case DRAG_ENDED_COPY: return "copy";
@@ -45,29 +58,38 @@ static const char *drag_ended_name(drag_ended_t ended) {
   }
 }
 
-/* Runs on the JS thread with the operation the drop did. */
+static const char *drag_ended_over_name(drag_ended_over_t over) {
+  switch (over) {
+    case DRAG_ENDED_OVER_THIS_WINDOW: return "this_window";
+    case DRAG_ENDED_OVER_ANOTHER_WINDOW: return "another_window";
+    default: return "elsewhere";
+  }
+}
+
+/* Runs on the JS thread with the operation the drop did, and where the drag ended. */
 static void call_on_ended(napi_env env, napi_value callback, void *context, void *data) {
   (void)context;
   if (env == NULL || callback == NULL) {
     return;
   }
-  napi_value operation;
-  napi_create_string_utf8(env, drag_ended_name((drag_ended_t)(intptr_t)data), NAPI_AUTO_LENGTH,
-                          &operation);
+  intptr_t packed = (intptr_t)data;
+  drag_ended_t ended = (drag_ended_t)(packed & ((1 << DRAG_ENDED_OVER_SHIFT) - 1));
+  drag_ended_over_t over = (drag_ended_over_t)(packed >> DRAG_ENDED_OVER_SHIFT);
+  napi_value argv[2];
+  napi_create_string_utf8(env, drag_ended_name(ended), NAPI_AUTO_LENGTH, &argv[0]);
+  napi_create_string_utf8(env, drag_ended_over_name(over), NAPI_AUTO_LENGTH, &argv[1]);
   napi_value undefined;
   napi_get_undefined(env, &undefined);
-  napi_call_function(env, undefined, callback, 1, &operation, NULL);
+  napi_call_function(env, undefined, callback, 2, argv, NULL);
 }
-
-/* The drag pasteboard's change count once this app's last drag had written to it: a drag
-   going on with that count is this app's own. */
-static NSInteger own_drag_change_count = -1;
 
 /* ── Dragging source ─────────────────────────────────────────────── */
 
 @interface FileTrailDragSource : NSObject <NSDraggingSource> {
  @public
   napi_threadsafe_function onEnded;
+  /* The window the drag started from. */
+  NSInteger windowNumber;
 }
 @end
 
@@ -103,7 +125,6 @@ static NSInteger own_drag_change_count = -1;
            endedAtPoint:(NSPoint)screenPoint
               operation:(NSDragOperation)operation {
   (void)session;
-  (void)screenPoint;
   drag_ended_t ended = DRAG_ENDED_NONE;
   if (operation & NSDragOperationDelete) {
     ended = DRAG_ENDED_DELETE;
@@ -114,7 +135,17 @@ static NSInteger own_drag_change_count = -1;
   } else if (operation & NSDragOperationLink) {
     ended = DRAG_ENDED_LINK;
   }
-  napi_call_threadsafe_function(onEnded, (void *)(intptr_t)ended, napi_tsfn_nonblocking);
+  /* A drop on a window of the app is that window's own: it moves or copies the items
+     itself, and follows them, so the window the drag came from leaves them be. */
+  NSInteger number = [NSWindow windowNumberAtPoint:screenPoint belowWindowWithWindowNumber:0];
+  drag_ended_over_t over = DRAG_ENDED_ELSEWHERE;
+  if (number == windowNumber) {
+    over = DRAG_ENDED_OVER_THIS_WINDOW;
+  } else if ([NSApp windowWithWindowNumber:number] != nil) {
+    over = DRAG_ENDED_OVER_ANOTHER_WINDOW;
+  }
+  intptr_t packed = (intptr_t)ended | ((intptr_t)over << DRAG_ENDED_OVER_SHIFT);
+  napi_call_threadsafe_function(onEnded, (void *)packed, napi_tsfn_nonblocking);
   napi_release_threadsafe_function(onEnded, napi_tsfn_release);
   onEnded = NULL;
   /* Retained by nativeStartFileDrag for the length of the drag. */
@@ -236,7 +267,10 @@ static bool read_drag_image(napi_env env, napi_value object, drag_image_t *out) 
   double index;
   napi_value centered, thumbnail;
   bool is_buffer = false;
-  if (!get_number(env, object, "index", &index) || index < 0 ||
+  /* A whole number a path's place can be; anything else (NaN, 2^32 and past) is refused
+     rather than cut down to some other item's. */
+  if (!get_number(env, object, "index", &index) || !(index >= 0 && index < (double)UINT32_MAX) ||
+      index != floor(index) ||
       !get_rect(env, object, "iconRect", &out->iconRect) ||
       !get_rect(env, object, "nameRect", &out->nameRect) ||
       !get_number(env, object, "nameFontSize", &out->nameFontSize) ||
@@ -269,7 +303,7 @@ static NSRect window_rect_in_view(NSView *view, NSRect rect) {
                     rect.size.height);
 }
 
-/* ── nativeStartFileDrag(viewHandle, paths, images, onEnded) ──────── */
+/* ── nativeStartFileDrag(viewHandle, paths, directories, images, onEnded) ── */
 
 static napi_value throw_type_error(napi_env env, const char *message) {
   napi_throw_type_error(env, NULL, message);
@@ -277,11 +311,11 @@ static napi_value throw_type_error(napi_env env, const char *message) {
 }
 
 static napi_value native_start_file_drag(napi_env env, napi_callback_info info) {
-  size_t argc = 4;
-  napi_value argv[4];
+  size_t argc = 5;
+  napi_value argv[5];
   napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
-  if (argc < 4) {
-    return throw_type_error(env, "Expected (viewHandle, paths, images, onEnded)");
+  if (argc < 5) {
+    return throw_type_error(env, "Expected (viewHandle, paths, directories, images, onEnded)");
   }
 
   void *handle_data = NULL;
@@ -300,18 +334,24 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
   }
   napi_is_array(env, argv[2], &is_array);
   if (!is_array) {
+    return throw_type_error(env, "directories must be an array of booleans");
+  }
+  napi_is_array(env, argv[3], &is_array);
+  if (!is_array) {
     return throw_type_error(env, "images must be an array");
   }
   napi_valuetype callback_type;
-  napi_typeof(env, argv[3], &callback_type);
+  napi_typeof(env, argv[4], &callback_type);
   if (callback_type != napi_function) {
     return throw_type_error(env, "onEnded must be a function");
   }
 
   uint32_t count = 0;
   napi_get_array_length(env, argv[1], &count);
+  uint32_t directory_count = 0;
+  napi_get_array_length(env, argv[2], &directory_count);
   uint32_t image_count = 0;
-  napi_get_array_length(env, argv[2], &image_count);
+  napi_get_array_length(env, argv[3], &image_count);
 
   napi_value started_value;
   @autoreleasepool {
@@ -333,6 +373,19 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
       [paths addObject:path ?: @""];
     }
 
+    /* Whether each path is a folder, as the page knows it: its file URL needn't look on
+       disk (one stat per item, on the main thread). A path past the list is looked at. */
+    NSMutableArray<NSNumber *> *directories = [NSMutableArray arrayWithCapacity:directory_count];
+    for (uint32_t i = 0; i < directory_count && i < count; i++) {
+      napi_value element;
+      bool is_directory = false;
+      napi_get_element(env, argv[2], i, &element);
+      if (napi_get_value_bool(env, element, &is_directory) != napi_ok) {
+        return throw_type_error(env, "directories must be an array of booleans");
+      }
+      [directories addObject:@(is_directory)];
+    }
+
     /* Each path's place on screen, where the page found one. */
     NSMutableDictionary<NSNumber *, NSValue *> *images = [NSMutableDictionary dictionary];
     drag_image_t *image_data = calloc(image_count > 0 ? image_count : 1, sizeof(drag_image_t));
@@ -341,7 +394,7 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
     }
     for (uint32_t i = 0; i < image_count; i++) {
       napi_value element;
-      napi_get_element(env, argv[2], i, &element);
+      napi_get_element(env, argv[3], i, &element);
       if (!read_drag_image(env, element, &image_data[i])) {
         free(image_data);
         return throw_type_error(env, "images must describe where each item shows");
@@ -356,76 +409,93 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
        arrives, and a drag started after it would follow the pointer with no button. */
     bool started = false;
     if (window != nil && paths.count > 0 && ([NSEvent pressedMouseButtons] & 1) != 0) {
-      NSPoint window_point = [window convertPointFromScreen:[NSEvent mouseLocation]];
-      NSPoint view_point = [view convertPoint:window_point fromView:nil];
-      NSEvent *drag_event = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDragged
-                                               location:window_point
-                                          modifierFlags:[NSEvent modifierFlags]
-                                              timestamp:[[NSProcessInfo processInfo] systemUptime]
-                                           windowNumber:window.windowNumber
-                                                context:nil
-                                            eventNumber:0
-                                             clickCount:1
-                                               pressure:1.0];
+      FileTrailDragSource *source = nil;
+      bool holds_on_ended = false;
+      /* AppKit raises on what it can't take (an item it can't draw, a window going away);
+         the drag then doesn't start, rather than taking the app down with it. */
+      @try {
+        NSPoint window_point = [window convertPointFromScreen:[NSEvent mouseLocation]];
+        NSPoint view_point = [view convertPoint:window_point fromView:nil];
+        NSEvent *drag_event =
+            [NSEvent mouseEventWithType:NSEventTypeLeftMouseDragged
+                               location:window_point
+                          modifierFlags:[NSEvent modifierFlags]
+                              timestamp:[[NSProcessInfo processInfo] systemUptime]
+                           windowNumber:window.windowNumber
+                                context:nil
+                            eventNumber:0
+                             clickCount:1
+                               pressure:1.0];
 
-      NSMutableArray<NSDraggingItem *> *items = [NSMutableArray arrayWithCapacity:paths.count];
-      NSRect unseen_frame = NSZeroRect;
-      bool any_placed = false;
-      for (uint32_t i = 0; i < paths.count; i++) {
-        NSString *path = paths[i];
-        NSURL *url = [NSURL fileURLWithPath:path];
-        NSDraggingItem *item = [[[NSDraggingItem alloc] initWithPasteboardWriter:url] autorelease];
-        drag_image_t *image = [images[@(i)] pointerValue];
-        if (image != NULL) {
-          /* It sets off from where it is on screen: icon and name in their places. */
-          NSRect iconRect = window_rect_in_view(view, image->iconRect);
-          NSRect nameRect = window_rect_in_view(view, image->nameRect);
-          NSImage *icon =
-              image->thumbnail ?: [[NSWorkspace sharedWorkspace] iconForFile:path];
-          NSImage *label = label_image([[NSFileManager defaultManager] displayNameAtPath:path],
-                                       image->nameFontSize);
-          CGFloat labelX = image->nameCentered ? NSMidX(nameRect) - label.size.width / 2
-                                               : NSMinX(nameRect) - DRAG_LABEL_PADDING_X;
-          NSRect labelRect = NSMakeRect(labelX, NSMidY(nameRect) - label.size.height / 2,
-                                        label.size.width, label.size.height);
-          set_item_picture(item, icon, fit_rect(icon.size, iconRect), label, labelRect);
-          if (!any_placed) {
-            unseen_frame = item.draggingFrame;
-            any_placed = true;
+        NSMutableArray<NSDraggingItem *> *items = [NSMutableArray arrayWithCapacity:paths.count];
+        NSRect unseen_frame = NSZeroRect;
+        bool any_placed = false;
+        for (uint32_t i = 0; i < paths.count; i++) {
+          NSString *path = paths[i];
+          NSURL *url = i < directories.count
+                           ? [NSURL fileURLWithPath:path isDirectory:directories[i].boolValue]
+                           : [NSURL fileURLWithPath:path];
+          NSDraggingItem *item =
+              [[[NSDraggingItem alloc] initWithPasteboardWriter:url] autorelease];
+          drag_image_t *image = [images[@(i)] pointerValue];
+          if (image != NULL) {
+            /* It sets off from where it is on screen: icon and name in their places. */
+            NSRect iconRect = window_rect_in_view(view, image->iconRect);
+            NSRect nameRect = window_rect_in_view(view, image->nameRect);
+            NSImage *icon =
+                image->thumbnail ?: [[NSWorkspace sharedWorkspace] iconForFile:path];
+            NSImage *label = label_image(
+                [[NSFileManager defaultManager] displayNameAtPath:path], image->nameFontSize);
+            CGFloat labelX = image->nameCentered ? NSMidX(nameRect) - label.size.width / 2
+                                                 : NSMinX(nameRect) - DRAG_LABEL_PADDING_X;
+            NSRect labelRect = NSMakeRect(labelX, NSMidY(nameRect) - label.size.height / 2,
+                                          label.size.width, label.size.height);
+            set_item_picture(item, icon, fit_rect(icon.size, iconRect), label, labelRect);
+            if (!any_placed) {
+              unseen_frame = item.draggingFrame;
+              any_placed = true;
+            }
+          }
+          [items addObject:item];
+        }
+        if (!any_placed) {
+          /* Nothing measured: the first item at the pointer, the rest in a pile under it. */
+          set_item_picture_at_pointer(items[0], paths[0], view, view_point);
+          unseen_frame = items[0].draggingFrame;
+        }
+        for (uint32_t i = 0; i < items.count; i++) {
+          if (images[@(i)] == nil && !(i == 0 && !any_placed)) {
+            /* Out of sight: it goes along without a picture, as in Finder. */
+            items[i].draggingFrame = unseen_frame;
           }
         }
-        [items addObject:item];
-      }
-      if (!any_placed) {
-        /* Nothing measured: the first item at the pointer, the rest in a pile under it. */
-        set_item_picture_at_pointer(items[0], paths[0], view, view_point);
-        unseen_frame = items[0].draggingFrame;
-      }
-      for (uint32_t i = 0; i < items.count; i++) {
-        if (images[@(i)] == nil && !(i == 0 && !any_placed)) {
-          /* Out of sight: it goes along without a picture, as in Finder. */
-          items[i].draggingFrame = unseen_frame;
-        }
-      }
 
-      FileTrailDragSource *source = [[FileTrailDragSource alloc] init];
-      napi_value resource_name;
-      napi_create_string_utf8(env, "nativeStartFileDrag", NAPI_AUTO_LENGTH, &resource_name);
-      if (napi_create_threadsafe_function(env, argv[3], NULL, resource_name, 0, 1, NULL, NULL,
-                                          NULL, call_on_ended,
-                                          &source->onEnded) != napi_ok) {
-        [source release];
-        free(image_data);
-        return throw_type_error(env, "could not hold onEnded");
+        source = [[FileTrailDragSource alloc] init];
+        source->windowNumber = window.windowNumber;
+        napi_value resource_name;
+        napi_create_string_utf8(env, "nativeStartFileDrag", NAPI_AUTO_LENGTH, &resource_name);
+        holds_on_ended =
+            napi_create_threadsafe_function(env, argv[4], NULL, resource_name, 0, 1, NULL, NULL,
+                                            NULL, call_on_ended, &source->onEnded) == napi_ok;
+        if (holds_on_ended) {
+          NSDraggingSession *session = [view beginDraggingSessionWithItems:items
+                                                                     event:drag_event
+                                                                    source:source];
+          /* From here the drag runs, and the source lets itself go once it has ended. */
+          started = true;
+          session.animatesToStartingPositionsOnCancelOrFail = YES;
+          /* Items set off from their places and gather into a stack under the pointer. */
+          session.draggingFormation = NSDraggingFormationStack;
+        }
+      } @catch (NSException *exception) {
+        (void)exception;
       }
-      NSDraggingSession *session = [view beginDraggingSessionWithItems:items
-                                                                 event:drag_event
-                                                                source:source];
-      session.animatesToStartingPositionsOnCancelOrFail = YES;
-      /* Items set off from their places and gather into a stack under the pointer. */
-      session.draggingFormation = NSDraggingFormationStack;
-      own_drag_change_count = session.draggingPasteboard.changeCount;
-      started = true;
+      if (!started && source != nil) {
+        if (holds_on_ended) {
+          napi_release_threadsafe_function(source->onEnded, napi_tsfn_release);
+        }
+        [source release];
+      }
     }
     free(image_data);
     napi_get_boolean(env, started, &started_value);
@@ -437,7 +507,7 @@ static napi_value native_start_file_drag(napi_env env, napi_callback_info info) 
 
 /* What the drag going on now carries, read from the system's drag pasteboard: the files it
    holds (file URLs only, references resolved to paths; promised files, text and links have
-   none), its change count, which every new drag changes, and whether it is this app's own.
+   none), and its change count, which every new drag changes.
    Any window can read it while a drag is over it; the page itself only gets the files once
    they are dropped. */
 static napi_value native_read_drag_pasteboard(napi_env env, napi_callback_info info) {
@@ -463,8 +533,6 @@ static napi_value native_read_drag_pasteboard(napi_env env, napi_callback_info i
     napi_value value;
     napi_create_int64(env, (int64_t)change_count, &value);
     napi_set_named_property(env, result, "changeCount", value);
-    napi_get_boolean(env, change_count == own_drag_change_count, &value);
-    napi_set_named_property(env, result, "ownDrag", value);
     napi_value list;
     napi_create_array_with_length(env, paths.count, &list);
     uint32_t index = 0;

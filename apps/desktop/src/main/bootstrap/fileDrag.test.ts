@@ -21,14 +21,15 @@ const window = { getNativeWindowHandle: () => handle };
 
 describe("startFileDrag", () => {
   it("drags from the sender's window, with each item where it shows, and answers with what the drop did", async () => {
-    let end: ((operation: "move") => void) | undefined;
-    const startNativeFileDrag = vi.fn((_view, _paths, _image, onEnded) => {
+    let end: ((operation: "move", endedOver: "another_window") => void) | undefined;
+    const startNativeFileDrag = vi.fn((_view, _paths, _directories, _images, onEnded) => {
       end = onEnded;
       return true;
     });
     const answer = startFileDrag(
       {
         paths: ["/Users/demo/a.txt", "/Users/demo/b.txt"],
+        directories: [false, true],
         images: [
           {
             index: 1,
@@ -48,6 +49,7 @@ describe("startFileDrag", () => {
     expect(startNativeFileDrag).toHaveBeenCalledWith(
       handle,
       ["/Users/demo/a.txt", "/Users/demo/b.txt"],
+      [false, true],
       [
         {
           index: 1,
@@ -60,25 +62,31 @@ describe("startFileDrag", () => {
       ],
       expect.any(Function),
     );
-    end?.("move");
-    await expect(answer).resolves.toEqual({ started: true, operation: "move" });
+    // Dropped on another window of the app, which takes the drop itself.
+    end?.("move", "another_window");
+    await expect(answer).resolves.toEqual({
+      started: true,
+      operation: "move",
+      endedOver: "another_window",
+    });
   });
 
   it("answers at once when the drag couldn't start", async () => {
+    const notStarted = { started: false, operation: "none", endedOver: "elsewhere" };
     await expect(
       startFileDrag(
-        { paths: ["/Users/demo/a.txt"], images: [] },
+        { paths: ["/Users/demo/a.txt"], directories: [false], images: [] },
         { sender },
         { windowFor: () => window, startNativeFileDrag: () => false },
       ),
-    ).resolves.toEqual({ started: false, operation: "none" });
+    ).resolves.toEqual(notStarted);
     await expect(
       startFileDrag(
-        { paths: ["/Users/demo/a.txt"], images: [] },
+        { paths: ["/Users/demo/a.txt"], directories: [false], images: [] },
         { sender },
         { windowFor: () => null, startNativeFileDrag: vi.fn() },
       ),
-    ).resolves.toEqual({ started: false, operation: "none" });
+    ).resolves.toEqual(notStarted);
   });
 });
 
@@ -159,7 +167,6 @@ describe("readDraggedIn", () => {
     const answer = await readDraggedIn({
       readDragPasteboard: () => ({
         changeCount: 7,
-        ownDrag: false,
         paths: [...Object.keys(onDisk), "/Users/demo/gone.txt", "relative/path"],
       }),
       lstatFn: lookUp(onDisk),
@@ -168,7 +175,6 @@ describe("readDraggedIn", () => {
 
     expect(answer).toEqual({
       changeCount: 7,
-      ownDrag: false,
       items: [
         { path: "/Users/demo/a.txt", kind: "file" },
         { path: "/Users/demo/Folder", kind: "directory" },
@@ -179,10 +185,10 @@ describe("readDraggedIn", () => {
     });
   });
 
-  it("says when the drag is the app's own, and has nothing for one without files", async () => {
+  it("has nothing for a drag without files", async () => {
     await expect(
-      readDraggedIn({ readDragPasteboard: () => ({ changeCount: 3, ownDrag: true, paths: [] }) }),
-    ).resolves.toEqual({ changeCount: 3, ownDrag: true, items: [] });
+      readDraggedIn({ readDragPasteboard: () => ({ changeCount: 3, paths: [] }) }),
+    ).resolves.toEqual({ changeCount: 3, items: [] });
   });
 
   it("refuses more items than one copy takes, rather than dropping some", async () => {
@@ -191,10 +197,10 @@ describe("readDraggedIn", () => {
 
     await expect(
       readDraggedIn({
-        readDragPasteboard: () => ({ changeCount: 1, ownDrag: false, paths }),
+        readDragPasteboard: () => ({ changeCount: 1, paths }),
         lstatFn,
       }),
-    ).resolves.toEqual({ changeCount: 1, ownDrag: false, items: [] });
+    ).resolves.toEqual({ changeCount: 1, items: [] });
     expect(lstatFn).not.toHaveBeenCalled();
   });
 });
