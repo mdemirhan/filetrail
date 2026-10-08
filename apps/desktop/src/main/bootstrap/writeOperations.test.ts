@@ -197,6 +197,52 @@ describe("createWriteOperationCoordinator", () => {
     coordinator.shutdown();
   });
 
+  // Only a trash, Undo or Redo was taken to have changed the Trash.
+  it("forgets the Trash's size when a Replace moved items into it, and tells the window", async () => {
+    const folderSizes = createFolderSizeHandlers({
+      getFolderSize: vi.fn(async () =>
+        JSON.stringify({
+          total: 500,
+          diskTotal: 500,
+          fileCount: 1,
+          folderCount: 0,
+          dev: 16,
+          dirs: {},
+        }),
+      ),
+      cancelFolderSize: vi.fn(),
+      homePath: "/Users/demo",
+    });
+    for (const path of ["/Users/demo/.Trash", "/Users/demo/Music"]) {
+      folderSizes.start({ path });
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const { writeService, emit } = createSubscribingWriteService();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    const sender = createSender();
+    startPaste(coordinator, sender);
+    const completed = createCopyPasteTerminalEvent("copy-op-1", "completed");
+    expect(folderSizes.getCachedSize("/Users/demo/.Trash")).toBe(500);
+
+    emit({
+      ...completed,
+      result: {
+        ...(completed.result as Record<string, unknown>),
+        trashedPaths: ["/Users/demo/.Trash/a.txt"],
+      },
+    });
+
+    expect(folderSizes.getCachedSize("/Users/demo/.Trash")).toBeUndefined();
+    expect(folderSizes.getCachedSize("/Users/demo/Music")).toBe(500);
+    expect(sender.send).toHaveBeenCalledWith(
+      "filetrail:writeOperationProgress",
+      expect.objectContaining({
+        result: expect.objectContaining({ trashedPaths: ["/Users/demo/.Trash/a.txt"] }),
+      }),
+    );
+    coordinator.shutdown();
+  });
+
   it("delete-immediately reports partial completion while continuing after failed items", async () => {
     const sender = createSender();
     const fs = createWriteOperationFs({

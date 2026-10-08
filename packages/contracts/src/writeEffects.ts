@@ -1,12 +1,14 @@
 // What a finished file operation changed, for whatever was worked out from the folders it
-// touched (folder sizes): the items it moved, made, renamed or removed, and the folder it
-// wrote into. Anything at, inside or around these paths may be different now. A path inside
-// another is left out, as what is at, inside or around it is at, inside or around the
-// other: the 100,000 files of a copied folder aren't each looked at again.
+// touched (folder sizes): the items it moved, made, renamed or removed, the folder it wrote
+// into, and where in the Trash the items it replaced went. Anything at, inside or around
+// these paths may be different now. A path inside another is left out, as what is at,
+// inside or around it is at, inside or around the other: the 100,000 files of a copied
+// folder aren't each looked at again.
 export function pathsChangedByWrite(result: {
   targetPath?: string | null;
   destinationDirectoryPath?: string | null;
   items: ReadonlyArray<{ sourcePath: string | null; destinationPath: string | null }>;
+  trashedPaths?: readonly string[] | undefined;
 }): string[] {
   const paths = new Set<string>();
   for (const path of [result.targetPath, result.destinationDirectoryPath]) {
@@ -21,6 +23,9 @@ export function pathsChangedByWrite(result: {
     if (item.destinationPath) {
       paths.add(item.destinationPath);
     }
+  }
+  for (const path of result.trashedPaths ?? []) {
+    paths.add(path);
   }
   return outermostPaths(paths);
 }

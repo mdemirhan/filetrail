@@ -231,6 +231,23 @@ describe("what a copy records", () => {
     expect(JSON.stringify(unit)).not.toContain(".filetrail");
   });
 
+  // The Trash's size, and the sizes of what holds it, stayed as they were.
+  it("says where in the Trash the items a Replace moved out of the way went", async () => {
+    await writeFile(join(src, "a.txt"), "new");
+    await writeFile(join(src, "b.txt"), "b");
+    await writeFile(join(dst, "a.txt"), "old");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt"), join(src, "b.txt")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(trashDir),
+    });
+
+    expect(result?.trashedPaths).toEqual([join(trashDir, "1-a.txt")]);
+  });
+
   // Found by the Undo fuzz test: "X.TXT" pasted over "x.txt" on a disk that ignores case
   // put the old item back as "X.TXT".
   it("records the old item of a Replace under the name it really had", async () => {

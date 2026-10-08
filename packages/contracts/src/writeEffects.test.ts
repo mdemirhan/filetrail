@@ -39,6 +39,16 @@ describe("pathsChangedByWrite", () => {
     ).toEqual(["/Users/demo/Dest", "/Users/demo/Old", "/Users/demo/a.txt"]);
   });
 
+  it("lists where in the Trash the items a Replace moved out of the way went", () => {
+    expect(
+      pathsChangedByWrite({
+        destinationDirectoryPath: "/Users/demo/Dest",
+        items: [{ sourcePath: "/Users/demo/a.txt", destinationPath: "/Users/demo/Dest/a.txt" }],
+        trashedPaths: ["/Users/demo/.Trash/a.txt"],
+      }).sort(),
+    ).toEqual(["/Users/demo/.Trash/a.txt", "/Users/demo/Dest", "/Users/demo/a.txt"]);
+  });
+
   it("leaves out a path inside another, which changes nothing it covers", () => {
     for (let seed = 1; seed <= 200; seed++) {
       const all = randomPaths(seed, 1 + (seed % 9));

@@ -314,6 +314,8 @@ export type CopyPasteOperationResult = {
     totalBytes: number | null;
   };
   items: CopyPasteItemResult[];
+  // Where the items a Replace moved out of the way went in the Trash, which they changed.
+  trashedPaths?: string[];
   error: string | null;
   // What the paste did, for Undo (main process only: the window's copy leaves it out).
   undoLog?: UndoLog;

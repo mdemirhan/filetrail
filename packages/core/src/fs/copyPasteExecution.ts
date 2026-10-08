@@ -110,6 +110,9 @@ type ExecutionContext = {
   // False while a Replace builds its new item under a hidden name: that isn't a step
   // anyone could undo, only the swap that follows is.
   recordsUndo: boolean;
+  // Where the items a Replace moved out of the way went in the Trash, which they changed.
+  // Shared by every step, like `progress`.
+  trashedPaths: string[];
 };
 
 // Steps are kept only for the items the person picked: undoing one undoes everything
@@ -209,6 +212,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     },
     folderIds: new Map(),
     recordsUndo: true,
+    trashedPaths: [],
   };
   const itemResults: CopyPasteItemResult[] = [];
   let encounteredError: Error | null = null;
@@ -292,7 +296,11 @@ export async function executeCopyPasteFromAnalysis(args: {
     currentSourcePath: null,
     currentDestinationPath: null,
     runtimeConflict: null,
-    result: { ...result, undoLog },
+    result: {
+      ...result,
+      ...(context.trashedPaths.length > 0 ? { trashedPaths: context.trashedPaths } : {}),
+      undoLog,
+    },
   });
 }
 
@@ -1415,6 +1423,9 @@ async function removeReplacedItem(
       const looks = records ? await stampWithoutId(fileSystem, node.destinationPath, id) : {};
       const trashPath = await fileSystem.trash(node.destinationPath);
       noteChanged(context);
+      if (trashPath !== null) {
+        context.trashedPaths.push(trashPath);
+      }
       if (trashPath === null) {
         // In the Trash, but the Trash didn't say where: it can't be put back.
         markCantUndo(context, "trash_location_unknown");

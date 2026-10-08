@@ -811,7 +811,7 @@ describe("useFolderSizeCache", () => {
         return () => undefined;
       },
     };
-    const finishWrite = async (action: string, sourcePaths: string[]) => {
+    const finishWrite = async (action: string, sourcePaths: string[], trashedPaths?: string[]) => {
       probes.length = 0;
       await act(async () => {
         emit?.({
@@ -821,6 +821,7 @@ describe("useFolderSizeCache", () => {
           result: {
             targetPath: null,
             items: sourcePaths.map((sourcePath) => ({ sourcePath, destinationPath: null })),
+            ...(trashedPaths ? { trashedPaths } : {}),
           },
         });
       });
@@ -943,6 +944,23 @@ describe("useFolderSizeCache", () => {
       expect(result.current.getEntry(path).status, path).toBe("idle");
     }
     expect(result.current.getEntry("/Users/demo/Music")).toMatchObject({ sizeBytes: 500 });
+    expect(probes).not.toContain("/Users/demo/Music");
+  });
+
+  // Only a trash, Undo or Redo was taken to have changed the Trash.
+  it("asks again about the Trash when a Replace moved the items it replaced there", async () => {
+    const sizes = new Map([
+      ["/Users/demo/.Trash", 2_000],
+      ["/Users/demo/Music", 500],
+    ]);
+    const { client, probes, finishWrite } = createWriteClient(sizes);
+    const { result } = renderHook(() => useFolderSizeCache(client, "/Users/demo"));
+    await calculateAll(result, sizes.keys());
+
+    sizes.set("/Users/demo/.Trash", 2_100);
+    await finishWrite("paste", ["/Users/demo/Downloads/a.txt"], ["/Users/demo/.Trash/a.txt"]);
+
+    expect(result.current.getEntry("/Users/demo/.Trash")).toMatchObject({ sizeBytes: 2_100 });
     expect(probes).not.toContain("/Users/demo/Music");
   });
 

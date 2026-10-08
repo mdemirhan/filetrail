@@ -528,6 +528,8 @@ export const copyPasteOperationResultSchema = z.object({
     totalBytes: z.number().int().nonnegative().nullable(),
   }),
   items: z.array(copyPasteItemResultSchema),
+  // Where the items a Replace moved out of the way went in the Trash.
+  trashedPaths: z.array(z.string()).optional(),
   error: z.string().nullable(),
 });
 export const copyPasteProgressEventSchema = z.object({
@@ -581,6 +583,8 @@ export const writeOperationResultSchema = z.object({
     totalBytes: z.number().int().nonnegative().nullable(),
   }),
   items: z.array(writeOperationItemResultSchema),
+  // Where the items a Replace moved out of the way went in the Trash.
+  trashedPaths: z.array(z.string()).optional(),
   error: z.string().nullable(),
 });
 export const writeOperationProgressEventSchema = z.object({

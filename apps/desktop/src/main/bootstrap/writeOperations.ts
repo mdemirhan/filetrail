@@ -2479,6 +2479,7 @@ function toProgressEvent(
           summary: event.result.summary,
           // Without what only the copy engine uses, as checking them took it out.
           items: event.result.items.map(({ sourceKind: _sourceKind, ...item }) => item),
+          ...(event.result.trashedPaths ? { trashedPaths: event.result.trashedPaths } : {}),
           error: event.result.error,
         }
       : null,
