@@ -66,6 +66,7 @@ import {
 } from "./lib/contentSelection";
 import type { ContextMenuSubmenus } from "./lib/contextMenu";
 import { describeClipboard } from "./lib/copyPasteClipboard";
+import { findEntryAtPath, resolveEntriesAtPaths } from "./lib/entriesAtPaths";
 import {
   createOpenItemLimitMessage,
   formatPathForShell,
@@ -720,18 +721,11 @@ export function App() {
     // Content-menu target entries are resolved from the visible content listing only.
     // Tree and favorite menus intentionally do not rely on this memo.
     () =>
-      contextMenuState
-        ? contextMenuState.paths
-            .map((path) => activeContentEntries.find((entry) => entry.path === path) ?? null)
-            .filter((entry): entry is DirectoryEntry => entry !== null)
-        : [],
+      contextMenuState ? resolveEntriesAtPaths(contextMenuState.paths, activeContentEntries) : [],
     [activeContentEntries, contextMenuState],
   );
   const contextMenuTargetEntry = useMemo(
-    () =>
-      contextMenuState?.targetPath
-        ? (activeContentEntries.find((entry) => entry.path === contextMenuState.targetPath) ?? null)
-        : null,
+    () => findEntryAtPath(activeContentEntries, contextMenuState?.targetPath),
     [activeContentEntries, contextMenuState],
   );
   const selectedTreeTargetPath = useMemo(

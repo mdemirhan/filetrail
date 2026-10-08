@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { buildApplicationMenuState } from "./applicationMenuState";
 import { EMPTY_COPY_PASTE_CLIPBOARD, setCopyPasteClipboard } from "./copyPasteClipboard";
 import {
   type RendererCommandAvailabilityContext,
@@ -566,5 +567,42 @@ describe("menu commands", () => {
     expect(canRunToolbarRendererCommand("openKeyboardShortcuts", onHelp)).toBe(true);
     expect(canRunToolbarRendererCommand("goBack", onHelp)).toBe(false);
     expect(canRunToolbarRendererCommand("openHelp", overDialog)).toBe(false);
+  });
+
+  // ⌘A in a big folder once took seconds here: every command looked up every selected item
+  // by walking the whole listing. The bound is far above the few milliseconds it takes now.
+  it("builds the menu state for a big folder with everything selected without a freeze", () => {
+    const entries = Array.from({ length: 20_000 }, (_, index) =>
+      index % 10 === 0
+        ? directory(["/Users/demo/big", `folder-${index}`].join("/"))
+        : file(["/Users/demo/big", `photo-${index}.jpg`].join("/")),
+    );
+    const context = availabilityContext({
+      currentPath: "/Users/demo/big",
+      activeContentEntries: entries,
+      selectedPathsInViewOrder: entries.map((entry) => entry.path),
+      selectedEntry: entries.at(-1) ?? null,
+      homePath: "/Users/demo",
+    });
+
+    const startedAt = performance.now();
+    const state = buildApplicationMenuState({
+      canRun: (command) => canRunToolbarRendererCommand(command, context),
+      viewMode: "list",
+      sortBy: "name",
+      foldersFirst: true,
+      hiddenFilesShown: false,
+      folderTreeOpen: true,
+      infoPanelOpen: false,
+      infoRowOpen: false,
+      favoriteIsSet: false,
+      textEditing: false,
+    });
+    const elapsed = performance.now() - startedAt;
+
+    expect(state.disabledCommands).toContain("editSelection");
+    expect(state.disabledCommands).not.toContain("calculateSize");
+    expect(state.disabledCommands).not.toContain("copySelection");
+    expect(elapsed).toBeLessThan(1000);
   });
 });

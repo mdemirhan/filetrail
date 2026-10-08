@@ -122,13 +122,15 @@ export function remapClipboardPaths(
   };
   let changed = false;
   const sourcePaths: string[] = [];
+  const keptPaths = new Set<string>();
   const sourceEntries: Record<string, ClipboardSourceEntry> = {};
   for (const path of clipboard.sourcePaths) {
     const nextPath = remap(path);
     changed ||= nextPath !== path;
-    if (sourcePaths.includes(nextPath)) {
+    if (keptPaths.has(nextPath)) {
       continue;
     }
+    keptPaths.add(nextPath);
     sourcePaths.push(nextPath);
     const entry = clipboard.sourceEntries[path];
     if (entry) {

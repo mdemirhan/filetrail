@@ -3,6 +3,7 @@ import { isInsideTrash } from "@filetrail/contracts";
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { CopyPasteClipboardState } from "./copyPasteClipboard";
 import { hasClipboardItems } from "./copyPasteClipboard";
+import { findEntryAtPath, resolveEntriesAtPaths } from "./entriesAtPaths";
 import {
   isDirectoryLikeEntry,
   isEditableFileEntry,
@@ -68,10 +69,8 @@ function resolveSingleSelectedFolderPath(context: CommandTargetContext): string 
   if (context.selectedPathsInViewOrder.length !== 1) {
     return null;
   }
-  const entry = context.activeContentEntries.find(
-    (candidate) => candidate.path === context.selectedPathsInViewOrder[0],
-  );
-  return isDirectoryLikeEntry(entry ?? null) ? (entry?.path ?? null) : null;
+  const entry = findEntryAtPath(context.activeContentEntries, context.selectedPathsInViewOrder[0]);
+  return isDirectoryLikeEntry(entry) ? entry.path : null;
 }
 
 // The folder File > Open in New Tab opens: the tree's folder when the tree has the
@@ -119,7 +118,7 @@ export function resolveCalculateSizePaths(context: CommandTargetContext): string
     return [context.selectedTreeTargetPath];
   }
   if (context.focusedPane !== "tree" && context.selectedPathsInViewOrder.length > 0) {
-    return resolveSelectedEntries(context.selectedPathsInViewOrder, context.activeContentEntries)
+    return resolveEntriesAtPaths(context.selectedPathsInViewOrder, context.activeContentEntries)
       .filter((entry) => isFolderSizeEligibleKind(entry.kind))
       .map((entry) => entry.path);
   }
@@ -129,15 +128,6 @@ export function resolveCalculateSizePaths(context: CommandTargetContext): string
 function selectionIsInTrash(context: RendererCommandAvailabilityContext): boolean {
   const homePath = context.homePath ?? "";
   return context.selectedPathsInViewOrder.some((path) => isInsideTrash(path, homePath));
-}
-
-function resolveSelectedEntries(
-  selectedPathsInViewOrder: readonly string[],
-  activeContentEntries: readonly DirectoryEntry[],
-) {
-  return selectedPathsInViewOrder
-    .map((path) => activeContentEntries.find((entry) => entry.path === path) ?? null)
-    .filter((entry): entry is DirectoryEntry => entry !== null);
 }
 
 export function canRunToolbarRendererCommand(
@@ -154,10 +144,6 @@ export function canRunToolbarRendererCommand(
 
   const { focusedPane } = context.shortcutContext;
   const selectedCount = context.selectedPathsInViewOrder.length;
-  const selectedEntries = resolveSelectedEntries(
-    context.selectedPathsInViewOrder,
-    context.activeContentEntries,
-  );
 
   switch (command) {
     case "openSelection":
@@ -165,13 +151,19 @@ export function canRunToolbarRendererCommand(
         return context.selectedTreeTargetPath !== null;
       }
       return selectedCount > 0 && selectedCount <= context.openItemLimit;
-    case "editSelection":
+    case "editSelection": {
+      if (selectedCount === 0 || selectedCount > context.openItemLimit) {
+        return false;
+      }
+      const selectedEntries = resolveEntriesAtPaths(
+        context.selectedPathsInViewOrder,
+        context.activeContentEntries,
+      );
       return (
-        selectedCount > 0 &&
-        selectedCount <= context.openItemLimit &&
         selectedEntries.length === selectedCount &&
         selectedEntries.every((entry) => isEditableFileEntry(entry))
       );
+    }
     case "openInTerminal":
       if (focusedPane === "tree") {
         return context.selectedTreeTargetPath !== null;

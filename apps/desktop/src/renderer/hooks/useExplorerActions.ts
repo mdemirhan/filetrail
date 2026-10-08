@@ -61,6 +61,7 @@ import {
   dirnameOf,
   pluralize,
 } from "../lib/copyPasteReview";
+import { resolveEntriesAtPaths } from "../lib/entriesAtPaths";
 import {
   collectRetrySourcePaths,
   createOpenItemLimitMessage,
@@ -2419,7 +2420,11 @@ export function useExplorerActions(args: {
       return false;
     }
     const now = selectedPathsInViewOrderRef.current;
-    return now.length !== atStart.paths.length || now.some((path) => !atStart.paths.includes(path));
+    if (now.length !== atStart.paths.length) {
+      return true;
+    }
+    const pathsAtStart = new Set(atStart.paths);
+    return now.some((path) => !pathsAtStart.has(path));
   }
 
   function queueWriteOperationSelection(
@@ -3132,9 +3137,7 @@ export function useExplorerActions(args: {
     if (paths.length === 0) {
       return;
     }
-    const entries = paths
-      .map((path) => activeContentEntries.find((candidate) => candidate.path === path) ?? null)
-      .filter((entry): entry is DirectoryEntry => entry !== null);
+    const entries = resolveEntriesAtPaths(paths, activeContentEntries);
     if (entries.length !== paths.length || entries.some((entry) => !isEditableFileEntry(entry))) {
       return;
     }
@@ -4106,9 +4109,7 @@ export function useExplorerActions(args: {
       await openPaths(paths);
       return;
     }
-    const entries = paths
-      .map((path) => activeContentEntries.find((candidate) => candidate.path === path) ?? null)
-      .filter((entry): entry is DirectoryEntry => entry !== null);
+    const entries = resolveEntriesAtPaths(paths, activeContentEntries);
     if (
       fileActivationAction === "edit" &&
       entries.length === paths.length &&
