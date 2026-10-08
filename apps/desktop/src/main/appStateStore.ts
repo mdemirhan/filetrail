@@ -94,7 +94,7 @@ export type StoredExplorerWindow = {
   session: WindowSession;
 };
 
-// No more windows are remembered than anyone keeps open; a damaged file can't make more.
+// No more windows are read back than anyone keeps open; a damaged file can't make more.
 export const STORED_EXPLORER_WINDOWS_LIMIT = 50;
 
 type AppState = {
@@ -328,17 +328,19 @@ export class AppStateStore {
     );
   }
 
-  /** Adds a window in front of the others. */
+  /**
+   * Adds a window in front of the others. Only open windows are kept, so none is dropped
+   * to keep to STORED_EXPLORER_WINDOWS_LIMIT: that is for reading a damaged file.
+   */
   addExplorerWindow(window: StoredExplorerWindow): void {
-    const windows = [
+    this.setWindows([
       {
         id: window.id,
         bounds: sanitizeWindowState(window.bounds),
         session: this.createWindowSession(window.session),
       },
       ...this.getExplorerWindows().filter((other) => other.id !== window.id),
-    ].slice(0, STORED_EXPLORER_WINDOWS_LIMIT);
-    this.setWindows(windows);
+    ]);
   }
 
   /** The window closed last, or none yet. */

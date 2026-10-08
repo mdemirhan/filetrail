@@ -19,6 +19,7 @@ const BATCH_RENAME_DEFAULTS = {
 };
 
 import {
+  STORED_EXPLORER_WINDOWS_LIMIT,
   type StoredWindowState,
   createAppStateStore,
   resolveAppStatePath,
@@ -1320,6 +1321,22 @@ describe("appStateStore explorer windows", () => {
     expect(lastClosed?.session.openTabs.map((open) => open.path)).toEqual(["/Users/demo/music"]);
     expect(lastClosed?.session.activeTabIndex).toBe(0);
     expect(lastClosed?.session.propertiesOpen).toBe(true);
+  });
+
+  it("never forgets a window that is open, however many are", () => {
+    const { store } = storeWithFile({ preferences: {}, windows: [] });
+    for (let index = 0; index <= STORED_EXPLORER_WINDOWS_LIMIT; index += 1) {
+      store.addExplorerWindow({
+        id: `window-${index}`,
+        bounds: { width: 900, height: 600, maximized: false },
+        session: store.createWindowSession(),
+      });
+    }
+
+    const ids = store.getExplorerWindows().map((window) => window.id);
+    expect(ids).toHaveLength(STORED_EXPLORER_WINDOWS_LIMIT + 1);
+    // The window opened first, behind all the others, is still open.
+    expect(ids.at(-1)).toBe("window-0");
   });
 
   it("keeps the windows of a damaged file that make sense", () => {
