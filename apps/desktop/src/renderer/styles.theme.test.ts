@@ -226,6 +226,22 @@ describe("theme styles", () => {
     }
   });
 
+  it("lets go of every part that drags the window while a menu is open", () => {
+    // A click there then reaches the page and closes the menu (see WindowDragRelease).
+    const dragging = declarations
+      .filter((d) => d.property === "-webkit-app-region" && d.value === "drag")
+      .flatMap((d) => d.selector.split(",").map((part) => part.trim()));
+    const released = declarations
+      .filter((d) => d.property === "-webkit-app-region" && d.value === "no-drag !important")
+      .flatMap((d) => d.selector.split(",").map((part) => part.trim()));
+
+    expect(dragging.length).toBeGreaterThan(0);
+    expect(released.every((selector) => selector.startsWith(":root[data-menu-open] "))).toBe(true);
+    expect(released.sort()).toEqual(
+      dragging.map((selector) => `:root[data-menu-open] ${selector}`).sort(),
+    );
+  });
+
   it("gives every menu the same surface, rows and highlight", () => {
     const shared = (property: string, selectors: string[]) =>
       declarations.filter(
