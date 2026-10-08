@@ -48,6 +48,7 @@ import { type TabPlace, useExplorerTabs } from "./hooks/useExplorerTabs";
 import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
 import { useFolderWatch } from "./hooks/useFolderWatch";
 import { useHiddenItemCount } from "./hooks/useHiddenItemCount";
+import { useLatest } from "./hooks/useLatest";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
 import { useTextEditingFocus } from "./hooks/useTextEditingFocus";
@@ -566,6 +567,9 @@ export function App() {
   // Search results' List view: the columns chosen for search results in Settings, Name
   // first, with widths of their own. Name, Folder and Kind sort the results; the dates, size
   // and permissions load only for the rows on screen.
+  // The same columns from one render to the next while the settings are, so the rows of the
+  // results aren't drawn again with every render of the window.
+  const sortSearchResultsByColumnRef = useLatest(sortSearchResultsByColumn);
   const searchListColumns = useMemo<ListColumnSet>(
     () => ({
       keys: ["name", ...searchColumnOrder.filter((key) => searchColumns[key])],
@@ -577,7 +581,7 @@ export function App() {
       sortBy: searchResultsSortBy,
       sortDirection: searchResultsSortDirection,
       onSortChange: (sortKey) =>
-        sortSearchResultsByColumn(sortKey as SearchResultsSortByPreference),
+        sortSearchResultsByColumnRef.current(sortKey as SearchResultsSortByPreference),
       getFolderLabel: (entry) => formatSearchResultFolder(entry.path, searchRootPath),
     }),
     [
@@ -588,7 +592,7 @@ export function App() {
       searchResultsSortDirection,
       searchRootPath,
       setSearchColumnWidths,
-      sortSearchResultsByColumn,
+      sortSearchResultsByColumnRef,
     ],
   );
   const searchNameHighlight = useMemo(

@@ -1,5 +1,6 @@
 import {
   type ReactNode,
+  memo,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -15,10 +16,10 @@ import { useElementSize } from "../hooks/useElementSize";
 import { useRevealIndex } from "../hooks/useRevealIndex";
 import {
   ClipboardMarkIcon,
+  type ClipboardMarks,
   clipboardMarkClassName,
   useClipboardMarks,
 } from "../lib/clipboardMarks";
-import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import { getIconGridItemsInBox } from "../lib/dragSelection";
 import { FileThumbnail } from "../lib/fileThumbnails";
 import {
@@ -43,6 +44,12 @@ import {
   isFolderKind,
   renameDraftKey,
 } from "./InlineRenameField";
+import {
+  type EntryItemEvents,
+  entryDropTargetState,
+  entryItemHandlers,
+  useEntryItemEvents,
+} from "./entryItemEvents";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type SelectionGestureModifiers = {
@@ -126,6 +133,19 @@ export function IconGridView({
   const scrollFrameRef = useRef<number | null>(null);
   const [scrollRowIndex, setScrollRowIndex] = useState(0);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const itemEvents = useEntryItemEvents({
+    containerRef,
+    selectedCount: selectedPaths.length,
+    onSelectionGesture,
+    onActivateEntry,
+    onItemContextMenu,
+    onItemDragStart,
+    onItemDragEnd,
+    onItemDragEnter,
+    onItemDragOver,
+    onItemDragLeave,
+    onItemDrop,
+  });
   // Stands for this reading of the folder: previews are checked against their files once
   // for each new list of items (see `FileThumbnail`).
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new token for every new list is the point.
@@ -343,7 +363,6 @@ export function IconGridView({
         }}
       >
         {visibleEntries.map((entry) => {
-          const canAcceptDrop = entry.kind === "directory" || entry.kind === "symlink_directory";
           if (inlineRename?.path === entry.path) {
             // While its name is edited the item is not a button: it would take the
             // field's clicks and key presses as its own.
@@ -375,67 +394,19 @@ export function IconGridView({
           }
           const selected = selectedPathSet.has(entry.path);
           return (
-            // biome-ignore lint/a11y/useSemanticElements: entries stay buttons for activation; role="option" overrides the implicit role on purpose.
-            <button
-              role="option"
+            <IconGridItem
               key={entry.path}
-              type="button"
-              className={`icon-item${selected ? " active" : ""}${
-                selected && !isFocused ? " inactive" : ""
-              }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
-              data-drop-target-state={
-                canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
-              }
-              data-selectable-entry-path={entry.path}
-              data-drag-path={entry.path}
+              entry={entry}
+              selected={selected}
+              inactive={selected && !isFocused}
+              clipboardMarks={clipboardMarks}
+              dropTargetState={entryDropTargetState(entry, getItemDropIndicator)}
               draggable={Boolean(onItemDragStart)}
-              onPointerDown={(event) => {
-                if (event.button !== 0) {
-                  return;
-                }
-                if (event.metaKey || event.shiftKey || !selected) {
-                  onSelectionGesture(entry.path, {
-                    metaKey: event.metaKey,
-                    shiftKey: event.shiftKey,
-                  });
-                }
-                containerRef.current?.focus();
-              }}
-              onClick={(event) => {
-                if (isSelectionNarrowingClick(event, selectedPaths.length, selected)) {
-                  onSelectionGesture(entry.path, { metaKey: false, shiftKey: false });
-                }
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                containerRef.current?.focus();
-                onItemContextMenu(entry.path, {
-                  x: event.clientX,
-                  y: event.clientY,
-                });
-              }}
-              onDragStart={(event) => onItemDragStart?.(entry, event)}
-              onDragEnd={(event) => onItemDragEnd?.(event)}
-              onDragEnter={canAcceptDrop ? (event) => onItemDragEnter?.(entry, event) : undefined}
-              onDragOver={canAcceptDrop ? (event) => onItemDragOver?.(entry, event) : undefined}
-              onDragLeave={canAcceptDrop ? (event) => onItemDragLeave?.(entry, event) : undefined}
-              onDrop={canAcceptDrop ? (event) => onItemDrop?.(entry, event) : undefined}
-              onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
-              title={entry.name}
-              aria-label={entry.name}
-              aria-selected={selected}
-            >
-              <span className="icon-item-image">
-                <FileThumbnail entry={entry} listing={listing} />
-                <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} variant="badge" />
-              </span>
-              <IconLabel
-                name={entry.name}
-                extension={entry.extension}
-                compact={compactIconView}
-                highlight={highlight}
-              />
-            </button>
+              events={itemEvents}
+              listing={listing}
+              compact={compactIconView}
+              highlight={highlight}
+            />
           );
         })}
       </div>
@@ -451,6 +422,64 @@ export function IconGridView({
     </div>
   );
 }
+
+// An item of the Icon view. Drawn again only when what it shows changes (see
+// useEntryItemEvents): the window around it is drawn again many times a second while files
+// are copied or folders measured.
+const IconGridItem = memo(function IconGridItem({
+  entry,
+  selected,
+  inactive,
+  clipboardMarks,
+  dropTargetState,
+  draggable,
+  events,
+  listing,
+  compact,
+  highlight,
+}: {
+  entry: DirectoryEntry;
+  selected: boolean;
+  /** Selected in a list that doesn't have the keyboard. */
+  inactive: boolean;
+  clipboardMarks: ClipboardMarks | null;
+  dropTargetState: string;
+  draggable: boolean;
+  events: EntryItemEvents;
+  listing: object;
+  compact: boolean;
+  highlight: RegExp | null;
+}) {
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: entries stay buttons for activation; role="option" overrides the implicit role on purpose.
+    <button
+      role="option"
+      type="button"
+      className={`icon-item${selected ? " active" : ""}${
+        inactive ? " inactive" : ""
+      }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
+      data-drop-target-state={dropTargetState}
+      data-selectable-entry-path={entry.path}
+      data-drag-path={entry.path}
+      draggable={draggable}
+      {...entryItemHandlers(entry, selected, events)}
+      title={entry.name}
+      aria-label={entry.name}
+      aria-selected={selected}
+    >
+      <span className="icon-item-image">
+        <FileThumbnail entry={entry} listing={listing} />
+        <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} variant="badge" />
+      </span>
+      <IconLabel
+        name={entry.name}
+        extension={entry.extension}
+        compact={compact}
+        highlight={highlight}
+      />
+    </button>
+  );
+});
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;

@@ -1,6 +1,7 @@
 import {
   type ReactNode,
   createContext,
+  memo,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -26,15 +27,16 @@ import {
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useDragSelection } from "../hooks/useDragSelection";
 import { useElementSize } from "../hooks/useElementSize";
+import { useLatest } from "../hooks/useLatest";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useRelativeDate } from "../hooks/useRelativeDate";
 import { useRevealIndex } from "../hooks/useRevealIndex";
 import {
   ClipboardMarkIcon,
+  type ClipboardMarks,
   clipboardMarkClassName,
   useClipboardMarks,
 } from "../lib/clipboardMarks";
-import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import {
   DETAILS_LAYOUT,
   LIST_COLUMN_LABELS,
@@ -79,6 +81,12 @@ import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
 import { type PathbarFolder, PathbarFolderMenu } from "./PathbarFolderMenu";
 import { PushButton } from "./PushButton";
 import { SortIndicator } from "./SortIndicator";
+import {
+  type EntryItemEvents,
+  entryDropTargetState,
+  entryItemHandlers,
+  useEntryItemEvents,
+} from "./entryItemEvents";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -329,30 +337,25 @@ export function ContentPane({
     onRequestPathSuggestions,
   });
   const pathSegments = useMemo(() => buildPathSegments(pathbarPath), [pathbarPath]);
-  // The folder's columns, from Settings, unless the list brings its own.
+  // The folder's columns, from Settings, unless the list brings its own. They stay the same
+  // from one render to the next while the settings do, so the rows aren't drawn again.
+  const columnCallbacks = useLatest({ onDetailColumnWidthsChange, onSortChange });
   const folderListColumns = useMemo<ListColumnSet>(
     () => ({
       keys: getVisibleDetailColumns(detailColumns, detailColumnOrder),
       widths: { ...detailColumnWidths, folder: 0 },
       clampWidth: (key, width) => (key === "folder" ? width : clampDetailColumnWidth(key, width)),
-      onWidthsChange: ({ folder: _folder, ...widths }) => onDetailColumnWidthsChange(widths),
+      onWidthsChange: ({ folder: _folder, ...widths }) =>
+        columnCallbacks.current.onDetailColumnWidthsChange(widths),
       // Date Created and Permissions come from metadata that loads only for the rows on
       // screen, so the folder cannot be ordered by them.
       getSortKey: (key) =>
         key === "created" || key === "permissions" || key === "folder" ? null : key,
       sortBy,
       sortDirection,
-      onSortChange: (sortKey) => onSortChange(sortKey as typeof sortBy),
+      onSortChange: (sortKey) => columnCallbacks.current.onSortChange(sortKey as typeof sortBy),
     }),
-    [
-      detailColumnOrder,
-      detailColumnWidths,
-      detailColumns,
-      onDetailColumnWidthsChange,
-      onSortChange,
-      sortBy,
-      sortDirection,
-    ],
+    [columnCallbacks, detailColumnOrder, detailColumnWidths, detailColumns, sortBy, sortDirection],
   );
   const { width: pathbarWidth } = useElementSize(pathbarRef);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -1153,6 +1156,19 @@ function FlowListView({
   const scrollFrameRef = useRef<number | null>(null);
   const [scrollRowIndex, setScrollRowIndex] = useState(0);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const itemEvents = useEntryItemEvents({
+    containerRef,
+    selectedCount: selectedPaths.length,
+    onSelectionGesture,
+    onActivateEntry,
+    onItemContextMenu,
+    onItemDragStart,
+    onItemDragEnd,
+    onItemDragEnter,
+    onItemDragOver,
+    onItemDragLeave,
+    onItemDrop,
+  });
 
   useEffect(
     () => () => {
@@ -1336,8 +1352,6 @@ function FlowListView({
             }}
           >
             {row.map((entry) => {
-              const canAcceptDrop =
-                entry.kind === "directory" || entry.kind === "symlink_directory";
               if (inlineRename?.path === entry.path) {
                 // While its name is edited the item is not a button: it would take the
                 // field's clicks and key presses as its own.
@@ -1365,74 +1379,18 @@ function FlowListView({
                   </div>
                 );
               }
+              const selected = selectedPathSet.has(entry.path);
               return (
-                // biome-ignore lint/a11y/useSemanticElements: entries stay buttons for activation; role="option" overrides the implicit role on purpose.
-                <button
-                  role="option"
+                <FlowListItem
                   key={entry.path}
-                  type="button"
-                  className={`flow-item${selectedPathSet.has(entry.path) ? " active" : ""}${
-                    selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
-                  }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
-                  data-drop-target-state={
-                    canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
-                  }
-                  data-selectable-entry-path={entry.path}
-                  data-drag-path={entry.path}
+                  entry={entry}
+                  selected={selected}
+                  inactive={selected && !isFocused}
+                  clipboardMarks={clipboardMarks}
+                  dropTargetState={entryDropTargetState(entry, getItemDropIndicator)}
                   draggable={Boolean(onItemDragStart)}
-                  onPointerDown={(event) => {
-                    if (event.button !== 0) {
-                      return;
-                    }
-                    if (event.metaKey || event.shiftKey || !selectedPathSet.has(entry.path)) {
-                      onSelectionGesture(entry.path, {
-                        metaKey: event.metaKey,
-                        shiftKey: event.shiftKey,
-                      });
-                    }
-                    containerRef.current?.focus();
-                  }}
-                  onClick={(event) => {
-                    if (
-                      isSelectionNarrowingClick(
-                        event,
-                        selectedPaths.length,
-                        selectedPathSet.has(entry.path),
-                      )
-                    ) {
-                      onSelectionGesture(entry.path, { metaKey: false, shiftKey: false });
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    containerRef.current?.focus();
-                    onItemContextMenu(entry.path, {
-                      x: event.clientX,
-                      y: event.clientY,
-                    });
-                  }}
-                  onDragStart={(event) => onItemDragStart?.(entry, event)}
-                  onDragEnd={(event) => onItemDragEnd?.(event)}
-                  onDragEnter={
-                    canAcceptDrop ? (event) => onItemDragEnter?.(entry, event) : undefined
-                  }
-                  onDragOver={canAcceptDrop ? (event) => onItemDragOver?.(entry, event) : undefined}
-                  onDragLeave={
-                    canAcceptDrop ? (event) => onItemDragLeave?.(entry, event) : undefined
-                  }
-                  onDrop={canAcceptDrop ? (event) => onItemDrop?.(entry, event) : undefined}
-                  onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
-                  title={entry.name}
-                  aria-selected={selectedPathSet.has(entry.path)}
-                >
-                  <FileIcon entry={entry} />
-                  <FileNameLabel
-                    className="flow-item-label"
-                    name={entry.name}
-                    extension={entry.extension}
-                  />
-                  <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} />
-                </button>
+                  events={itemEvents}
+                />
               );
             })}
           </div>
@@ -1442,6 +1400,50 @@ function FlowListView({
     </div>
   );
 }
+
+// An item of the List view. Drawn again only when what it shows changes (see
+// useEntryItemEvents): the window around it is drawn again many times a second while files
+// are copied or folders measured.
+const FlowListItem = memo(function FlowListItem({
+  entry,
+  selected,
+  inactive,
+  clipboardMarks,
+  dropTargetState,
+  draggable,
+  events,
+}: {
+  entry: DirectoryEntry;
+  selected: boolean;
+  /** Selected in a list that doesn't have the keyboard. */
+  inactive: boolean;
+  clipboardMarks: ClipboardMarks | null;
+  dropTargetState: string;
+  draggable: boolean;
+  events: EntryItemEvents;
+}) {
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: entries stay buttons for activation; role="option" overrides the implicit role on purpose.
+    <button
+      role="option"
+      type="button"
+      className={`flow-item${selected ? " active" : ""}${
+        inactive ? " inactive" : ""
+      }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
+      data-drop-target-state={dropTargetState}
+      data-selectable-entry-path={entry.path}
+      data-drag-path={entry.path}
+      draggable={draggable}
+      {...entryItemHandlers(entry, selected, events)}
+      title={entry.name}
+      aria-selected={selected}
+    >
+      <FileIcon entry={entry} />
+      <FileNameLabel className="flow-item-label" name={entry.name} extension={entry.extension} />
+      <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} />
+    </button>
+  );
+});
 
 function DetailsView({
   currentPath,
@@ -1568,6 +1570,21 @@ function DetailsView({
     overscan: 10,
   });
   const visibleEntries = entries.slice(range.startIndex, range.endIndex);
+  const showsFolderColumn = visibleColumns.includes("folder");
+  const showsSizeColumn = visibleColumns.includes("size");
+  const itemEvents = useEntryItemEvents({
+    containerRef,
+    selectedCount: selectedPaths.length,
+    onSelectionGesture,
+    onActivateEntry,
+    onItemContextMenu,
+    onItemDragStart,
+    onItemDragEnd,
+    onItemDragEnter,
+    onItemDragOver,
+    onItemDragLeave,
+    onItemDrop,
+  });
   const tableRef = useRef<HTMLDivElement | null>(null);
   const { boxRef, startDragSelection } = useDragSelection({
     containerRef,
@@ -1867,7 +1884,6 @@ function DetailsView({
         >
           {visibleEntries.map((entry, visibleIndex) => {
             const metadata = metadataByPath[entry.path];
-            const canAcceptDrop = entry.kind === "directory" || entry.kind === "symlink_directory";
             // Parity comes from the absolute row index so stripes stay put while virtualized
             // rows mount and unmount during scrolling.
             const rowParity = (range.startIndex + visibleIndex) % 2 === 0 ? "even" : "odd";
@@ -1924,93 +1940,30 @@ function DetailsView({
                 </div>
               );
             }
+            const selected = selectedPathSet.has(entry.path);
             return (
-              // biome-ignore lint/a11y/useSemanticElements: rows stay buttons for activation; role="row" overrides the implicit role on purpose.
-              <button
-                role="row"
+              <DetailsRow
                 key={entry.path}
-                type="button"
-                className={`details-row${selectedPathSet.has(entry.path) ? " active" : ""}${
-                  selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
-                }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
-                data-drop-target-state={
-                  canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
-                }
-                data-selectable-entry-path={entry.path}
-                data-drag-path={entry.path}
-                data-row-parity={rowParity}
+                entry={entry}
+                metadata={metadata}
+                rowParity={rowParity}
+                selected={selected}
+                inactive={selected && !isFocused}
+                clipboardMarks={clipboardMarks}
+                dropTargetState={entryDropTargetState(entry, getItemDropIndicator)}
                 draggable={Boolean(onItemDragStart)}
-                onPointerDown={(event) => {
-                  if (event.button !== 0) {
-                    return;
-                  }
-                  if (event.metaKey || event.shiftKey || !selectedPathSet.has(entry.path)) {
-                    onSelectionGesture(entry.path, {
-                      metaKey: event.metaKey,
-                      shiftKey: event.shiftKey,
-                    });
-                  }
-                  containerRef.current?.focus();
-                }}
-                onClick={(event) => {
-                  if (
-                    isSelectionNarrowingClick(
-                      event,
-                      selectedPaths.length,
-                      selectedPathSet.has(entry.path),
-                    )
-                  ) {
-                    onSelectionGesture(entry.path, { metaKey: false, shiftKey: false });
-                  }
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  containerRef.current?.focus();
-                  onItemContextMenu(entry.path, {
-                    x: event.clientX,
-                    y: event.clientY,
-                  });
-                }}
-                onDragStart={(event) => onItemDragStart?.(entry, event)}
-                onDragEnd={(event) => onItemDragEnd?.(event)}
-                onDragEnter={canAcceptDrop ? (event) => onItemDragEnter?.(entry, event) : undefined}
-                onDragOver={canAcceptDrop ? (event) => onItemDragOver?.(entry, event) : undefined}
-                onDragLeave={canAcceptDrop ? (event) => onItemDragLeave?.(entry, event) : undefined}
-                onDrop={canAcceptDrop ? (event) => onItemDrop?.(entry, event) : undefined}
-                onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
-                title={entry.path}
-                aria-selected={selectedPathSet.has(entry.path)}
-                style={{
-                  width: `${tableWidth}px`,
-                  minWidth: "100%",
-                  gridTemplateColumns,
-                }}
-              >
-                {visibleColumns.map((columnKey) => (
-                  <DetailsCell
-                    key={columnKey}
-                    columnKey={columnKey}
-                    entry={entry}
-                    metadata={metadata}
-                    folderLabel={
-                      columnKey === "folder" ? (columns.getFolderLabel?.(entry) ?? "") : null
-                    }
-                    folderSizeLabel={
-                      columnKey === "size" && isFolderLikeEntry(entry)
-                        ? (getFolderSizeLabel?.(entry.path) ?? null)
-                        : null
-                    }
-                    sizeBarFraction={
-                      columnKey === "size" ? getSizeBarFraction(entry, sizeBars) : null
-                    }
-                    nameTag={
-                      columnKey === "name" ? (
-                        <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} />
-                      ) : null
-                    }
-                  />
-                ))}
-              </button>
+                events={itemEvents}
+                tableWidth={tableWidth}
+                gridTemplateColumns={gridTemplateColumns}
+                visibleColumns={visibleColumns}
+                folderLabel={showsFolderColumn ? (columns.getFolderLabel?.(entry) ?? "") : null}
+                folderSizeLabel={
+                  showsSizeColumn && isFolderLikeEntry(entry)
+                    ? (getFolderSizeLabel?.(entry.path) ?? null)
+                    : null
+                }
+                sizeBarFraction={showsSizeColumn ? getSizeBarFraction(entry, sizeBars) : null}
+              />
             );
           })}
         </div>
@@ -2027,6 +1980,84 @@ function DetailsView({
     </div>
   );
 }
+
+// A row of the List view (see FlowListItem): drawn again only when what it shows changes.
+const DetailsRow = memo(function DetailsRow({
+  entry,
+  metadata,
+  rowParity,
+  selected,
+  inactive,
+  clipboardMarks,
+  dropTargetState,
+  draggable,
+  events,
+  tableWidth,
+  gridTemplateColumns,
+  visibleColumns,
+  folderLabel,
+  folderSizeLabel,
+  sizeBarFraction,
+}: {
+  entry: DirectoryEntry;
+  metadata: DirectoryEntryMetadata | undefined;
+  rowParity: "even" | "odd";
+  selected: boolean;
+  /** Selected in a list that doesn't have the keyboard. */
+  inactive: boolean;
+  clipboardMarks: ClipboardMarks | null;
+  dropTargetState: string;
+  draggable: boolean;
+  events: EntryItemEvents;
+  tableWidth: number;
+  gridTemplateColumns: string;
+  visibleColumns: readonly ListColumnKey[];
+  /** The Folder column's text, when that column is shown. */
+  folderLabel: string | null;
+  folderSizeLabel: string | null;
+  sizeBarFraction: number | null;
+}) {
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: rows stay buttons for activation; role="row" overrides the implicit role on purpose.
+    <button
+      role="row"
+      type="button"
+      className={`details-row${selected ? " active" : ""}${
+        inactive ? " inactive" : ""
+      }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
+      data-drop-target-state={dropTargetState}
+      data-selectable-entry-path={entry.path}
+      data-drag-path={entry.path}
+      data-row-parity={rowParity}
+      draggable={draggable}
+      {...entryItemHandlers(entry, selected, events)}
+      title={entry.path}
+      aria-selected={selected}
+      style={{
+        width: `${tableWidth}px`,
+        minWidth: "100%",
+        gridTemplateColumns,
+      }}
+    >
+      {visibleColumns.map((columnKey) => (
+        <DetailsCell
+          key={columnKey}
+          columnKey={columnKey}
+          entry={entry}
+          metadata={metadata}
+          folderLabel={columnKey === "folder" ? folderLabel : null}
+          folderSizeLabel={columnKey === "size" ? folderSizeLabel : null}
+          sizeBarFraction={columnKey === "size" ? sizeBarFraction : null}
+          nameTag={
+            columnKey === "name" ? (
+              <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} />
+            ) : null
+          }
+        />
+      ))}
+    </button>
+  );
+});
 
 function DetailsHeaderCell({
   columnKey,
