@@ -471,6 +471,7 @@ describe("recoverWrites", () => {
         sourcePath: join(testDir, "source", "F"),
         staged: false,
         stagingId: { dev: stats.dev + 1, ino: stats.ino },
+        stagingBornMs: stats.birthtimeMs,
       }),
     );
     const logger = { info: vi.fn(), error: vi.fn() };
@@ -479,6 +480,50 @@ describe("recoverWrites", () => {
 
     expect(existsSync(staging)).toBe(false);
     expect(journal.entries()).toEqual([]);
+  });
+
+  // Another disk at the same place, with an item of the same file id there: not the
+  // folder the paste made, so it is left alone.
+  it("leaves alone an item of the same file id on another disk", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const staging = join(testDir, ".F.filetrail-0a1b2c3d");
+    await mkdir(staging);
+    await writeFile(join(staging, "a.txt"), "someone's");
+    const stats = lstatSync(staging);
+    await journal.add(
+      createEntry("folder", {
+        stagingPath: staging,
+        finalPath: join(testDir, "F"),
+        sourcePath: join(testDir, "source", "F"),
+        staged: false,
+        stagingId: { dev: stats.dev + 1, ino: stats.ino },
+        stagingBornMs: stats.birthtimeMs - 1000,
+      }),
+    );
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    await recoverWrites(journal, nativeFileSystem, logger);
+
+    expect(await readdir(staging)).toEqual(["a.txt"]);
+  });
+
+  // The part of a large file couldn't be removed at first (the disk had a moment's
+  // trouble), but the hidden folder it was in could: its record clears on the next try.
+  it("clears the record of a part whose hidden folder went before it could be removed", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const staging = join(testDir, ".F.filetrail-0a1b2c3d");
+    const partial = join(staging, ".movie.mov.filetrail-11111111");
+    await journal.add({ kind: "partial_file", id: "p", partialPath: partial, finalPath: "x" });
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    await recoverWrites(journal, nativeFileSystem, logger);
+
+    expect(journal.entries()).toEqual([]);
+    // A disk that isn't connected keeps it.
+    const away = join(testDir, "gone-disk", ".F.filetrail-0a1b2c3d", ".m.filetrail-11111111");
+    await journal.add({ kind: "partial_file", id: "away", partialPath: away, finalPath: "x" });
+    await recoverWrites(journal, nativeFileSystem, logger);
+    expect(journal.entries().map((entry) => entry.id)).toEqual(["away"]);
   });
 
   // A rename of several ("1" becomes "2", "2" becomes "3") stops dead as the first item

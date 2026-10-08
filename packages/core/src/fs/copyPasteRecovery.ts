@@ -4,7 +4,6 @@ import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
 import { moveExclusive, removeStagedItem, unlockForMove } from "./copyPasteExecution";
 import { captureFingerprint } from "./copyPasteFingerprint";
 import { isPackageFolder, resolveDuplicateName } from "./copyPasteNames";
-import type { ItemId } from "./undoLog";
 import type {
   PartialFileJournalEntry,
   ReplaceJournalEntry,
@@ -112,13 +111,17 @@ async function removePartialFile(
   try {
     isFile = (await fileSystem.lstat(entry.partialPath)).isFile();
   } catch (error) {
-    if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, entry.partialPath))) {
+    if (
+      errorCode(error) === "ENOENT" &&
+      ((await folderIsThere(fileSystem, entry.partialPath)) ||
+        (await hiddenFolderAroundIsGone(fileSystem, entry.partialPath)))
+    ) {
       return { entry, outcome: "nothing_left" };
     }
     return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
   }
-  // Only what this app names its partial files: "."+name+".filetrail-" and 8 hex digits.
-  if (!isFile || !/^\..*\.filetrail-[0-9a-f]{8}$/su.test(basename(entry.partialPath))) {
+  // Only what this app names its partial files (see STAGING_NAME).
+  if (!isFile || !STAGING_NAME.test(basename(entry.partialPath))) {
     return { entry, outcome: "nothing_left" };
   }
   // A copy is locked, or carries a rule against deleting it, as its original does: those
@@ -126,6 +129,28 @@ async function removePartialFile(
   await removeStagedItem(fileSystem, entry.partialPath);
   return { entry, outcome: "removed_copy" };
 }
+
+// A large file copied inside a folder a paste was building under a hidden name: that folder
+// may have gone since (removed by recovery after this part couldn't be), taking the part
+// with it. Told from a disk that isn't connected by the folder that held it being there.
+async function hiddenFolderAroundIsGone(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<boolean> {
+  for (let folder = dirname(path); folder !== dirname(folder); folder = dirname(folder)) {
+    if (STAGING_NAME.test(basename(folder))) {
+      const gone = await fileSystem.lstat(folder).then(
+        () => false,
+        (error) => errorCode(error) === "ENOENT",
+      );
+      return gone && (await folderIsThere(fileSystem, folder));
+    }
+  }
+  return false;
+}
+
+// The hidden name this app builds an item under: "."+name+".filetrail-" and 8 hex digits.
+const STAGING_NAME = /^\..*\.filetrail-[0-9a-f]{8}$/su;
 
 // Whether looking up `path` comes back (found or not) within `ms`.
 export async function answersWithin(
@@ -160,12 +185,9 @@ async function recoverEntry(
     if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, entry.stagingPath))) {
       // A folder built under a hidden name and put in place before its own metadata went on:
       // it is in place (the same folder, by its id), and gets it now.
-      if (entry.staged && entry.stagingId !== undefined) {
-        const placed = await captureFingerprint(fileSystem, entry.finalPath);
-        if (isSameItem(placed, entry.stagingId)) {
-          await applyFolderMetadata(fileSystem, entry);
-          return { entry, outcome: "finished", path: entry.finalPath };
-        }
+      if (entry.staged && (await isOwnStaging(fileSystem, entry.finalPath, entry))) {
+        await applyFolderMetadata(fileSystem, entry);
+        return { entry, outcome: "finished", path: entry.finalPath };
       }
       return { entry, outcome: "nothing_left" };
     }
@@ -174,7 +196,10 @@ async function recoverEntry(
   const staged = await captureFingerprint(fileSystem, entry.stagingPath);
   // A folder made there for the item to be built in is known by its id: another item that
   // took the name since isn't this paste's, and is left alone.
-  if (entry.stagingId !== undefined && !isSameItem(staged, entry.stagingId)) {
+  if (
+    entry.stagingId !== undefined &&
+    !(await isOwnStaging(fileSystem, entry.stagingPath, entry))
+  ) {
     return { entry, outcome: "nothing_left" };
   }
   const finalTaken = (await captureFingerprint(fileSystem, entry.finalPath)).exists;
@@ -228,17 +253,35 @@ async function applyFolderMetadata(
   if (
     !fileSystem.copyMetadata ||
     entry.sourceId === undefined ||
-    !isSameItem(source, entry.sourceId)
+    source.dev !== entry.sourceId.dev ||
+    source.ino !== entry.sourceId.ino
   ) {
     return;
   }
   await fileSystem.copyMetadata(entry.sourcePath, entry.finalPath).catch(() => undefined);
 }
 
-// Whether `found` is the item `id` was read from. Its disk may have been connected again
-// since, under another device number: the item's number on it says.
-function isSameItem(found: { ino: number | null }, id: ItemId): boolean {
-  return found.ino === id.ino;
+// Whether the item at `path` is the folder the entry's paste made to build in (it keeps its
+// id when renamed into place). An external disk connected again since has another device
+// number: the folder is then known by its file id and when it was made, which the disk
+// keeps; another disk at the same place has neither.
+async function isOwnStaging(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  entry: ReplaceJournalEntry,
+): Promise<boolean> {
+  const id = entry.stagingId;
+  if (id === undefined) {
+    return false;
+  }
+  const stats = await fileSystem.lstat(path).catch(() => null);
+  if (stats === null || stats.ino !== id.ino) {
+    return false;
+  }
+  return (
+    stats.dev === id.dev ||
+    (entry.stagingBornMs !== undefined && stats.birthtimeMs === entry.stagingBornMs)
+  );
 }
 
 async function folderIsThere(fileSystem: WriteServiceFileSystem, path: string): Promise<boolean> {

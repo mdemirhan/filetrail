@@ -873,6 +873,7 @@ async function executeStagedDirectory(
     moved: false,
     staged: false,
     ...(reserved.id ? { stagingId: reserved.id } : {}),
+    ...(reserved.bornMs !== null ? { stagingBornMs: reserved.bornMs } : {}),
     ...(sourceIdOf(currentNode) ? { sourceId: sourceIdOf(currentNode) as ItemId } : {}),
     ...(context.mode === "cut" ? { movingCopy: true as const } : {}),
   };
@@ -950,13 +951,7 @@ async function executeStagedDirectory(
   // paste built is put in place, and only then are originals removed.
   if (!(await isStillOurs(fileSystem, temporaryPath, reserved.id))) {
     await discard();
-    return {
-      itemStatus: "failed",
-      skipReason: null,
-      error: hiddenCopyChangedMessage(name, context.mode),
-      destinationPath: finalPath,
-      childItems: [],
-    };
+    return copyChangedOutcome(name, finalPath, context.mode);
   }
   try {
     // Complete now: a crash from here on puts it in place at the next start.
@@ -1435,6 +1430,9 @@ async function executeReplace(
       if (reserved.id) {
         journalEntry.stagingId = reserved.id;
       }
+      if (reserved.bornMs !== null) {
+        journalEntry.stagingBornMs = reserved.bornMs;
+      }
       const sourceId = sourceIdOf(currentNode);
       if (sourceId) {
         journalEntry.sourceId = sourceId;
@@ -1548,21 +1546,24 @@ async function executeReplace(
   try {
     // A copy of a locked item is locked too, and a locked item can't be renamed: it is
     // unlocked for the swap and locked again after. Done before the old item goes.
-    if (!movedByRename && !(await isStillOurs(fileSystem, temporaryPath, stagingId))) {
+    // Another app could have put something else under the hidden name: nothing is done to
+    // it, and the old item goes only for the copy this paste built.
+    const stillOurs = () =>
+      movedByRename ? Promise.resolve(true) : isStillOurs(fileSystem, temporaryPath, stagingId);
+    if (!(await stillOurs())) {
       await undoStaging();
-      return {
-        itemStatus: "failed",
-        skipReason: null,
-        error: hiddenCopyChangedMessage(basename(finalPath), context.mode),
-        destinationPath: finalPath,
-        childItems: [],
-      };
+      return copyChangedOutcome(basename(finalPath), finalPath, context.mode);
     }
     stagedFlags = await unlockForMove(fileSystem, temporaryPath);
     stagedMode = await openForMove(fileSystem, temporaryPath);
-    if ((await removeReplacedItem(context, currentNode, replaced)) === "skipped") {
+    const removal = await removeReplacedItem(context, currentNode, replaced, stillOurs);
+    if (removal === "skipped") {
       await undoStaging();
       return skippedOutcome("runtime_conflict_resolution", finalPath);
+    }
+    if (removal === "changed") {
+      await undoStaging();
+      return copyChangedOutcome(basename(finalPath), finalPath, context.mode);
     }
     oldItemRemoved = true;
     try {
@@ -1742,11 +1743,15 @@ async function removeMovedSources(
 
 // Moves the item being replaced out of the way: to the Trash, or, when there is no
 // Trash here, deleted permanently only if the person agrees.
+// `stillOurs` says whether the new item built under a hidden name is still the one this
+// paste made: asked last, just before the old item goes (a question about deleting it for
+// good may have been open a while). "changed" when it isn't: the old item stays.
 async function removeReplacedItem(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
   replaced: ReplacedItem,
-): Promise<"removed" | "skipped"> {
+  stillOurs?: () => Promise<boolean>,
+): Promise<"removed" | "skipped" | "changed"> {
   const { fileSystem } = context;
   const destination = replaced.fingerprint;
   if (fileSystem.trash) {
@@ -1765,6 +1770,9 @@ async function removeReplacedItem(
           ? itemIdOf({ dev: current.dev, ino: current.ino })
           : null;
       const looks = records ? await stampWithoutId(fileSystem, node.destinationPath, id) : {};
+      if (stillOurs && !(await stillOurs())) {
+        return "changed";
+      }
       const trashPath = await fileSystem.trash(node.destinationPath);
       noteChanged(context);
       context.replacedPaths.push(node.destinationPath);
@@ -1831,6 +1839,9 @@ async function removeReplacedItem(
   // Last, after the long look inside: the question may have been open a while, and what
   // is deleted is what it was about.
   await assertReplacedItemUnchanged(context, node, replaced);
+  if (stillOurs && !(await stillOurs())) {
+    return "changed";
+  }
   markCantUndo(context, "deleted_for_good");
   noteChanged(context);
   // Named before deleting: a delete that fails part way has still removed some of it.
@@ -2269,7 +2280,7 @@ function sourceIdOf(node: ResolvedCopyPasteNode): ItemId | null {
 async function reserveStagingFolder(
   fileSystem: WriteServiceFileSystem,
   finalPath: string,
-): Promise<{ path: string; id: ItemId | null }> {
+): Promise<{ path: string; id: ItemId | null; bornMs: number | null }> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const path = await temporarySiblingPath(fileSystem, finalPath);
     try {
@@ -2281,9 +2292,14 @@ async function reserveStagingFolder(
       throw await explainMissingFolder(fileSystem, path, error);
     }
     const made = await captureFingerprint(fileSystem, path);
+    const bornMs = await fileSystem.lstat(path).then(
+      (stats) => (typeof stats.birthtimeMs === "number" ? stats.birthtimeMs : null),
+      () => null,
+    );
     return {
       path,
       id: made.dev !== null && made.ino !== null ? { dev: made.dev, ino: made.ino } : null,
+      bornMs,
     };
   }
   throw new Error(`Couldn't find a free temporary name next to “${basename(finalPath)}”.`);
@@ -2301,6 +2317,20 @@ async function isStillOurs(
   }
   const there = await captureFingerprint(fileSystem, path);
   return there.dev === id.dev && there.ino === id.ino;
+}
+
+function copyChangedOutcome(
+  name: string,
+  destinationPath: string,
+  mode: CopyPasteMode,
+): ExecuteNodeResult {
+  return {
+    itemStatus: "failed",
+    skipReason: null,
+    error: hiddenCopyChangedMessage(name, mode),
+    destinationPath,
+    childItems: [],
+  };
 }
 
 function hiddenCopyChangedMessage(name: string, mode: CopyPasteMode): string {

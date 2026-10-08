@@ -2,7 +2,7 @@
 // review and the paste, on the real disk.
 
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -1340,6 +1340,43 @@ describe("the item a Replace removes is the one that was there", () => {
     expect(result?.status).toBe("failed");
     expect(await readFile(join(dst, "a.txt"), "utf8")).toBe("never asked about");
     expect(await readdir(dst)).toEqual(["a.txt"]);
+  });
+
+  // Another app swapped the hidden copy while the question was open: the old item isn't
+  // deleted for it, and it isn't put in place.
+  it("doesn't delete the old item for a copy another app swapped while it asked", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "new");
+    await mkdir(join(dst, "F"));
+    await writeFile(join(dst, "F", "a.txt"), "old");
+    const fileSystem: WriteServiceFileSystem = {
+      ...nativeFileSystem,
+      trash: async () => {
+        throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+      },
+    };
+
+    const { result, conflicts } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem,
+      resolve: () => {
+        const hidden = readdirSync(dst).find((name) => name.startsWith(".F.filetrail-")) ?? "";
+        renameSync(join(dst, hidden), join(testDir, "ours"));
+        mkdirSync(join(dst, hidden));
+        writeFileSync(join(dst, hidden, "theirs.txt"), "theirs");
+        return "overwrite";
+      },
+    });
+
+    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
+    expect(result?.status).toBe("failed");
+    expect(await readFile(join(dst, "F", "a.txt"), "utf8")).toBe("old");
+    const hidden = (await readdir(dst)).filter((name) => name !== "F");
+    expect(hidden).toHaveLength(1);
+    expect(await readdir(join(dst, hidden[0] ?? ""))).toEqual(["theirs.txt"]);
   });
 });
 

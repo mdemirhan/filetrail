@@ -61,6 +61,8 @@ export type WriteServiceStats = {
   size: number;
   mode: number;
   mtimeMs?: number;
+  // When the item was made, which its disk keeps for it.
+  birthtimeMs?: number;
   ino?: number;
   dev?: number;
 };
@@ -492,6 +494,9 @@ export type ReplaceJournalEntry = {
   // The id of the folder made at `stagingPath` for the item to be built in: what is there
   // is removed or put in place only while it is that folder.
   stagingId?: ItemId;
+  // When that folder was made. An external disk connected again gets another device
+  // number: the folder is known there by its file id and this, which the disk keeps.
+  stagingBornMs?: number;
   // The id of the item copied: its metadata is put on the copy at recovery only while the
   // item at `sourcePath` is still that one.
   sourceId?: ItemId;
