@@ -5,6 +5,7 @@ import type { ExplorerWorkerClient } from "@filetrail/core";
 import {
   clearResponseCaches,
   createFolderSizeHandlers,
+  forgetFolderListings,
   getCachedMetadataBatch,
   getCachedResponse,
   getResponseCacheSizes,
@@ -643,6 +644,121 @@ describe("getCachedResponse", () => {
     (finishRequest as (() => void) | null)?.();
     await next;
     expect(getResponseCacheSizes().directoryMetadata).toBe(1);
+    resetResponseCacheState();
+  });
+});
+
+describe("forgetFolderListings", () => {
+  const detailPaths = ["/p/a", "/p/a/x.txt", "/p/a/y.txt", "/p/b/z.txt"];
+
+  // Fills the caches as windows showing /p, /p/a and /p/b would.
+  async function fillCaches() {
+    for (const path of ["/p", "/p/a", "/p/b"]) {
+      await getCachedResponse("directory", { path, sortBy: "name" }, async () => "listing");
+      await getCachedResponse("tree", { path }, async () => "children");
+    }
+    await getCachedResponse("directory", { path: "/p/a", sortBy: "size" }, async () => "by size");
+    const workerClient = {
+      request: async (_channel: string, payload: { paths: string[] }) => ({
+        directoryPath: "/p",
+        items: payload.paths.map((path) => ({ path })),
+      }),
+    } as unknown as ExplorerWorkerClient;
+    await getCachedMetadataBatch(workerClient, {
+      directoryPath: "/p",
+      paths: detailPaths,
+    } as Parameters<typeof getCachedMetadataBatch>[1]);
+  }
+
+  // Which of the cached answers are still handed out without reading the disk.
+  async function stillCached(): Promise<string[]> {
+    const kept: string[] = [];
+    for (const path of ["/p", "/p/a", "/p/b"]) {
+      let loaded = false;
+      const load = async () => {
+        loaded = true;
+        return "read again";
+      };
+      await getCachedResponse("directory", { path, sortBy: "name" }, load);
+      if (!loaded) {
+        kept.push(`listing ${path}`);
+      }
+      loaded = false;
+      await getCachedResponse("tree", { path }, load);
+      if (!loaded) {
+        kept.push(`children ${path}`);
+      }
+    }
+    let readAgain: string[] = [];
+    const workerClient = {
+      request: async (_channel: string, payload: { paths: string[] }) => {
+        readAgain = payload.paths;
+        return { directoryPath: "/p", items: [] };
+      },
+    } as unknown as ExplorerWorkerClient;
+    await getCachedMetadataBatch(workerClient, {
+      directoryPath: "/p",
+      paths: detailPaths,
+    } as Parameters<typeof getCachedMetadataBatch>[1]);
+    for (const path of detailPaths) {
+      if (!readAgain.includes(path)) {
+        kept.push(`details ${path}`);
+      }
+    }
+    return kept;
+  }
+
+  it("lets go of the folder's listings and the details of the items that changed", async () => {
+    resetResponseCacheState();
+    await fillCaches();
+
+    forgetFolderListings("/p/a", ["/p/a/x.txt"]);
+
+    expect(await stillCached()).toEqual([
+      "listing /p",
+      "children /p",
+      "listing /p/b",
+      "children /p/b",
+      "details /p/a",
+      "details /p/a/y.txt",
+      "details /p/b/z.txt",
+    ]);
+    // Read again however it is sorted.
+    const load = vi.fn(async () => "read again");
+    await getCachedResponse("directory", { path: "/p/a", sortBy: "size" }, load);
+    expect(load).toHaveBeenCalledTimes(1);
+    resetResponseCacheState();
+  });
+
+  it("lets go of all in the folder, and of the listing holding it, when anything may have changed", async () => {
+    resetResponseCacheState();
+    await fillCaches();
+
+    // The folder itself may be gone, and the window then opens the folder above it.
+    forgetFolderListings("/p/a", null);
+
+    expect(await stillCached()).toEqual(["listing /p/b", "children /p/b", "details /p/b/z.txt"]);
+    resetResponseCacheState();
+  });
+
+  it("doesn't keep a listing of the folder that was loading when it changed", async () => {
+    resetResponseCacheState();
+    let finishLoad: ((value: string) => void) | null = null;
+    const pending = getCachedResponse(
+      "directory",
+      { path: "/p/a" },
+      () =>
+        new Promise<string>((resolveLoad) => {
+          finishLoad = resolveLoad;
+        }),
+    );
+    forgetFolderListings("/p/a", ["/p/a/x.txt"]);
+    (finishLoad as ((value: string) => void) | null)?.("before the change");
+    expect(await pending).toBe("before the change");
+
+    const load = vi.fn(async () => "after the change");
+    expect(await getCachedResponse("directory", { path: "/p/a" }, load)).toBe("after the change");
+    expect(load).toHaveBeenCalledTimes(1);
     resetResponseCacheState();
   });
 });

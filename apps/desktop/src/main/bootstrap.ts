@@ -39,6 +39,7 @@ import { createDiskHasTrash } from "./bootstrap/diskHasTrash";
 import {
   clearResponseCaches,
   createFolderSizeHandlers,
+  forgetFolderListings,
   getCachedMetadataBatch,
   getCachedResponse,
   resetResponseCacheState,
@@ -167,14 +168,14 @@ export async function bootstrapMainProcess(
   // The folder each window has on screen: a change made to it outside the app is sent to
   // the window, which reads the folder again.
   const folderWatches = createFolderWatches({
-    watchFolder: (path, onChange) => {
+    watchFolder: (path, onChange, onFail) => {
       try {
         const watcher = watch(path, (_eventType, name) => onChange(name ?? null));
-        // A watch that fails (the folder gone, say) has the window look again.
-        watcher.on("error", () => onChange(null));
+        // Node closes a watch on its first error (the folder gone, say).
+        watcher.on("error", onFail);
         return () => watcher.close();
       } catch {
-        return () => undefined;
+        return null;
       }
     },
     readModifiedTime: (path) =>
@@ -182,7 +183,7 @@ export async function bootstrapMainProcess(
         (stats) => stats.mtimeMs,
         () => null,
       ),
-    forgetCachedListings: () => clearResponseCaches(),
+    forgetCachedListings: forgetFolderListings,
     onFolderChanged: (windowId, change) => {
       const window = BrowserWindow.getAllWindows().find(
         (candidate) => !candidate.isDestroyed() && candidate.webContents.id === windowId,

@@ -2,19 +2,35 @@ import { createFolderWatches } from "./folderWatch";
 
 function setup() {
   const listeners = new Map<string, (name: string | null) => void>();
+  const failures = new Map<string, () => void>();
   const stopped: string[] = [];
+  // Folders a watch can't be started on.
+  const unwatchable = new Set<string>();
+  let started = 0;
   const modifiedTimes = new Map<string, number | null>();
+  // Reads of the modification time held back until the test lets them go.
+  let heldReads: Array<() => void> | null = null;
   const onFolderChanged = vi.fn();
   const forgetCachedListings = vi.fn();
   const watches = createFolderWatches({
-    watchFolder: (path, onChange) => {
+    watchFolder: (path, onChange, onFail) => {
+      if (unwatchable.has(path)) {
+        return null;
+      }
+      started += 1;
       listeners.set(path, onChange);
+      failures.set(path, onFail);
       return () => {
         listeners.delete(path);
         stopped.push(path);
       };
     },
-    readModifiedTime: async (path) => modifiedTimes.get(path) ?? null,
+    readModifiedTime: async (path) => {
+      if (heldReads) {
+        await new Promise<void>((resolve) => heldReads?.push(resolve));
+      }
+      return modifiedTimes.get(path) ?? null;
+    },
     onFolderChanged,
     forgetCachedListings,
   });
@@ -23,9 +39,27 @@ function setup() {
     onFolderChanged,
     forgetCachedListings,
     stopped,
+    started: () => started,
     watched: () => [...listeners.keys()],
     change: (path: string, name: string | null) => listeners.get(path)?.(name),
+    // The watch stops by itself, as Node closes one on its first error.
+    fail: (path: string) => {
+      listeners.delete(path);
+      failures.get(path)?.();
+    },
+    setUnwatchable: (path: string, value: boolean) =>
+      value ? unwatchable.add(path) : unwatchable.delete(path),
     setModifiedTime: (path: string, time: number | null) => modifiedTimes.set(path, time),
+    holdReads: () => {
+      heldReads = [];
+    },
+    releaseReads: () => {
+      const reads = heldReads ?? [];
+      heldReads = null;
+      for (const release of reads) {
+        release();
+      }
+    },
   };
 }
 
@@ -68,6 +102,7 @@ describe("folder watches", () => {
 
     vi.advanceTimersByTime(50);
     expect(forgetCachedListings).toHaveBeenCalledTimes(1);
+    expect(forgetCachedListings).toHaveBeenCalledWith("/a", ["/a/one.txt", "/a/two.txt"]);
     expect(onFolderChanged).toHaveBeenCalledTimes(1);
     expect(onFolderChanged).toHaveBeenCalledWith(7, {
       path: "/a",
@@ -142,5 +177,77 @@ describe("folder watches", () => {
     watches.checkForMissedChanges(1);
     await vi.advanceTimersByTimeAsync(0);
     expect(onFolderChanged).toHaveBeenCalledWith(1, { path: "/a", changedPaths: null });
+  });
+
+  it("tells of a change to the folder itself as anything may have changed", () => {
+    const { watches, change, onFolderChanged, forgetCachedListings } = setup();
+    watches.watch(1, "/a/Project");
+    // The folder renamed or removed is told of by its own name.
+    change("/a/Project", "Project");
+    vi.advanceTimersByTime(250);
+    expect(onFolderChanged).toHaveBeenCalledWith(1, { path: "/a/Project", changedPaths: null });
+    expect(forgetCachedListings).toHaveBeenCalledWith("/a/Project", null);
+  });
+
+  it("starts a watch again when the window asks for the folder after it failed", () => {
+    const { watches, fail, onFolderChanged, started, watched } = setup();
+    watches.watch(1, "/a");
+    fail("/a");
+    // The window is told, so it reads the folder again.
+    vi.advanceTimersByTime(250);
+    expect(onFolderChanged).toHaveBeenCalledWith(1, { path: "/a", changedPaths: null });
+    expect(watched()).toEqual([]);
+
+    watches.watch(1, "/a");
+    expect(started()).toBe(2);
+    expect(watched()).toEqual(["/a"]);
+  });
+
+  it("starts a watch again that could not start, once the folder can be watched", () => {
+    const { watches, setUnwatchable, started, watched } = setup();
+    setUnwatchable("/a", true);
+    watches.watch(1, "/a");
+    expect(watched()).toEqual([]);
+
+    setUnwatchable("/a", false);
+    watches.watch(1, "/a");
+    expect(started()).toBe(1);
+    expect(watched()).toEqual(["/a"]);
+  });
+
+  it("starts a failed watch again when the window comes back to the front", async () => {
+    const { watches, fail, change, onFolderChanged, watched, setModifiedTime } = setup();
+    setModifiedTime("/a", 100);
+    watches.watch(1, "/a");
+    fail("/a");
+    await vi.advanceTimersByTimeAsync(250);
+    onFolderChanged.mockClear();
+
+    watches.checkForMissedChanges(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(watched()).toEqual(["/a"]);
+    change("/a", "one.txt");
+    vi.advanceTimersByTime(250);
+    expect(onFolderChanged).toHaveBeenCalledWith(1, { path: "/a", changedPaths: ["/a/one.txt"] });
+  });
+
+  it("tells of a change once when the window comes to the front while it is still noted", async () => {
+    const { watches, change, onFolderChanged, setModifiedTime, holdReads, releaseReads } = setup();
+    setModifiedTime("/a", 100);
+    watches.watch(1, "/a");
+    await vi.advanceTimersByTimeAsync(0);
+
+    setModifiedTime("/a", 200);
+    holdReads();
+    change("/a", "one.txt");
+    vi.advanceTimersByTime(250);
+    expect(onFolderChanged).toHaveBeenCalledTimes(1);
+    // The folder's new time is still being read when the window comes to the front.
+    watches.checkForMissedChanges(1);
+    releaseReads();
+    await vi.advanceTimersByTimeAsync(0);
+    releaseReads();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onFolderChanged).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { type IpcRequest, type IpcResponse, isAffectedByChange } from "@filetrail/contracts";
 import type { ExplorerWorkerClient } from "@filetrail/core";
@@ -80,6 +80,42 @@ export function clearResponseCaches(
   if (changedPaths.length > 0 || removedItems.length > 0) {
     for (const forget of folderSizeForgetters) {
       forget(changedPaths, removedItems);
+    }
+  }
+}
+
+// After a change made outside the app to the folder at `folderPath`: its listings are read
+// again, and the details of `changedPaths` in it. Null says anything in it may have changed,
+// or the folder itself (renamed or removed): the details of all in it are read again, and the
+// listing of the folder holding it too. The listings of other folders, which other windows
+// may be showing, are kept: a file growing in one folder doesn't slow every window.
+export function forgetFolderListings(
+  folderPath: string,
+  changedPaths: readonly string[] | null,
+): void {
+  cacheGeneration += 1;
+  const parentPath = dirname(folderPath);
+  const listedPaths = new Set(
+    changedPaths === null && parentPath !== folderPath ? [folderPath, parentPath] : [folderPath],
+  );
+  for (const cache of [directorySnapshotCache, treeChildrenCache]) {
+    for (const key of [...cache.entries.keys()]) {
+      // Each is keyed by the request, which names the folder.
+      const { path } = JSON.parse(key) as { path: string };
+      if (listedPaths.has(path)) {
+        cache.entries.delete(key);
+      }
+    }
+  }
+  if (changedPaths !== null) {
+    for (const path of changedPaths) {
+      directoryMetadataCache.entries.delete(path);
+    }
+    return;
+  }
+  for (const path of [...directoryMetadataCache.entries.keys()]) {
+    if (path === folderPath || dirname(path) === folderPath) {
+      directoryMetadataCache.entries.delete(path);
     }
   }
 }
