@@ -46,7 +46,7 @@ export default defineConfig({
         // which window asks.
         "apps/desktop/src/main/{explorerWindowController,explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers}.ts",
         "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename,useTextEditingFocus}.ts",
-        "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,internalDragAndDrop,undoQuestion}.ts",
+        "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,earlyWriteOperationEvents,internalDragAndDrop,undoQuestion}.ts",
         "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField,BatchRenameSheet,UndoQuestionAlert}.tsx",
         // The window's navigation, keys and tabs, and the panes and toolbar they drive.
         "apps/desktop/src/renderer/hooks/{useExplorerNavigationController,useExplorerShortcuts,useExplorerTabs,useFolderWatch}.ts",

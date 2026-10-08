@@ -62,6 +62,7 @@ import {
   dirnameOf,
   pluralize,
 } from "../lib/copyPasteReview";
+import { createEarlyWriteOperationEvents } from "../lib/earlyWriteOperationEvents";
 import { resolveEntriesAtPaths } from "../lib/entriesAtPaths";
 import {
   collectRetrySourcePaths,
@@ -860,7 +861,7 @@ export function useExplorerActions(args: {
 
   // Events for an operation this window hasn't heard the id of yet: one that finishes
   // before its start request returns. Kept until the id arrives (see adoptWriteOperation).
-  const earlyWriteOperationEventsRef = useRef(new Map<string, WriteOperationProgressEvent[]>());
+  const earlyWriteOperationEventsRef = useRef(createEarlyWriteOperationEvents());
   // What was selected, and in which folder, when the running operation started.
   const selectionAtWriteStartRef = useRef<{ directoryPath: string; paths: string[] } | null>(null);
   // The operations this page took over from a window that closed.
@@ -876,8 +877,7 @@ export function useExplorerActions(args: {
     if (foreignWriteOperationRef.current?.operationId === operationId) {
       noteForeignWriteOperation(null);
     }
-    const early = earlyWriteOperationEventsRef.current.get(operationId) ?? [];
-    earlyWriteOperationEventsRef.current.clear();
+    const early = earlyWriteOperationEventsRef.current.take(operationId);
     if (early.length > 0) {
       queueMicrotask(() => {
         for (const event of early) {
@@ -922,12 +922,7 @@ export function useExplorerActions(args: {
           });
         }
         if (activeWriteOperationIdRef.current === null) {
-          const early = earlyWriteOperationEventsRef.current;
-          early.set(event.operationId, [...(early.get(event.operationId) ?? []), event]);
-          // Only the latest few operations matter; anything older was someone else's.
-          while (early.size > 4) {
-            early.delete(early.keys().next().value as string);
-          }
+          earlyWriteOperationEventsRef.current.note(event);
         }
         return;
       }
@@ -1069,7 +1064,7 @@ export function useExplorerActions(args: {
       }
       adoptedOperationIdsRef.current.add(operationId);
       noteForeignWriteOperation(null);
-      earlyWriteOperationEventsRef.current.delete(operationId);
+      earlyWriteOperationEventsRef.current.forget(operationId);
       activeWriteOperationIdRef.current = operationId;
       adoptedWriteOperationIdRef.current = operationId;
       // A paste of a cut: the clipboard is cleared here when it is done, as the window
@@ -1826,13 +1821,15 @@ export function useExplorerActions(args: {
         clipboard.mode === "cut"
           ? clipboard.capturedAt
           : null;
-      const response = await client.invoke("copyPaste:start", {
-        analysisId: report.analysisId,
-        action,
-        policy,
-        ...(overrides.length > 0 ? { overrides } : {}),
-        ...(clearsCutClipboard !== null ? { clearsCutClipboard } : {}),
-      });
+      const response = await earlyWriteOperationEventsRef.current.whileStarting(() =>
+        client.invoke("copyPaste:start", {
+          analysisId: report.analysisId,
+          action,
+          policy,
+          ...(overrides.length > 0 ? { overrides } : {}),
+          ...(clearsCutClipboard !== null ? { clearsCutClipboard } : {}),
+        }),
+      );
       if (action === "move_to" && sourceSurface) {
         moveOperationSourceSurfaceRef.current.set(response.operationId, sourceSurface);
       }
@@ -3555,7 +3552,9 @@ export function useExplorerActions(args: {
       currentSourcePath: first,
     });
     try {
-      const response = await client.invoke("writeOperation:batchRename", request);
+      const response = await earlyWriteOperationEventsRef.current.whileStarting(() =>
+        client.invoke("writeOperation:batchRename", request),
+      );
       adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({
         action: "batch_rename",
@@ -3749,7 +3748,8 @@ export function useExplorerActions(args: {
       );
       return;
     }
-    if (prepared.ticket === null) {
+    const { ticket } = prepared;
+    if (ticket === null) {
       if (prepared.refusal === "busy") {
         showWriteOperationBusyNotice(direction);
       }
@@ -3791,7 +3791,9 @@ export function useExplorerActions(args: {
     applyWriteOperationCardState({ ...card, stage: "starting" });
     runningUndoLabelRef.current = prepared.label;
     try {
-      const response = await client.invoke("undo:start", { ticket: prepared.ticket });
+      const response = await earlyWriteOperationEventsRef.current.whileStarting(() =>
+        client.invoke("undo:start", { ticket }),
+      );
       adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({ ...card, stage: "queued" });
     } catch (error) {
@@ -3822,10 +3824,12 @@ export function useExplorerActions(args: {
       currentSourcePath: request.sourcePath,
     });
     try {
-      const response = await client.invoke("writeOperation:rename", {
-        sourcePath: request.sourcePath,
-        destinationName: request.name,
-      });
+      const response = await earlyWriteOperationEventsRef.current.whileStarting(() =>
+        client.invoke("writeOperation:rename", {
+          sourcePath: request.sourcePath,
+          destinationName: request.name,
+        }),
+      );
       adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({
         action: "rename",
@@ -4025,11 +4029,13 @@ export function useExplorerActions(args: {
       currentSourcePath: null,
     });
     try {
-      const response = await client.invoke("writeOperation:createFolder", {
-        parentDirectoryPath: request.parentDirectoryPath,
-        folderName: request.name,
-        ...(request.nextFreeName ? { nextFreeName: true } : {}),
-      });
+      const response = await earlyWriteOperationEventsRef.current.whileStarting(() =>
+        client.invoke("writeOperation:createFolder", {
+          parentDirectoryPath: request.parentDirectoryPath,
+          folderName: request.name,
+          ...(request.nextFreeName ? { nextFreeName: true } : {}),
+        }),
+      );
       rememberPendingTreeSelectionPath(
         request.selectInTreeOnSuccess
           ? buildChildPath(request.parentDirectoryPath, request.name)
@@ -4097,10 +4103,11 @@ export function useExplorerActions(args: {
       currentSourcePath: paths[0] ?? null,
     });
     try {
-      const response =
+      const response = await earlyWriteOperationEventsRef.current.whileStarting(() =>
         action === "trash"
-          ? await client.invoke("writeOperation:trash", { paths })
-          : await client.invoke("writeOperation:deleteImmediately", { paths });
+          ? client.invoke("writeOperation:trash", { paths })
+          : client.invoke("writeOperation:deleteImmediately", { paths }),
+      );
       rememberPendingTreeSelectionPath(null);
       adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({
