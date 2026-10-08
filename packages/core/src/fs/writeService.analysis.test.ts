@@ -293,6 +293,53 @@ describe("writeService analysis and runtime coordination", () => {
     );
   });
 
+  // Another window's review is still open, and can still be pasted from.
+  it("keeps the finished analyses it is asked to keep, but not cancelled ones", async () => {
+    const service = createWriteService({
+      createAnalysisId: (() => {
+        let index = 0;
+        return () => {
+          index += 1;
+          return `analysis-${index}`;
+        };
+      })(),
+      fileSystem: new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/file.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      }),
+    });
+    const request = {
+      mode: "copy" as const,
+      sourcePaths: ["/source/file.txt"],
+      destinationDirectoryPath: "/target",
+    };
+    const finished = async (analysisId: string) =>
+      vi.waitFor(() => {
+        expect(service.getCopyPasteAnalysisUpdate(analysisId).done).toBe(true);
+      });
+
+    service.startCopyPasteAnalysis(request);
+    await finished("analysis-1");
+    service.startCopyPasteAnalysis(request, new Set(["analysis-1"]));
+    await finished("analysis-2");
+    service.cancelCopyPasteAnalysis("analysis-2");
+    service.startCopyPasteAnalysis(request, new Set(["analysis-1", "analysis-2"]));
+    await finished("analysis-3");
+
+    expect(service.getCopyPasteAnalysisUpdate("analysis-1").status).toBe("complete");
+    expect(() => service.getCopyPasteAnalysisUpdate("analysis-2")).toThrow(
+      "Unknown copy/paste analysis job: analysis-2",
+    );
+
+    // Pasting from one keeps the others it is asked to keep, too.
+    service.startCopyPaste(
+      { analysisId: "analysis-3", policy: DEFAULT_COPY_PASTE_POLICY },
+      new Set(["analysis-1"]),
+    );
+    expect(service.getCopyPasteAnalysisUpdate("analysis-1").status).toBe("complete");
+  });
+
   it("cancels operations that are paused on a runtime conflict", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source": { kind: "directory" },

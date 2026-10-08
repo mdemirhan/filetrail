@@ -1,10 +1,15 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
-import type { WriteService } from "@filetrail/core";
+import {
+  ANALYSIS_BUSY_ERROR,
+  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+  type WriteService,
+  createWriteService,
+} from "@filetrail/core";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
 import { createWriteOperationCoordinator } from "./writeOperations";
@@ -232,6 +237,121 @@ describe("a window taking over an operation", () => {
       }),
     });
     emit(copyEvent("cancelled"));
+    await coordinator.shutdown();
+  });
+});
+
+describe("copy analyses and their windows", () => {
+  it.each(["destroyed", "render-process-gone"] as const)(
+    "cancels an analysis when its window is %s",
+    async (event) => {
+      const { writeService } = createWriteServiceStub();
+      const coordinator = createWriteOperationCoordinator(
+        writeService,
+        createOriginalWriteOperationFs(async (path) => path),
+      );
+      const window = createWindow();
+      await analyze(coordinator, window);
+
+      close(window, event);
+
+      expect(writeService.cancelCopyPasteAnalysis).toHaveBeenCalledWith("analysis-1");
+      expect(window.listenerCount("destroyed")).toBe(0);
+      await coordinator.shutdown();
+    },
+  );
+
+  it("lets another window set up a copy once the window of a stuck analysis closes", async () => {
+    // A folder on a network disk that stopped answering.
+    const coordinator = createWriteOperationCoordinator(
+      createWriteService({
+        fileSystem: {
+          ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+          lstat: () => new Promise(() => undefined),
+        },
+      }),
+      createOriginalWriteOperationFs(async (path) => path),
+    );
+    const first = createWindow();
+    const second = createWindow();
+    await analyze(coordinator, first, [join(root, "a.txt")], root);
+    await expect(analyze(coordinator, second, [join(root, "a.txt")], root)).rejects.toThrow(
+      ANALYSIS_BUSY_ERROR,
+    );
+
+    close(first);
+
+    await expect(analyze(coordinator, second, [join(root, "a.txt")], root)).resolves.toEqual(
+      expect.objectContaining({ status: "queued" }),
+    );
+    await coordinator.shutdown();
+  });
+
+  it("doesn't listen to a window for an analysis it replaced or pasted from", async () => {
+    const { writeService, emit } = createWriteServiceStub();
+    writeService.startCopyPasteAnalysis
+      .mockReturnValueOnce({ analysisId: "analysis-1", status: "queued" })
+      .mockReturnValueOnce({ analysisId: "analysis-2", status: "queued" });
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+    );
+    const window = createWindow();
+
+    await analyze(coordinator, window);
+    await analyze(coordinator, window);
+    expect(window.listenerCount("destroyed")).toBe(1);
+
+    // The paste listens for itself.
+    await paste(coordinator, window, "analysis-2");
+    expect(window.listenerCount("destroyed")).toBe(1);
+    expect(
+      coordinator.handlers["copyPaste:analyzeCancel"](
+        { analysisId: "analysis-2" },
+        { sender: window },
+      ),
+    ).toEqual({ ok: false });
+    emit(copyEvent("cancelled"));
+    expect(window.listenerCount("destroyed")).toBe(0);
+    await coordinator.shutdown();
+  });
+
+  it("keeps a window's finished analysis when another window sets up a copy", async () => {
+    await mkdir(join(root, "src"));
+    await mkdir(join(root, "one"));
+    await mkdir(join(root, "two"));
+    await writeFile(join(root, "src", "a.txt"), "a");
+    const coordinator = createWriteOperationCoordinator(
+      createWriteService(),
+      createOriginalWriteOperationFs(async (path) => path),
+    );
+    const first = createWindow();
+    const second = createWindow();
+    const { analysisId: firstAnalysis } = await analyze(
+      coordinator,
+      first,
+      [join(root, "src", "a.txt")],
+      join(root, "one"),
+    );
+    await analyzed(coordinator, first, firstAnalysis);
+
+    // The second window sets up its copy, and pastes, while the first one's review is open.
+    const { analysisId: secondAnalysis } = await analyze(
+      coordinator,
+      second,
+      [join(root, "src", "a.txt")],
+      join(root, "two"),
+    );
+    await analyzed(coordinator, second, secondAnalysis);
+    const secondPaste = await paste(coordinator, second, secondAnalysis);
+    expect((await waitForEnd(second, secondPaste.operationId)).status).toBe("completed");
+
+    // The first window's review can still be pasted from.
+    expect((await analyzed(coordinator, first, firstAnalysis)).status).toBe("complete");
+    const firstPaste = await paste(coordinator, first, firstAnalysis);
+    expect((await waitForEnd(first, firstPaste.operationId)).status).toBe("completed");
+    expect(await readFile(join(root, "one", "a.txt"), "utf8")).toBe("a");
+    expect(await readFile(join(root, "two", "a.txt"), "utf8")).toBe("a");
     await coordinator.shutdown();
   });
 });

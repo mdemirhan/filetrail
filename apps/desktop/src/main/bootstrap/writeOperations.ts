@@ -172,7 +172,10 @@ export function createWriteOperationCoordinator(
   const localWriteOperationControllers = new Map<string, AbortController>();
   const localWriteOperationActions = new Map<string, WriteOperationAction>();
   // The window that started each copy analysis: only it may read, cancel, or start it.
+  // Each window has at most one, its newest, kept until it pastes from it or goes away.
   const analysisOwners = new Map<string, WriteOperationSender>();
+  // Stops listening for the window of an analysis going away.
+  const analysisDetachers = new Map<string, () => void>();
   const progressThrottles = new Map<
     string,
     {
@@ -1439,6 +1442,51 @@ export function createWriteOperationCoordinator(
     return writeService.cancelOperation(operationId);
   }
 
+  // An analysis whose window crashed, closed or reloaded is cancelled: nobody can answer
+  // its review, and one still running (a network folder that stopped answering) would keep
+  // every other window from setting up a copy.
+  function watchAnalysisOwner(analysisId: string, owner: WriteOperationSender): void {
+    analysisOwners.set(analysisId, owner);
+    const abandon = () => {
+      forgetAnalysis(analysisId);
+      writeService.cancelCopyPasteAnalysis(analysisId);
+    };
+    if (isSenderDestroyed(owner)) {
+      abandon();
+      return;
+    }
+    const events = owner as SenderLifecycleEvents;
+    if (typeof events.on !== "function" || typeof events.removeListener !== "function") {
+      return;
+    }
+    for (const eventName of SENDER_GONE_EVENTS) {
+      events.on.call(owner, eventName, abandon);
+    }
+    analysisDetachers.set(analysisId, () => {
+      for (const eventName of SENDER_GONE_EVENTS) {
+        events.removeListener?.call(owner, eventName, abandon);
+      }
+    });
+  }
+
+  function forgetAnalysis(analysisId: string): void {
+    analysisDetachers.get(analysisId)?.();
+    analysisDetachers.delete(analysisId);
+    analysisOwners.delete(analysisId);
+  }
+
+  // The analyses of windows other than `sender`: their reviews may still be open, so the
+  // write service keeps them when it drops finished ones.
+  function analysesOfOtherWindows(sender: WriteOperationSender): Set<string> {
+    const ids = new Set<string>();
+    for (const [analysisId, owner] of analysisOwners) {
+      if (owner !== sender) {
+        ids.add(analysisId);
+      }
+    }
+    return ids;
+  }
+
   // An analysis is read, cancelled, and started only by the window that asked for it;
   // another window (such as Settings) shares the same preload API.
   function assertAnalysisOwner(analysisId: string, requester: unknown): void {
@@ -1523,7 +1571,9 @@ export function createWriteOperationCoordinator(
     writeOperationSenders.clear();
     copyPasteRequests.clear();
     copyPasteModes.clear();
-    analysisOwners.clear();
+    for (const analysisId of [...analysisOwners.keys()]) {
+      forgetAnalysis(analysisId);
+    }
     localWriteOperationControllers.clear();
     localWriteOperationActions.clear();
   }
@@ -1541,15 +1591,22 @@ export function createWriteOperationCoordinator(
           await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
         }
         ensureNoWriteOperationInFlight();
-        const handle = writeService.startCopyPasteAnalysis({
-          mode: payload.mode,
-          sourcePaths: payload.sourcePaths,
-          destinationDirectoryPath: payload.destinationDirectoryPath,
-        });
-        // Starting an analysis drops the write service's finished ones, so only this one
-        // can still be asked about.
-        analysisOwners.clear();
-        analysisOwners.set(handle.analysisId, event.sender);
+        const handle = writeService.startCopyPasteAnalysis(
+          {
+            mode: payload.mode,
+            sourcePaths: payload.sourcePaths,
+            destinationDirectoryPath: payload.destinationDirectoryPath,
+          },
+          analysesOfOtherWindows(event.sender),
+        );
+        // The write service dropped this window's earlier analysis: only the newest can
+        // be pasted from.
+        for (const [analysisId, owner] of [...analysisOwners]) {
+          if (owner === event.sender) {
+            forgetAnalysis(analysisId);
+          }
+        }
+        watchAnalysisOwner(handle.analysisId, event.sender);
         return handle;
       },
       "copyPaste:analyzeGetUpdate": (
@@ -1583,15 +1640,20 @@ export function createWriteOperationCoordinator(
         let handle: ReturnType<WriteService["startCopyPaste"]>;
         let finishedEarly: CopyPasteProgressEvent | undefined;
         try {
-          handle = writeService.startCopyPaste({
-            analysisId: payload.analysisId,
-            policy: payload.policy,
-            ...(payload.overrides ? { overrides: payload.overrides } : {}),
-          });
+          handle = writeService.startCopyPaste(
+            {
+              analysisId: payload.analysisId,
+              policy: payload.policy,
+              ...(payload.overrides ? { overrides: payload.overrides } : {}),
+            },
+            analysesOfOtherWindows(event.sender),
+          );
           finishedEarly = earlyTerminalEvents.get(handle.operationId);
         } finally {
           earlyTerminalEvents = null;
         }
+        // The paste has it now; the window going away stops the paste instead.
+        forgetAnalysis(payload.analysisId);
         if (finishedEarly) {
           // The window learns the operation id from this reply, so its end is sent just
           // after it, when the window is listening for that id.

@@ -568,11 +568,14 @@ describe("createWriteOperationCoordinator", () => {
       { sender },
     );
 
-    expect(writeService.startCopyPaste).toHaveBeenCalledWith({
-      analysisId: "analysis-1",
-      policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
-      overrides: [{ nodeId: "item-2", action: "overwrite" }],
-    });
+    expect(writeService.startCopyPaste).toHaveBeenCalledWith(
+      {
+        analysisId: "analysis-1",
+        policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+        overrides: [{ nodeId: "item-2", action: "overwrite" }],
+      },
+      new Set(),
+    );
     expect(writeService.resolveRuntimeConflict).toHaveBeenCalledWith(
       "copy-op-1",
       "runtime-item-1-destination",
@@ -736,9 +739,18 @@ describe("createWriteOperationCoordinator", () => {
     const writeService = createWriteServiceStub();
     const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
     const sender = createLifecycleSender();
+    analyze(coordinator, sender);
+    // Closed while the start request was on its way.
     sender.destroyed = true;
 
-    startPaste(coordinator, sender);
+    coordinator.handlers["copyPaste:start"](
+      {
+        analysisId: "analysis-1",
+        action: "paste",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      },
+      { sender },
+    );
 
     expect(writeService.cancelOperation).toHaveBeenCalledWith("copy-op-1");
     coordinator.shutdown();

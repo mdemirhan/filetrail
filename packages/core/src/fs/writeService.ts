@@ -147,8 +147,13 @@ export class WriteService {
     };
   }
 
-  startCopyPasteAnalysis(request: CopyPasteAnalysisRequest): CopyPasteAnalysisStartHandle {
-    this.pruneTerminalAnalysisJobs();
+  // Starting an analysis drops the finished ones, except those in `keep`: reviews still
+  // open in other windows, which can still be pasted from.
+  startCopyPasteAnalysis(
+    request: CopyPasteAnalysisRequest,
+    keep: ReadonlySet<string> = new Set(),
+  ): CopyPasteAnalysisStartHandle {
+    this.pruneTerminalAnalysisJobs(keep);
     if (this.activeOperationId !== null) {
       throw new Error(WRITE_OPERATION_BUSY_ERROR);
     }
@@ -198,11 +203,14 @@ export class WriteService {
     return { ok: true };
   }
 
-  startCopyPaste(start: CopyPasteExecutionRequest): CopyPasteOperationHandle {
+  startCopyPaste(
+    start: CopyPasteExecutionRequest,
+    keep: ReadonlySet<string> = new Set(),
+  ): CopyPasteOperationHandle {
     if (this.activeOperationId !== null) {
       throw new Error(WRITE_OPERATION_BUSY_ERROR);
     }
-    this.pruneTerminalAnalysisJobs(start.analysisId);
+    this.pruneTerminalAnalysisJobs(keep, start.analysisId);
 
     // Validate before claiming the busy slot so a bad request can't leave it held.
     const mode = this.getAnalysisJobOrThrow(start.analysisId).request.mode;
@@ -421,9 +429,14 @@ export class WriteService {
     return false;
   }
 
-  private pruneTerminalAnalysisJobs(retainAnalysisId: string | null = null): void {
+  // Drops the analyses that have ended, but not `retainAnalysisId`, nor a finished one in
+  // `keep` (one that was cancelled or failed can't be pasted from, so it goes).
+  private pruneTerminalAnalysisJobs(
+    keep: ReadonlySet<string>,
+    retainAnalysisId: string | null = null,
+  ): void {
     for (const [analysisId, job] of this.analysisJobs.entries()) {
-      if (retainAnalysisId !== null && analysisId === retainAnalysisId) {
+      if (analysisId === retainAnalysisId || (keep.has(analysisId) && job.status === "complete")) {
         continue;
       }
       if (job.status === "complete" || job.status === "cancelled" || job.status === "error") {
