@@ -173,6 +173,13 @@ export function createWindowIpcHandlers(deps: {
     },
     "app:getClipboard": () => ({ clipboard: sharedClipboard }),
     "app:setClipboard": (payload, event) => {
+      if (
+        payload.follows !== undefined &&
+        (sharedClipboard.type !== "ready" || sharedClipboard.capturedAt !== payload.follows)
+      ) {
+        // Something else was put on the clipboard since; that window told the others.
+        return { ok: false };
+      }
       sharedClipboard = payload.clipboard;
       windows.sendToOtherWindows(senderIdOf(event), "filetrail:clipboardChanged", sharedClipboard);
       return { ok: true };

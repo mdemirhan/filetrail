@@ -915,7 +915,13 @@ export const ipcContractSchemas = {
     response: z.object({ clipboard: copyPasteClipboardSchema }),
   },
   "app:setClipboard": {
-    request: z.object({ clipboard: copyPasteClipboardSchema }),
+    request: z.object({
+      clipboard: copyPasteClipboardSchema,
+      // When the change follows what the clipboard held (an item on it was moved or deleted):
+      // when that was captured. It applies only while the clipboard still holds that, not
+      // over a Copy made since in another window (ok is false then).
+      follows: z.string().min(1).optional(),
+    }),
     response: z.object({ ok: z.boolean() }),
   },
   "app:updatePreferences": {

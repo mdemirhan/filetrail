@@ -484,9 +484,50 @@ describe("App windows", () => {
       });
 
       await waitFor(() => expect(clipboardButton()).toBeNull());
+      // Only that cut is cleared: not a Copy made in another window since.
       expect(
         harness.invocations.filter((call) => call.channel === "app:setClipboard").at(-1)?.payload,
-      ).toEqual({ clipboard: { type: "empty" } });
+      ).toEqual({ clipboard: { type: "empty" }, follows: "2026-10-07T10:00:00.000Z" });
+    });
+
+    it("says which clipboard it follows when a write moved an item on it", async () => {
+      const harness = createAppHarness();
+      await ready(harness);
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "c", metaKey: true });
+      const copied = harness.invocations
+        .filter((call) => call.channel === "app:setClipboard")
+        .at(-1)?.payload as IpcRequestInput<"app:setClipboard">;
+      if (copied.clipboard.type !== "ready") {
+        throw new Error("Expected something copied.");
+      }
+      // A plain Copy replaces whatever is there.
+      expect(copied.follows).toBeUndefined();
+
+      // A move this window has (it took it over), which moves the copied item.
+      await act(async () => {
+        harness.emitWriteOperationAdopted({ operationId: "other-op", event: null });
+      });
+      await act(async () => {
+        harness.emitProgress({
+          ...finishedResultEvent("cut", "completed", [
+            { sourcePath: "/Users/demo/source.txt", status: "completed", error: null },
+          ]),
+          operationId: "other-op",
+          action: "move_to",
+        });
+      });
+
+      await waitFor(() =>
+        expect(
+          harness.invocations.filter((call) => call.channel === "app:setClipboard").at(-1)?.payload,
+        ).toEqual({
+          clipboard: expect.objectContaining({
+            sourcePaths: ["/Users/demo/Folder/source.txt"],
+          }),
+          follows: copied.clipboard.type === "ready" ? copied.clipboard.capturedAt : "",
+        }),
+      );
     });
 
     it("opens with what was copied before the window opened", async () => {

@@ -151,6 +151,59 @@ describe("createWindowIpcHandlers", () => {
   });
 });
 
+describe("following the clipboard", () => {
+  const copied = (path: string, capturedAt: string) => ({
+    type: "ready" as const,
+    mode: "copy" as const,
+    sourcePaths: [path],
+    sourceEntries: {},
+    capturedAt,
+  });
+
+  it("follows what it holds", async () => {
+    const { windows, handlers } = setUp();
+    const before = copied("/Users/demo/a.txt", "2026-10-08T10:00:00.000Z");
+    await handlers["app:setClipboard"]({ clipboard: before }, from(1));
+    const moved = copied("/Users/demo/Folder/a.txt", before.capturedAt);
+
+    expect(
+      await handlers["app:setClipboard"]({ clipboard: moved, follows: before.capturedAt }, from(1)),
+    ).toEqual({ ok: true });
+    expect(await handlers["app:getClipboard"]({}, from(2))).toEqual({ clipboard: moved });
+    expect(windows.sendToOtherWindows).toHaveBeenLastCalledWith(
+      1,
+      "filetrail:clipboardChanged",
+      moved,
+    );
+  });
+
+  // The window that moved an item follows it on the clipboard, after another window copied
+  // something else.
+  it("doesn't take a Copy made since in another window off", async () => {
+    const { windows, handlers } = setUp();
+    const before = copied("/Users/demo/a.txt", "2026-10-08T10:00:00.000Z");
+    await handlers["app:setClipboard"]({ clipboard: before }, from(1));
+    const since = copied("/Users/demo/b.txt", "2026-10-08T10:00:05.000Z");
+    await handlers["app:setClipboard"]({ clipboard: since }, from(2));
+    windows.sendToOtherWindows.mockClear();
+
+    expect(
+      await handlers["app:setClipboard"](
+        {
+          clipboard: copied("/Users/demo/Folder/a.txt", before.capturedAt),
+          follows: before.capturedAt,
+        },
+        from(1),
+      ),
+    ).toEqual({ ok: false });
+    expect(
+      await handlers["app:setClipboard"]({ clipboard: { type: "empty" }, follows: "x" }, from(1)),
+    ).toEqual({ ok: false });
+    expect(await handlers["app:getClipboard"]({}, from(1))).toEqual({ clipboard: since });
+    expect(windows.sendToOtherWindows).not.toHaveBeenCalled();
+  });
+});
+
 describe("WindowTabsRequests", () => {
   it("hands over the answer of the window asked, and no other's", async () => {
     const requests = new WindowTabsRequests();

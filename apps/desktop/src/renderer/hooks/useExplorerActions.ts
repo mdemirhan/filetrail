@@ -977,7 +977,7 @@ export function useExplorerActions(args: {
             clipboard.type === "ready" &&
             clipboard.capturedAt === clipboardToClear.capturedAt
           ) {
-            applyCopyPasteClipboardState(clearCopyPasteClipboard());
+            applyCopyPasteClipboardState(clearCopyPasteClipboard(), clipboard);
           }
         }
         // Copied items that this write renamed or moved are followed, so a later paste still
@@ -987,7 +987,7 @@ export function useExplorerActions(args: {
           const clipboard = copyPasteClipboardRef.current;
           const followedClipboard = followClipboardThroughWrite(clipboard, event.result);
           if (followedClipboard !== clipboard) {
-            applyCopyPasteClipboardState(followedClipboard);
+            applyCopyPasteClipboardState(followedClipboard, clipboard);
           }
         }
         // The folder made in its row may have been given the next free name.
@@ -1373,13 +1373,21 @@ export function useExplorerActions(args: {
   }
 
   // The clipboard is the app's, not the window's: every change goes to main, which tells
-  // the other windows.
-  function applyCopyPasteClipboardState(nextClipboard: CopyPasteClipboardState) {
+  // the other windows. A change that only follows what the clipboard held (an item on it
+  // moved or deleted) says what it follows, so main doesn't let it replace something copied
+  // in another window meanwhile; that window's change then reaches this one too.
+  function applyCopyPasteClipboardState(
+    nextClipboard: CopyPasteClipboardState,
+    follows: CopyPasteClipboardState | null = null,
+  ) {
     copyPasteClipboardRef.current = nextClipboard;
     setCopyPasteClipboardState(nextClipboard);
-    void Promise.resolve(client.invoke("app:setClipboard", { clipboard: nextClipboard })).catch(
-      () => undefined,
-    );
+    void Promise.resolve(
+      client.invoke("app:setClipboard", {
+        clipboard: nextClipboard,
+        ...(follows?.type === "ready" ? { follows: follows.capturedAt } : {}),
+      }),
+    ).catch(() => undefined);
   }
 
   // Items dragged out of the app that another app moved away or put in the Trash: the
@@ -1389,7 +1397,7 @@ export function useExplorerActions(args: {
     const clipboard = copyPasteClipboardRef.current;
     const followedClipboard = followClipboardThroughRemoval(clipboard, paths);
     if (followedClipboard !== clipboard) {
-      applyCopyPasteClipboardState(followedClipboard);
+      applyCopyPasteClipboardState(followedClipboard, clipboard);
     }
     if (isSearchModeRef.current) {
       void restartActiveSearchRef.current?.();
@@ -2220,7 +2228,8 @@ export function useExplorerActions(args: {
     const missingSourcePaths: string[] = [];
     const onSourcesMissing = (paths: string[]) => {
       missingSourcePaths.push(...paths);
-      applyCopyPasteClipboardState(dropClipboardPaths(copyPasteClipboardRef.current, paths));
+      const clipboard = copyPasteClipboardRef.current;
+      applyCopyPasteClipboardState(dropClipboardPaths(clipboard, paths), clipboard);
     };
     let outcome: CopyLikePreStartOutcome;
     if (request.mode === "cut") {
