@@ -239,6 +239,17 @@ describe("round trips", () => {
     await t.coordinator.shutdown();
   });
 
+  it("doesn't ask about a new folder Finder wrote its view settings into", async () => {
+    const t = setUp();
+    await t.newFolder(root, "F");
+    writeFileSync(join(root, "F", ".DS_Store"), "Finder");
+
+    expect(await t.prepare()).toMatchObject({ nameTaken: [], changed: [] });
+    expect((await t.undo()).status).toBe("completed");
+    expect(existsSync(join(root, "F"))).toBe(false);
+    await t.coordinator.shutdown();
+  });
+
   it("undoes a chain of operations one by one, back to the start", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     const t = setUp();

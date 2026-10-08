@@ -66,6 +66,17 @@ describe("readItemStamp", () => {
     });
   });
 
+  it("doesn't count the files Finder writes into a folder on its own", async () => {
+    await mkdir(join(root, "Folder"));
+    await writeFile(join(root, "Folder", ".DS_Store"), "");
+    await writeFile(join(root, "Folder", "._a.txt"), "");
+    await writeFile(join(root, "Folder", ".hidden"), "");
+
+    await expect(
+      readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder")),
+    ).resolves.toMatchObject({ entryCount: 1 });
+  });
+
   it("is null for an item that can't be read", async () => {
     await expect(
       readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "gone")),

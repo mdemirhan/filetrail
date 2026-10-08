@@ -191,7 +191,7 @@ export async function readItemIdAndStamp(
   const entryCount =
     kind === "directory" && fileSystem.readdir
       ? await fileSystem.readdir(path).then(
-          (entries) => entries.length,
+          (entries) => entries.filter((name) => !isFinderBookkeeping(name)).length,
           () => null,
         )
       : null;
@@ -204,6 +204,13 @@ export async function readItemIdAndStamp(
       entryCount,
     },
   };
+}
+
+// Files Finder writes into a folder on its own when it is opened or copied to some disks:
+// its view settings (.DS_Store) and AppleDouble files ("._name"). They aren't the
+// person's work, so a new folder holding only them is still empty.
+function isFinderBookkeeping(name: string): boolean {
+  return name === ".DS_Store" || name.startsWith("._");
 }
 
 // For a `trashed` step: how the item at `path` looks, when it has no usable `id` (FAT,
