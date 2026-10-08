@@ -507,10 +507,16 @@ describe("a drag from another app while an operation runs", () => {
 
     const dataTransfer = dragFromOtherApp();
     await enter(harness, pane, dataTransfer);
-    const cursor = await overAndDrop(pane, dataTransfer);
     await act(async () => {
       fireEvent.dragOver(pane, { dataTransfer });
     });
+    // Only passing over the window, it isn't told anything.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryByText(/Can't drop/)).toBeNull();
+    const cursor = await overAndDrop(pane, dataTransfer);
+    await overAndDrop(pane, dataTransfer);
 
     expect(cursor).toBe("none");
     const viewport = await screen.findByTestId("toast-viewport");
@@ -519,6 +525,26 @@ describe("a drag from another app while an operation runs", () => {
     });
     expect(viewport.textContent?.match(/Can't drop/g)).toHaveLength(1);
     expect(analyzeRequests(harness)).toHaveLength(1);
+  });
+
+  it("says why when it is let go over the window, which hears no drop it refused", async () => {
+    const harness = createAppHarness({ deferCopyPasteStart: true });
+    draggedIn(harness, elsewhere);
+    renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+    await pressKey({ key: "v", metaKey: true });
+    await screen.findByRole("region", { name: "Pasting…" });
+    const pane = screen.getByTestId("content-pane");
+
+    const dataTransfer = dragFromOtherApp();
+    await enter(harness, pane, dataTransfer);
+    await act(async () => {
+      fireEvent.dragOver(pane, { dataTransfer });
+      fireEvent.pointerMove(window, { buttons: 0 });
+    });
+
+    expect(await screen.findByText(/Can't drop while .* being copied/)).toBeInTheDocument();
   });
 });
 

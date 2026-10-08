@@ -245,6 +245,7 @@ export function useExplorerDragAndDrop(args: {
   // The window listens for drags from other apps, and for the pointer once its own drag may
   // be over; it calls the latest of these.
   const noteFileDragOverRef = useRef<(cameBack: boolean) => void>(() => undefined);
+  const noteExternalDragLetGoRef = useRef<() => void>(() => undefined);
   const noteOwnDragMaybeOverRef = useRef<() => void>(() => undefined);
   // The folder a drag is being held over in the content pane, since when, and when it was
   // last heard from.
@@ -334,6 +335,7 @@ export function useExplorerDragAndDrop(args: {
 
   noteFileDragOverRef.current = noteFileDragOver;
   noteOwnDragMaybeOverRef.current = noteOwnDragMaybeOver;
+  noteExternalDragLetGoRef.current = noteExternalDragLetGo;
   // Drags of files from other apps are seen by the whole window first, before any target.
   useEffect(() => {
     function handleWindowDragOver(event: DragEvent) {
@@ -363,6 +365,7 @@ export function useExplorerDragAndDrop(args: {
       // A press, or a move with the button let go.
       if (event.type === "pointerdown" || (event.buttons & 1) === 0) {
         noteOwnDragMaybeOverRef.current();
+        noteExternalDragLetGoRef.current();
       }
     }
     window.addEventListener("dragenter", handleWindowDragOver, true);
@@ -819,9 +822,29 @@ export function useExplorerDragAndDrop(args: {
     dragSessionRef.current = session;
     setDragActive(true);
     void requestDiskIds(getDragFacts(session).folderPaths);
-    if (blockedRef.current && refusedDragChangeCountRef.current !== contents.changeCount) {
-      refusedDragChangeCountRef.current = contents.changeCount;
-      onDragRefusedRef.current?.("drop");
+  }
+
+  // A drag from another app was let go over the window while something else holds it: the
+  // drop is refused, and the window says why, once for each drag. Not for a drag that only
+  // passes over the window.
+  function tellDropRefused(drag: ExternalDrag) {
+    if (
+      drag.session === null ||
+      !blockedRef.current ||
+      refusedDragChangeCountRef.current === drag.changeCount
+    ) {
+      return;
+    }
+    refusedDragChangeCountRef.current = drag.changeCount;
+    onDragRefusedRef.current?.("drop");
+  }
+
+  // The pointer moves free over the window: a drag from another app that was over it just
+  // now was let go here. The page hears nothing else of a drop it refused.
+  function noteExternalDragLetGo() {
+    const drag = externalDragRef.current;
+    if (drag && Date.now() - drag.lastOverAt < DRAG_AWAY_MS) {
+      tellDropRefused(drag);
     }
   }
 
@@ -1056,6 +1079,10 @@ export function useExplorerDragAndDrop(args: {
     const validity = validityFor(operation);
     applyDropEffect(event, validity, operation);
     if (validity !== "valid" || !session || !path) {
+      const externalDrag = externalDragRef.current;
+      if (externalDrag && session && externalDrag.session === session) {
+        tellDropRefused(externalDrag);
+      }
       return;
     }
     event.preventDefault();
