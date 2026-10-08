@@ -2,6 +2,7 @@ import {
   type Dispatch,
   type SetStateAction,
   createContext,
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -12,6 +13,7 @@ import {
 
 import type { FavoritePreference, FavoritesPlacement } from "../../shared/appPreferences";
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
+import { useLatest } from "../hooks/useLatest";
 import {
   ClipboardMarkIcon,
   clipboardMarkClassName,
@@ -74,6 +76,9 @@ const FavoriteReorderContext = createContext<FavoriteReorder | null>(null);
 // (a folder being read) without the sidebar scrolling to the selected item.
 const HAND_TOGGLE_SETTLE_MS = 1500;
 
+// The same empty list every time, so the rows built from it stay the same too.
+const NO_LOCATIONS: SidebarLocation[] = [];
+
 export function TreePane({
   paneRef,
   isFocused,
@@ -104,7 +109,7 @@ export function TreePane({
   onItemDrop,
   getItemDropIndicator,
   onToggleFavoritesExpanded: onToggleFavoritesExpandedProp,
-  locations = [],
+  locations = NO_LOCATIONS,
   locationsExpanded = true,
   onToggleLocationsExpanded: onToggleLocationsExpandedProp = () => undefined,
   onSelectItem,
@@ -185,9 +190,12 @@ export function TreePane({
     draggedPath: string;
     dropTarget: FavoriteDropTarget | null;
   } | null>(null);
+  // The same from one render to the next while the drag is: every row reads it.
+  const reorderFavoritesRef = useLatest(onReorderFavorites);
+  const canReorderFavorites = onReorderFavorites !== undefined;
   const favoriteReorder = useMemo<FavoriteReorder | null>(
     () =>
-      onReorderFavorites
+      canReorderFavorites
         ? {
             draggedPath: favoriteDrag?.draggedPath ?? null,
             dropTarget: favoriteDrag?.dropTarget ?? null,
@@ -202,7 +210,7 @@ export function TreePane({
               ),
             drop: () => {
               if (favoriteDrag?.dropTarget) {
-                onReorderFavorites(
+                reorderFavoritesRef.current?.(
                   favoriteDrag.draggedPath,
                   favoriteDrag.dropTarget.path,
                   favoriteDrag.dropTarget.position,
@@ -213,7 +221,7 @@ export function TreePane({
             end: () => setFavoriteDrag(null),
           }
         : null,
-    [favoriteDrag, onReorderFavorites],
+    [canReorderFavorites, favoriteDrag, reorderFavoritesRef],
   );
   const integratedPresentation = useMemo(
     () =>
@@ -309,6 +317,21 @@ export function TreePane({
   const onToggleExpand = toggledByHand(onToggleExpandProp);
   const onToggleFavoritesExpanded = toggledByHand(onToggleFavoritesExpandedProp);
   const onToggleLocationsExpanded = toggledByHand(onToggleLocationsExpandedProp);
+  const rowActions = useTreeRowActions({
+    clickTimeoutRef,
+    setOptimisticSelectedItemId,
+    onToggleExpand,
+    onToggleFavoritesExpanded,
+    onToggleLocationsExpanded,
+    onSelectItem,
+    onClearSelection,
+    onNavigate,
+    onNavigateFavorite,
+    onOpenInNewTab,
+    onItemContextMenu,
+    onLeftPaneSubviewChange,
+  });
+  const currentItemId = optimisticSelectedItemId ?? selectedTreeItemId;
   // The selected item the sidebar last brought into view.
   const lastRevealedItemIdRef = useRef(selectedTreeItemId);
   const treeVisibilityVersion = useMemo(
@@ -524,27 +547,13 @@ export function TreePane({
         key={item.id}
         item={item}
         isPaneFocused={isFocused}
-        selectedTreeItemId={selectedTreeItemId}
-        clickTimeoutRef={clickTimeoutRef}
-        optimisticSelectedItemId={optimisticSelectedItemId}
-        setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-        onToggleExpand={onToggleExpand}
-        onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-        onToggleLocationsExpanded={onToggleLocationsExpanded}
-        onSelectItem={onSelectItem}
+        isCurrent={currentItemId === item.id}
+        isMenuTarget={isTreeMenuTarget(contextMenuTarget, item, "favorites")}
+        dropIndicator={getItemDropIndicator?.(item, "favorites") ?? null}
         singleClickExpandTreeItems={singleClickExpandTreeItems}
-        onClearSelection={onClearSelection}
-        onNavigate={onNavigate}
-        onNavigateFavorite={onNavigateFavorite}
-        onOpenInNewTab={onOpenInNewTab}
-        onItemContextMenu={onItemContextMenu}
-        contextMenuTarget={contextMenuTarget}
-        onItemDragEnter={onItemDragEnter}
-        onItemDragOver={onItemDragOver}
-        onItemDrop={onItemDrop}
-        getItemDropIndicator={getItemDropIndicator}
+        canOpenInNewTab={Boolean(onOpenInNewTab)}
         subview="favorites"
-        onSubviewFocus={() => onLeftPaneSubviewChange("favorites")}
+        actions={rowActions}
         registerRowRef={registerTreeRowRef}
       />
     );
@@ -566,24 +575,13 @@ export function TreePane({
           items={integratedPresentation.items}
           visibleItemIds={integratedPresentation.visibleItemIds}
           isPaneFocused={isFocused}
-          selectedTreeItemId={selectedTreeItemId}
-          clickTimeoutRef={clickTimeoutRef}
-          optimisticSelectedItemId={optimisticSelectedItemId}
-          setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-          onToggleExpand={onToggleExpand}
-          onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-          onToggleLocationsExpanded={onToggleLocationsExpanded}
-          onSelectItem={onSelectItem}
-          singleClickExpandTreeItems={singleClickExpandTreeItems}
-          onClearSelection={onClearSelection}
-          onNavigate={onNavigate}
-          onNavigateFavorite={onNavigateFavorite}
-          onOpenInNewTab={onOpenInNewTab}
-          onItemContextMenu={onItemContextMenu}
+          currentItemId={currentItemId}
           contextMenuTarget={contextMenuTarget}
           getItemDropIndicator={getItemDropIndicator}
+          singleClickExpandTreeItems={singleClickExpandTreeItems}
+          canOpenInNewTab={Boolean(onOpenInNewTab)}
           subview="tree"
-          onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
+          actions={rowActions}
           registerRowRef={registerTreeRowRef}
         />
       </div>
@@ -721,27 +719,13 @@ export function TreePane({
                   items={filesystemPresentation.items}
                   visibleItemIds={filesystemPresentation.visibleItemIds}
                   isPaneFocused={isFocused}
-                  selectedTreeItemId={selectedTreeItemId}
-                  clickTimeoutRef={clickTimeoutRef}
-                  optimisticSelectedItemId={optimisticSelectedItemId}
-                  setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-                  onToggleExpand={onToggleExpand}
-                  onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-                  onToggleLocationsExpanded={onToggleLocationsExpanded}
-                  onSelectItem={onSelectItem}
-                  singleClickExpandTreeItems={singleClickExpandTreeItems}
-                  onClearSelection={onClearSelection}
-                  onNavigate={onNavigate}
-                  onNavigateFavorite={onNavigateFavorite}
-                  onOpenInNewTab={onOpenInNewTab}
-                  onItemContextMenu={onItemContextMenu}
+                  currentItemId={currentItemId}
                   contextMenuTarget={contextMenuTarget}
-                  onItemDragEnter={onItemDragEnter}
-                  onItemDragOver={onItemDragOver}
-                  onItemDrop={onItemDrop}
                   getItemDropIndicator={getItemDropIndicator}
+                  singleClickExpandTreeItems={singleClickExpandTreeItems}
+                  canOpenInNewTab={Boolean(onOpenInNewTab)}
                   subview="tree"
-                  onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
+                  actions={rowActions}
                   registerRowRef={registerTreeRowRef}
                 />
               </div>
@@ -779,80 +763,28 @@ function TreeList({
   items,
   visibleItemIds,
   isPaneFocused,
-  selectedTreeItemId,
-  clickTimeoutRef,
-  optimisticSelectedItemId,
-  setOptimisticSelectedItemId,
-  onToggleExpand,
-  onToggleFavoritesExpanded,
-  onToggleLocationsExpanded,
-  onSelectItem,
-  singleClickExpandTreeItems,
-  onClearSelection,
-  onNavigate,
-  onNavigateFavorite,
-  onOpenInNewTab,
-  onItemContextMenu,
+  currentItemId,
   contextMenuTarget = null,
-  onItemDragEnter,
-  onItemDragOver,
-  onItemDrop,
   getItemDropIndicator,
+  singleClickExpandTreeItems,
+  canOpenInNewTab,
   subview,
-  onSubviewFocus,
+  actions,
   registerRowRef,
 }: {
   items: Record<TreeItemId, TreePresentationItem>;
   visibleItemIds: TreeItemId[];
   isPaneFocused: boolean;
-  selectedTreeItemId: TreeItemId | null;
-  clickTimeoutRef: React.RefObject<number | null>;
-  optimisticSelectedItemId: TreeItemId | null;
-  setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
-  onToggleExpand: (path: string) => void;
-  onToggleFavoritesExpanded: () => void;
-  onToggleLocationsExpanded: () => void;
-  onSelectItem: ((itemId: TreeItemId) => Promise<unknown> | undefined) | undefined;
-  singleClickExpandTreeItems: boolean;
-  onClearSelection: () => void;
-  onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
-  onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
-  /** ⌘-click on a folder or a favorite. */
-  onOpenInNewTab?: ((path: string) => void) | undefined;
-  onItemContextMenu?:
-    | ((
-        item: TreePresentationItem,
-        subview: "favorites" | "tree",
-        position: { x: number; y: number },
-      ) => void)
-    | undefined;
+  /** The row shown as selected: the one just clicked, or the tree's selection. */
+  currentItemId: TreeItemId | null;
   contextMenuTarget?: TreeContextMenuTarget | null;
-  onItemDragEnter?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
-  onItemDragOver?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
-  onItemDrop?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
   getItemDropIndicator?:
     | ((item: TreePresentationItem, subview: "favorites" | "tree") => "valid" | "invalid" | null)
     | undefined;
+  singleClickExpandTreeItems: boolean;
+  canOpenInNewTab: boolean;
   subview: "favorites" | "tree";
-  onSubviewFocus: () => void;
+  actions: TreeRowActions;
   registerRowRef: (id: string, element: HTMLDivElement | null) => void;
 }) {
   return (
@@ -868,27 +800,13 @@ function TreeList({
               key={item.id}
               item={item}
               isPaneFocused={isPaneFocused}
-              selectedTreeItemId={selectedTreeItemId}
-              clickTimeoutRef={clickTimeoutRef}
-              optimisticSelectedItemId={optimisticSelectedItemId}
-              setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-              onToggleExpand={onToggleExpand}
-              onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-              onToggleLocationsExpanded={onToggleLocationsExpanded}
-              onSelectItem={onSelectItem}
+              isCurrent={currentItemId === item.id}
+              isMenuTarget={isTreeMenuTarget(contextMenuTarget, item, subview)}
+              dropIndicator={getItemDropIndicator?.(item, subview) ?? null}
               singleClickExpandTreeItems={singleClickExpandTreeItems}
-              onClearSelection={onClearSelection}
-              onNavigate={onNavigate}
-              onNavigateFavorite={onNavigateFavorite}
-              onOpenInNewTab={onOpenInNewTab}
-              onItemContextMenu={onItemContextMenu}
-              contextMenuTarget={contextMenuTarget}
-              onItemDragEnter={onItemDragEnter}
-              onItemDragOver={onItemDragOver}
-              onItemDrop={onItemDrop}
-              getItemDropIndicator={getItemDropIndicator}
+              canOpenInNewTab={canOpenInNewTab}
               subview={subview}
-              onSubviewFocus={onSubviewFocus}
+              actions={actions}
               registerRowRef={registerRowRef}
             />
           );
@@ -898,50 +816,31 @@ function TreeList({
   );
 }
 
-// How long a folder in the tree loads before it says so.
-const TREE_LOADING_DELAY_MS = 400;
+// Whether the row is what the open context menu acts on: it gets a ring.
+function isTreeMenuTarget(
+  contextMenuTarget: TreeContextMenuTarget | null,
+  item: TreePresentationItem,
+  subview: "favorites" | "tree",
+): boolean {
+  return (
+    contextMenuTarget !== null &&
+    contextMenuTarget.path === item.path &&
+    contextMenuTarget.subview === subview &&
+    contextMenuTarget.kind ===
+      (item.kind === "favorite" || item.kind === "location" ? "favorite" : "treeFolder")
+  );
+}
 
-function TreeItemRow({
-  item,
-  isPaneFocused,
-  selectedTreeItemId,
-  clickTimeoutRef,
-  optimisticSelectedItemId,
-  setOptimisticSelectedItemId,
-  onToggleExpand,
-  onToggleFavoritesExpanded,
-  onToggleLocationsExpanded,
-  onSelectItem,
-  singleClickExpandTreeItems,
-  onClearSelection,
-  onNavigate,
-  onNavigateFavorite,
-  onOpenInNewTab,
-  onItemContextMenu,
-  contextMenuTarget = null,
-  onItemDragEnter,
-  onItemDragOver,
-  onItemDrop,
-  getItemDropIndicator,
-  subview,
-  onSubviewFocus,
-  registerRowRef,
-}: {
-  item: TreePresentationItem;
-  isPaneFocused: boolean;
-  selectedTreeItemId: TreeItemId | null;
+type TreeRowCallbacks = {
   clickTimeoutRef: React.RefObject<number | null>;
-  optimisticSelectedItemId: TreeItemId | null;
   setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   onToggleExpand: (path: string) => void;
   onToggleFavoritesExpanded: () => void;
   onToggleLocationsExpanded: () => void;
   onSelectItem: ((itemId: TreeItemId) => Promise<unknown> | undefined) | undefined;
-  singleClickExpandTreeItems: boolean;
   onClearSelection: () => void;
   onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
   onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
-  /** ⌘-click on a folder or a favorite. */
   onOpenInNewTab?: ((path: string) => void) | undefined;
   onItemContextMenu?:
     | ((
@@ -950,45 +849,85 @@ function TreeItemRow({
         position: { x: number; y: number },
       ) => void)
     | undefined;
-  contextMenuTarget?: TreeContextMenuTarget | null;
-  onItemDragEnter?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
-  onItemDragOver?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
-  onItemDrop?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
-  getItemDropIndicator?:
-    | ((item: TreePresentationItem, subview: "favorites" | "tree") => "valid" | "invalid" | null)
-    | undefined;
+  onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
+};
+
+type TreeRowActions = ReturnType<typeof createTreeRowActions>;
+
+// What the rows do when clicked. The object stays the same from one render to the next and
+// calls the latest callbacks, so a row is drawn again only when what it shows changes: the
+// window around the tree is drawn again many times a second while files are copied.
+function useTreeRowActions(callbacks: TreeRowCallbacks): TreeRowActions {
+  const latest = useLatest(callbacks);
+  return useMemo(() => createTreeRowActions(latest), [latest]);
+}
+
+function createTreeRowActions(latest: { readonly current: TreeRowCallbacks }) {
+  return {
+    get clickTimeoutRef() {
+      return latest.current.clickTimeoutRef;
+    },
+    setOptimisticSelectedItemId: (value: SetStateAction<TreeItemId | null>) =>
+      latest.current.setOptimisticSelectedItemId(value),
+    toggleExpand: (path: string) => latest.current.onToggleExpand(path),
+    toggleFavoritesExpanded: () => latest.current.onToggleFavoritesExpanded(),
+    toggleLocationsExpanded: () => latest.current.onToggleLocationsExpanded(),
+    selectItem: (itemId: TreeItemId) => latest.current.onSelectItem?.(itemId),
+    clearSelection: () => latest.current.onClearSelection(),
+    navigate: (path: string) => latest.current.onNavigate(path),
+    navigateFavorite: (path: string) => latest.current.onNavigateFavorite(path),
+    openInNewTab: (path: string) => latest.current.onOpenInNewTab?.(path),
+    itemContextMenu: (
+      item: TreePresentationItem,
+      subview: "favorites" | "tree",
+      position: { x: number; y: number },
+    ) => latest.current.onItemContextMenu?.(item, subview, position),
+    focusSubview: (subview: "favorites" | "tree") =>
+      latest.current.onLeftPaneSubviewChange(subview),
+  };
+}
+
+// How long a folder in the tree loads before it says so.
+const TREE_LOADING_DELAY_MS = 400;
+
+// A row of the tree, the Favorites or the Locations: drawn again only when what it shows
+// changes (see useTreeRowActions).
+const TreeItemRow = memo(function TreeItemRow({
+  item,
+  isPaneFocused,
+  isCurrent,
+  isMenuTarget,
+  dropIndicator,
+  singleClickExpandTreeItems,
+  canOpenInNewTab,
+  subview,
+  actions,
+  registerRowRef,
+}: {
+  item: TreePresentationItem;
+  isPaneFocused: boolean;
+  /** Shown as selected: just clicked, or the tree's selection. */
+  isCurrent: boolean;
+  /** What the open context menu acts on. */
+  isMenuTarget: boolean;
+  dropIndicator: "valid" | "invalid" | null;
+  singleClickExpandTreeItems: boolean;
+  /** ⌘-click opens the row's folder in a new tab. */
+  canOpenInNewTab: boolean;
   subview: "favorites" | "tree";
-  onSubviewFocus: () => void;
+  actions: TreeRowActions;
   registerRowRef: (id: string, element: HTMLDivElement | null) => void;
 }) {
   // Most folders list in a few milliseconds: their "Loading folder…" line would only flash
   // under the row (and vanish again for a folder without subfolders), so it waits.
   const showLoading = useDelayedFlag(item.loading === true, TREE_LOADING_DELAY_MS);
-  const isCurrent = (optimisticSelectedItemId ?? selectedTreeItemId) === item.id;
-  const isMenuTarget =
-    contextMenuTarget !== null &&
-    contextMenuTarget.path === item.path &&
-    contextMenuTarget.subview === subview &&
-    contextMenuTarget.kind ===
-      (item.kind === "favorite" || item.kind === "location" ? "favorite" : "treeFolder");
+  const {
+    clickTimeoutRef,
+    setOptimisticSelectedItemId,
+    toggleExpand: onToggleExpand,
+    clearSelection: onClearSelection,
+  } = actions;
+  const onSubviewFocus = () => actions.focusSubview(subview);
   const canExpand =
     item.kind === "favorites-root" || item.kind === "locations-root"
       ? item.canExpand
@@ -1000,10 +939,11 @@ function TreeItemRow({
   const isLocationsRoot = item.kind === "locations-root";
   // The Favorites and Locations rows: section heads, not places.
   const isFavoritesRoot = item.kind === "favorites-root" || isLocationsRoot;
-  const toggleSection = isLocationsRoot ? onToggleLocationsExpanded : onToggleFavoritesExpanded;
+  const toggleSection = isLocationsRoot
+    ? actions.toggleLocationsExpanded
+    : actions.toggleFavoritesExpanded;
   const isFileSystem = item.kind === "filesystem";
   const itemPath = item.path;
-  const dropIndicator = getItemDropIndicator?.(item, subview) ?? null;
   // A favorite points at a folder; only the folder's own row in the tree is marked.
   const clipboardMarks = useClipboardMarks("tree");
   const clipboardPath = isFileSystem ? itemPath : null;
@@ -1017,7 +957,7 @@ function TreeItemRow({
 
   // ⌘-click on a folder that is not on screen opens it in a new tab; the tab on screen and
   // its selection in the tree stay as they are.
-  const opensInNewTab = Boolean(onOpenInNewTab) && !isCurrent && !isFavoritesRoot && itemPath;
+  const opensInNewTab = canOpenInNewTab && !isCurrent && !isFavoritesRoot && itemPath;
 
   function handleActivatePointerDown(metaKey: boolean, button: number, ctrlKey: boolean) {
     // Control-click opens the context menu, which leaves the selection alone.
@@ -1060,7 +1000,7 @@ function TreeItemRow({
       return;
     }
     if (metaKey && opensInNewTab && itemPath) {
-      onOpenInNewTab?.(itemPath);
+      actions.openInNewTab(itemPath);
       return;
     }
     if (clickTimeoutRef.current !== null) {
@@ -1094,10 +1034,10 @@ function TreeItemRow({
       onToggleExpand(itemPath);
     }
     const navigationResult = isLocation
-      ? (onSelectItem?.(item.id) as Promise<boolean | undefined> | undefined)
+      ? (actions.selectItem(item.id) as Promise<boolean | undefined> | undefined)
       : isFavorite
-        ? onNavigateFavorite(itemPath)
-        : onNavigate(itemPath);
+        ? actions.navigateFavorite(itemPath)
+        : actions.navigate(itemPath);
     if (!navigationResult || typeof navigationResult.then !== "function") {
       return;
     }
@@ -1115,7 +1055,7 @@ function TreeItemRow({
     // The menu acts on this row, but the selection stays on the folder being shown: the row
     // gets a ring while the menu is open instead.
     onSubviewFocus();
-    onItemContextMenu?.(item, subview, {
+    actions.itemContextMenu(item, subview, {
       x: clientX,
       y: clientY,
     });
@@ -1327,4 +1267,4 @@ function TreeItemRow({
       ) : null}
     </div>
   );
-}
+});
