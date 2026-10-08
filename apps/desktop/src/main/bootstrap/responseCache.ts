@@ -605,6 +605,17 @@ export function createFolderSizeHandlers(native: {
       return { ok: true };
     },
 
+    // A window closed, or loading its page again: its measurements are stopped, those
+    // waiting and the one under way, and none is run again for it.
+    forgetOwner(owner: number): void {
+      cancelQueuedJobsOf(owner);
+      const activeJob = activeJobId ? folderSizeJobs.get(activeJobId) : undefined;
+      if (activeJob?.status === "running" && jobOwners.get(activeJob.jobId) === owner) {
+        setFolderSizeJob(activeJob.jobId, { ...activeJob, status: "cancelled" });
+        native.cancelFolderSize();
+      }
+    },
+
     clearCache(): void {
       folderSizeCache.clear();
     },

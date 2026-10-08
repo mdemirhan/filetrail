@@ -535,6 +535,66 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.getCachedSize("/Users/demo/Library/c0/d0")).toBeUndefined();
   });
 
+  describe("a window that goes away", () => {
+    it("stops its measurement under way, and doesn't measure it again", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+      const { jobId } = handlers.start({ path: "/test" }, 1);
+      // Outdated: it would be measured again once stopped.
+      clearResponseCaches(["/test/new.txt"]);
+      native.cancelFolderSize.mockClear();
+
+      handlers.forgetOwner(1);
+      native.rejectActive(Object.assign(new Error("cancelled"), { code: "ECANCELLED" }));
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(native.cancelFolderSize).toHaveBeenCalledTimes(1);
+      expect(native.getFolderSize).toHaveBeenCalledTimes(1);
+      expect(handlers.getStatus({ jobId }).status).toBe("cancelled");
+    });
+
+    it("takes its waiting measurements off the queue, and leaves the others' alone", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+      const running = handlers.start({ path: "/test/a" }, 2);
+      const gone = handlers.start({ path: "/test/b" }, 1);
+      const other = handlers.start({ path: "/test/c" }, 3);
+
+      handlers.forgetOwner(1);
+      expect(native.cancelFolderSize).not.toHaveBeenCalled();
+      native.resolveActive(sampleJson);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(handlers.getStatus({ jobId: running.jobId }).status).toBe("ready");
+      expect(handlers.getStatus({ jobId: gone.jobId }).status).toBe("cancelled");
+      expect(handlers.getStatus({ jobId: other.jobId }).status).toBe("running");
+      expect(native.getFolderSize).toHaveBeenLastCalledWith(
+        "/test/c",
+        expect.any(Function),
+        expect.anything(),
+      );
+    });
+
+    it("stops one measured again for it, waiting behind another window's", async () => {
+      const native = createMockNative();
+      const handlers = createFolderSizeHandlers(native);
+      const outdated = handlers.start({ path: "/test/a" }, 1);
+      const other = handlers.start({ path: "/test/b" }, 2);
+      clearResponseCaches(["/test/a/new.txt"]);
+      native.resolveActive(sampleJson);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(handlers.getStatus({ jobId: outdated.jobId }).status).toBe("queued");
+
+      handlers.forgetOwner(1);
+      native.resolveActive(sampleJson);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(handlers.getStatus({ jobId: other.jobId }).status).toBe("ready");
+      expect(handlers.getStatus({ jobId: outdated.jobId }).status).toBe("cancelled");
+      expect(native.getFolderSize).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("folders finished while measuring", () => {
     const tick = () => new Promise((r) => setTimeout(r, 0));
 

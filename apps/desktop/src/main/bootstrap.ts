@@ -264,6 +264,8 @@ export async function bootstrapMainProcess(
     onFinished: (messages) => windows.showRecoveryNotices(messages),
   });
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
+  // The windows that have asked for a measurement, so each is let go of when it closes.
+  const measuringSenders = new WeakSet<WebContents>();
   activeWorkerClient = workerClient;
   void activeWriteCoordinator?.shutdown();
   activeWriteCoordinator = writeCoordinator;
@@ -407,8 +409,22 @@ export async function bootstrapMainProcess(
       "search:getUpdate": (payload) => workerClient.request("search:getUpdate", payload),
       "search:cancel": (payload) => workerClient.request("search:cancel", payload),
       ...writeCoordinator.handlers,
-      "folderSize:start": (payload, event) =>
-        folderSizeHandlers.start(payload, event?.sender?.id ?? null),
+      "folderSize:start": (payload, event) => {
+        const sender = event?.sender;
+        if (sender && !measuringSenders.has(sender)) {
+          // A window closed, or loading its page again, stops its measurements with it.
+          measuringSenders.add(sender);
+          const senderId = sender.id;
+          const stop = () => folderSizeHandlers.forgetOwner(senderId);
+          sender.once("destroyed", stop);
+          sender.on("did-start-navigation", (details) => {
+            if (details.isMainFrame && !details.isSameDocument) {
+              stop();
+            }
+          });
+        }
+        return folderSizeHandlers.start(payload, sender?.id ?? null);
+      },
       "folderSize:getStatus": (payload) => folderSizeHandlers.getStatus(payload),
       "folderSize:cancel": (payload) => folderSizeHandlers.cancel(payload),
       "folderSize:probeMany": (payload) => folderSizeHandlers.probeMany(payload),
