@@ -3574,40 +3574,58 @@ describe("copyPasteExecution", () => {
       },
     );
 
-    it("lutimes other errors fail the symlink copy", async () => {
-      const fileSystem = new MockWriteServiceFileSystem({
-        "/source": { kind: "directory" },
-        "/source/link": { kind: "symlink", target: "actual.txt", mtimeMs: 7777 },
-        "/target": { kind: "directory" },
-      });
-      fileSystem.enableLutimes();
-      fileSystem.lutimesImpl = async () => {
-        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
-      };
-      const { report, resolvedNodes } = await createResolvedOperation({
-        fileSystem,
-        sourcePaths: ["/source/link"],
-        destinationDirectoryPath: "/target",
-      });
-      const events: CopyPasteProgressEvent[] = [];
+    // As for a file: the link was made, so it counts, and a move doesn't leave it in both
+    // places.
+    it.each(["copy", "cut"] as const)(
+      "keeps a link it made when its date can't be set (%s to another disk)",
+      async (mode) => {
+        const fileSystem = new MockWriteServiceFileSystem({
+          "/source": { kind: "directory" },
+          "/source/link": { kind: "symlink", target: "actual.txt", mtimeMs: 7777 },
+          "/target": { kind: "directory", dev: 2 },
+        });
+        fileSystem.enableLutimes();
+        fileSystem.lutimesImpl = async () => {
+          throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+        };
+        const { report, resolvedNodes } = await createResolvedOperation({
+          fileSystem,
+          mode,
+          sourcePaths: ["/source/link"],
+          destinationDirectoryPath: "/target",
+        });
+        const events: CopyPasteProgressEvent[] = [];
 
-      await executeCopyPasteFromAnalysis({
-        operationId: "lutimes-eperm-1",
-        report,
-        mode: "copy",
-        policy: { file: "skip", directory: "merge", mismatch: "skip" },
-        fileSystem,
-        now: () => new Date("2026-03-11T00:00:00.000Z"),
-        signal: new AbortController().signal,
-        resolvedNodes,
-        emit: (event) => events.push(event),
-        requestResolution: async () => null,
-      });
+        await executeCopyPasteFromAnalysis({
+          operationId: "lutimes-eperm-1",
+          report,
+          mode,
+          policy: { file: "skip", directory: "merge", mismatch: "skip" },
+          fileSystem,
+          now: () => new Date("2026-03-11T00:00:00.000Z"),
+          signal: new AbortController().signal,
+          resolvedNodes,
+          emit: (event) => events.push(event),
+          requestResolution: async () => null,
+        });
 
-      const finalEvent = expectLastEvent(events);
-      expect(finalEvent.status).toBe("failed");
-      expect(finalEvent.result?.error).toBe("You don't have permission to access this item.");
-    });
+        const finalEvent = expectLastEvent(events);
+        expect(finalEvent.status).toBe("completed");
+        expect(finalEvent.result?.items).toEqual([
+          expect.objectContaining({ destinationPath: "/target/link", status: "completed" }),
+        ]);
+        expect(expectNode(fileSystem, "/target/link").kind).toBe("symlink");
+        expect(fileSystem.exists("/source/link")).toBe(mode === "copy");
+        if (mode === "copy") {
+          expect(finalEvent.result?.undoLog).toEqual({
+            undoable: true,
+            units: [
+              { steps: [expect.objectContaining({ kind: "created", path: "/target/link" })] },
+            ],
+          });
+        }
+      },
+    );
 
     it("symlink uses lutimes not utimes (does not follow symlink target)", async () => {
       const fileSystem = new MockWriteServiceFileSystem({

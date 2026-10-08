@@ -870,7 +870,7 @@ async function writeLeaf(
         ? new DestinationTakenError(error)
         : await explainMissingFolder(context.fileSystem, targetPath, error);
     }
-    await preserveSymlinkTimestampsIfSupported(
+    await preserveSymlinkTimestamps(
       context.fileSystem,
       targetPath,
       node.node.sourceFingerprint.mtimeMs,
@@ -2240,7 +2240,10 @@ async function preserveTimestampsIfSupported(
   }
 }
 
-async function preserveSymlinkTimestampsIfSupported(
+// A copied link's dates, set on the link itself. As for a file, a link that was made isn't
+// reported as failed over its dates (a move would then leave it in both places): a disk
+// that refuses them leaves them as it made them.
+async function preserveSymlinkTimestamps(
   fileSystem: WriteServiceFileSystem,
   destinationPath: string,
   mtimeMs: number | null | undefined,
@@ -2248,13 +2251,5 @@ async function preserveSymlinkTimestampsIfSupported(
   if (!fileSystem.lutimes || mtimeMs == null) {
     return;
   }
-  try {
-    await fileSystem.lutimes(destinationPath, mtimeMs, mtimeMs);
-  } catch (error) {
-    const code = errorCode(error);
-    if (code === "ENOTSUP" || code === "EOPNOTSUPP") {
-      return;
-    }
-    throw error;
-  }
+  await fileSystem.lutimes(destinationPath, mtimeMs, mtimeMs).catch(() => undefined);
 }
