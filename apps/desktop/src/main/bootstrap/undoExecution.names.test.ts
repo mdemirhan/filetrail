@@ -95,3 +95,35 @@ describe("renaming back a name that differs only in case", () => {
     await t.coordinator.shutdown();
   });
 });
+
+// A folder and an item in it renamed together; the item's new name was taken meanwhile, so
+// it was skipped and kept its name, and is in the renamed folder only because of it.
+describe("undoing a rename of a folder with an item in it that was skipped", () => {
+  it("takes the item back with its folder, under its own name", async () => {
+    mkdirSync(join(root, "P"));
+    writeFileSync(join(root, "P", "a.txt"), "a");
+    // Taken after the sheet checked the names.
+    writeFileSync(join(root, "P", "b.txt"), "b");
+    const t = setUpUndo(root, trashDir);
+    const renamed = await t.finish(
+      t.coordinator.handlers["writeOperation:batchRename"](
+        {
+          items: [
+            { sourcePath: join(root, "P"), destinationName: "Q", isFolder: true },
+            { sourcePath: join(root, "P", "a.txt"), destinationName: "b.txt", isFolder: false },
+          ],
+          onConflict: "skip",
+          numberSeparator: " ",
+        },
+        { sender: t.sender },
+      ),
+    );
+    expect(renamed.result?.items.map((item) => item.status)).toEqual(["completed", "skipped"]);
+    expect(readdirSync(join(root, "Q")).sort()).toEqual(["a.txt", "b.txt"]);
+
+    expect((await t.undo()).status).toBe("completed");
+
+    expect(readdirSync(join(root, "P")).sort()).toEqual(["a.txt", "b.txt"]);
+    expect(readdirSync(root).includes("Q")).toBe(false);
+  });
+});

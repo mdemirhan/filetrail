@@ -97,9 +97,11 @@ export function shouldRenderCopyPasteResultDialog(
   if (event.action === "rename" || event.action === "new_folder") {
     return event.status === "failed";
   }
-  // An Undo that left anything as it was says what and why; a stopped one says how far.
+  // An Undo that left anything as it was says what and why; a stopped one says how far; one
+  // with something to know about an item it did (its lock couldn't be put back) says that.
   if (isUndoOrRedo(event.action)) {
     return (
+      event.result.items.some((item) => item.note === true) ||
       event.status === "failed" ||
       event.status === "partial" ||
       (event.status === "cancelled" && event.result.summary.completedItemCount > 0)

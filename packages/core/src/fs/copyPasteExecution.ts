@@ -115,6 +115,10 @@ type ExecutionContext = {
   // or moved to another disk, see executeStagedDirectory): what the paste is ("cut" for a
   // move). What is inside is then written straight in, never built aside again.
   stagingFor: CopyPasteMode | null;
+  // The folder being built under a hidden name, whose own metadata waits until it has its
+  // real name: a copied rule against deleting it (a copy of ~/Documents has one) would keep
+  // it from being renamed into place.
+  metadataLaterFor: string | null;
   // Where the items a Replace moved out of the way went in the Trash, which they changed.
   // Shared by every step, like `progress`.
   trashedPaths: string[];
@@ -209,6 +213,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     progress: { completedItemCount: 0, completedByteCount: 0 },
     writeJournal: args.writeJournal ?? null,
     stagingFor: null,
+    metadataLaterFor: null,
     folderListings: new Map(),
     undo: {
       topLevelNodeIds: new Set(args.resolvedNodes.map((node) => node.node.id)),
@@ -864,6 +869,7 @@ async function executeStagedDirectory(
         mode: "copy",
         recordsUndo: false,
         stagingFor: context.mode,
+        metadataLaterFor: temporaryPath,
         displayPath: (path) =>
           (context.displayPath ?? ((value: string) => value))(
             rebasePath(path, temporaryPath, finalPath),
@@ -917,6 +923,10 @@ async function executeStagedDirectory(
     throw errorCode(error) === "EEXIST" ? new DestinationTakenError(error) : error;
   }
   await journal?.remove(journalEntry.id).catch(() => undefined);
+  // Its own metadata now that it has its name (see metadataLaterFor).
+  await applyDirectoryMetadata({ ...context, stagingFor: context.mode }, currentNode).catch(
+    () => undefined,
+  );
   noteChanged(context);
   if (context.mode === "copy") {
     await recordCreated(context, currentNode, finalPath);
@@ -1188,7 +1198,7 @@ async function executeDirectoryNode(
   // and a read-only or locked folder can't take new items. As for a file, a folder whose
   // items were written isn't reported as failed over its dates or permissions (some
   // network volumes refuse them), and what was done inside it is never dropped.
-  if (createsDirectory) {
+  if (createsDirectory && currentNode.destinationPath !== context.metadataLaterFor) {
     await applyDirectoryMetadata(context, currentNode).catch(() => undefined);
   }
   let dirDeleteError: string | null = null;
@@ -1354,6 +1364,7 @@ async function executeReplace(
           mode: "copy",
           recordsUndo: false,
           stagingFor: context.mode,
+          metadataLaterFor: temporaryPath,
           displayPath: (path) =>
             (context.displayPath ?? ((value: string) => value))(
               rebasePath(path, temporaryPath, finalPath),
@@ -1443,6 +1454,7 @@ async function executeReplace(
       );
       await moveExclusive(fileSystem, temporaryPath, visiblePath);
       await restoreAfterMove(fileSystem, visiblePath, stagedMode, stagedFlags);
+      await applyStagedFolderMetadata(context, currentNode, visiblePath, movedByRename);
       await recordReplacement(context, currentNode, visiblePath, movedByRename, source);
       await journal?.remove(journalEntry.id).catch(() => undefined);
       return {
@@ -1454,6 +1466,7 @@ async function executeReplace(
       };
     }
     await restoreAfterMove(fileSystem, finalPath, stagedMode, stagedFlags);
+    await applyStagedFolderMetadata(context, currentNode, finalPath, movedByRename);
     await recordReplacement(context, currentNode, finalPath, movedByRename, source);
   } catch (error) {
     if (oldItemRemoved && journal && errorCode(error) !== "EEXIST") {
@@ -1484,6 +1497,23 @@ async function executeReplace(
     destinationPath: finalPath,
     childItems,
   };
+}
+
+// A folder a Replace built under a hidden name gets its own metadata once it has its name
+// (see metadataLaterFor); one moved there on its disk kept its own.
+async function applyStagedFolderMetadata(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  path: string,
+  movedByRename: boolean,
+): Promise<void> {
+  if (movedByRename || node.node.sourceKind !== "directory") {
+    return;
+  }
+  await applyDirectoryMetadata(
+    { ...context, stagingFor: context.mode },
+    { ...node, destinationPath: path },
+  ).catch(() => undefined);
 }
 
 // The new item a Replace put in place: moved there on its disk, or copied there.

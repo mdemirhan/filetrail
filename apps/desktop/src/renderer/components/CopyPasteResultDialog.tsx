@@ -223,6 +223,13 @@ export function CopyPasteResultDialog({
             tone="muted"
           />
           <ResultSection
+            label="Note"
+            items={outcome.notes}
+            displayPaths={outcome.displayPaths}
+            describe={(item) => item.error ?? ""}
+            tone="muted"
+          />
+          <ResultSection
             label={undoing ? "Left as it is" : "Skipped"}
             items={outcome.skipped}
             displayPaths={outcome.displayPaths}
@@ -313,6 +320,8 @@ type ResultOutcome = {
   stoppedPartWay: ResultItem[];
   notStarted: ResultItem[];
   skipped: ResultItem[];
+  /** Items done, with something to know about them (see `note`). */
+  notes: ResultItem[];
   retryCount: number;
   displayPaths: Map<ResultItem, string>;
 };
@@ -349,6 +358,7 @@ function summarizeResultItems(
     stoppedPartWay: [],
     notStarted: [],
     skipped: [],
+    notes: [],
     retryCount: collectRetrySourcePaths(items).length,
     displayPaths: new Map(),
   };
@@ -390,7 +400,9 @@ function summarizeResultItems(
           )
         : displayPath(item, topLevelSet.has(item), topLevelPaths),
     );
-    if (item.status === "failed") {
+    if (item.status === "completed" && item.note) {
+      outcome.notes.push(item);
+    } else if (item.status === "failed") {
       outcome.failed.push(item);
       if (!isFolderWithFailuresInside(item)) {
         if (typeof path === "string" && findAncestor(path, partialPaths) !== null) {

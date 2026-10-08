@@ -25,6 +25,9 @@ beforeEach(() => {
 
 afterEach(() => {
   execFileSync("chflags", ["-R", "nouchg", root]);
+  // Access rules and read-only folders some tests make, which would keep them from going.
+  execFileSync("chmod", ["-R", "-N", root]);
+  execFileSync("chmod", ["-R", "u+rwx", root]);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -124,13 +127,14 @@ describe("undoing a copy of a locked item", () => {
 
     const ended = await t.undo(direction);
 
-    expect(ended.status).toBe("partial");
+    // Done, with a note: nothing is left for the same command to try again.
+    expect(ended.status).toBe("completed");
     expect(ended.result?.items).toEqual([
-      expect.objectContaining({ status: "completed" }),
       expect.objectContaining({
-        status: "failed",
+        status: "completed",
+        note: true,
         error:
-          "“a copy.txt” was moved, but couldn't be locked again. Lock it in Finder's Get Info.",
+          "“a copy.txt” was moved, but its lock or permissions couldn't be put back. Set them in Finder's Get Info.",
       }),
     ]);
     // Done all the same: the other command is next.
@@ -242,6 +246,64 @@ describe("undoing a copy of a locked item", () => {
     expect(existsSync(join(root, "F"))).toBe(true);
     // It never can be: not kept to be tried again.
     expect(t.history.menu().undo).toBeNull();
+    await t.coordinator.shutdown();
+  });
+});
+
+// A copy of ~/Documents (or Desktop, Downloads) carries its rule against deleting it, and a
+// copy of a read-only folder is read-only: the Trash refuses both. They are the operation's
+// own copies, so Undo takes the rule off (or makes the folder writable) to move them there,
+// and puts it back on in the Trash; Redo does the same to put them back.
+describe("undoing a copy the Trash would refuse", () => {
+  function aclOf(path: string): string {
+    return execFileSync("/bin/ls", ["-led", path]).toString().split("\n").slice(1).join("\n");
+  }
+
+  it("moves a copy with a rule against deleting it to the Trash, rule and all", async () => {
+    mkdirSync(join(root, "Documents"));
+    writeFileSync(join(root, "Documents", "a.txt"), "a");
+    execFileSync("chmod", ["+a", "group:everyone deny delete", join(root, "Documents")]);
+    const t = setUpUndo(root, trashDir);
+    await paste(
+      t.history,
+      { mode: "copy", sourcePaths: [join(root, "Documents")], destinationDirectoryPath: root },
+      "duplicate",
+    );
+    expect(aclOf(join(root, "Documents copy"))).toContain("deny delete");
+
+    expect((await t.undo()).status).toBe("completed");
+    expect(existsSync(join(root, "Documents copy"))).toBe(false);
+    expect(aclOf(join(trashDir, "1-Documents copy"))).toContain("deny delete");
+
+    expect((await t.undo("redo")).status).toBe("completed");
+    expect(aclOf(join(root, "Documents copy"))).toContain("deny delete");
+    await t.coordinator.shutdown();
+  });
+
+  it("moves a copy of a read-only folder to the Trash, still read-only", async () => {
+    mkdirSync(join(root, "cache"));
+    writeFileSync(join(root, "cache", "a.txt"), "a");
+    execFileSync("chmod", ["555", join(root, "cache")]);
+    const t = setUpUndo(root, trashDir);
+    await paste(
+      t.history,
+      { mode: "copy", sourcePaths: [join(root, "cache")], destinationDirectoryPath: root },
+      "duplicate",
+    );
+
+    expect((await t.undo()).status).toBe("completed");
+    expect(existsSync(join(root, "cache copy"))).toBe(false);
+    expect(
+      execFileSync("stat", ["-f", "%Lp", join(trashDir, "1-cache copy")])
+        .toString()
+        .trim(),
+    ).toBe("555");
+    expect((await t.undo("redo")).status).toBe("completed");
+    expect(
+      execFileSync("stat", ["-f", "%Lp", join(root, "cache copy")])
+        .toString()
+        .trim(),
+    ).toBe("555");
     await t.coordinator.shutdown();
   });
 });

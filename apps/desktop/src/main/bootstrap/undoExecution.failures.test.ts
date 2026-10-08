@@ -18,7 +18,7 @@ import {
   runPaste,
 } from "@filetrail/core/fs/testNativePaste";
 
-import { originalRenameExclusive } from "../originalFileSystem";
+import { createOriginalWriteOperationFs, originalRenameExclusive } from "../originalFileSystem";
 import { classifyUndoWriteError, runUndo } from "./undoExecution";
 import { folderTrash, paste, setUpUndo, snapshotOf } from "./undoRealDisk.testkit";
 import type { WriteOperationFs } from "./writeOperations";
@@ -55,6 +55,37 @@ function noTrash(): NodeJS.ErrnoException {
     cause: Object.assign(new Error("not supported"), { code: "ENOTSUP" }),
   });
 }
+
+describe("an item that can't be checked", () => {
+  // A folder that can't be read for a moment (no permission, a share that doesn't answer)
+  // hides whether the item is there: it isn't taken for gone.
+  it("keeps the operation on the Undo list, and undoes it once it can be read", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    let unreadable = false;
+    const t = setUpUndo(root, trashDir, {
+      lstat: async (path) => {
+        if (unreadable && path === join(root, "b.txt")) {
+          throw permissionDenied();
+        }
+        return createOriginalWriteOperationFs(folderTrash(trashDir)).lstat(path);
+      },
+    });
+    await t.rename(join(root, "a.txt"), "b.txt");
+    const entry = t.history.top("undo");
+    unreadable = true;
+
+    const failed = await t.undo();
+
+    expect(failed.status).toBe("failed");
+    expect(failed.result?.items[0]?.error).toBe(
+      "“b.txt” couldn't be checked: You don't have permission to access this item.",
+    );
+    expect(t.history.top("undo")).toEqual(entry);
+    unreadable = false;
+    expect((await t.undo()).status).toBe("completed");
+    expect(readdirSync(root).sort()).toEqual([".Trash", "a.txt"]);
+  });
+});
 
 describe("a write that fails", () => {
   it("keeps the operation on top of the Undo list, to be tried again", async () => {

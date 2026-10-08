@@ -360,6 +360,9 @@ async function moveBack(
 ): Promise<StepOutcome> {
   const { fs } = args;
   const check = await checkMove(fs, planned);
+  if (!check.ok && check.retry) {
+    return failedStep(original, planned.from, planned.to, check.reason);
+  }
   if (!check.ok) {
     return {
       status: "skipped",
@@ -368,22 +371,25 @@ async function moveBack(
     };
   }
   // An item put back from the Trash is the very item that went there (its id was checked).
-  // One that is locked (a locked copy an Undo moved there) is unlocked to be moved, and
-  // locked again once back.
-  let flags: number | null = null;
+  // What kept the Trash from taking it was taken off when an Undo moved it there (a lock,
+  // a folder that can't be written to, a rule against deleting it), and is again to move
+  // it out, then put back once it is back.
+  let lifted: Lifted = NOTHING_LIFTED;
   if (planned.putBack && check.id !== null) {
     try {
-      flags = await unlockForMove(fs, planned.from);
+      lifted = await liftRestrictions(fs, planned.from);
     } catch (error) {
       return writeFailed(error, { original, from: planned.from, to: planned.to, around: [] }, args);
     }
   }
   const renamed = await renameInto(planned, check, original, args);
-  const lockedAgain =
-    flags === null ||
-    (await lockAgain(fs, renamed.status === "renamed" ? renamed.target : planned.from, flags));
+  const restored = await restoreRestrictions(
+    fs,
+    renamed.status === "renamed" ? renamed.target : planned.from,
+    lifted,
+  );
   if (renamed.status !== "renamed") {
-    return lockedAgain ? renamed : { ...renamed, items: notLockedAgain(renamed.items) };
+    return restored ? renamed : { ...renamed, items: notLockedAgain(renamed.items) };
   }
   const target = renamed.target;
   // A rename keeps the item's id: it is the one the check just read.
@@ -395,23 +401,73 @@ async function moveBack(
     itemKind: check.kind,
     parentId: await args.folderIdOf(dirname(planned.from)),
     ...(planned.putBack ? { fromTrash: true, stamp: await readItemStamp(fs, target) } : {}),
-    ...(flags !== null && lockedAgain ? { locked: true } : {}),
+    ...(lifted.flags !== null && restored ? { locked: true } : {}),
   };
   return {
     status: "done",
     produced,
-    items: [
-      {
-        sourcePath: planned.from,
-        destinationPath: target,
-        status: "completed",
-        error: null,
-        skipReason: null,
-      },
-      ...(lockedAgain ? [] : [lostLockItem(target)]),
-    ],
+    items: [doneItem(planned.from, target, restored ? null : lostLockNote(target))],
     removed: null,
   };
+}
+
+// What keeps an item from being moved to the Trash or out of it, taken off an item the
+// operation made (its id was checked) to move it, and put back after: its lock, a folder's
+// read-only mode (renaming it into another folder needs it writable), and an access rule
+// against deleting it (a copy of ~/Documents has one).
+type Lifted = { flags: number | null; mode: number | null; acl: string | null };
+
+const NOTHING_LIFTED: Lifted = { flags: null, mode: null, acl: null };
+
+async function liftRestrictions(fs: WriteOperationFs, path: string): Promise<Lifted> {
+  // A locked item's mode and access rules can't be changed: its lock comes off first.
+  const flags = await unlockForMove(fs, path);
+  const lifted: Lifted = { flags, mode: null, acl: null };
+  const stats = await fs.lstat(path).catch(() => null);
+  const mode = typeof stats?.mode === "number" ? stats.mode & 0o7777 : null;
+  if (fs.chmod && stats?.isDirectory() && mode !== null && (mode & 0o200) === 0) {
+    await fs.chmod(path, mode | 0o200);
+    lifted.mode = mode;
+  }
+  const acl = fs.getAcl ? await fs.getAcl(path).catch(() => null) : null;
+  if (fs.setAcl && acl !== null && /:deny:/u.test(acl)) {
+    await fs.setAcl(path, null);
+    lifted.acl = acl;
+  }
+  return lifted;
+}
+
+// Puts back on the item at `path` what liftRestrictions took off; whether all of it could be
+// (said in the result).
+async function restoreRestrictions(
+  fs: WriteOperationFs,
+  path: string,
+  lifted: Lifted,
+): Promise<boolean> {
+  let restored = true;
+  if (lifted.acl !== null) {
+    restored = await succeeds(fs.setAcl?.(path, lifted.acl));
+  }
+  if (lifted.mode !== null) {
+    restored = (await succeeds(fs.chmod?.(path, lifted.mode))) && restored;
+  }
+  if (lifted.flags !== null) {
+    restored = (await lockAgain(fs, path, lifted.flags)) && restored;
+  }
+  return restored;
+}
+
+// Whether `write` was made and went through.
+async function succeeds(write: Promise<void> | undefined): Promise<boolean> {
+  if (write === undefined) {
+    return false;
+  }
+  try {
+    await write;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Puts back the lock taken off an item to move it; whether it could be (said in the result).
@@ -424,13 +480,26 @@ async function lockAgain(fs: WriteOperationFs, path: string, flags: number): Pro
   }
 }
 
-// An item an Undo moved that was locked, and is no longer: said, though the move is done.
-function lostLockItem(path: string): ResultItem {
-  return failedItem(
-    path,
-    null,
-    `“${basename(path)}” was moved, but couldn't be locked again. Lock it in Finder's Get Info.`,
-  );
+// An item an Undo moved that had its lock or permissions taken off, which couldn't be put
+// back: said, though the move is done and nothing is left to do.
+function lostLockNote(path: string): string {
+  return `“${basename(path)}” was moved, but its lock or permissions couldn't be put back. Set them in Finder's Get Info.`;
+}
+
+// A done item, with a note when there is something to know about it.
+function doneItem(
+  sourcePath: string,
+  destinationPath: string | null,
+  note: string | null,
+): ResultItem {
+  return {
+    sourcePath,
+    destinationPath,
+    status: "completed",
+    error: note,
+    skipReason: null,
+    ...(note === null ? {} : { note: true as const }),
+  };
 }
 
 // Items left where they were, now unlocked: said too.
@@ -528,6 +597,9 @@ async function moveToTrash(
 ): Promise<StepOutcome> {
   const { fs } = args;
   const check = await checkTrash(fs, planned);
+  if (!check.ok && check.retry) {
+    return failedStep(original, planned.path, null, check.reason);
+  }
   if (!check.ok) {
     return {
       status: "skipped",
@@ -546,12 +618,13 @@ async function moveToTrash(
     ? await fs.itemSize(planned.path).catch(() => null)
     : null;
   // What an operation made is its own (its id was checked): a copy of a locked item is
-  // locked too, and the Trash refuses a locked item. It goes there unlocked, without asking,
-  // and is locked again there. So does a copy put back locked by a Redo.
-  let flags: number | null = null;
+  // locked too, a copy of a read-only folder read-only, and a copy of ~/Documents has a rule
+  // against deleting it; the Trash refuses all of them. It goes there without them,
+  // without asking, and they are put back on it there. So does a copy put back by a Redo.
+  let lifted: Lifted = NOTHING_LIFTED;
   if (planned.unlock && check.id !== null) {
     try {
-      flags = await unlockForMove(fs, planned.path);
+      lifted = await liftRestrictions(fs, planned.path);
     } catch (error) {
       return writeFailed(error, { original, from: planned.path, to: null, around: [] }, args);
     }
@@ -560,16 +633,15 @@ async function moveToTrash(
   try {
     trashPath = await fs.trash(planned.path);
   } catch (error) {
-    const lockedAgain = flags === null || (await lockAgain(fs, planned.path, flags));
+    const restored = await restoreRestrictions(fs, planned.path, lifted);
     const outcome = await writeFailed(
       error,
       { original, from: planned.path, to: null, around: [dirname(planned.path)] },
       args,
     );
-    return lockedAgain ? outcome : { ...outcome, items: notLockedAgain(outcome.items) };
+    return restored ? outcome : { ...outcome, items: notLockedAgain(outcome.items) };
   }
-  const lockedAgain =
-    flags === null || trashPath === null || (await lockAgain(fs, trashPath, flags));
+  const restored = trashPath === null || (await restoreRestrictions(fs, trashPath, lifted));
   return {
     status: "done",
     // In the Trash, but the Trash didn't say where: done, and nothing to do it again from.
@@ -577,16 +649,7 @@ async function moveToTrash(
       trashPath === null
         ? null
         : { kind: "trashed", from: planned.path, trashPath, id, parentId, ...looks },
-    items: [
-      {
-        sourcePath: planned.path,
-        destinationPath: null,
-        status: "completed",
-        error: null,
-        skipReason: null,
-      },
-      ...(lockedAgain ? [] : [lostLockItem(planned.path)]),
-    ],
+    items: [doneItem(planned.path, null, restored ? null : lostLockNote(planned.path))],
     removed: {
       path: planned.path,
       item: before,
@@ -612,7 +675,28 @@ async function renameBack(
   const items: ResultItem[] = [];
   const running: BatchItem[] = [];
   const toRename: Array<{ sourcePath: string; destinationName: string; isFolder: boolean }> = [];
-  for (const check of await checkBatch(fs, planned)) {
+  const checks = await checkBatch(fs, planned);
+  // An item that couldn't be checked leaves the whole batch to be tried again: its items
+  // may swap names with each other.
+  const unreadable = checks.find((check) => check.refusal?.retry);
+  if (unreadable?.refusal) {
+    return {
+      status: "failed",
+      produced: null,
+      items: [failedItem(unreadable.item.from, unreadable.item.to, unreadable.refusal.reason)],
+      // The whole step as the operation named it (see the end of this function).
+      leftover: {
+        kind: "batchRenamed",
+        items: planned.items.map((item) => ({
+          from: item.to,
+          to: item.from,
+          id: item.id,
+          itemKind: item.itemKind,
+        })),
+      },
+    };
+  }
+  for (const check of checks) {
     if (check.refusal) {
       items.push(skippedItem(check.item.from, check.item.to, check.refusal.reason));
     } else {

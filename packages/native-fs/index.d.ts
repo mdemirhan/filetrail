@@ -321,3 +321,18 @@ export function nativeReadDragPasteboard(): DragPasteboardContents;
  * going on now, without reading what it carries. Call on the main thread.
  */
 export function nativeReadDragChangeCount(): number;
+
+/**
+ * The access control list (ACL) of the item at `path` (a symlink itself, not its target) as
+ * text (`acl_to_text(3)`), or `null` when it has none.
+ *
+ * @throws An error with a `code` property when `path` can't be reached (e.g. `"ENOENT"`).
+ */
+export function nativeGetAcl(path: string): Promise<string | null>;
+
+/**
+ * Gives the item at `path` the ACL `acl` (text from nativeGetAcl), or none for `null`.
+ *
+ * @throws An error with a `code` property when it can't be set (e.g. `"EPERM"`).
+ */
+export function nativeSetAcl(path: string, acl: string | null): Promise<void>;

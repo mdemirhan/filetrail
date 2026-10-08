@@ -47,7 +47,7 @@ import { runUndo } from "./undoExecution";
 import { type UndoEntry, type UndoHistory, itemStepCount } from "./undoHistory";
 import { type UndoQuestions, findQuestions } from "./undoPlan";
 
-type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
+type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number; mode?: number };
 
 // Filesystem operations used by write operations (rename, mkdir, path checks).
 // Callers inject an original-fs backed implementation to bypass Electron's ASAR
@@ -76,6 +76,12 @@ export type WriteOperationFs = {
   // an operation's own locked copy for Undo to move it to the Trash.
   getFlags?: (path: string) => Promise<number>;
   setFlags?: (path: string, flags: number) => Promise<void>;
+  // What else keeps the Trash from taking an operation's own copy, taken off for Undo to
+  // move it there and put back after: a read-only folder's mode, and its access control
+  // list (ACL) as text (nativeGetAcl), null for none.
+  chmod?: (path: string, mode: number) => Promise<void>;
+  getAcl?: (path: string) => Promise<string | null>;
+  setAcl?: (path: string, acl: string | null) => Promise<void>;
   // An item as a folder's measurement counts it (nativeItemSize), read just before a delete
   // removes it, so the measured folders that held it can have it taken off their sizes.
   itemSize?: (path: string) => Promise<ItemSize>;

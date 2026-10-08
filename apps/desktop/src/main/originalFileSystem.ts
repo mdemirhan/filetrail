@@ -60,6 +60,8 @@ const addon = require("@filetrail/native-fs") as {
   nativeListVolumes: () => Volume[];
   nativeListMounts: () => Array<{ path: string; isLocal: boolean }>;
   nativeTrashItem: (path: string) => Promise<string | null>;
+  nativeGetAcl: (path: string) => Promise<string | null>;
+  nativeSetAcl: (path: string, acl: string | null) => Promise<void>;
 };
 const {
   nativeCopyFile,
@@ -79,6 +81,8 @@ const {
   nativeListVolumes,
   nativeListMounts,
   nativeTrashItem,
+  nativeGetAcl,
+  nativeSetAcl,
 } = addon;
 
 // Stop takes effect part way through a large file.
@@ -199,6 +203,9 @@ export function createOriginalWriteOperationFs(
     trash,
     getFlags: (path) => nativeGetFlags(path),
     setFlags: (path, flags) => nativeSetFlags(path, flags),
+    chmod: (path, mode) => chmod(path, mode),
+    getAcl: (path) => nativeGetAcl(path),
+    setAcl: (path, acl) => nativeSetAcl(path, acl),
     itemSize: (path) => nativeItemSize(path),
   };
 }

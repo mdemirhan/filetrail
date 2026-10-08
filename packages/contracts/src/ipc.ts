@@ -509,6 +509,9 @@ export const copyPasteItemResultSchema = z.object({
   // For a folder: how many items inside it failed. A folder whose only problem is failures
   // inside it has status "failed" and a null error.
   childFailureCount: z.number().int().nonnegative().optional(),
+  // A completed item with something to know about it: `error` says what (it was moved, but
+  // its lock couldn't be put back). Nothing is left to do about it.
+  note: z.literal(true).optional(),
 });
 export const copyPasteOperationResultSchema = z.object({
   operationId: z.string().min(1),
@@ -564,6 +567,9 @@ export const writeOperationItemResultSchema = z.object({
   // For a folder: how many items inside it failed. A folder whose only problem is failures
   // inside it has status "failed" and a null error.
   childFailureCount: z.number().int().nonnegative().optional(),
+  // A completed item with something to know about it: `error` says what (it was moved, but
+  // its lock couldn't be put back). Nothing is left to do about it.
+  note: z.literal(true).optional(),
 });
 export const writeOperationResultSchema = z.object({
   operationId: z.string().min(1),

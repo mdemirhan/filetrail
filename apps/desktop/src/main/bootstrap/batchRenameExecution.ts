@@ -434,6 +434,8 @@ async function renamesItself(fs: BatchRenameFs, item: PlannedItem): Promise<bool
  * What a batch rename moved, for Undo: each item that is somewhere else than it was, and
  * still there. That is every item renamed, and an item that couldn't take its new name and
  * was left under another name than its own ("b 2", or the hidden name it waited under).
+ * An item that kept its name (skipped, or failed) but is elsewhere only because its folder
+ * was renamed isn't one: undoing the folder's rename takes it back.
  */
 export async function movedItemsOf(
   lstat: BatchRenameFs["lstat"],
@@ -444,7 +446,8 @@ export async function movedItemsOf(
     if (
       item.sourcePath === null ||
       item.destinationPath === null ||
-      item.destinationPath === item.sourcePath
+      item.destinationPath === item.sourcePath ||
+      basename(item.destinationPath) === basename(item.sourcePath)
     ) {
       continue;
     }

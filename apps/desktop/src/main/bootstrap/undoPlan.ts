@@ -6,6 +6,8 @@ import {
   type ItemStamp,
   type UndoStep,
   type UndoUnit,
+  describeCopyPasteError,
+  errorCode,
   itemIdOf,
   kindOfStats,
   readItemStamp,
@@ -121,8 +123,10 @@ export type PlanFs = {
 };
 
 // Why a step can't be undone, said about the item. `missing` means nothing is left where
-// the item was: no other item is in the way of the steps after it.
-export type Refusal = { reason: string; missing: boolean };
+// the item was: no other item is in the way of the steps after it. `retry` means it can't
+// be told now (the disk couldn't be read: no permission, an error, a share not answering):
+// the step stays to be tried again, never dropped as if its item were gone.
+export type Refusal = { reason: string; missing: boolean; retry?: true };
 
 // `id` is the item's id now, when it has one.
 export type MoveCheck =
@@ -190,6 +194,31 @@ async function lstatOrNull(fs: PlanFs, path: string): Promise<PlanStats | null> 
   }
 }
 
+// What is at `path`: an item, nothing at all, or an error that hides whether there is one.
+type LookedUp = { stats: PlanStats } | { missing: true } | { unreadable: Refusal };
+
+async function lookUp(
+  fs: PlanFs,
+  path: string,
+  look: (path: string) => Promise<PlanStats> = fs.lstat,
+): Promise<LookedUp> {
+  try {
+    return { stats: await look(path) };
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return { missing: true };
+    }
+    return {
+      unreadable: {
+        reason: `“${basename(path)}” couldn't be checked: ${describeCopyPasteError(error)}`,
+        missing: false,
+        retry: true,
+      },
+    };
+  }
+}
+
 // Whether the item at `path` is the one a step was about. Its id must match; when moving
 // or renaming it back (`relaxed`), an item of the same kind under the same name is taken
 // too, since apps save a document by replacing its file, which gives it a new id. Without
@@ -241,10 +270,14 @@ export async function checkMove(
   step: Extract<PlannedStep, { kind: "move" }>,
   changes: UnitChanges = noUnitChanges(),
 ): Promise<MoveCheck> {
-  const item = await lstatOrNull(fs, step.from);
-  if (item === null) {
+  const found = await lookUp(fs, step.from);
+  if ("unreadable" in found) {
+    return { ok: false, ...found.unreadable };
+  }
+  if ("missing" in found) {
     return { ok: false, reason: await missingReason(fs, step.from), missing: true };
   }
+  const item = found.stats;
   if (!isExpectedItem(item, step.id, step.itemKind, !step.putBack)) {
     return { ok: false, reason: replacedReason(step.from, step.id, item), missing: false };
   }
@@ -257,7 +290,11 @@ export async function checkMove(
   }
   const folderPath = dirname(step.to);
   // Through a link, as when the step was recorded (see readFolderId).
-  const folder = await fs.stat(folderPath).catch(() => null);
+  const foundFolder = await lookUp(fs, folderPath, fs.stat);
+  if ("unreadable" in foundFolder) {
+    return { ok: false, ...foundFolder.unreadable };
+  }
+  const folder = "stats" in foundFolder ? foundFolder.stats : null;
   if (folder === null || !folder.isDirectory()) {
     return {
       ok: false,
@@ -278,7 +315,11 @@ export async function checkMove(
   const kind = kindOfStats(item);
   const isFolder = kind === "directory";
   const itemId = itemIdOf(item);
-  const there = await lstatOrNull(fs, step.to);
+  const foundThere = await lookUp(fs, step.to);
+  if ("unreadable" in foundThere) {
+    return { ok: false, ...foundThere.unreadable };
+  }
+  const there = "stats" in foundThere ? foundThere.stats : null;
   if (there === null || leavesBefore(there, step.to, changes)) {
     // Free by then, unless a step before puts another item there.
     const nameTaken = changes.filledPlaces.has(placeKey(step.to));
@@ -312,10 +353,14 @@ export async function checkTrash(
   fs: PlanFs,
   step: Extract<PlannedStep, { kind: "trash" }>,
 ): Promise<TrashCheck> {
-  const item = await lstatOrNull(fs, step.path);
-  if (item === null) {
+  const found = await lookUp(fs, step.path);
+  if ("unreadable" in found) {
+    return { ok: false, ...found.unreadable };
+  }
+  if ("missing" in found) {
     return { ok: false, reason: await missingReason(fs, step.path), missing: true };
   }
+  const item = found.stats;
   if (!isExpectedItem(item, step.id, step.stamp?.kind ?? null, false)) {
     return { ok: false, reason: replacedReason(step.path, step.id, item), missing: false };
   }
@@ -356,7 +401,12 @@ export async function checkBatch(
   const vacated = new Set(step.items.map((item) => item.from));
   const checks: BatchItemCheck[] = [];
   for (const item of step.items) {
-    const stats = await lstatOrNull(fs, item.from);
+    const found = await lookUp(fs, item.from);
+    if ("unreadable" in found) {
+      checks.push({ item, refusal: found.unreadable, nameTaken: false, isFolder: false });
+      continue;
+    }
+    const stats = "stats" in found ? found.stats : null;
     if (stats === null) {
       checks.push({
         item,
@@ -378,7 +428,12 @@ export async function checkBatch(
     // The name it goes back to, in the folder it is in now (its folder may be renamed back
     // in the same batch, after it).
     const target = `${dirname(item.from)}/${basename(item.to)}`;
-    const there = vacated.has(target) ? null : await lstatOrNull(fs, target);
+    const foundThere = vacated.has(target) ? null : await lookUp(fs, target);
+    if (foundThere !== null && "unreadable" in foundThere) {
+      checks.push({ item, refusal: foundThere.unreadable, nameTaken: false, isFolder: false });
+      continue;
+    }
+    const there = foundThere !== null && "stats" in foundThere ? foundThere.stats : null;
     const itemId = itemIdOf(stats);
     checks.push({
       item,
