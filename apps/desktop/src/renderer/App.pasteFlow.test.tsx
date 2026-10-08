@@ -333,7 +333,9 @@ describe("App copy/paste integration", () => {
       );
 
     const invocationCountBeforeBlockedPaste = writeInvocations().length;
-    // Cut only fills the clipboard, so the operation under way does not hold it back.
+    // Cut only fills the clipboard, so the operation under way does not hold it back. (Not
+    // the folder: one on the clipboard has no Paste into Folder of its own.)
+    await selectItem("/Users/demo/source.txt");
     await act(async () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });

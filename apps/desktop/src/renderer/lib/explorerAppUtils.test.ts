@@ -148,12 +148,30 @@ describe("explorerAppUtils", () => {
       expect(resolvePasteDestinationPath({ ...base, currentPath: "" })).toBeNull();
     });
 
-    it("pastes into the current folder from the menu of several items", () => {
+    // An item's menu never pastes anywhere but into its item: that menu has no Paste.
+    it("has no destination from the menu of several items or of a file", () => {
       expect(
         resolvePasteDestinationPath({
           ...base,
           contextMenuState: contentMenu(["/Users/demo/Folder", "/Users/demo/a.txt"], folder.path),
           contextMenuTargetEntry: folder,
+        }),
+      ).toBeNull();
+      const file = { ...folder, path: "/Users/demo/a.txt", name: "a.txt", kind: "file" as const };
+      expect(
+        resolvePasteDestinationPath({
+          ...base,
+          contextMenuState: contentMenu([file.path], file.path),
+          contextMenuTargetEntry: file,
+        }),
+      ).toBeNull();
+    });
+
+    it("pastes into the folder on screen from the background's menu", () => {
+      expect(
+        resolvePasteDestinationPath({
+          ...base,
+          contextMenuState: { ...contentMenu([], "/Users/demo"), surface: "background" },
         }),
       ).toBe("/Users/demo");
     });
@@ -168,7 +186,8 @@ describe("explorerAppUtils", () => {
       ).toBe("/Users/demo/Folder");
     });
 
-    it("pastes into the folder on screen when the folder right-clicked is itself on the clipboard", () => {
+    // Nothing goes into itself; the paste never lands in the folder on screen instead.
+    it("has no destination when the folder right-clicked is itself on the clipboard", () => {
       expect(
         resolvePasteDestinationPath({
           ...base,
@@ -176,17 +195,18 @@ describe("explorerAppUtils", () => {
           contextMenuState: contentMenu([folder.path], folder.path),
           contextMenuTargetEntry: folder,
         }),
-      ).toBe("/Users/demo");
+      ).toBeNull();
     });
 
-    it("never pastes through a symlinked folder", () => {
+    // As New Folder makes its folder there: the alias's own folder is where things go.
+    it("pastes into an alias of a folder through it", () => {
       expect(
         resolvePasteDestinationPath({
           ...base,
           contextMenuState: contentMenu([linkedFolder.path], linkedFolder.path),
           contextMenuTargetEntry: linkedFolder,
         }),
-      ).toBe("/Users/demo");
+      ).toBe("/Users/demo/Linked");
     });
 
     it("has no destination in search results", () => {

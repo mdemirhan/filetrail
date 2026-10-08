@@ -389,7 +389,10 @@ describe("App copy/paste dialogs and destinations", () => {
     });
   });
 
-  it("never pastes into a symlinked folder, from the keyboard or the context menu", async () => {
+  // ⌘V goes into the folder on screen, whatever is selected. An alias's own Paste into
+  // Folder pastes into its folder through it, as New Folder makes its folder there: it
+  // never pastes into the folder on screen instead.
+  it("pastes into an alias of a folder only from the alias's own menu", async () => {
     const harness = createAppHarness({
       directorySnapshots: {
         "/Users/demo": {
@@ -437,7 +440,7 @@ describe("App copy/paste dialogs and destinations", () => {
       fireEvent.contextMenu(await screen.findByTitle("/Users/demo/Linked"));
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Paste/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^Paste into Folder/ }));
     });
     await vi.waitFor(() => {
       expect(
@@ -446,7 +449,7 @@ describe("App copy/paste dialogs and destinations", () => {
     });
     expect(
       harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
-    ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
+    ).toMatchObject({ destinationDirectoryPath: "/Users/demo/Linked" });
   });
 
   it("does nothing, silently, when cut items are pasted into the folder they are in", async () => {
@@ -1211,7 +1214,9 @@ describe("App file operations like Finder", () => {
     );
   });
 
-  it("pastes into the folder on screen from the menu of a folder that is on the clipboard", async () => {
+  // Nothing goes into itself. Its Paste into Folder used to paste into the folder on
+  // screen instead, which the menu didn't say.
+  it("offers no Paste into Folder on a folder that is itself on the clipboard", async () => {
     const harness = createAppHarness();
     renderApp(harness);
 
@@ -1220,17 +1225,9 @@ describe("App file operations like Finder", () => {
     await act(async () => {
       fireEvent.contextMenu(screen.getByTitle("/Users/demo/Folder"));
     });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Paste/ }));
-    });
 
-    await vi.waitFor(() => {
-      expect(analyzeRequests(harness).at(-1)).toMatchObject({
-        sourcePaths: ["/Users/demo/Folder"],
-        destinationDirectoryPath: "/Users/demo",
-      });
-    });
-    expect(screen.queryByText(/couldn't start/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Rename/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Paste/ })).not.toBeInTheDocument();
   });
 
   describe("names that begin with a dot", () => {
@@ -2777,8 +2774,9 @@ describe("file commands from the keyboard, in more states", () => {
     expect(screen.queryByRole("dialog", { name: "Rename “New Folder”" })).not.toBeInTheDocument();
   });
 
-  // Search results show no folder of their own: New Folder has nowhere to go.
-  it("offers no New Folder on a folder in the search results", async () => {
+  // Search results show no folder of their own: New Folder has nowhere to go, and nothing
+  // is pasted there (Paste into Folder was shown, always dimmed).
+  it("offers no New Folder or Paste on a folder in the search results", async () => {
     const harness = createAppHarness({
       searchResultItems: [
         {
@@ -2802,6 +2800,7 @@ describe("file commands from the keyboard, in more states", () => {
 
     expect(screen.getByRole("button", { name: /^Rename/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^New Folder/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Paste into Folder/ })).not.toBeInTheDocument();
   });
 
   // A search tab shows results, not the folder behind them: like Paste there, a drop on

@@ -594,9 +594,13 @@ export function useExplorerActions(args: {
       hidden.add("openInNewTab");
       hidden.add("openInNewWindow");
     }
-    // An item's Paste goes into it, so it is there only for one folder; the folder on
-    // screen has its own, in the menu of the background.
-    if ((surface === "content" || surface === "search") && !isSingleFolder) {
+    // An item's Paste goes into it, so it is there only for one folder it can paste into:
+    // not one that is itself on the clipboard, nor one in search results, where nothing is
+    // pasted. The folder on screen has its own, in the menu of the background.
+    if (
+      (surface === "content" || surface === "search") &&
+      (!isSingleFolder || pasteDestinationPath === null)
+    ) {
       hidden.add("paste");
     }
     // Edit is for text files.
@@ -687,6 +691,7 @@ export function useExplorerActions(args: {
     currentPath,
     homePath,
     isWriteOperationLocked,
+    pasteDestinationPath,
   ]);
 
   // Items removed while their menu is open (by another app): nothing in it applies any more,

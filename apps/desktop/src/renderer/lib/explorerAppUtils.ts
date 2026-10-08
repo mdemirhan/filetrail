@@ -228,29 +228,28 @@ function resolvePasteDestinationIgnoringTrash(args: {
     ) {
       return contextMenuState.targetPath;
     }
-    // Like the keyboard, a folder is the target only when it is the one item picked, and
-    // not when it is itself on the clipboard: nothing goes into itself, so the paste goes
-    // into the folder on screen instead.
-    if (contextMenuState.paths.length <= 1 && isPasteTargetFolderEntry(contextMenuTargetEntry)) {
-      if (clipboardSourcePaths.includes(contextMenuTargetEntry.path)) {
-        return currentFolder ?? contextMenuTargetEntry.path;
-      }
+    // The background's menu pastes into the folder on screen.
+    if (contextMenuState.paths.length === 0) {
+      return currentFolder;
+    }
+    // An item's menu pastes into that item, never anywhere else: only when it is the one
+    // folder picked (an alias of a folder is pasted into through it, as New Folder makes
+    // its folder there), and not when it is itself on the clipboard, as nothing goes into
+    // itself. Otherwise its menu has no Paste.
+    if (
+      contextMenuState.paths.length === 1 &&
+      isDirectoryLikeEntry(contextMenuTargetEntry) &&
+      !clipboardSourcePaths.includes(contextMenuTargetEntry.path)
+    ) {
       return contextMenuTargetEntry.path;
     }
-    return currentFolder;
+    return null;
   }
   // From the keyboard or the menu bar the paste goes into the folder on screen, like
   // Finder, whatever is selected: a selected folder (often the one just pasted or made)
   // isn't a target, or a second ⌘V would land out of sight inside it. A folder's own
   // right-click menu pastes into it (above).
   return currentFolder;
-}
-
-// A symlinked folder is not a paste target, the same as for drag and drop
-// (`isRealDirectoryEntry`): pasting through it would write into the link's target
-// somewhere else on disk, so the paste goes into the folder on screen instead.
-function isPasteTargetFolderEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {
-  return entry?.kind === "directory" && !entry.isSymlink;
 }
 
 // Where New Folder makes its folder. From the keyboard, the menu bar or the background's
