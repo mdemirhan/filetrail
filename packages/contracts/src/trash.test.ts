@@ -1,4 +1,4 @@
-import { isInsideTrash } from "./trash";
+import { isInsideTrash, isTrashFolder } from "./trash";
 
 describe("isInsideTrash", () => {
   it("knows the home folder's Trash and what is in it", () => {
@@ -23,5 +23,24 @@ describe("isInsideTrash", () => {
     expect(isInsideTrash("/Volumes/USB/.TrashesBackup", "/Users/demo")).toBe(false);
     expect(isInsideTrash("/Volumes/USB/Stuff/.Trashes", "/Users/demo")).toBe(false);
     expect(isInsideTrash("/Users/demo/.Trash", "")).toBe(false);
+  });
+});
+
+describe("isTrashFolder", () => {
+  it("knows the home folder's Trash, and another disk's, and each user's Trash in that", () => {
+    expect(isTrashFolder("/Users/demo/.Trash", "/Users/demo")).toBe(true);
+    expect(isTrashFolder("/users/DEMO/.trash/", "/Users/demo/")).toBe(true);
+    expect(isTrashFolder("/Volumes/USB/.Trashes", "/Users/demo")).toBe(true);
+    expect(isTrashFolder("/Volumes/USB/.Trashes/501", "/Users/demo")).toBe(true);
+    expect(isTrashFolder("/volumes/usb/.TRASHES/501/", "/Users/demo")).toBe(true);
+  });
+
+  it("leaves what is in a Trash to be deleted", () => {
+    expect(isTrashFolder("/Users/demo/.Trash/a.txt", "/Users/demo")).toBe(false);
+    expect(isTrashFolder("/Volumes/USB/.Trashes/501/a.txt", "/Users/demo")).toBe(false);
+    expect(isTrashFolder("/Volumes/USB/.Trashes2", "/Users/demo")).toBe(false);
+    expect(isTrashFolder("/Volumes/USB/Stuff/.Trashes", "/Users/demo")).toBe(false);
+    expect(isTrashFolder("/Users/demo/.Trash", "")).toBe(false);
+    expect(isTrashFolder("/", "/Users/demo")).toBe(false);
   });
 });

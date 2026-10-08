@@ -1518,6 +1518,60 @@ describe("moving to the Trash and deleting", () => {
     coordinator.shutdown();
   });
 
+  // Delete Immediately deletes only what is in a Trash, never a Trash itself.
+  it("protects another disk's Trash, and each user's Trash in it", async () => {
+    const fs = createWriteOperationFs();
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+
+    for (const path of [
+      "/Volumes/Backup/.Trashes",
+      "/Volumes/Backup/.Trashes/501",
+      "/volumes/backup/.TRASHES/501/",
+    ]) {
+      await expect(
+        coordinator.handlers["writeOperation:deleteImmediately"](
+          { paths: [path] },
+          { sender: createSender() },
+        ),
+        path,
+      ).rejects.toThrow("protected system directory");
+      await expect(
+        coordinator.handlers["writeOperation:trash"]({ paths: [path] }, { sender: createSender() }),
+        path,
+      ).rejects.toThrow("protected system directory");
+      await expect(
+        coordinator.handlers["writeOperation:rename"](
+          { sourcePath: path, destinationName: "Old" },
+          { sender: createSender() },
+        ),
+        path,
+      ).rejects.toThrow("protected system directory");
+    }
+    expect(fs.rm).not.toHaveBeenCalled();
+    expect(fs.trash).not.toHaveBeenCalled();
+    coordinator.shutdown();
+  });
+
+  it("doesn't delete another disk's Trash through a link in the Trash", async () => {
+    const homeTrash = resolve(homedir(), ".Trash");
+    const fs: WriteOperationFs = {
+      ...createWriteOperationFs(),
+      // A link in the Trash that leads to another disk's Trash.
+      realpath: async (path) =>
+        path === join(homeTrash, "link") ? "/Volumes/Backup/.Trashes" : path,
+    };
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+
+    await expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: [join(homeTrash, "link", "501")] },
+        { sender: createSender() },
+      ),
+    ).rejects.toThrow("protected system directory");
+    expect(fs.rm).not.toHaveBeenCalled();
+    coordinator.shutdown();
+  });
+
   // The same folder can be reached by other paths: on macOS the home folder is also at
   // /System/Volumes/Data/Users/<name>. What is on disk is compared, not only the path.
   it.runIf(process.platform === "darwin" && existsSync("/System/Volumes/Data"))(

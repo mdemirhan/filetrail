@@ -9,6 +9,7 @@ import {
   type WriteOperationResult,
   isAbortError,
   isInsideTrash,
+  isTrashFolder,
   pathsChangedByWrite,
   withoutNestedPaths,
   writeOperationProgressEventSchema,
@@ -124,6 +125,9 @@ export const PROGRESS_UPDATE_INTERVAL_MS = 100;
 
 // How long quitting waits for a stopped operation to finish cleaning up.
 export const SHUTDOWN_WAIT_LIMIT_MS = 15_000;
+
+const TRASH_FOLDER_REFUSAL =
+  "The Trash folder is a protected system directory and cannot be modified.";
 
 // Answer returned to a request that isn't allowed to act on an operation (unknown id, or
 // asked by a window other than the one that started it).
@@ -279,11 +283,11 @@ export function createWriteOperationCoordinator(
     }
   }
 
-  const trashPath = resolve(homePath, ".Trash").toLowerCase();
+  // A Trash folder itself: the home folder's, or another disk's (see isTrashFolder).
   function assertNotProtectedPath(paths: readonly string[]): void {
     for (const path of paths) {
-      if (resolve(path).toLowerCase() === trashPath) {
-        throw new Error("The Trash folder is a protected system directory and cannot be modified.");
+      if (isTrashFolder(resolve(path), homePath)) {
+        throw new Error(TRASH_FOLDER_REFUSAL);
       }
     }
   }
@@ -341,6 +345,10 @@ export function createWriteOperationCoordinator(
         ? await fs.realpath(dirname(resolved)).catch(() => null)
         : dirname(resolved);
       const realPath = folder === null ? null : join(folder, basename(resolved));
+      // A link to a Trash folder leads to the folder itself.
+      if (realPath !== null && isTrashFolder(realPath, realHomePath)) {
+        throw new Error(TRASH_FOLDER_REFUSAL);
+      }
       if (
         realPath === null ||
         !isInsideTrash(resolved, homePath) ||

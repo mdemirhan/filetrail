@@ -14,6 +14,18 @@ export function isInsideTrash(path: string, homePath: string): boolean {
   return /^\/volumes\/[^/]+\/\.trashes(?:\/|$)/u.test(key);
 }
 
+// A Trash folder itself, not something in it: the home folder's ".Trash", and on another
+// disk its ".Trashes" and each user's Trash in that. It is never deleted, renamed, moved or
+// put in the Trash; only what is in it may be deleted for good.
+export function isTrashFolder(path: string, homePath: string): boolean {
+  const key = comparable(path).replace(/(.)\/+$/u, "$1");
+  const home = comparable(homePath).replace(/\/+$/u, "");
+  if (home.length > 0 && key === `${home}/.trash`) {
+    return true;
+  }
+  return /^\/volumes\/[^/]+\/\.trashes(?:\/[^/]+)?$/u.test(key);
+}
+
 function comparable(path: string): string {
   return path.normalize("NFD").toLowerCase();
 }
