@@ -11,7 +11,7 @@ import {
   type InternalMoveSourceSurface,
   allowedBySource,
   buildInternalDragSession,
-  getSourceFolderPaths,
+  getDragFacts,
   isFileDrag,
   isRealDirectoryEntry,
   resolveInternalDropOperation,
@@ -247,10 +247,6 @@ export function useExplorerDragAndDrop(args: {
   const treeHoverExpandRef = useRef<{ path: string; timerId: number } | null>(null);
   const activeTreeDropElementRef = useRef<ActiveTreeDropElement | null>(null);
 
-  const entriesByPath = useMemo(
-    () => new Map(activeEntries.map((entry) => [entry.path, entry])),
-    [activeEntries],
-  );
   const trashPath = useMemo(() => getTrashPath(homePath), [homePath]);
 
   useEffect(() => {
@@ -459,11 +455,13 @@ export function useExplorerDragAndDrop(args: {
     sourceSurface: InternalMoveSourceSurface,
     event: React.DragEvent<HTMLElement>,
   ) {
+    // Looked up as the drag starts, not each time the list changes: a filter keystroke in a
+    // large folder would otherwise pay for it.
     const session = buildInternalDragSession({
       sourceSurface,
       draggedPath: entry.path,
       selectedPathsInViewOrder,
-      entriesByPath,
+      entriesByPath: new Map(activeEntries.map((activeEntry) => [activeEntry.path, activeEntry])),
     });
     if (blocked || !session) {
       event.preventDefault();
@@ -475,7 +473,7 @@ export function useExplorerDragAndDrop(args: {
     }
     dragSessionRef.current = session;
     setDragActive(true);
-    void requestDiskIds(getSourceFolderPaths(session.sourceItems.map((item) => item.path)));
+    void requestDiskIds(getDragFacts(session).folderPaths);
     // A system drag, not the page's: only it can leave the window. Its drops here still
     // come to the handlers below, while it is still this session.
     event.preventDefault();
@@ -535,10 +533,9 @@ export function useExplorerDragAndDrop(args: {
       droppedSessionRef.current !== session &&
       (result.operation === "move" || result.operation === "delete")
     ) {
-      void followDraggedAway(
-        session.sourceItems.map((item) => item.path),
-        { intoTrash: result.operation === "delete" },
-      );
+      void followDraggedAway(getDragFacts(session).sourcePaths, {
+        intoTrash: result.operation === "delete",
+      });
     }
     if (dragSessionRef.current === session) {
       clearDragSession();
@@ -670,7 +667,7 @@ export function useExplorerDragAndDrop(args: {
     drag.session = session;
     dragSessionRef.current = session;
     setDragActive(true);
-    void requestDiskIds(getSourceFolderPaths(contents.items.map((item) => item.path)));
+    void requestDiskIds(getDragFacts(session).folderPaths);
     if (blockedRef.current && refusedDragChangeCountRef.current !== contents.changeCount) {
       refusedDragChangeCountRef.current = contents.changeCount;
       onDragRefusedRef.current?.("drop");
@@ -749,11 +746,7 @@ export function useExplorerDragAndDrop(args: {
     path: string,
     diskIds: ReadonlyMap<string, number | null> = diskIdsRef.current,
   ): boolean | undefined {
-    return resolveOnSameDisk(
-      getSourceFolderPaths(session.sourceItems.map((item) => item.path)),
-      path,
-      diskIds,
-    );
+    return resolveOnSameDisk(getDragFacts(session).folderPaths, path, diskIds);
   }
 
   // Read again on every dragover, so the cursor changes as soon as Option or Command is
@@ -772,7 +765,7 @@ export function useExplorerDragAndDrop(args: {
     }
     return allowedBySource(
       resolveInternalDropOperation({
-        sourcePaths: session.sourceItems.map((item) => item.path),
+        sourcePaths: getDragFacts(session).sourcePaths,
         targetPath: path,
         altKey: modifiers.altKey,
         metaKey: modifiers.metaKey,
@@ -883,8 +876,7 @@ export function useExplorerDragAndDrop(args: {
     const diskIds = diskIdsRef.current;
     let stillValid = true;
     if (!modifiers.altKey && !modifiers.metaKey && knownOnSameDisk(session, path) === undefined) {
-      const sourceFolders = getSourceFolderPaths(session.sourceItems.map((item) => item.path));
-      await requestDiskIds([...sourceFolders, path]);
+      await requestDiskIds([...getDragFacts(session).folderPaths, path]);
       const onSameDisk = knownOnSameDisk(session, path, diskIds);
       if (onSameDisk !== undefined) {
         operation = allowedBySource(onSameDisk ? "move" : "copy", modifiers.effectAllowed);
@@ -900,17 +892,13 @@ export function useExplorerDragAndDrop(args: {
     if (!stillValid) {
       return;
     }
-    await onDropItems(
-      session.sourceItems.map((item) => item.path),
-      path,
-      {
-        operation,
-        initiator: "drag_drop",
-        pendingTreeSelectionPath: options.selectTargetInTree ? path : null,
-        sourceSurface: session.sourceSurface,
-        validateDestinationBeforeAnalyze: options.validateWithItemProperties !== false,
-      },
-    );
+    await onDropItems(getDragFacts(session).sourcePaths, path, {
+      operation,
+      initiator: "drag_drop",
+      pendingTreeSelectionPath: options.selectTargetInTree ? path : null,
+      sourceSurface: session.sourceSurface,
+      validateDestinationBeforeAnalyze: options.validateWithItemProperties !== false,
+    });
   }
 
   function getContentItemDropIndicator(path: string): DropIndicatorState | "springing" {
@@ -942,7 +930,7 @@ export function useExplorerDragAndDrop(args: {
       surface: "content",
       path: entry.path,
       targetSupportsMove: isRealDirectoryEntry(entry),
-      targetIsSelected: dragSessionRef.current.sourceItems.some((item) => item.path === entry.path),
+      targetIsSelected: getDragFacts(dragSessionRef.current).paths.has(entry.path),
     });
     setDropIndicator("content", entry.path, validity);
     setBackgroundDropIndicator(null);
@@ -1108,9 +1096,9 @@ export function useExplorerDragAndDrop(args: {
     event.stopPropagation();
     await handleDrop("content", entry.path, event, {
       targetSupportsMove: isRealDirectoryEntry(entry),
-      targetIsSelected: dragSessionRef.current?.sourceItems.some(
-        (item) => item.path === entry.path,
-      ),
+      targetIsSelected:
+        dragSessionRef.current !== null &&
+        getDragFacts(dragSessionRef.current).paths.has(entry.path),
       validateWithItemProperties: true,
     });
   }

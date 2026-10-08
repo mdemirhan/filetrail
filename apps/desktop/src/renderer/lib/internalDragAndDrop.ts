@@ -1,6 +1,6 @@
 import { parentDirectoryPath } from "./explorerNavigation";
 import type { DirectoryEntry } from "./explorerTypes";
-import { isOnSameVolume } from "./volumes";
+import { getVolumeRootPath } from "./volumes";
 
 // "external" is a drag from Finder or another app, its items read from the drag itself.
 export type InternalMoveSourceSurface = "content" | "search" | "external";
@@ -101,7 +101,78 @@ export function resolveInternalDropOperation(args: {
     return args.onSameDisk ? "move" : "copy";
   }
   // Search results can come from several disks; they move only if all are on the target's.
-  return args.sourcePaths.every((path) => isOnSameVolume(path, args.targetPath)) ? "move" : "copy";
+  const targetVolume = getVolumeRootPath(args.targetPath);
+  for (const volume of getVolumeRoots(args.sourcePaths)) {
+    if (volume !== targetVolume) {
+      return "copy";
+    }
+  }
+  return "move";
+}
+
+// The disks the paths are on, by their paths: asked on every drag-over, so worked out once
+// for each list of paths (a drag's own list stays the same while it goes on).
+const volumeRootsByPaths = new WeakMap<readonly string[], ReadonlySet<string>>();
+
+function getVolumeRoots(paths: readonly string[]): ReadonlySet<string> {
+  let roots = volumeRootsByPaths.get(paths);
+  if (!roots) {
+    roots = new Set(paths.map(getVolumeRootPath));
+    volumeRootsByPaths.set(paths, roots);
+  }
+  return roots;
+}
+
+// What the drag-overs of a drag ask about its items, worked out once per drag: they come
+// many times a second, and a drag may carry tens of thousands of items.
+export type DragFacts = {
+  sourcePaths: string[];
+  paths: ReadonlySet<string>;
+  // The folders that hold the items (see getSourceFolderPaths).
+  folderPaths: string[];
+  // The folder each item is in; null for "/".
+  parentPaths: ReadonlySet<string | null>;
+  // The folders, apps and packages among the items, which can't go into themselves.
+  containerPaths: ReadonlySet<string>;
+};
+
+const dragFactsBySession = new WeakMap<InternalDragSession, DragFacts>();
+
+export function getDragFacts(session: InternalDragSession): DragFacts {
+  let facts = dragFactsBySession.get(session);
+  if (!facts) {
+    const sourcePaths = session.sourceItems.map((item) => item.path);
+    facts = {
+      sourcePaths,
+      paths: new Set(sourcePaths),
+      folderPaths: getSourceFolderPaths(sourcePaths),
+      parentPaths: new Set(sourcePaths.map(parentDirectoryPath)),
+      containerPaths: new Set(
+        session.sourceItems
+          .filter((item) => item.kind === "directory" || item.kind === "bundle")
+          .map((item) => item.path),
+      ),
+    };
+    dragFactsBySession.set(session, facts);
+  }
+  return facts;
+}
+
+// Whether `path` is one of the folders or inside one: it and each folder above it are
+// looked up, rather than every folder compared with it.
+function isInsideAny(path: string, folderPaths: ReadonlySet<string>): boolean {
+  if (folderPaths.size === 0) {
+    return false;
+  }
+  if (folderPaths.has(path)) {
+    return true;
+  }
+  for (let index = path.indexOf("/", 1); index > 0; index = path.indexOf("/", index + 1)) {
+    if (folderPaths.has(path.slice(0, index))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // What another app's drag allows (`effectAllowed`), from what that app offers and the keys
@@ -200,26 +271,17 @@ export function validateInternalDrop(args: {
   if (targetSurface === "content" && targetIsSelected) {
     return { ok: false, code: "target_selected" };
   }
-  if (session.sourceItems.some((item) => item.path === targetPath)) {
+  const facts = getDragFacts(session);
+  if (facts.paths.has(targetPath)) {
     return { ok: false, code: "same_path" };
   }
   // Moving items into the folder they are in does nothing; copying them there makes
   // duplicates ("name copy"), as an Option-drag does in Finder.
-  if (
-    operation === "move" &&
-    session.sourceItems.length > 0 &&
-    session.sourceItems.every((item) => parentDirectoryPath(item.path) === targetPath)
-  ) {
+  if (operation === "move" && facts.parentPaths.size === 1 && facts.parentPaths.has(targetPath)) {
     return { ok: false, code: "already_in_target" };
   }
   // An app or package is a folder too, which can't go into a folder inside itself.
-  if (
-    session.sourceItems.some(
-      (item) =>
-        (item.kind === "directory" || item.kind === "bundle") &&
-        (targetPath === item.path || targetPath.startsWith(`${item.path}/`)),
-    )
-  ) {
+  if (isInsideAny(targetPath, facts.containerPaths)) {
     return { ok: false, code: "parent_into_child" };
   }
   return { ok: true };

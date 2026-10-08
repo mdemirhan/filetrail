@@ -1,5 +1,6 @@
 import {
   buildInternalDragSession,
+  getDragFacts,
   getSourceFolderPaths,
   isRealDirectoryEntry,
   resolveInternalDropOperation,
@@ -312,5 +313,110 @@ describe("which disk decides a drag", () => {
         onSameDisk: false,
       }),
     ).toBe("move");
+  });
+});
+
+describe("a drag of many items", () => {
+  // A drag whose items count each time one of them is read.
+  function countedSession(paths: string[]) {
+    let reads = 0;
+    const items = paths.map((path) => ({ path, kind: "file" as const }));
+    const sourceItems = new Proxy(items, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/u.test(property)) {
+          reads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const session = {
+      sourceSurface: "content" as const,
+      sourceItems,
+      leadPath: paths[0] ?? "",
+      leadKind: "file" as const,
+    };
+    return { session, reads: () => reads };
+  }
+
+  it("reads its items once, however many times a target is checked", () => {
+    const paths = Array.from({ length: 1000 }, (_, index) => `/Users/demo/f${index}.txt`);
+    const { session, reads } = countedSession(paths);
+    const check = (targetPath: string) => {
+      const facts = getDragFacts(session);
+      return [
+        validateInternalDrop({
+          session,
+          blocked: false,
+          targetSurface: "tree",
+          targetPath,
+          targetSupportsMove: true,
+          operation: "move",
+        }),
+        resolveInternalDropOperation({
+          sourcePaths: facts.sourcePaths,
+          targetPath,
+          altKey: false,
+          metaKey: false,
+        }),
+      ];
+    };
+
+    check("/Users/demo/Folder");
+    const afterFirst = reads();
+    for (let index = 0; index < 50; index += 1) {
+      check(index % 2 === 0 ? "/Users/demo/Folder" : "/Volumes/Backup");
+    }
+
+    expect(reads()).toBe(afterFirst);
+    expect(check("/Users/demo/Folder")).toEqual([{ ok: true }, "move"]);
+    expect(check("/Volumes/Backup")).toEqual([{ ok: true }, "copy"]);
+    expect(check("/Users/demo")[0]).toEqual({ ok: false, code: "already_in_target" });
+  });
+
+  it("knows its paths, the folders they are in, and the folders among them", () => {
+    const session = {
+      sourceSurface: "content" as const,
+      sourceItems: [
+        { path: "/Users/demo/a.txt", kind: "file" as const },
+        { path: "/Users/demo/Folder", kind: "directory" as const },
+        { path: "/Applications/Tool.app", kind: "bundle" as const },
+        { path: "/top", kind: "file" as const },
+      ],
+      leadPath: "/Users/demo/a.txt",
+      leadKind: "file" as const,
+    };
+
+    const facts = getDragFacts(session);
+
+    expect(getDragFacts(session)).toBe(facts);
+    expect(facts.sourcePaths).toEqual(session.sourceItems.map((item) => item.path));
+    expect([...facts.paths]).toEqual(facts.sourcePaths);
+    expect(facts.folderPaths).toEqual(["/Users/demo", "/Applications", "/"]);
+    expect([...facts.parentPaths]).toEqual(["/Users/demo", "/Applications", "/"]);
+    expect([...facts.containerPaths]).toEqual(["/Users/demo/Folder", "/Applications/Tool.app"]);
+  });
+
+  it("refuses a folder into itself or below it, not a folder whose name only starts the same", () => {
+    const session = {
+      sourceSurface: "content" as const,
+      sourceItems: [{ path: "/Users/demo/Folder", kind: "directory" as const }],
+      leadPath: "/Users/demo/Folder",
+      leadKind: "directory" as const,
+    };
+    const drop = (targetPath: string) =>
+      validateInternalDrop({
+        session,
+        blocked: false,
+        targetSurface: "tree",
+        targetPath,
+        targetSupportsMove: true,
+        operation: "copy",
+      });
+
+    expect(drop("/Users/demo/Folder/a/b/c")).toEqual({ ok: false, code: "parent_into_child" });
+    expect(drop("/Users/demo/Folder 2")).toEqual({ ok: true });
+    expect(drop("/Users/demo/Folder2/a")).toEqual({ ok: true });
+    expect(drop("/Users")).toEqual({ ok: true });
+    expect(drop("/")).toEqual({ ok: true });
   });
 });
