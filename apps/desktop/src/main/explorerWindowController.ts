@@ -52,7 +52,7 @@ export type ExplorerWindowLike = {
   getNormalBounds(): WindowBounds;
   on(event: "close", listener: (event: { preventDefault(): void }) => void): unknown;
   on(
-    event: "closed" | "focus" | "move" | "resize" | "maximize" | "unmaximize",
+    event: "closed" | "focus" | "move" | "resize" | "maximize" | "unmaximize" | "leave-full-screen",
     listener: () => void,
   ): unknown;
   once(event: "ready-to-show", listener: () => void): unknown;
@@ -437,7 +437,8 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     if (!source || source.isDestroyed()) {
       return DEFAULT_WINDOW_STATE;
     }
-    const from = source.isMaximized() ? source.getNormalBounds() : source.getBounds();
+    // The size it has out of full screen or zoomed, as it would be put back to.
+    const from = source.getNormalBounds();
     const bounds = placeNewWindow(from, this.host.workAreaFor(from));
     return { ...bounds, maximized: false };
   }
@@ -470,13 +471,15 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       if (window.isDestroyed()) {
         return;
       }
-      const normalBounds = window.isMaximized() ? window.getNormalBounds() : window.getBounds();
+      // Where it goes back to out of full screen or zoomed, not the size of the screen. A
+      // full-screen window comes back out of full screen, at that place.
+      const normalBounds = window.getNormalBounds();
       store.setExplorerWindowBounds(windowId, {
         x: normalBounds.x,
         y: normalBounds.y,
         width: normalBounds.width,
         height: normalBounds.height,
-        maximized: window.isMaximized(),
+        maximized: window.isMaximized() && !window.isFullScreen(),
       });
     };
     this.boundsRecorders.set(windowId, recordBounds);
@@ -526,6 +529,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     window.on("resize", scheduleBoundsSave);
     window.on("maximize", scheduleBoundsSave);
     window.on("unmaximize", scheduleBoundsSave);
+    window.on("leave-full-screen", scheduleBoundsSave);
     window.on("close", recordBounds);
     window.on("close", (event) => {
       if (this.holdClose(window)) {

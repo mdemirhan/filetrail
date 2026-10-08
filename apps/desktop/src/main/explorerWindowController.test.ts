@@ -112,7 +112,9 @@ class FakeWindow {
   isMaximized = () => this.maximized;
   isFullScreen = () => this.fullScreen;
   getBounds = () => this.bounds;
-  getNormalBounds = () => this.normalBounds;
+  // As Electron's: the bounds the window goes back to, which are its bounds when it is
+  // neither zoomed nor full screen.
+  getNormalBounds = () => (this.maximized || this.fullScreen ? this.normalBounds : this.bounds);
 }
 
 // Lets promise callbacks waiting on each other run.
@@ -467,6 +469,29 @@ describe("ExplorerWindowController order and bounds", () => {
     expect(controller.windows.front()?.window).toBe(windows[0]);
     expect(ids()).toEqual(controller.windows.all().map((entry) => entry.id));
     expect(ids()[0]).toBe(windows[0]?.recordId);
+  });
+
+  it("records a full-screen window's place and size out of full screen", async () => {
+    const { controller, store, windows } = setUpWithWindows(2);
+    const [window] = windows;
+    if (!window) {
+      throw new Error("No window.");
+    }
+    window.fullScreen = true;
+    window.bounds = { x: 0, y: 0, width: 1600, height: 1000 };
+
+    // A window opened from it is the size it is out of full screen.
+    controller.openWindowFrom(window.webContents.id, [tab("/Users/demo/x")], 0);
+    expect(store.getExplorerWindows()[0]?.bounds).toMatchObject({ width: 900, height: 600 });
+    window.emit("close", { preventDefault: () => undefined });
+
+    expect(store.getExplorerWindows().find((w) => w.id === window.recordId)?.bounds).toEqual({
+      x: 100,
+      y: 80,
+      width: 900,
+      height: 600,
+      maximized: false,
+    });
   });
 
   it("records where a window is once it stops moving, and as it closes", async () => {
