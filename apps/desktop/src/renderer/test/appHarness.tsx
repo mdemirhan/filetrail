@@ -1000,7 +1000,7 @@ export function createAppHarness(
           preferencesChangedListener = null;
         }
       };
-      },
+    },
     // A dropped file is where `createDroppedFile` says it is.
     getPathForFile(file) {
       return (file as File & { diskPath?: string }).diskPath ?? "";
