@@ -16,51 +16,33 @@ import {
 
 import { type HelpTopic, type SettingsTab, helpTopicSchema } from "@filetrail/contracts";
 
-import type { AppPreferences, OpenTabPreference } from "../shared/appPreferences";
-import {
-  type ApplicationMenuState,
-  INITIAL_APPLICATION_MENU_STATE,
-} from "../shared/applicationMenuState";
-import type { RendererCommandType } from "../shared/rendererCommands";
+import type { AppPreferences } from "../shared/appPreferences";
 import { resolveShortcuts } from "../shared/shortcuts";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
-import {
-  APP_MENU_NAME,
-  type ExplorerCommandTarget,
-  applyApplicationMenuItemStates,
-  createApplicationMenuTemplate,
-  resolveApplicationMenuItemStates,
-  undoMenuLabels,
-} from "./appMenu";
+import { APP_MENU_NAME, createApplicationMenuTemplate } from "./appMenu";
 import {
   type AppStateStore,
-  DEFAULT_WINDOW_STATE,
   type StoredExplorerWindow,
-  type StoredWindowState,
   createAppStateStore,
-  pickWindowSession,
   resolveAppStatePath,
 } from "./appStateStore";
+import { ApplicationMenuSync } from "./applicationMenuSync";
 import {
   bootstrapMainProcess,
   getActiveWriteOperation,
   getMainProcessStatus,
   shutdownMainProcess,
 } from "./bootstrap";
-import { ExplorerWindowList, placeNewWindow } from "./explorerWindows";
+import { ExplorerWindowController } from "./explorerWindowController";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
-import {
-  KEEP_WORKING_BUTTON_INDEX,
-  STOP_BUTTON_INDEX,
-  type StopTrigger,
-  describeQuitWhileBusy,
-  shouldOpenWindowOnActivate,
-  stopQuestionButtons,
-} from "./quitWhileBusy";
+import { loadPageWindow, pageWebPreferences } from "./pageWindows";
 import { readSettingsTabFromUrl } from "./settingsWindowTab";
-// The explorer windows, front to back.
-const explorerWindows = new ExplorerWindowList<BrowserWindow>();
+
+// The explorer windows: opening, closing, merging, and quitting.
+let explorerWindowsRef: ExplorerWindowController<BrowserWindow> | null = null;
+// What the application menu shows, for the explorer window it acts on.
+let menuSyncRef: ApplicationMenuSync<BrowserWindow> | null = null;
 let settingsWindowRef: BrowserWindow | null = null;
 // The Settings tab that was on screen last, so the window opens where it was left. It is
 // remembered only while the app runs: a fresh launch starts on General.
@@ -71,31 +53,12 @@ let lastHelpTopic: HelpTopic | null = null;
 let aboutWindowRef: BrowserWindow | null = null;
 let acknowledgementsWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
-// Records each explorer window's size and position in the store, by window id.
-const windowBoundsRecorders = new Map<string, () => void>();
 let appLoggerRef: ReturnType<typeof createAppLogger> | null = null;
-// What each explorer window last said the application menu should show, by web contents.
-const applicationMenuStates = new Map<number, ApplicationMenuState>();
-// What the history says Undo and Redo would do, and the words the menu was last built with.
-let undoHistoryMenu: { undo: string | null; redo: string | null; cantUndo: boolean } = {
-  undo: null,
-  redo: null,
-  cantUndo: false,
-};
-let builtUndoLabels = "";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
-const WINDOW_STATE_SAVE_DELAY_MS = 160;
-let shutdownInProgress = false;
-// True while the "a copy is still in progress" question is on screen.
-let stopQuestionOpen = false;
-// Explorer windows that close without asking first: the person agreed to stop the running
-// operation, or their tabs were merged into another window.
-const windowsClosingWithoutAsking = new WeakSet<BrowserWindow>();
-// Explorer windows closed by Merge All Windows: not remembered as the window closed last.
-const windowsMerged = new WeakSet<BrowserWindow>();
 let processLoggingHandlersInstalled = false;
 // Found while starting, before the window opened; shown once it has.
 const pendingStartupNotices: string[] = [];
+const PRELOAD_PATH = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
 
 if (!hasSingleInstanceLock) {
   app.quit();
@@ -107,7 +70,7 @@ if (hasSingleInstanceLock) {
   Menu.setApplicationMenu(null);
   // While Settings has the keyboard the explorer's commands do not apply, and its Undo is
   // its text fields'.
-  app.on("browser-window-focus", () => refreshUndoMenu());
+  app.on("browser-window-focus", () => menuSyncRef?.refresh());
 
   app
     .whenReady()
@@ -120,12 +83,14 @@ if (hasSingleInstanceLock) {
       });
       appLoggerRef = appLogger;
       installProcessLoggingHandlers(appLogger);
-      const launchContext = {
-        startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
+      const startupFolderPath = resolveStartupFolderPath(
+        process.argv,
+        resolveLaunchWorkingDirectory(),
+        {
           appPath: app.getAppPath(),
           argvOffset: process.defaultApp ? 2 : 1,
-        }),
-      };
+        },
+      );
       const fdStatus = resolveFdStartupStatus();
       appLogger.info("[filetrail] app start", {
         appVersion: app.getVersion(),
@@ -137,7 +102,7 @@ if (hasSingleInstanceLock) {
         pid: process.pid,
         userDataPath,
         appLogPath,
-        startupFolderPath: launchContext.startupFolderPath,
+        startupFolderPath,
         debugEnabled,
         fdBinaryPath: fdStatus.path,
         fdBinaryError: fdStatus.error,
@@ -159,6 +124,14 @@ if (hasSingleInstanceLock) {
         }
       }
       appStateStoreRef = appStateStore;
+      const explorerWindows = createExplorerWindowController(appStateStore);
+      explorerWindowsRef = explorerWindows;
+      menuSyncRef = new ApplicationMenuSync<BrowserWindow>({
+        windows: explorerWindows.windows,
+        focusedWindow: () => BrowserWindow.getFocusedWindow(),
+        menu: () => Menu.getApplicationMenu(),
+        build: () => buildApplicationMenu(),
+      });
       applyNativeAppearance(appStateStore.getPreferences().theme);
       // "Auto" follows macOS: keep the window backgrounds in step when it switches.
       nativeTheme.on("updated", () => {
@@ -169,8 +142,45 @@ if (hasSingleInstanceLock) {
       });
       await bootstrapMainProcess(
         appStateStore,
-        launchContext,
-        appLogger,
+        {
+          openSettingsWindow,
+          openAcknowledgementsWindow,
+          openHelpWindow,
+          showStartupNotices: (notices) => {
+            pendingStartupNotices.push(...notices);
+          },
+          showRecoveryNotices: (notices) => {
+            const window = explorerWindows.frontWindow();
+            const options = {
+              type: "info" as const,
+              message:
+                notices.length === 1
+                  ? "An item waiting for its disk is in place now"
+                  : "Items waiting for their disk are in place now",
+              detail: notices.join("\n\n"),
+              buttons: ["OK"],
+            };
+            // With no window open it stands on its own.
+            void (window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options));
+          },
+          setApplicationMenuState: (state, senderId) =>
+            menuSyncRef?.setWindowState(senderId, state),
+          onUndoHistoryChanged: (menu) => menuSyncRef?.setUndoHistory(menu),
+          explorerWindowIdOf: (senderId) => explorerWindows.windowIdOf(senderId),
+          launchContextFor: (senderId) => explorerWindows.launchContextFor(senderId),
+          openExplorerWindow: (senderId, tabs, activeTabIndex) =>
+            explorerWindows.openWindowFrom(senderId, tabs, activeTabIndex),
+          mergeExplorerWindows: (senderId) => explorerWindows.mergeInto(senderId),
+          explorerWindowCount: () => explorerWindows.windows.count,
+          successorWindowOf: (senderId) => explorerWindows.successorOf(senderId),
+          sendToOtherWindows: (senderId, channel, payload) => {
+            for (const window of BrowserWindow.getAllWindows()) {
+              if (!window.isDestroyed() && window.webContents.id !== senderId) {
+                window.webContents.send(channel, payload);
+              }
+            }
+          },
+        },
         (preferences, change) => {
           // Keep every open window (explorer and Settings) on the same preferences.
           for (const window of BrowserWindow.getAllWindows()) {
@@ -180,7 +190,7 @@ if (hasSingleInstanceLock) {
             // Setting the zoom, even to the value it has, makes Chromium rewrite its own
             // preferences file; most changes (the folder on screen, say) are not the zoom.
             if (change.patch.zoomPercent !== undefined) {
-              applyWindowZoom(window, preferences.zoomPercent);
+              window.webContents.setZoomFactor(preferences.zoomPercent / 100);
               // About can not be resized by hand; it grows and shrinks with its text.
               if (window === aboutWindowRef) {
                 window.setContentSize(...aboutWindowSize(preferences.zoomPercent));
@@ -201,68 +211,17 @@ if (hasSingleInstanceLock) {
             buildApplicationMenu();
           }
         },
-        {
-          openSettingsWindow,
-          openAcknowledgementsWindow,
-          showStartupNotices: (notices) => {
-            pendingStartupNotices.push(...notices);
-          },
-          showRecoveryNotices: (notices) => {
-            const window = explorerWindows.front()?.window;
-            const options = {
-              type: "info" as const,
-              message:
-                notices.length === 1
-                  ? "An item waiting for its disk is in place now"
-                  : "Items waiting for their disk are in place now",
-              detail: notices.join("\n\n"),
-              buttons: ["OK"],
-            };
-            // With no window open it stands on its own.
-            void (window && !window.isDestroyed()
-              ? dialog.showMessageBox(window, options)
-              : dialog.showMessageBox(options));
-          },
-          openHelpWindow,
-          setApplicationMenuState: (state, senderId) => {
-            if (senderId === null || !explorerWindows.byWebContentsId(senderId)) {
-              return;
-            }
-            applicationMenuStates.set(senderId, state);
-            refreshUndoMenu();
-          },
-          explorerWindowIdOf: (senderId) => explorerWindows.byWebContentsId(senderId)?.id ?? null,
-          launchContextFor: (senderId) => {
-            const entry = explorerWindows.byWebContentsId(senderId);
-            return {
-              startupFolderPath: entry?.launchFolderPath ?? null,
-              restoreTabs: entry?.restoreTabs ?? false,
-              ...(entry?.initialCommand ? { initialCommand: entry.initialCommand } : {}),
-            };
-          },
-          openExplorerWindow: (senderId, tabs, activeTabIndex) =>
-            openExplorerWindowFrom(senderId, tabs, activeTabIndex),
-          mergeExplorerWindows: (senderId) => mergeExplorerWindowsInto(senderId),
-          explorerWindowCount: () => explorerWindows.count,
-          successorWindowOf: (senderId) => {
-            const successor = explorerWindows
-              .all()
-              .find((entry) => entry.webContentsId !== senderId && !entry.window.isDestroyed());
-            return successor?.window.webContents ?? null;
-          },
-          onUndoHistoryChanged: (menu) => {
-            undoHistoryMenu = menu;
-            refreshUndoMenu();
-          },
-        },
+        appLogger,
       );
       // Before the windows open, so the menu bar never shows anything but the app's own menu.
       buildApplicationMenu();
       app.dock?.setMenu(
-        Menu.buildFromTemplate([{ label: "New Window", click: () => openNewWindowFromFront() }]),
+        Menu.buildFromTemplate([
+          { label: "New Window", click: () => explorerWindows.openNewWindowFromFront() },
+        ]),
       );
-      openStartupWindows(launchContext.startupFolderPath);
-      const frontWindow = explorerWindows.front()?.window;
+      explorerWindows.openStartupWindows(startupFolderPath);
+      const frontWindow = explorerWindows.frontWindow();
       if (frontWindow) {
         showPendingStartupNotices(frontWindow);
       }
@@ -270,16 +229,9 @@ if (hasSingleInstanceLock) {
       app.on("activate", () => {
         appLogger.info("[filetrail] app activate", {
           openWindowCount: BrowserWindow.getAllWindows().length,
-          explorerWindowCount: explorerWindows.count,
+          explorerWindowCount: explorerWindows.windows.count,
         });
-        if (
-          shouldOpenWindowOnActivate({
-            shutdownInProgress,
-            explorerWindowCount: explorerWindows.count,
-          })
-        ) {
-          openDefaultExplorerWindow();
-        }
+        explorerWindows.activate();
       });
     })
     .catch(async (error) => {
@@ -288,14 +240,17 @@ if (hasSingleInstanceLock) {
       app.exit(1);
     });
 
-  // The app always ends through finalizeShutdown's app.exit, which doesn't come back here.
-  // A second quit while it waits for an operation to stop must not cut that wait short.
+  // The app always ends through the controller's quit, which ends in app.exit and doesn't
+  // come back here. A second quit while it waits for an operation to stop must not cut
+  // that wait short.
   app.on("before-quit", (event) => {
     event.preventDefault();
-    if (shutdownInProgress || stopQuestionOpen) {
+    const explorerWindows = explorerWindowsRef;
+    if (!explorerWindows) {
+      app.exit(0);
       return;
     }
-    void confirmQuit();
+    void explorerWindows.quit();
   });
 
   // Closing the last window leaves the app open, as Finder does: a click on the Dock icon,
@@ -307,204 +262,57 @@ if (hasSingleInstanceLock) {
     appLoggerRef?.info("[filetrail] second instance activation", {
       hasWindow: BrowserWindow.getAllWindows().length > 0,
     });
-    const window = explorerWindows.front()?.window ?? null;
-    if (!window) {
-      openDefaultExplorerWindow();
-      return;
-    }
-    if (window.isMinimized()) {
-      window.restore();
-    }
-    window.focus();
+    explorerWindowsRef?.bringToFront();
   });
 }
 
-// The windows the app opens with: every window that was open when it quit, front one in
-// front, when the last folders and tabs are reopened; otherwise one window. The folder the
-// app was launched with goes to the window in front.
-function openStartupWindows(startupFolderPath: string | null): void {
-  const appStateStore = appStateStoreRef;
-  if (!appStateStore) {
-    throw new Error("App state store was not initialized before creating the windows.");
-  }
-  const stored = appStateStore.getExplorerWindows();
-  const records = appStateStore.getPreferences().restoreSessionOnStartup
-    ? [...stored]
-    : stored.slice(0, 1);
-  // Windows not brought back now aren't brought back later either.
-  for (const dropped of stored.slice(records.length)) {
-    appStateStore.removeExplorerWindow(dropped.id);
-  }
-  // No window was open at quit: one, as a window opened with none open starts.
-  if (records.length === 0) {
-    const record = createWindowRecordFromLastClosed(appStateStore);
-    appStateStore.addExplorerWindow(record);
-    records.push(record);
-  }
-  const opened = records.map((record, index) => {
-    const window = createExplorerWindow(record, {
-      launchFolderPath: index === 0 ? startupFolderPath : null,
-      restoreTabs: false,
-      place: "back",
-    });
-    return {
-      window,
-      maximized: record.bounds.maximized,
-      ready: new Promise<void>((resolve) => {
-        window.once("ready-to-show", () => resolve());
-        // A window whose page never gets ready isn't waited for.
-        setTimeout(resolve, STARTUP_SHOW_TIMEOUT_MS);
-      }),
-    };
-  });
-  // Shown back to front once all are ready, so they stack as they were.
-  void Promise.all(opened.map((entry) => entry.ready)).then(() => {
-    for (const [index, entry] of [...opened.entries()].reverse()) {
-      if (entry.window.isDestroyed()) {
-        continue;
-      }
-      if (entry.maximized) {
-        entry.window.maximize();
-      }
-      if (index === 0) {
-        entry.window.show();
-      } else {
-        entry.window.showInactive();
-      }
-    }
-  });
-}
-
-// How long startup waits for a window's page before showing the windows anyway.
-const STARTUP_SHOW_TIMEOUT_MS = 5_000;
-
-function createExplorerWindowRecord(
+function createExplorerWindowController(
   appStateStore: AppStateStore,
-  bounds: StoredWindowState,
-  session: Partial<StoredExplorerWindow["session"]>,
-): StoredExplorerWindow {
-  return {
-    id: `window-${randomUUID()}`,
-    bounds,
-    session: appStateStore.createWindowSession(session),
-  };
-}
-
-// A window that starts as the window closed last ended: its place and size, panels and
-// column widths, and the tab that was in front. Before any window has closed, the app's
-// latest values at the default size.
-function createWindowRecordFromLastClosed(appStateStore: AppStateStore): StoredExplorerWindow {
-  const lastClosed = appStateStore.getLastClosedWindow();
-  return createExplorerWindowRecord(
-    appStateStore,
-    lastClosed?.bounds ?? DEFAULT_WINDOW_STATE,
-    lastClosed?.session ?? {},
-  );
-}
-
-// A window opened with none open (the Dock icon, New Window, the second launch): it starts
-// where the window closed last was. `initialCommand` is run once it has opened (a place in
-// the Go menu, chosen with no window open).
-function openDefaultExplorerWindow(initialCommand?: RendererCommandType): void {
-  const appStateStore = appStateStoreRef;
-  if (!appStateStore) {
-    return;
-  }
-  const record = createWindowRecordFromLastClosed(appStateStore);
-  appStateStore.addExplorerWindow(record);
-  createExplorerWindow(record, {
-    launchFolderPath: null,
-    restoreTabs: record.session.openTabs.length > 0,
-    place: "front",
-    ...(initialCommand ? { initialCommand } : {}),
+): ExplorerWindowController<BrowserWindow> {
+  return new ExplorerWindowController<BrowserWindow>({
+    store: appStateStore,
+    createWindow: (record) => createExplorerBrowserWindow(record, appStateStore),
+    newWindowId: () => `window-${randomUUID()}`,
+    workAreaFor: (bounds) => screen.getDisplayMatching(bounds).workArea,
+    activeOperation: () => getActiveWriteOperation(),
+    showStopQuestion: async (question, parent) =>
+      (parent
+        ? await dialog.showMessageBox(parent, { type: "warning", ...question })
+        : await dialog.showMessageBox({ type: "warning", ...question })
+      ).response,
+    anyWindowOpen: () => BrowserWindow.getAllWindows().length > 0,
+    windowsChanged: () => menuSyncRef?.windowsChanged(),
+    shutDown: async () => {
+      const logger = appLoggerRef;
+      const state = getMainProcessStatus();
+      logger?.info("[filetrail] app stop", {
+        phase: "before-quit",
+        windowCount: BrowserWindow.getAllWindows().length,
+        workerActive: state.workerActive,
+        writeCoordinatorActive: state.writeCoordinatorActive,
+      });
+      try {
+        // Stops a running operation and waits until it has cleaned up after itself.
+        await shutdownMainProcess();
+      } catch (error) {
+        logger?.error("[filetrail] shutdown failed", error);
+      }
+      try {
+        await logger?.flush();
+      } catch (error) {
+        logger?.error("[filetrail] final log flush failed", error);
+      }
+    },
+    exit: () => app.exit(0),
+    logger: { info: (message, details) => appLoggerRef?.info(message, details) },
   });
 }
 
-// New Window from the Dock menu: the window in front opens it on its folder, as ⌘N does.
-function openNewWindowFromFront(): void {
-  const front = explorerWindows.front();
-  if (!front || front.window.isDestroyed()) {
-    openDefaultExplorerWindow();
-    return;
-  }
-  front.window.webContents.send("filetrail:command", { type: "newWindow" });
-}
-
-// A window opened from another one (New Window, Open in New Window, Move Tab to New
-// Window): it has the tabs it is given, and the other window's panels and size, a step
-// down and to the right of it.
-function openExplorerWindowFrom(
-  senderId: number | null,
-  tabs: OpenTabPreference[],
-  activeTabIndex: number,
-): void {
-  const appStateStore = appStateStoreRef;
-  if (!appStateStore || tabs.length === 0) {
-    return;
-  }
-  const source = explorerWindows.byWebContentsId(senderId) ?? explorerWindows.front();
-  const sourcePreferences = source
-    ? appStateStore.getWindowPreferences(source.id)
-    : appStateStore.getPreferences();
-  const activeIndex = Math.min(Math.max(0, activeTabIndex), tabs.length - 1);
-  const activeTab = tabs[activeIndex];
-  const record = createExplorerWindowRecord(appStateStore, newWindowBounds(source?.window), {
-    ...pickWindowSession(sourcePreferences),
-    openTabs: tabs,
-    activeTabIndex: activeIndex,
-    lastVisitedPath: activeTab?.path ?? null,
-    lastVisitedFavoritePath: activeTab?.favoritePath ?? null,
-    treeRootPath: activeTab?.treeRootPath ?? null,
-  });
-  appStateStore.addExplorerWindow(record);
-  createExplorerWindow(record, { launchFolderPath: null, restoreTabs: true, place: "front" });
-}
-
-function newWindowBounds(source: BrowserWindow | undefined): StoredWindowState {
-  if (!source || source.isDestroyed()) {
-    return DEFAULT_WINDOW_STATE;
-  }
-  const from = source.isMaximized() ? source.getNormalBounds() : source.getBounds();
-  const bounds = placeNewWindow(from, screen.getDisplayMatching(from).workArea);
-  return { ...bounds, maximized: false };
-}
-
-// Merge All Windows: the tabs of every other window, front to back, which close. The
-// window asking adds the tabs after its own.
-function mergeExplorerWindowsInto(senderId: number | null): OpenTabPreference[] {
-  const appStateStore = appStateStoreRef;
-  const target = explorerWindows.byWebContentsId(senderId);
-  if (!appStateStore || !target) {
-    return [];
-  }
-  const others = explorerWindows.all().filter((entry) => entry !== target);
-  const tabs = others.flatMap((entry) => appStateStore.getWindowPreferences(entry.id).openTabs);
-  for (const entry of others) {
-    if (!entry.window.isDestroyed()) {
-      windowsClosingWithoutAsking.add(entry.window);
-      windowsMerged.add(entry.window);
-      entry.window.close();
-    }
-  }
-  return tabs;
-}
-
-function createExplorerWindow(
+// An explorer window, hidden until its page is ready; the controller shows it.
+function createExplorerBrowserWindow(
   record: StoredExplorerWindow,
-  options: {
-    launchFolderPath: string | null;
-    restoreTabs: boolean;
-    // "front": opened while the app runs, and shown as soon as it is ready. "back": one of
-    // the windows the app opens with, shown by openStartupWindows.
-    place: "front" | "back";
-    // A menu command the window runs once it has opened.
-    initialCommand?: RendererCommandType;
-  },
+  appStateStore: AppStateStore,
 ): BrowserWindow {
-  const appStateStore = appStateStoreRef;
-  if (!appStateStore) {
-    throw new Error("App state store was not initialized before creating the window.");
-  }
   const storedBounds = record.bounds;
   const iconPath = resolveAppIconPath();
   const explorerWindow = new BrowserWindow({
@@ -526,70 +334,8 @@ function createExplorerWindow(
     backgroundColor: TRANSPARENT_WINDOW_BACKGROUND,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 14, y: 16 },
-    webPreferences: {
-      preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      zoomFactor: appStateStore.getPreferences().zoomPercent / 100,
-    },
+    webPreferences: pageWebPreferences(PRELOAD_PATH, appStateStore.getPreferences().zoomPercent),
     ...(iconPath ? { icon: iconPath } : {}),
-  });
-  const windowId = record.id;
-  const webContentsId = explorerWindow.webContents.id;
-  explorerWindows.add(
-    {
-      id: windowId,
-      window: explorerWindow,
-      webContentsId,
-      launchFolderPath: options.launchFolderPath,
-      restoreTabs: options.restoreTabs,
-      initialCommand: options.initialCommand ?? null,
-    },
-    options.place,
-  );
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null;
-  keepWindowZoom(explorerWindow, appStateStore);
-
-  const persistWindowBounds = () => {
-    if (explorerWindow.isDestroyed()) {
-      return;
-    }
-    const normalBounds = explorerWindow.isMaximized()
-      ? explorerWindow.getNormalBounds()
-      : explorerWindow.getBounds();
-    appStateStore.setExplorerWindowBounds(windowId, {
-      x: normalBounds.x,
-      y: normalBounds.y,
-      width: normalBounds.width,
-      height: normalBounds.height,
-      maximized: explorerWindow.isMaximized(),
-    });
-  };
-  windowBoundsRecorders.set(windowId, persistWindowBounds);
-
-  const scheduleWindowBoundsSave = () => {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
-    }
-    saveTimeout = setTimeout(() => {
-      saveTimeout = null;
-      persistWindowBounds();
-    }, WINDOW_STATE_SAVE_DELAY_MS);
-  };
-
-  const rendererEntryUrl = resolveRendererEntryUrl();
-
-  explorerWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedExternalUrl(url)) {
-      void shell.openExternal(url);
-    }
-    return { action: "deny" };
-  });
-  explorerWindow.webContents.on("will-navigate", (event, navigationUrl) => {
-    if (navigationUrl !== rendererEntryUrl) {
-      event.preventDefault();
-    }
   });
   explorerWindow.webContents.on("render-process-gone", (_event, details) => {
     appLoggerRef?.error("[filetrail] renderer process gone", {
@@ -603,77 +349,37 @@ function createExplorerWindow(
       windowId: explorerWindow.id,
     });
   });
-
-  if (options.place === "front") {
-    explorerWindow.once("ready-to-show", () => explorerWindow.show());
-  }
-
-  void explorerWindow.loadURL(rendererEntryUrl);
-
+  loadAppPage(explorerWindow, resolveRendererEntryUrl(), appStateStore);
   if (process.env.FILETRAIL_OPEN_DEVTOOLS === "1") {
     explorerWindow.webContents.openDevTools({ mode: "detach" });
   }
-
-  // The window used last is the one in front: New Window takes its folder from it, and
-  // it is in front again at the next launch.
-  explorerWindow.on("focus", () => {
-    if (explorerWindows.moveToFront(windowId)) {
-      appStateStore.moveExplorerWindowToFront(windowId);
-    }
-  });
-
-  explorerWindow.on("closed", () => {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
-    }
-    explorerWindows.remove(windowId);
-    applicationMenuStates.delete(webContentsId);
-    windowBoundsRecorders.delete(windowId);
-    // Closed while the app runs: it doesn't come back at the next launch, but the next
-    // window opened with none open starts as it ended. (Windows merged into another one
-    // weren't closed by hand.) Quitting keeps the windows open then.
-    if (!shutdownInProgress) {
-      if (!windowsMerged.has(explorerWindow)) {
-        appStateStore.rememberClosedWindow(windowId);
-      }
-      appStateStore.removeExplorerWindow(windowId);
-    }
-    syncApplicationMenuItems();
-  });
-
-  explorerWindow.on("move", scheduleWindowBoundsSave);
-  explorerWindow.on("resize", scheduleWindowBoundsSave);
-  explorerWindow.on("maximize", scheduleWindowBoundsSave);
-  explorerWindow.on("unmaximize", scheduleWindowBoundsSave);
-  explorerWindow.on("close", persistWindowBounds);
-  // Closing the last explorer window quits the app and stops a running copy, so it asks
-  // first, as quitting does. With other windows open the copy goes on in one of them.
-  explorerWindow.on("close", (event) => {
-    if (shutdownInProgress || windowsClosingWithoutAsking.has(explorerWindow)) {
-      return;
-    }
-    if (stopQuestionOpen) {
-      event.preventDefault();
-      return;
-    }
-    if (explorerWindows.count > 1) {
-      return;
-    }
-    const operation = getActiveWriteOperation();
-    if (!operation || !describeQuitWhileBusy(operation.kind, "close")) {
-      return;
-    }
-    event.preventDefault();
-    void askToStopOperation("close").then((stop) => {
-      if (stop && !explorerWindow.isDestroyed()) {
-        windowsClosingWithoutAsking.add(explorerWindow);
-        explorerWindow.close();
-      }
-    });
-  });
-
-  syncApplicationMenuItems();
   return explorerWindow;
+}
+
+// Every window of the app shows a page of the renderer: links open in the browser, the page
+// stays at its address, and the app's zoom holds.
+function loadAppPage(window: BrowserWindow, url: string, appStateStore: AppStateStore): void {
+  loadPageWindow(window, url, {
+    zoomPercent: () => appStateStore.getPreferences().zoomPercent,
+    openExternal: (externalUrl) => void shell.openExternal(externalUrl),
+  });
+}
+
+// A window that is a page of the renderer other than the explorer (Settings, Help, About),
+// hidden until its page is ready.
+function createPageBrowserWindow(
+  appStateStore: AppStateStore,
+  options: BrowserWindowConstructorOptions,
+): BrowserWindow {
+  const preferences = appStateStore.getPreferences();
+  return new BrowserWindow({
+    show: false,
+    backgroundColor: windowBackgroundColor(preferences.theme),
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+    webPreferences: pageWebPreferences(PRELOAD_PATH, preferences.zoomPercent),
+    ...options,
+  });
 }
 
 // Settings lives in its own window (⌘,), like a native macOS app. Preference edits there
@@ -691,49 +397,26 @@ function openSettingsWindow(tab?: SettingsTab): void {
     settingsWindowRef.focus();
     return;
   }
-  const settingsWindow = new BrowserWindow({
-    show: false,
+  const settingsWindow = createPageBrowserWindow(appStateStore, {
     width: 720,
     height: 540,
     minWidth: 680,
     minHeight: 420,
     title: "Settings",
-    backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
-    titleBarStyle: "hiddenInset",
     // Placed as in the explorer window, whose sidebar and title row are as tall.
     trafficLightPosition: { x: 14, y: 16 },
     fullscreenable: false,
-    webPreferences: {
-      preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      zoomFactor: appStateStore.getPreferences().zoomPercent / 100,
-    },
   });
   settingsWindowRef = settingsWindow;
-  keepWindowZoom(settingsWindow, appStateStore);
-  const rendererEntryUrl = resolveRendererEntryUrl();
   // The tab to open on follows "#settings" in the address: the one asked for, or the one
   // Settings was left on.
   const openOnTab = tab ?? lastSettingsTab;
-  const settingsUrl = `${rendererEntryUrl}#settings${openOnTab ? `/${openOnTab}` : ""}`;
+  const settingsUrl = `${resolveRendererEntryUrl()}#settings${openOnTab ? `/${openOnTab}` : ""}`;
   const rememberTab = (url: string) => {
     lastSettingsTab = readSettingsTabFromUrl(url) ?? lastSettingsTab;
   };
-  settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedExternalUrl(url)) {
-      void shell.openExternal(url);
-    }
-    return { action: "deny" };
-  });
-  settingsWindow.webContents.on("will-navigate", (event, navigationUrl) => {
-    if (navigationUrl !== settingsUrl) {
-      event.preventDefault();
-    }
-  });
   // The window puts the tab on screen in its address (a change within the page, which the
-  // guard above lets through).
+  // navigation guard lets through).
   settingsWindow.webContents.on("did-navigate-in-page", (_event, url) => rememberTab(url));
   settingsWindow.on("close", () => rememberTab(settingsWindow.webContents.getURL()));
   settingsWindow.once("ready-to-show", () => settingsWindow.show());
@@ -742,7 +425,7 @@ function openSettingsWindow(tab?: SettingsTab): void {
       settingsWindowRef = null;
     }
   });
-  void settingsWindow.loadURL(settingsUrl);
+  loadAppPage(settingsWindow, settingsUrl, appStateStore);
 }
 
 // Help is a window of its own (⌘?), beside the files rather than in their place, like a
@@ -760,26 +443,14 @@ function openHelpWindow(topic?: HelpTopic): void {
     helpWindowRef.focus();
     return;
   }
-  const helpWindow = new BrowserWindow({
-    show: false,
+  const helpWindow = createPageBrowserWindow(appStateStore, {
     width: 900,
     height: 680,
     minWidth: 560,
     minHeight: 420,
     title: "File Trail Help",
-    backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
-    webPreferences: {
-      preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      zoomFactor: appStateStore.getPreferences().zoomPercent / 100,
-    },
   });
   helpWindowRef = helpWindow;
-  keepWindowZoom(helpWindow, appStateStore);
   const openOnTopic = topic ?? lastHelpTopic;
   const helpUrl = `${resolveRendererEntryUrl()}#help${openOnTopic ? `/${openOnTopic}` : ""}`;
   const rememberTopic = (url: string) => {
@@ -790,17 +461,6 @@ function openHelpWindow(topic?: HelpTopic): void {
       lastHelpTopic = parsed.data;
     }
   };
-  helpWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedExternalUrl(url)) {
-      void shell.openExternal(url);
-    }
-    return { action: "deny" };
-  });
-  helpWindow.webContents.on("will-navigate", (event, navigationUrl) => {
-    if (navigationUrl !== helpUrl) {
-      event.preventDefault();
-    }
-  });
   // The window keeps its address in step with the page on screen.
   helpWindow.webContents.on("did-navigate-in-page", (_event, url) => rememberTopic(url));
   helpWindow.on("close", () => rememberTopic(helpWindow.webContents.getURL()));
@@ -810,7 +470,7 @@ function openHelpWindow(topic?: HelpTopic): void {
       helpWindowRef = null;
     }
   });
-  void helpWindow.loadURL(helpUrl);
+  loadAppPage(helpWindow, helpUrl, appStateStore);
 }
 
 const ABOUT_WINDOW_WIDTH = 460;
@@ -870,36 +530,9 @@ function showPageWindow(
     openWindow.focus();
     return openWindow;
   }
-  const window = new BrowserWindow({
-    show: false,
-    backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
-    fullscreenable: false,
-    webPreferences: {
-      preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      zoomFactor: appStateStore.getPreferences().zoomPercent / 100,
-    },
-    ...options,
-  });
-  keepWindowZoom(window, appStateStore);
-  const pageUrl = `${resolveRendererEntryUrl()}#${page}`;
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedExternalUrl(url)) {
-      void shell.openExternal(url);
-    }
-    return { action: "deny" };
-  });
-  window.webContents.on("will-navigate", (event, navigationUrl) => {
-    if (navigationUrl !== pageUrl) {
-      event.preventDefault();
-    }
-  });
+  const window = createPageBrowserWindow(appStateStore, { fullscreenable: false, ...options });
   window.once("ready-to-show", () => window.show());
-  void window.loadURL(pageUrl);
+  loadAppPage(window, `${resolveRendererEntryUrl()}#${page}`, appStateStore);
   return window;
 }
 
@@ -912,15 +545,6 @@ function resolveRendererEntryUrl(): string {
   return pathToFileURL(rendererPath).toString();
 }
 
-function isAllowedExternalUrl(rawUrl: string): boolean {
-  try {
-    const parsed = new URL(rawUrl);
-    return parsed.protocol === "https:" || parsed.protocol === "mailto:";
-  } catch {
-    return false;
-  }
-}
-
 // Native parts of the window (title bar, scroll bars, pickers, the empty window before the
 // page paints) follow the app's theme rather than the macOS appearance: Light or Dark pins
 // them, "auto" follows the system as the page does.
@@ -929,7 +553,7 @@ function applyNativeAppearance(theme: AppPreferences["theme"]): void {
   const color = windowBackgroundColor(theme);
   for (const window of BrowserWindow.getAllWindows()) {
     // Explorer windows stay transparent: a color would cover their sidebar material.
-    if (!window.isDestroyed() && !explorerWindows.byWindow(window)) {
+    if (!window.isDestroyed() && !explorerWindowsRef?.windows.byWindow(window)) {
       window.setBackgroundColor(color);
     }
   }
@@ -943,121 +567,35 @@ function windowBackgroundColor(theme: AppPreferences["theme"]): string {
   return dark ? "#161618" : "#f4f5f8";
 }
 
-function applyWindowZoom(window: BrowserWindow, zoomPercent: number): void {
-  window.webContents.setZoomFactor(zoomPercent / 100);
-}
-
-// A zoom factor set before the page loads does not always survive the load (Chromium keeps
-// zoom per page), so the saved zoom is applied again once each page has loaded; otherwise a
-// newly opened Settings window can show at 100% until the zoom next changes.
-function keepWindowZoom(window: BrowserWindow, appStateStore: AppStateStore): void {
-  applyWindowZoom(window, appStateStore.getPreferences().zoomPercent);
-  window.webContents.on("did-finish-load", () => {
-    if (!window.isDestroyed()) {
-      applyWindowZoom(window, appStateStore.getPreferences().zoomPercent);
-    }
-  });
-}
-
 // Builds the menu with the shortcuts and the text editor chosen in Settings; called again
 // when they change.
 function buildApplicationMenu(): void {
+  const menuSync = menuSyncRef;
+  if (!menuSync) {
+    return;
+  }
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       createApplicationMenuTemplate(
-        { explorerFor: menuExplorerFor },
+        { explorerFor: (focusedWindow) => menuSync.explorerFor(focusedWindow) },
         {
           onOpenAbout: () => openAboutWindow(),
           onOpenSettings: () => openSettingsWindow(),
           onOpenHelp: (topic) => openHelpWindow(topic),
           includeDeveloperTools: !app.isPackaged || process.env.FILETRAIL_OPEN_DEVTOOLS === "1",
-          onCommandSent: () => syncApplicationMenuItems(),
+          onCommandSent: () => menuSync.sync(),
           shortcuts: resolveShortcuts(appStateStoreRef?.getPreferences().shortcutOverrides)
             .bindings,
           textEditorName: appStateStoreRef?.getPreferences().defaultTextEditor.appName,
-          undoLabels: currentUndoLabels(),
+          undoLabels: menuSync.undoLabels(),
           // With no window open, New Window and the Go menu's places open one.
           onCommandWithoutExplorerWindow: (type) =>
-            openDefaultExplorerWindow(type === "newWindow" ? undefined : type),
+            explorerWindowsRef?.openDefaultWindow(type === "newWindow" ? undefined : type),
         },
       ),
     ),
   );
-  builtUndoLabels = JSON.stringify(currentUndoLabels());
-  syncApplicationMenuItems();
-}
-
-// The explorer window a menu command goes to: the focused window when it is one, else the
-// one in front (while Settings has the keyboard, or no window has).
-function menuExplorerFor(focusedWindow: unknown): ExplorerCommandTarget | null {
-  const focused =
-    focusedWindow instanceof BrowserWindow && !focusedWindow.isDestroyed() ? focusedWindow : null;
-  const focusedEntry = focused ? explorerWindows.byWindow(focused) : null;
-  if (focusedEntry) {
-    return { contents: focusedEntry.window.webContents, focused: true };
-  }
-  const front = explorerWindows.front();
-  if (!front || front.window.isDestroyed()) {
-    return null;
-  }
-  return { contents: front.window.webContents, focused: focused === null };
-}
-
-// The explorer window the menu shows, and whether it has the keyboard. With no window
-// focused (the app is in the background) the front window's state stays; with no explorer
-// window open there is none to show.
-function currentMenuExplorer(): {
-  state: ApplicationMenuState;
-  explorerFocused: boolean;
-  otherWindowFocused: boolean;
-} {
-  const focusedWindow = BrowserWindow.getFocusedWindow();
-  const focusedEntry = focusedWindow ? explorerWindows.byWindow(focusedWindow) : null;
-  const entry = focusedEntry ?? explorerWindows.front();
-  return {
-    state:
-      (entry ? applicationMenuStates.get(entry.webContentsId) : undefined) ??
-      INITIAL_APPLICATION_MENU_STATE,
-    explorerFocused: focusedEntry !== null || (focusedWindow === null && explorerWindows.count > 0),
-    otherWindowFocused: focusedWindow !== null && focusedEntry === null,
-  };
-}
-
-function currentUndoLabels(): { undo: string; redo: string } {
-  const { state, explorerFocused } = currentMenuExplorer();
-  return undoMenuLabels(undoHistoryMenu, state.textEditing || !explorerFocused);
-}
-
-// A menu item's label can't be changed in place: the menu is built again when Undo or Redo
-// should say something else. Otherwise only what is on and off changes.
-function refreshUndoMenu(): void {
-  if (!Menu.getApplicationMenu()) {
-    return;
-  }
-  if (JSON.stringify(currentUndoLabels()) !== builtUndoLabels) {
-    buildApplicationMenu();
-    return;
-  }
-  syncApplicationMenuItems();
-}
-
-// Dims, checks and shows the menu's items for the state the explorer window the menu acts
-// on last reported.
-function syncApplicationMenuItems(): void {
-  const menu = Menu.getApplicationMenu();
-  if (!menu) {
-    return;
-  }
-  const { state, explorerFocused, otherWindowFocused } = currentMenuExplorer();
-  applyApplicationMenuItemStates(
-    menu,
-    resolveApplicationMenuItemStates(state, {
-      explorerFocused,
-      otherWindowFocused,
-      explorerWindowCount: explorerWindows.count,
-      undoAvailable: { undo: undoHistoryMenu.undo !== null, redo: undoHistoryMenu.redo !== null },
-    }),
-  );
+  menuSync.menuBuilt();
 }
 
 function resolveAppIconPath(): string | null {
@@ -1103,57 +641,6 @@ function installProcessLoggingHandlers(logger: ReturnType<typeof createAppLogger
   });
 }
 
-// Quitting stops a running copy, move, or delete after the item it is on. While a window
-// is open the person is asked first, and may keep working instead. With every window
-// closed the operation was already told to stop; quitting waits for it either way.
-async function confirmQuit(): Promise<void> {
-  if (BrowserWindow.getAllWindows().length > 0 && !(await askToStopOperation("quit"))) {
-    return;
-  }
-  if (shutdownInProgress) {
-    return;
-  }
-  shutdownInProgress = true;
-  await finalizeShutdown();
-}
-
-// Asks whether to stop the running operation, when there is one worth asking about.
-// Resolves true when it may be stopped (or nothing needs asking), false to keep working.
-async function askToStopOperation(trigger: StopTrigger): Promise<boolean> {
-  const operation = getActiveWriteOperation();
-  const question = operation ? describeQuitWhileBusy(operation.kind, trigger) : null;
-  if (!question) {
-    return true;
-  }
-  stopQuestionOpen = true;
-  let response: number;
-  try {
-    const options = {
-      type: "warning" as const,
-      message: question.message,
-      detail: question.detail,
-      buttons: stopQuestionButtons(trigger),
-      defaultId: KEEP_WORKING_BUTTON_INDEX,
-      cancelId: KEEP_WORKING_BUTTON_INDEX,
-    };
-    const front = explorerWindows.front()?.window;
-    const window = front && !front.isDestroyed() ? front : null;
-    ({ response } = window
-      ? await dialog.showMessageBox(window, options)
-      : await dialog.showMessageBox(options));
-  } finally {
-    stopQuestionOpen = false;
-  }
-  if (response !== STOP_BUTTON_INDEX) {
-    appLoggerRef?.info("[filetrail] kept an operation running instead of stopping it", {
-      trigger,
-      kind: operation?.kind ?? null,
-    });
-    return false;
-  }
-  return true;
-}
-
 // Items a crash left half replaced that couldn't be put right: the person is told where
 // they are, once the window is on screen.
 function showPendingStartupNotices(window: BrowserWindow): void {
@@ -1180,34 +667,6 @@ function showPendingStartupNotices(window: BrowserWindow): void {
   } else {
     show();
   }
-}
-
-async function finalizeShutdown(): Promise<void> {
-  const logger = appLoggerRef;
-  const state = getMainProcessStatus();
-  logger?.info("[filetrail] app stop", {
-    phase: "before-quit",
-    windowCount: BrowserWindow.getAllWindows().length,
-    workerActive: state.workerActive,
-    writeCoordinatorActive: state.writeCoordinatorActive,
-  });
-  // The store is written here, once, with the windows as they are now.
-  for (const recordWindowBounds of windowBoundsRecorders.values()) {
-    recordWindowBounds();
-  }
-  appStateStoreRef?.flush();
-  try {
-    // Stops a running operation and waits until it has cleaned up after itself.
-    await shutdownMainProcess();
-  } catch (error) {
-    logger?.error("[filetrail] shutdown failed", error);
-  }
-  try {
-    await logger?.flush();
-  } catch (error) {
-    logger?.error("[filetrail] final log flush failed", error);
-  }
-  app.exit(0);
 }
 
 function resolveFdStartupStatus(): { path: string | null; error: string | null } {

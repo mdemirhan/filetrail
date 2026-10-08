@@ -1245,7 +1245,7 @@ describe("appStateStore explorer windows", () => {
         session: store.createWindowSession({ openTabs: [tab(`/Users/demo/${id}`)] }),
       });
     }
-    store.moveExplorerWindowToFront("window-c");
+    store.setExplorerWindowOrder(["window-c", "window-a"]);
     store.removeExplorerWindow("window-b");
     store.flush();
 

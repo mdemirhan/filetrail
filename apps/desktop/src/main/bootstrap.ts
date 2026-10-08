@@ -3,9 +3,9 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { BrowserWindow, type WebContents, app, clipboard, ipcMain, shell } from "electron";
 
-import type { AppLogEntry, HelpTopic, IpcResponse, SettingsTab } from "@filetrail/contracts";
+import type { AppLogEntry, HelpTopic, SettingsTab } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
-import type { AppPreferences, OpenTabPreference } from "../shared/appPreferences";
+import type { AppPreferences } from "../shared/appPreferences";
 import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
 import {
   formatMacosVersion,
@@ -16,7 +16,7 @@ import {
   resolveNoticesPath,
 } from "./aboutInfo";
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
-import { type AppStateStore, isWindowSessionKey } from "./appStateStore";
+import type { AppStateStore } from "./appStateStore";
 import { getDiskIds } from "./bootstrap/diskIds";
 import {
   bringWindowToFront,
@@ -73,54 +73,45 @@ import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
 import { type FolderWatches, createFolderWatches } from "./folderWatch";
 import { registerIpcHandlers } from "./ipc";
 import { type VolumeWatcher, createVolumeWatcher } from "./volumes";
+import {
+  type PreferencesChange,
+  type WindowHost,
+  createWindowIpcHandlers,
+} from "./windowIpcHandlers";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
 let activeWriteCoordinator: ReturnType<typeof createWriteOperationCoordinator> | null = null;
 let activeVolumeWatcher: VolumeWatcher | null = null;
 let activeFolderWatches: FolderWatches | null = null;
 
+// The windows, as the main process's work sees them. The host (main.ts) makes and keeps
+// them.
+export type MainProcessWindows = WindowHost & {
+  openSettingsWindow: (tab?: SettingsTab) => void;
+  openAcknowledgementsWindow: () => void;
+  openHelpWindow: (topic?: HelpTopic) => void;
+  // The explorer window reporting what the application menu should show.
+  setApplicationMenuState: (state: ApplicationMenuState, senderId: number | null) => void;
+  // Things found at start that the person must be told about (a Replace a crash left
+  // unfinished that couldn't be put right), shown once the window is open.
+  showStartupNotices: (notices: string[]) => void;
+  // Items such a Replace left waiting for their disk, put in place later.
+  showRecoveryNotices: (notices: string[]) => void;
+  // What Undo and Redo would do now, for the Edit menu; told at start and on each change.
+  onUndoHistoryChanged: (menu: {
+    undo: string | null;
+    redo: string | null;
+    cantUndo: boolean;
+  }) => void;
+  // The explorer window a running operation goes to when the one that started it closes.
+  successorWindowOf: (senderId: number) => WebContents | null;
+};
+
 export async function bootstrapMainProcess(
   appStateStore: AppStateStore,
-  launchContext: { startupFolderPath: string | null } = { startupFolderPath: null },
+  windows: MainProcessWindows,
+  onPreferencesChanged: (preferences: AppPreferences, change: PreferencesChange) => void,
   logger: Pick<AppLogger, "debug" | "info" | "warn" | "error"> = console,
-  onPreferencesChanged?: (
-    preferences: AppPreferences,
-    change: { patch: Partial<AppPreferences>; senderId: number | null },
-  ) => void,
-  windows: {
-    openSettingsWindow?: (tab?: SettingsTab) => void;
-    openAcknowledgementsWindow?: () => void;
-    openHelpWindow?: (topic?: HelpTopic) => void;
-    // The explorer window reporting what the application menu should show.
-    setApplicationMenuState?: (state: ApplicationMenuState, senderId: number | null) => void;
-    // Things found at start that the person must be told about (a Replace a crash left
-    // unfinished that couldn't be put right), shown once the window is open.
-    showStartupNotices?: (notices: string[]) => void;
-    // Items such a Replace left waiting for their disk, put in place later.
-    showRecoveryNotices?: (notices: string[]) => void;
-    // What Undo and Redo would do now, for the Edit menu; told at start and on each change.
-    onUndoHistoryChanged?: (menu: {
-      undo: string | null;
-      redo: string | null;
-      cantUndo: boolean;
-    }) => void;
-    // The id of the explorer window a web contents belongs to; null for other windows
-    // (Settings), which see only the app's preferences.
-    explorerWindowIdOf?: (senderId: number | null) => string | null;
-    // What an explorer window opens with: the launch folder for the window in front at
-    // startup, and whether it opens the tabs it was given.
-    launchContextFor?: (senderId: number | null) => IpcResponse<"app:getLaunchContext">;
-    openExplorerWindow?: (
-      senderId: number | null,
-      tabs: OpenTabPreference[],
-      activeTabIndex: number,
-    ) => void;
-    // Closes the other explorer windows and returns their tabs.
-    mergeExplorerWindows?: (senderId: number | null) => OpenTabPreference[];
-    explorerWindowCount?: () => number;
-    // The explorer window a running operation goes to when the one that started it closes.
-    successorWindowOf?: (senderId: number) => WebContents | null;
-  } = {},
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
@@ -220,13 +211,13 @@ export async function bootstrapMainProcess(
     answerWithinMs: RECOVERY_ANSWER_WITHIN_MS,
   });
   if (recovery.notices.length > 0) {
-    windows.showStartupNotices?.(recovery.notices);
+    windows.showStartupNotices(recovery.notices);
   }
   const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
   // What Undo and Redo work from, for as long as the app runs.
   const undoHistory = createUndoHistory();
-  undoHistory.onChange(() => windows.onUndoHistoryChanged?.(undoHistory.menu()));
-  windows.onUndoHistoryChanged?.(undoHistory.menu());
+  undoHistory.onChange(() => windows.onUndoHistoryChanged(undoHistory.menu()));
+  windows.onUndoHistoryChanged(undoHistory.menu());
   const writeCoordinator = createWriteOperationCoordinator(
     writeService,
     createOriginalWriteOperationFs(trashItem),
@@ -240,7 +231,7 @@ export async function bootstrapMainProcess(
           if (
             !window.isDestroyed() &&
             (window.webContents as unknown) !== owner &&
-            windows.explorerWindowIdOf?.(window.webContents.id)
+            windows.explorerWindowIdOf(window.webContents.id)
           ) {
             window.webContents.send("filetrail:writeOperationProgress", event);
           }
@@ -248,9 +239,7 @@ export async function bootstrapMainProcess(
       },
       successorOf: (sender) => {
         const senderId = (sender as Partial<WebContents>).id;
-        return typeof senderId === "number"
-          ? (windows.successorWindowOf?.(senderId) ?? null)
-          : null;
+        return typeof senderId === "number" ? windows.successorWindowOf(senderId) : null;
       },
     },
   );
@@ -267,11 +256,9 @@ export async function bootstrapMainProcess(
       }),
     remainingIds: () => new Set(replaceJournal.entries().map((entry) => entry.id)),
     isBusy: () => writeCoordinator.getActiveOperation() !== null,
-    onFinished: (messages) => windows.showRecoveryNotices?.(messages),
+    onFinished: (messages) => windows.showRecoveryNotices(messages),
   });
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
-  // What Copy or Cut put on the clipboard, in whichever window: every window pastes it.
-  let sharedClipboard: IpcResponse<"app:getClipboard">["clipboard"] = { type: "empty" };
   activeWorkerClient = workerClient;
   void activeWriteCoordinator?.shutdown();
   activeWriteCoordinator = writeCoordinator;
@@ -282,54 +269,7 @@ export async function bootstrapMainProcess(
       "app:getHomeDirectory": () => ({
         path: app.getPath("home"),
       }),
-      "app:getPreferences": (_payload, event) => {
-        const windowId = windows.explorerWindowIdOf?.(event?.sender?.id ?? null) ?? null;
-        return {
-          preferences: windowId
-            ? appStateStore.getWindowPreferences(windowId)
-            : appStateStore.getPreferences(),
-        };
-      },
-      "app:getLaunchContext": (_payload, event) =>
-        windows.launchContextFor?.(event?.sender?.id ?? null) ?? launchContext,
-      "app:updatePreferences": (payload, event) => {
-        const senderId = event?.sender?.id ?? null;
-        const patch = toPreferencePatch(payload.preferences);
-        const windowId = windows.explorerWindowIdOf?.(senderId) ?? null;
-        const preferences = windowId
-          ? appStateStore.updateWindowPreferences(windowId, patch)
-          : appStateStore.updatePreferences(patch);
-        // The sender id lets main forward the change to the other windows (e.g. Settings).
-        // What belongs to one window (its tabs, panels, column widths) stays with it.
-        const sharedPatch = Object.fromEntries(
-          Object.entries(patch).filter(([key]) => !isWindowSessionKey(key)),
-        ) as Partial<AppPreferences>;
-        onPreferencesChanged?.(appStateStore.getPreferences(), { patch: sharedPatch, senderId });
-        return { preferences };
-      },
-      "app:openWindow": (payload, event) => {
-        windows.openExplorerWindow?.(
-          event?.sender?.id ?? null,
-          payload.tabs as OpenTabPreference[],
-          payload.activeTabIndex,
-        );
-        return { ok: windows.openExplorerWindow !== undefined };
-      },
-      "app:getExplorerWindowCount": () => ({ count: windows.explorerWindowCount?.() ?? 1 }),
-      "app:mergeAllWindows": (_payload, event) => ({
-        tabs: windows.mergeExplorerWindows?.(event?.sender?.id ?? null) ?? [],
-      }),
-      "app:getClipboard": () => ({ clipboard: sharedClipboard }),
-      "app:setClipboard": (payload, event) => {
-        sharedClipboard = payload.clipboard;
-        const senderId = event?.sender?.id ?? null;
-        for (const window of BrowserWindow.getAllWindows()) {
-          if (!window.isDestroyed() && window.webContents.id !== senderId) {
-            window.webContents.send("filetrail:clipboardChanged", sharedClipboard);
-          }
-        }
-        return { ok: true };
-      },
+      ...createWindowIpcHandlers({ store: appStateStore, windows, onPreferencesChanged }),
       "places:list": () => ({
         folders: appStateStore.getVisitedFolders(),
       }),
@@ -342,8 +282,8 @@ export async function bootstrapMainProcess(
       }),
       "batchRename:inspect": (payload) => inspectBatchRename(payload, batchRenameInspectDeps),
       "app:openSettingsWindow": (payload) => {
-        windows.openSettingsWindow?.(payload.tab);
-        return { ok: windows.openSettingsWindow !== undefined };
+        windows.openSettingsWindow(payload.tab);
+        return { ok: true };
       },
       "app:getAboutInfo": () => ({
         version: readBuildVersion(resolveDistDir()) ?? app.getVersion(),
@@ -354,12 +294,12 @@ export async function bootstrapMainProcess(
         fdVersion: readBundledFdManifest().version,
       }),
       "app:openHelpWindow": (payload) => {
-        windows.openHelpWindow?.(payload.topic);
-        return { ok: windows.openHelpWindow !== undefined };
+        windows.openHelpWindow(payload.topic);
+        return { ok: true };
       },
       "app:openAcknowledgementsWindow": () => {
-        windows.openAcknowledgementsWindow?.();
-        return { ok: windows.openAcknowledgementsWindow !== undefined };
+        windows.openAcknowledgementsWindow();
+        return { ok: true };
       },
       "app:getAcknowledgements": () => ({
         components: readAcknowledgements(resolveDistDir(), { chromium: process.versions.chrome }),
@@ -370,7 +310,7 @@ export async function bootstrapMainProcess(
         return { ok: noticesPath !== null && (await shell.openPath(noticesPath)).length === 0 };
       },
       "app:setMenuState": (payload, event) => {
-        windows.setApplicationMenuState?.(
+        windows.setApplicationMenuState(
           toApplicationMenuState(payload.state),
           event?.sender?.id ?? null,
         );

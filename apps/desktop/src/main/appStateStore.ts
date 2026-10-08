@@ -375,12 +375,20 @@ export class AppStateStore {
     }
   }
 
-  moveExplorerWindowToFront(windowId: string): void {
+  /**
+   * Puts the windows in this order, front to back: the order the open windows are in. Any
+   * not named stay behind them.
+   */
+  setExplorerWindowOrder(windowIds: readonly string[]): void {
     const windows = this.getExplorerWindows();
-    const window = windows.find((candidate) => candidate.id === windowId);
-    if (window && windows[0] !== window) {
-      this.setWindows([window, ...windows.filter((other) => other !== window)]);
+    const ordered = [
+      ...windowIds.flatMap((id) => windows.find((window) => window.id === id) ?? []),
+      ...windows.filter((window) => !windowIds.includes(window.id)),
+    ];
+    if (ordered.every((window, index) => window === windows[index])) {
+      return;
     }
+    this.setWindows(ordered);
   }
 
   setExplorerWindowBounds(windowId: string, value: StoredWindowState): void {

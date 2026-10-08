@@ -40,6 +40,9 @@ export default defineConfig({
         "apps/desktop/src/renderer/hooks/{useFolderSizeCache,useAutoFolderSize}.ts",
         "apps/desktop/src/shared/batchRename.ts",
         "apps/desktop/src/main/ipc.ts",
+        // The explorer windows' lives, the menu that follows them, and the IPC that knows
+        // which window asks.
+        "apps/desktop/src/main/{explorerWindowController,explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers}.ts",
         "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState,useBatchRename,useTextEditingFocus}.ts",
         "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,internalDragAndDrop,undoQuestion}.ts",
         "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField,BatchRenameSheet,UndoQuestionAlert}.tsx",
@@ -49,7 +52,15 @@ export default defineConfig({
         "packages/core/src/fs/**": { statements: 95, branches: 89, functions: 100, lines: 95 },
         "packages/contracts/src/**": { statements: 92, branches: 94, functions: 100, lines: 92 },
         // The main process's file operations.
-        "apps/desktop/src/main/**": { statements: 95, branches: 88, functions: 90, lines: 95 },
+        "apps/desktop/src/main/{bootstrap/**,ipc.ts}": {
+          statements: 95,
+          branches: 88,
+          functions: 90,
+          lines: 95,
+        },
+        // The explorer windows: opening, closing, merging, quitting, and the menu.
+        "apps/desktop/src/main/{explorerWindowController,explorerWindows,applicationMenuSync,pageWindows,windowIpcHandlers}.ts":
+          { statements: 95, branches: 88, functions: 95, lines: 95 },
         // Undo and Redo, a floor for each file: a pattern's floor is for all it matches
         // together, so one file well below it could hide among the others.
         "apps/desktop/src/main/bootstrap/undoHistory.ts": {
