@@ -100,22 +100,19 @@ export class FolderSizeCache {
   // is looked at once, and only the sizes inside a change are walked.
   forgetAffected(changedPaths: readonly string[]): void {
     const looked = new Set<string>();
+    const forget = (holder: string) => {
+      this.delete(holder);
+    };
     for (const changed of changedPaths) {
-      for (const holder of holdersOf(changed, looked)) {
-        this.delete(holder);
-      }
-      this.forgetAtOrInside([changed]);
+      forEachHolder(changed, looked, forget);
+      this.forgetAtOrInsideOne(changed);
     }
   }
 
   // The sizes of `paths` and of everything inside them.
   forgetAtOrInside(paths: readonly string[]): void {
     for (const path of paths) {
-      this.delete(path);
-      // What is inside "/a/" is what is inside "/a".
-      for (const inside of this.inside(path.endsWith("/") ? path.slice(0, -1) : path)) {
-        this.delete(inside);
-      }
+      this.forgetAtOrInsideOne(path);
     }
   }
 
@@ -142,16 +139,28 @@ export class FolderSizeCache {
       return;
     }
     const looked = new Set<string>();
+    const forgetRecorded = (candidate: string) => {
+      if (recorded.has(candidate)) {
+        this.delete(candidate);
+      }
+    };
     for (const path of paths) {
-      const candidates = holdersOf(path, looked);
+      forEachHolder(path, looked, forgetRecorded);
       if (atToo) {
-        candidates.push(path);
+        forgetRecorded(path);
       }
-      for (const candidate of candidates) {
-        if (recorded.has(candidate)) {
-          this.delete(candidate);
-        }
-      }
+    }
+  }
+
+  private forgetAtOrInsideOne(path: string): void {
+    this.delete(path);
+    // What is inside "/a/" is what is inside "/a".
+    const folder = path.endsWith("/") ? path.slice(0, -1) : path;
+    if (!this.children.has(folder)) {
+      return;
+    }
+    for (const inside of this.inside(folder)) {
+      this.delete(inside);
     }
   }
 
@@ -217,23 +226,22 @@ function parentOf(path: string): string | null {
   return index === -1 ? null : path.slice(0, index);
 }
 
-// The folders holding `path` by isSameOrInside, nearest first (as createChangeMatcher's
-// holdsChange: each part before a "/", with and without it), leaving out those in `looked`
-// and what holds them, which were looked at already. Adds those it gives to `looked`.
-function holdersOf(path: string, looked: Set<string>): string[] {
-  const holders: string[] = [];
+// Calls `visit` with the folders holding `path` by isSameOrInside, nearest first (as
+// createChangeMatcher's holdsChange: each part before a "/", with and without it), leaving
+// out those in `looked` and what holds them, which were visited already. Adds those it
+// visits to `looked`.
+function forEachHolder(path: string, looked: Set<string>, visit: (folder: string) => void) {
   for (let index = path.lastIndexOf("/"); index !== -1; ) {
     // Not the path itself, when it ends in "/".
     if (index + 1 < path.length) {
-      holders.push(path.slice(0, index + 1));
+      visit(path.slice(0, index + 1));
     }
     const folder = path.slice(0, index);
     if (looked.has(folder)) {
-      break;
+      return;
     }
     looked.add(folder);
-    holders.push(folder);
+    visit(folder);
     index = index === 0 ? -1 : path.lastIndexOf("/", index - 1);
   }
-  return holders;
 }
