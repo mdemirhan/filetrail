@@ -34,8 +34,15 @@ class FakeWindow {
     on: (event: string, listener: Listener) => {
       this.contentsListeners.set(event, [...(this.contentsListeners.get(event) ?? []), listener]);
     },
+    isLoading: () => this.loading,
+    reload: () => {
+      this.log.push(`reload ${this.recordId}`);
+    },
   };
   destroyed = false;
+  // Whether its page is still loading.
+  loading = false;
+  visible = false;
   bounds = { x: 100, y: 80, width: 900, height: 600 };
   normalBounds = { x: 100, y: 80, width: 900, height: 600 };
   maximized = false;
@@ -70,11 +77,20 @@ class FakeWindow {
     }
   }
 
+  emitContents(event: string, ...args: unknown[]): void {
+    for (const listener of [...(this.contentsListeners.get(event) ?? [])]) {
+      (listener as (...values: unknown[]) => void)(...args);
+    }
+  }
+
   // The page starts loading: the first time, or again (reloaded).
   startNavigation(details: { isMainFrame: boolean; isSameDocument: boolean }): void {
-    for (const listener of this.contentsListeners.get("did-start-navigation") ?? []) {
-      (listener as (value: unknown) => void)(details);
-    }
+    this.emitContents("did-start-navigation", details);
+  }
+
+  // Its page crashes (or ends some other way).
+  crash(reason = "crashed"): void {
+    this.emitContents("render-process-gone", {}, { reason });
   }
 
   close(): void {
@@ -98,9 +114,16 @@ class FakeWindow {
   }
 
   isDestroyed = () => this.destroyed;
-  show = () => this.log.push(`show ${this.recordId}`);
-  showInactive = () => this.log.push(`showInactive ${this.recordId}`);
+  show = () => {
+    this.visible = true;
+    this.log.push(`show ${this.recordId}`);
+  };
+  showInactive = () => {
+    this.visible = true;
+    this.log.push(`showInactive ${this.recordId}`);
+  };
   focus = () => this.emit("focus");
+  isVisible = () => this.visible;
   isMinimized = () => this.minimized;
   restore = () => {
     this.minimized = false;
@@ -176,6 +199,9 @@ function setUp(store: AppStateStore = createStore()) {
   }> = [];
   let operation: { kind: WriteOperationKind } | null = null;
   let windowCount = 0;
+  let now = 1_000_000;
+  // While set, Merge All Windows' requests for tabs wait for it.
+  let tabsHeld: Promise<void> | null = null;
   // What each window says when Merge All Windows asks for its tabs; left out, the tabs it
   // last saved.
   const tabAnswers = new Map<FakeWindow, { tabs: OpenTabPreference[]; busy: boolean } | null>();
@@ -196,15 +222,18 @@ function setUp(store: AppStateStore = createStore()) {
       new Promise<number>((resolve) => {
         questions.push({ question, parent, answer: resolve });
       }),
-    requestTabs: async (window: FakeWindow) =>
-      tabAnswers.has(window)
+    requestTabs: async (window: FakeWindow) => {
+      await tabsHeld;
+      return tabAnswers.has(window)
         ? (tabAnswers.get(window) ?? null)
-        : { tabs: store.getWindowPreferences(window.recordId).openTabs, busy: false },
+        : { tabs: store.getWindowPreferences(window.recordId).openTabs, busy: false };
+    },
     anyWindowOpen: () => windows.some((window) => !window.destroyed),
     windowsChanged: vi.fn(),
     shutDown: vi.fn(async () => undefined),
     exit: vi.fn(),
     logger: { info: vi.fn() },
+    now: () => now,
   } satisfies ExplorerWindowHost<FakeWindow>;
   const controller = new ExplorerWindowController<FakeWindow>(host);
   return {
@@ -224,6 +253,20 @@ function setUp(store: AppStateStore = createStore()) {
     },
     runOperation: (kind: WriteOperationKind | null) => {
       operation = kind ? { kind } : null;
+    },
+    // Holds Merge All Windows' requests for tabs until the returned function is called.
+    holdTabAnswers: () => {
+      let release: () => void = () => undefined;
+      tabsHeld = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        tabsHeld = null;
+        release();
+      };
+    },
+    passTime: (milliseconds: number) => {
+      now += milliseconds;
     },
     windowFor: (id: string) => {
       const window = windows.find((candidate) => candidate.recordId === id);
@@ -389,8 +432,11 @@ describe("ExplorerWindowController opening windows", () => {
     window.startNavigation({ isMainFrame: false, isSameDocument: false });
     expect(launchContext().startupFolderPath).toBe("/Users/demo/launched");
 
+    expect(launchContext().restoreTabs).toBe(false);
+
+    // Loaded again, it opens the tabs the window had.
     window.startNavigation({ isMainFrame: true, isSameDocument: false });
-    expect(launchContext()).toEqual({ startupFolderPath: null, restoreTabs: false });
+    expect(launchContext()).toEqual({ startupFolderPath: null, restoreTabs: true });
   });
 
   it("doesn't run the Go menu's command again when the page reloads", () => {
@@ -452,9 +498,53 @@ describe("ExplorerWindowController opening windows", () => {
 
   it("opens a window from the Dock icon only with none open", () => {
     const { controller, windows } = setUp();
-    controller.activate();
-    controller.activate();
+    controller.activate(false);
+    controller.activate(true);
     expect(windows).toHaveLength(1);
+  });
+
+  it("brings back the window in front from the Dock icon when every window is minimized", () => {
+    const { controller, windows } = setUpWithWindows(2);
+    const [back, front] = windows;
+    if (!back || !front) {
+      throw new Error("No windows.");
+    }
+    back.minimized = true;
+    front.minimized = true;
+
+    // Another window of the app (Settings) is on screen: macOS brings that one forward.
+    controller.activate(true);
+    expect(front.minimized).toBe(true);
+    controller.activate(false);
+
+    expect(front.minimized).toBe(false);
+    expect(back.minimized).toBe(true);
+    expect(windows).toHaveLength(2);
+  });
+
+  it("opens a window zoomed with none open when the window closed last was", () => {
+    const store = createStore();
+    store.addExplorerWindow(
+      storedWindow(store, "window-old", ["/Users/demo"], { maximized: true }),
+    );
+    store.rememberClosedWindow("window-old");
+    store.removeExplorerWindow("window-old");
+    const { controller, windows, log } = setUp(store);
+
+    controller.openDefaultWindow();
+    windows[0]?.emit("ready-to-show");
+
+    expect(log).toEqual(["maximize window-new-1", "show window-new-1"]);
+  });
+
+  it("tells the menu when a window is minimized or comes back", () => {
+    const { windows, host } = setUpWithWindows(1);
+    host.windowsChanged.mockClear();
+
+    windows[0]?.emit("minimize");
+    windows[0]?.emit("restore");
+
+    expect(host.windowsChanged).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -585,6 +675,51 @@ describe("ExplorerWindowController closing", () => {
     expect(controller.windows.count).toBe(0);
   });
 
+  it("brings the question forward when ⌘Q or another close comes while it is open", async () => {
+    const { controller, windows, questions, runOperation, host } = setUpWithWindows(1);
+    runOperation("copy");
+    const [window] = windows;
+    if (!window) {
+      throw new Error("No window.");
+    }
+    window.close();
+    await settle();
+    const focused = vi.fn();
+    window.on("focus", focused);
+    window.minimized = true;
+
+    await controller.quit();
+
+    expect(questions).toHaveLength(1);
+    expect(window.minimized).toBe(false);
+    expect(focused).toHaveBeenCalledTimes(1);
+    expect(host.shutDown).not.toHaveBeenCalled();
+    // A window opened meanwhile isn't closed either while the question waits.
+    controller.openWindowFrom(window.webContents.id, [tab("/Users/demo/x")], 0);
+    windows[1]?.close();
+    expect(windows[1]?.destroyed).toBe(false);
+    expect(focused).toHaveBeenCalledTimes(2);
+    questions[0]?.answer(KEEP_WORKING_BUTTON_INDEX);
+    await settle();
+  });
+
+  it("stops the operation with Stop and Close, even with a window opened while it asked", async () => {
+    const { controller, windows, questions, runOperation } = setUpWithWindows(1);
+    runOperation("copy");
+    const [first] = windows;
+    first?.close();
+    await settle();
+
+    controller.openWindowFrom(first?.webContents.id ?? null, [tab("/Users/demo/x")], 0);
+    questions[0]?.answer(STOP_BUTTON_INDEX);
+    await settle();
+
+    expect(first?.destroyed).toBe(true);
+    expect(windows[1]?.destroyed).toBe(false);
+    // Not handed to the new window: it is cancelled.
+    expect(controller.successorOf(first?.webContents.id ?? 0)).toBeNull();
+  });
+
   it("asks the same when ⌘W closes the last tab of the last window", async () => {
     vi.useFakeTimers();
     try {
@@ -705,6 +840,135 @@ describe("ExplorerWindowController Merge All Windows", () => {
     expect(windows.filter((window) => window.destroyed)).toEqual([inFront]);
     expect(controller.windows.count).toBe(4);
   });
+
+  it("merges once at a time: a second merge while one waits leaves its window open", async () => {
+    const { controller, windows, answerTabs } = setUpWithWindows(3);
+    const [first, second, third] = windows;
+    answerTabs(first, { tabs: [tab("/Users/demo/0")], busy: false });
+
+    // Chosen in two windows in the same moment.
+    const [intoFirst, intoSecond] = await Promise.all([
+      controller.mergeInto(first?.webContents.id ?? null, 1),
+      controller.mergeInto(second?.webContents.id ?? null, 1),
+    ]);
+    await settle();
+
+    expect(intoSecond).toEqual([]);
+    expect(intoFirst.map((open) => open.path)).toEqual(["/Users/demo/2", "/Users/demo/1"]);
+    expect(first?.destroyed).toBe(false);
+    expect(second?.destroyed).toBe(true);
+    expect(third?.destroyed).toBe(true);
+    // Once it is over, another may run.
+    controller.openWindowFrom(first?.webContents.id ?? null, [tab("/Users/demo/x")], 0);
+    expect((await controller.mergeInto(first?.webContents.id ?? null, 3)).length).toBe(1);
+  });
+
+  it("merges nothing when the window asking closes while the others are asked", async () => {
+    const { controller, windows, holdTabAnswers } = setUpWithWindows(3);
+    const [first, second, third] = windows;
+    const releaseTabs = holdTabAnswers();
+
+    const merging = controller.mergeInto(first?.webContents.id ?? null, 1);
+    first?.close();
+    releaseTabs();
+    const tabs = await merging;
+    await settle();
+
+    expect(tabs).toEqual([]);
+    expect(first?.destroyed).toBe(true);
+    expect(second?.destroyed).toBe(false);
+    expect(third?.destroyed).toBe(false);
+  });
+
+  it("merges nothing while quitting, or when quitting starts while the others are asked", async () => {
+    const { controller, windows, holdTabAnswers, host } = setUpWithWindows(2);
+    host.shutDown.mockImplementation(() => new Promise<undefined>(() => undefined));
+    const [first, second] = windows;
+    const releaseTabs = holdTabAnswers();
+
+    const merging = controller.mergeInto(first?.webContents.id ?? null, 1);
+    void controller.quit();
+    await settle();
+    releaseTabs();
+
+    expect(await merging).toEqual([]);
+    expect(await controller.mergeInto(first?.webContents.id ?? null, 1)).toEqual([]);
+    await settle();
+    expect(second?.destroyed).toBe(false);
+  });
+});
+
+describe("ExplorerWindowController a page that crashes", () => {
+  it("loads the page again with the window's own tabs, and counts the window out until then", async () => {
+    const store = createStore();
+    store.addExplorerWindow(storedWindow(store, "window-b", ["/Users/demo/b"]));
+    store.addExplorerWindow(storedWindow(store, "window-a", ["/Users/demo/a"]));
+    const { controller, windowFor, log } = setUp(store);
+    controller.openStartupWindows("/Users/demo/launched");
+    const front = windowFor("window-a");
+    const back = windowFor("window-b");
+    front.startNavigation({ isMainFrame: true, isSameDocument: false });
+    expect(controller.launchContextFor(front.webContents.id).restoreTabs).toBe(false);
+
+    front.crash();
+
+    expect(log).toContain("reload window-a");
+    expect(controller.frontWindow()).toBe(back);
+    // A copy in the window behind doesn't go to the crashed one.
+    expect(controller.successorOf(back.webContents.id)).toBeNull();
+    expect(await controller.mergeInto(back.webContents.id, 1)).toEqual([]);
+    expect(front.destroyed).toBe(false);
+
+    // The page loaded again opens the tabs the window had, not the launch folder.
+    front.startNavigation({ isMainFrame: true, isSameDocument: false });
+    expect(controller.launchContextFor(front.webContents.id)).toEqual({
+      startupFolderPath: null,
+      restoreTabs: true,
+    });
+    front.emitContents("did-finish-load");
+    expect(controller.successorOf(back.webContents.id)).toBe(front.webContents);
+  });
+
+  it("leaves a page that ends cleanly, and doesn't reload one that crashes again straight away", () => {
+    const { windows, log, passTime } = setUpWithWindows(1);
+    const [window] = windows;
+
+    window?.crash("clean-exit");
+    expect(log.filter((entry) => entry.startsWith("reload"))).toEqual([]);
+
+    window?.crash();
+    window?.emitContents("did-finish-load");
+    passTime(1_000);
+    window?.crash();
+    expect(log.filter((entry) => entry.startsWith("reload"))).toHaveLength(1);
+    passTime(60_000);
+    window?.crash();
+    expect(log.filter((entry) => entry.startsWith("reload"))).toHaveLength(2);
+  });
+
+  it("shows a window whose page crashed before it was first shown, once it has loaded", () => {
+    const { controller, windows, log } = setUp();
+    controller.openDefaultWindow();
+    const [opened] = windows;
+
+    opened?.crash();
+    opened?.emitContents("did-finish-load");
+
+    expect(log.at(-1)).toBe(`show ${opened?.recordId}`);
+  });
+
+  it("hands an operation to a window whose page has loaded before one still loading", () => {
+    const { controller, windows } = setUpWithWindows(3);
+    const [first, second, third] = windows;
+    if (!first || !second || !third) {
+      throw new Error("No windows.");
+    }
+    third.loading = true;
+
+    expect(controller.successorOf(first.webContents.id)).toBe(second.webContents);
+    second.loading = true;
+    expect(controller.successorOf(first.webContents.id)).toBe(third.webContents);
+  });
 });
 
 describe("ExplorerWindowController quitting", () => {
@@ -745,7 +1009,7 @@ describe("ExplorerWindowController quitting", () => {
     expect(host.shutDown).toHaveBeenCalledTimes(1);
     expect(host.exit).toHaveBeenCalledTimes(1);
     // Not while quitting: a window would close again moments later.
-    controller.activate();
+    controller.activate(false);
     expect(windows).toHaveLength(1);
   });
 
@@ -787,7 +1051,7 @@ describe("ExplorerWindowController quitting", () => {
     controller.openDefaultWindow();
     controller.openNewWindowFromFront();
     controller.bringToFront();
-    controller.activate();
+    controller.activate(false);
 
     expect(controller.openWindowFrom(null, [tab("/Users/demo")], 0)).toBe(false);
     expect(windows).toHaveLength(1);

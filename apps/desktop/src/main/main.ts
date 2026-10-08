@@ -72,6 +72,12 @@ if (hasSingleInstanceLock) {
   // While Settings has the keyboard the explorer's commands do not apply, and its Undo is
   // its text fields'.
   app.on("browser-window-focus", () => menuSyncRef?.refresh());
+  // A window that loses the keyboard may leave none with it (Settings closed, a window
+  // minimized): the menu then acts on the window in front only while it is on screen. The
+  // focus has moved on once this event's turn is over.
+  app.on("browser-window-blur", () => {
+    setTimeout(() => menuSyncRef?.refresh(), 0);
+  });
 
   app
     .whenReady()
@@ -232,12 +238,13 @@ if (hasSingleInstanceLock) {
         showPendingStartupNotices(frontWindow);
       }
 
-      app.on("activate", () => {
+      app.on("activate", (_event, hasVisibleWindows) => {
         appLogger.info("[filetrail] app activate", {
           openWindowCount: BrowserWindow.getAllWindows().length,
           explorerWindowCount: explorerWindows.windows.count,
+          hasVisibleWindows,
         });
-        explorerWindows.activate();
+        explorerWindows.activate(hasVisibleWindows);
       });
     })
     .catch(async (error) => {
@@ -345,6 +352,7 @@ function createExplorerBrowserWindow(
     webPreferences: pageWebPreferences(PRELOAD_PATH, appStateStore.getPreferences().zoomPercent),
     ...(iconPath ? { icon: iconPath } : {}),
   });
+  // The controller loads the page again (see ExplorerWindowController.open).
   explorerWindow.webContents.on("render-process-gone", (_event, details) => {
     appLoggerRef?.error("[filetrail] renderer process gone", {
       windowId: explorerWindow.id,
@@ -596,9 +604,11 @@ function buildApplicationMenu(): void {
             .bindings,
           textEditorName: appStateStoreRef?.getPreferences().defaultTextEditor.appName,
           undoLabels: menuSync.undoLabels(),
-          // With no window open, New Window and the Go menu's places open one.
+          // With no window open or on screen, New Window and the Go menu's places open one.
           onCommandWithoutExplorerWindow: (type) =>
-            explorerWindowsRef?.openDefaultWindow(type === "newWindow" ? undefined : type),
+            type === "newWindow"
+              ? explorerWindowsRef?.openNewWindowFromFront()
+              : explorerWindowsRef?.openDefaultWindow(type),
           onNewWindowFromOtherWindow: () => explorerWindowsRef?.openNewWindowFromFront(),
         },
       ),

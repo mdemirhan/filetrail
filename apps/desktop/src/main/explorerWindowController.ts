@@ -33,16 +33,24 @@ export type ExplorerWindowLike = {
   readonly webContents: {
     readonly id: number;
     send(channel: string, ...args: unknown[]): void;
+    isLoading(): boolean;
+    reload(): void;
     on(
       event: "did-start-navigation",
       listener: (details: { isMainFrame: boolean; isSameDocument: boolean }) => void,
     ): unknown;
+    on(
+      event: "render-process-gone",
+      listener: (event: unknown, details: { reason: string }) => void,
+    ): unknown;
+    on(event: "did-finish-load", listener: () => void): unknown;
   };
   isDestroyed(): boolean;
   close(): void;
   show(): void;
   showInactive(): void;
   focus(): void;
+  isVisible(): boolean;
   isMinimized(): boolean;
   restore(): void;
   maximize(): void;
@@ -52,7 +60,18 @@ export type ExplorerWindowLike = {
   getNormalBounds(): WindowBounds;
   on(event: "close", listener: (event: { preventDefault(): void }) => void): unknown;
   on(
-    event: "closed" | "focus" | "move" | "resize" | "maximize" | "unmaximize" | "leave-full-screen",
+    event:
+      | "closed"
+      | "focus"
+      | "move"
+      | "resize"
+      | "maximize"
+      | "unmaximize"
+      | "leave-full-screen"
+      | "minimize"
+      | "restore"
+      | "show"
+      | "hide",
     listener: () => void,
   ): unknown;
   once(event: "ready-to-show", listener: () => void): unknown;
@@ -99,19 +118,25 @@ export type ExplorerWindowHost<W extends ExplorerWindowLike> = {
   requestTabs: (window: W) => Promise<{ tabs: OpenTabPreference[]; busy: boolean } | null>;
   // Whether any window of the app is open, explorer or not (Settings, Help, About).
   anyWindowOpen: () => boolean;
-  // Something the menu shows changed: which windows are open, or which is in front.
+  // Something the menu shows changed: which windows are open, which is in front, or
+  // whether they are on screen (minimized, say).
   windowsChanged: () => void;
   // Stops the main process's work (waiting for a running operation to stop), then the
   // app ends with `exit`.
   shutDown: () => Promise<void>;
   exit: () => void;
   logger: { info: (message: string, details?: unknown) => void };
+  // When it is now, in milliseconds (left out: Date.now).
+  now?: () => number;
 };
 
 // How long the place and size of a window that moves wait before they are recorded.
 export const WINDOW_BOUNDS_SAVE_DELAY_MS = 160;
 // How long startup waits for a window's page before showing the windows anyway.
 export const STARTUP_SHOW_TIMEOUT_MS = 5_000;
+// A page that crashes again this soon after it was loaded again for a crash is left as it
+// is, rather than loaded over and over.
+export const CRASH_RELOAD_INTERVAL_MS = 30_000;
 
 type OpenOptions = {
   launchFolderPath: string | null;
@@ -136,9 +161,22 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   // Windows whose close went ahead, on their way out until "closed": two windows closed in
   // the same moment (Close All) aren't open for each other.
   private readonly closing = new WeakSet<W>();
+  // Windows whose page crashed, until it has loaded again: they don't count as open, so a
+  // running operation or Merge All Windows doesn't go to them.
+  private readonly crashed = new WeakSet<W>();
+  // Windows closed with Stop and Close, by web contents: their operation is stopped, not
+  // handed to a window opened while the question was on screen.
+  private readonly stoppedOnClose = new Set<number>();
   private shuttingDown = false;
   // True while the "a copy is still in progress" question is on screen.
   private stopQuestionOpen = false;
+  // The window the question is on, if any.
+  private stopQuestionParent: W | null = null;
+  // True while Merge All Windows waits for the windows' tabs: one runs at a time, or the
+  // two would close each other's windows.
+  private merging = false;
+  // True until the windows the app opens with have been shown.
+  private startupShowPending = false;
   // Windows whose page has been given its launch folder and command: they are for that
   // page only, not for it loaded again.
   private readonly launchContextGiven = new WeakSet<ExplorerWindowEntry<W>>();
@@ -203,7 +241,9 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       };
     });
     // Shown back to front once all are ready, so they stack as they were.
+    this.startupShowPending = true;
     void Promise.all(opened.map((entry) => entry.ready)).then(() => {
+      this.startupShowPending = false;
       for (const [index, entry] of [...opened.entries()].reverse()) {
         if (entry.window.isDestroyed()) {
           continue;
@@ -292,36 +332,45 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   // window asking adds the tabs after its own `tabCount`. Each window is asked for its tabs
   // as they are now. One stays open, its tabs where they are, when it doesn't answer, when
   // something is open in it that closing would lose (a sheet, a dialog, a name being
-  // edited), or when its tabs don't fit in the window asking.
+  // edited), or when its tabs don't fit in the window asking. One merge runs at a time; and
+  // when the window asking closes, or the app starts quitting, while the windows are asked,
+  // nothing is merged: the tabs would have nowhere to go.
   async mergeInto(senderId: number | null, tabCount: number): Promise<OpenTabPreference[]> {
     const target = this.list.byWebContentsId(senderId);
-    if (!target || this.shuttingDown) {
+    if (!target || this.shuttingDown || this.merging || !this.isStayingOpen(target.window)) {
       return [];
     }
-    const others = this.openWindows().filter((entry) => entry !== target);
-    const answers = await Promise.all(others.map((entry) => this.host.requestTabs(entry.window)));
-    let room = OPEN_TABS_LIMIT - tabCount;
-    const tabs: OpenTabPreference[] = [];
-    for (const [index, entry] of others.entries()) {
-      const answer = answers[index];
-      if (
-        !answer ||
-        answer.busy ||
-        answer.tabs.length === 0 ||
-        answer.tabs.length > room ||
-        entry.window.isDestroyed() ||
-        this.closing.has(entry.window) ||
-        this.shuttingDown
-      ) {
-        continue;
+    this.merging = true;
+    try {
+      const others = this.openWindows().filter((entry) => entry !== target);
+      const answers = await Promise.all(others.map((entry) => this.host.requestTabs(entry.window)));
+      let room = OPEN_TABS_LIMIT - tabCount;
+      const tabs: OpenTabPreference[] = [];
+      for (const [index, entry] of others.entries()) {
+        if (!this.isStayingOpen(target.window) || this.shuttingDown) {
+          break;
+        }
+        const answer = answers[index];
+        if (
+          !answer ||
+          answer.busy ||
+          answer.tabs.length === 0 ||
+          answer.tabs.length > room ||
+          !this.isStayingOpen(entry.window) ||
+          this.crashed.has(entry.window)
+        ) {
+          continue;
+        }
+        room -= answer.tabs.length;
+        tabs.push(...answer.tabs);
+        this.closingWithoutAsking.add(entry.window);
+        this.merged.add(entry.window);
+        entry.window.close();
       }
-      room -= answer.tabs.length;
-      tabs.push(...answer.tabs);
-      this.closingWithoutAsking.add(entry.window);
-      this.merged.add(entry.window);
-      entry.window.close();
+      return tabs;
+    } finally {
+      this.merging = false;
     }
-    return tabs;
   }
 
   // What an explorer window opens with: the launch folder for the window in front at
@@ -342,9 +391,17 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     };
   }
 
-  // The window a running operation goes to when the one that started it closes.
+  // The window a running operation goes to when the one that started it closes: the one in
+  // front, unless its page is still loading and another's has loaded, as only a loaded page
+  // can show the operation's card and questions. None for a window closed with Stop and
+  // Close: its operation is stopped.
   successorOf(senderId: number): W["webContents"] | null {
-    const successor = this.openWindows().find((entry) => entry.webContentsId !== senderId);
+    if (this.stoppedOnClose.has(senderId)) {
+      return null;
+    }
+    const others = this.openWindows().filter((entry) => entry.webContentsId !== senderId);
+    const successor =
+      others.find((entry) => !entry.window.webContents.isLoading()) ?? others[0] ?? null;
     return successor?.window.webContents ?? null;
   }
 
@@ -361,7 +418,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
 
   // A second launch, or a click on the Dock icon with no explorer window open.
   bringToFront(): void {
-    const window = this.list.front()?.window ?? null;
+    const window = this.openWindows()[0]?.window ?? this.list.front()?.window ?? null;
     if (!window) {
       this.openDefaultWindow();
       return;
@@ -372,7 +429,10 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     window.focus();
   }
 
-  activate(): void {
+  // A click on the Dock icon. With no explorer window open one opens; with every window of
+  // the app minimized the one in front comes back (Electron declines macOS's own restoring
+  // then).
+  activate(hasVisibleWindows: boolean): void {
     if (
       shouldOpenWindowOnActivate({
         shutdownInProgress: this.shuttingDown,
@@ -380,6 +440,10 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       })
     ) {
       this.openDefaultWindow();
+      return;
+    }
+    if (!hasVisibleWindows && !this.shuttingDown) {
+      this.bringToFront();
     }
   }
 
@@ -387,7 +451,12 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   // is open the person is asked first, and may keep working instead. With every window
   // closed the operation was already told to stop; quitting waits for it either way.
   async quit(): Promise<void> {
-    if (this.shuttingDown || this.stopQuestionOpen) {
+    if (this.shuttingDown) {
+      return;
+    }
+    // Asked already: the question comes forward, to be answered first.
+    if (this.stopQuestionOpen) {
+      this.bringStopQuestionForward();
       return;
     }
     if (this.host.anyWindowOpen() && !(await this.askToStopOperation("quit", this.frontWindow()))) {
@@ -457,13 +526,46 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       initialCommand: options.initialCommand ?? null,
     };
     this.list.add(entry, options.place);
-    // The page loaded again (reloaded) opens as a window's page does, not on the launch
-    // folder or with the command it was opened for once more.
+    // The page loaded again (reloaded, or after a crash) opens the window's own tabs as it
+    // left them, not on the launch folder or with the command it was opened for once more.
     window.webContents.on("did-start-navigation", (details) => {
       if (details.isMainFrame && !details.isSameDocument && this.launchContextGiven.has(entry)) {
         entry.launchFolderPath = null;
         entry.initialCommand = null;
+        entry.restoreTabs = true;
       }
+    });
+    // A page that crashed is loaded again, with the window's tabs; until it has, the window
+    // doesn't count as open. One that crashes again straight after is left as it is.
+    let reloadedForCrashAt: number | null = null;
+    window.webContents.on("render-process-gone", (_event, details) => {
+      if (details.reason === "clean-exit" || window.isDestroyed()) {
+        return;
+      }
+      this.crashed.add(window);
+      this.host.windowsChanged();
+      const now = this.host.now?.() ?? Date.now();
+      if (reloadedForCrashAt !== null && now - reloadedForCrashAt < CRASH_RELOAD_INTERVAL_MS) {
+        this.host.logger.info("[filetrail] left a window whose page crashed again", {
+          windowId,
+          reason: details.reason,
+        });
+        return;
+      }
+      reloadedForCrashAt = now;
+      window.webContents.reload();
+    });
+    window.webContents.on("did-finish-load", () => {
+      if (!this.crashed.has(window) || window.isDestroyed()) {
+        return;
+      }
+      this.crashed.delete(window);
+      // Crashed before it was first shown: shown now, unless the windows the app opens
+      // with are still waiting to be shown together.
+      if (!window.isVisible() && !window.isMinimized() && !this.startupShowPending) {
+        window.show();
+      }
+      this.host.windowsChanged();
     });
     this.saveWindowOrder();
 
@@ -495,7 +597,13 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     };
 
     if (options.place === "front") {
-      window.once("ready-to-show", () => window.show());
+      window.once("ready-to-show", () => {
+        // A window opened with none open is zoomed when the window closed last was.
+        if (record.bounds.maximized) {
+          window.maximize();
+        }
+        window.show();
+      });
     }
 
     // The window used last is the one in front: New Window takes its folder from it, and
@@ -530,6 +638,10 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     window.on("maximize", scheduleBoundsSave);
     window.on("unmaximize", scheduleBoundsSave);
     window.on("leave-full-screen", scheduleBoundsSave);
+    // The menu acts on the window in front only while it is on screen.
+    for (const event of ["minimize", "restore", "show", "hide"] as const) {
+      window.on(event, () => this.host.windowsChanged());
+    }
     window.on("close", recordBounds);
     window.on("close", (event) => {
       if (this.holdClose(window)) {
@@ -550,7 +662,9 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     if (this.shuttingDown || this.closingWithoutAsking.has(window)) {
       return false;
     }
+    // The question is answered first; it comes forward.
     if (this.stopQuestionOpen) {
+      this.bringStopQuestionForward();
       return true;
     }
     if (this.openWindows().some((entry) => entry.window !== window)) {
@@ -560,8 +674,12 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     if (!operation || !describeQuitWhileBusy(operation.kind, "close")) {
       return false;
     }
+    const webContentsId = window.webContents.id;
     void this.askToStopOperation("close", window).then((stop) => {
       if (stop && !window.isDestroyed()) {
+        // Stopped, even when another window was opened while the question was up: the
+        // operation isn't handed to it.
+        this.stoppedOnClose.add(webContentsId);
         this.closingWithoutAsking.add(window);
         window.close();
       }
@@ -569,11 +687,29 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     return true;
   }
 
-  // The windows open and staying open, front to back.
+  // The window the open question is on comes forward.
+  private bringStopQuestionForward(): void {
+    const parent = this.stopQuestionParent;
+    if (!parent || parent.isDestroyed()) {
+      return;
+    }
+    if (parent.isMinimized()) {
+      parent.restore();
+    }
+    parent.focus();
+  }
+
+  // Not closing, nor on its way out.
+  private isStayingOpen(window: W): boolean {
+    return !window.isDestroyed() && !this.closing.has(window);
+  }
+
+  // The windows open and staying open, front to back, leaving out those whose page crashed
+  // and hasn't loaded again.
   private openWindows(): ExplorerWindowEntry<W>[] {
     return this.list
       .all()
-      .filter((entry) => !entry.window.isDestroyed() && !this.closing.has(entry.window));
+      .filter((entry) => this.isStayingOpen(entry.window) && !this.crashed.has(entry.window));
   }
 
   // The list of open windows is what says which is in front; the store keeps its order.
@@ -590,6 +726,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       return true;
     }
     this.stopQuestionOpen = true;
+    this.stopQuestionParent = parent;
     let response: number;
     try {
       response = await this.host.showStopQuestion(
@@ -604,6 +741,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       );
     } finally {
       this.stopQuestionOpen = false;
+      this.stopQuestionParent = null;
     }
     if (response !== STOP_BUTTON_INDEX) {
       this.host.logger.info("[filetrail] kept an operation running instead of stopping it", {
