@@ -64,8 +64,10 @@ export type WriteOperationFs = {
   // Moves an item to the Trash and resolves with the path it has there (createTrashItem in
   // the app).
   trash: (path: string) => Promise<string>;
-  // The item's BSD flags, to tell a locked item from a lack of permission.
+  // The item's BSD flags, to tell a locked item from a lack of permission, and to unlock
+  // an operation's own locked copy for Undo to move it to the Trash.
   getFlags?: (path: string) => Promise<number>;
+  setFlags?: (path: string, flags: number) => Promise<void>;
   // An item as a folder's measurement counts it (nativeItemSize), read just before a delete
   // removes it, so the measured folders that held it can have it taken off their sizes.
   itemSize?: (path: string) => Promise<ItemSize>;

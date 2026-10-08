@@ -1526,7 +1526,7 @@ async function temporarySiblingPath(
 // flags to put back once it has its new name; null when it wasn't locked. An item locked
 // in a way its owner can't undo is refused here, before anything else changes.
 export async function unlockForMove(
-  fileSystem: WriteServiceFileSystem,
+  fileSystem: Pick<WriteServiceFileSystem, "getFlags" | "setFlags">,
   path: string,
 ): Promise<number | null> {
   if (!fileSystem.getFlags || !fileSystem.setFlags) {

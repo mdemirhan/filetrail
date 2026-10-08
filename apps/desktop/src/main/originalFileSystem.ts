@@ -191,6 +191,7 @@ export function createOriginalWriteOperationFs(
     rm: (path, options) => originalFileSystem.rm(path, options),
     trash,
     getFlags: (path) => nativeGetFlags(path),
+    setFlags: (path, flags) => nativeSetFlags(path, flags),
     itemSize: (path) => nativeItemSize(path),
   };
 }

@@ -12,11 +12,13 @@ import {
   readItemId,
   readItemRef,
   readItemStamp,
+  unlockForMove,
 } from "@filetrail/core";
 
 import { numberedName, runBatchRename } from "./batchRenameExecution";
 import type { ItemSize, RemovedItem } from "./folderSizeAdjust";
 import {
+  type MoveCheck,
   type PlannedStep,
   checkBatch,
   checkMove,
@@ -232,6 +234,60 @@ async function moveBack(
       missing: check.missing,
     };
   }
+  // An item put back from the Trash is the very item that went there (its id was checked).
+  // One that is locked (a locked copy an Undo moved there) is unlocked to be moved, and
+  // locked again once back.
+  let flags: number | null = null;
+  if (planned.putBack && check.id !== null) {
+    try {
+      flags = await unlockForMove(fs, planned.from);
+    } catch (error) {
+      return failedStep(original, planned.from, planned.to, await describeFailure(fs, error, []));
+    }
+  }
+  const renamed = await renameInto(fs, planned, check, original);
+  if (flags !== null) {
+    const at = renamed.status === "renamed" ? renamed.target : planned.from;
+    await fs.setFlags?.(at, flags).catch(() => undefined);
+  }
+  if (renamed.status !== "renamed") {
+    return renamed;
+  }
+  const target = renamed.target;
+  const moved = await readItemRef(fs.lstat, target);
+  const produced: UndoStep = {
+    kind: "moved",
+    from: planned.from,
+    to: target,
+    id: moved.id,
+    itemKind: moved.kind,
+    parentId: await readFolderId(fs.stat, dirname(planned.from)),
+    ...(planned.putBack ? { fromTrash: true, stamp: await readItemStamp(fs, target) } : {}),
+  };
+  return {
+    status: "done",
+    produced,
+    items: [
+      {
+        sourcePath: planned.from,
+        destinationPath: target,
+        status: "completed",
+        error: null,
+        skipReason: null,
+      },
+    ],
+    removed: null,
+  };
+}
+
+// Renames the item of a move step to where it goes back, with a number when its name is
+// taken; where it went, or why it didn't.
+async function renameInto(
+  fs: WriteOperationFs,
+  planned: Extract<PlannedStep, { kind: "move" }>,
+  check: Extract<MoveCheck, { ok: true }>,
+  original: UndoStep,
+): Promise<{ status: "renamed"; target: string } | StepOutcome> {
   let target = planned.to;
   for (let attempt = 1; ; attempt += 1) {
     if (check.nameTaken || attempt > 1) {
@@ -243,7 +299,7 @@ async function moveBack(
       } else {
         await fs.renameExclusive(planned.from, target);
       }
-      break;
+      return { status: "renamed", target };
     } catch (error) {
       const taken = errorCode(error) === "EEXIST";
       if (taken && attempt < KEEP_BOTH_ATTEMPTS) {
@@ -270,37 +326,23 @@ async function moveBack(
         dirname(planned.from),
         dirname(target),
       ]);
-      return {
-        status: "failed",
-        produced: null,
-        items: [failedItem(planned.from, target, reason)],
-        leftover: original,
-      };
+      return failedStep(original, planned.from, target, reason);
     }
   }
-  const moved = await readItemRef(fs.lstat, target);
-  const produced: UndoStep = {
-    kind: "moved",
-    from: planned.from,
-    to: target,
-    id: moved.id,
-    itemKind: moved.kind,
-    parentId: await readFolderId(fs.stat, dirname(planned.from)),
-    ...(planned.putBack ? { fromTrash: true, stamp: await readItemStamp(fs, target) } : {}),
-  };
+}
+
+// A step whose write failed: it stays to be tried again.
+function failedStep(
+  original: UndoStep,
+  sourcePath: string,
+  destinationPath: string | null,
+  reason: string,
+): StepOutcome {
   return {
-    status: "done",
-    produced,
-    items: [
-      {
-        sourcePath: planned.from,
-        destinationPath: target,
-        status: "completed",
-        error: null,
-        skipReason: null,
-      },
-    ],
-    removed: null,
+    status: "failed",
+    produced: null,
+    items: [failedItem(sourcePath, destinationPath, reason)],
+    leftover: original,
   };
 }
 
@@ -343,20 +385,32 @@ async function moveToTrash(
   const before: ItemSize | null = fs.itemSize
     ? await fs.itemSize(planned.path).catch(() => null)
     : null;
+  // What an operation made is its own (its id was checked): a copy of a locked item is
+  // locked too, and the Trash refuses a locked item. It goes there unlocked, without asking,
+  // and is locked again there.
+  let flags: number | null = null;
+  if (!planned.putBack && check.id !== null) {
+    try {
+      flags = await unlockForMove(fs, planned.path);
+    } catch (error) {
+      return failedStep(original, planned.path, null, await describeFailure(fs, error, []));
+    }
+  }
   let trashPath: string;
   try {
     trashPath = await fs.trash(planned.path);
   } catch (error) {
+    if (flags !== null) {
+      await fs.setFlags?.(planned.path, flags).catch(() => undefined);
+    }
     const reason =
       errorCode(error) === NO_TRASH_ERROR_CODE
         ? `“${basename(planned.path)}” couldn't be moved to the Trash because its disk has no Trash.`
         : await describeFailure(fs, error, [planned.path, dirname(planned.path)]);
-    return {
-      status: "failed",
-      produced: null,
-      items: [failedItem(planned.path, null, reason)],
-      leftover: original,
-    };
+    return failedStep(original, planned.path, null, reason);
+  }
+  if (flags !== null) {
+    await fs.setFlags?.(trashPath, flags).catch(() => undefined);
   }
   return {
     status: "done",
