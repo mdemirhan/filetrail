@@ -474,7 +474,7 @@ describe("after an Undo", () => {
           sourcePath: "/Users/demo/.Trash/b.txt",
           destinationPath: "/Users/demo/b.txt",
           status: "skipped",
-          error: "“b.txt” is no longer in “.Trash”.",
+          error: "“b.txt” isn't in the Trash any more.",
         },
       ]),
     );
@@ -486,7 +486,7 @@ describe("after an Undo", () => {
     ).toBeInTheDocument();
     expect(within(dialog).getByText("Left as it is")).toBeInTheDocument();
     expect(within(dialog).getByText("b.txt")).toBeInTheDocument();
-    expect(within(dialog).getByText("“b.txt” is no longer in “.Trash”.")).toBeInTheDocument();
+    expect(within(dialog).getByText("“b.txt” isn't in the Trash any more.")).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /Retry|Try Again/ })).toBeNull();
   });
 

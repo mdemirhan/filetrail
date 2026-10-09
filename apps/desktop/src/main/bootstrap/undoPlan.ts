@@ -239,23 +239,38 @@ function isExpectedItem(
   return itemKind === null || kindOfStats(stats) === itemKind;
 }
 
-// An item that isn't where it was: gone, or on a disk that is no longer connected.
-export async function missingReason(fs: PlanFs, path: string): Promise<string> {
+// An item that isn't where it was: gone, or on a disk that is no longer connected. An item
+// to be put back from the Trash goes by the name it had before (`original`, the place it
+// goes back to), not its name in the Trash's own folders (".Trash", ".Trashes/501").
+export async function missingReason(fs: PlanFs, path: string, original?: string): Promise<string> {
+  const name = basename(original ?? path);
   const disk = /^\/Volumes\/([^/]+)\//u.exec(path)?.[1];
   if (disk !== undefined && (await lstatOrNull(fs, `/Volumes/${disk}`)) === null) {
-    return `“${basename(path)}” is on “${disk}”, which isn't connected.`;
+    return `“${name}” is on “${disk}”, which isn't connected.`;
   }
-  return `“${basename(path)}” is no longer in “${basename(dirname(path))}”.`;
+  if (original !== undefined) {
+    return `“${name}” isn't in the Trash any more.`;
+  }
+  return `“${name}” is no longer in “${basename(dirname(path))}”.`;
 }
 
 // The item at `path` isn't the one a step was about (`expected`): another item, or the
 // same one on a disk that was ejected and connected again, which gives it another device
-// number (and Undo can't tell it is the same disk).
-function replacedReason(path: string, expected: ItemId | null, stats: PlanStats): string {
+// number (and Undo can't tell it is the same disk). `original` as for missingReason.
+function replacedReason(
+  path: string,
+  expected: ItemId | null,
+  stats: PlanStats,
+  original?: string,
+): string {
+  const name = basename(original ?? path);
   if (reconnected(expected, itemIdOf(stats))) {
-    return `“${basename(path)}” is on a disk that was disconnected since, so it is left as it is.`;
+    return `“${name}” is on a disk that was disconnected since, so it is left as it is.`;
   }
-  return `The “${basename(path)}” in “${basename(dirname(path))}” is another item now.`;
+  if (original !== undefined) {
+    return `The “${name}” in the Trash is another item now.`;
+  }
+  return `The “${name}” in “${basename(dirname(path))}” is another item now.`;
 }
 
 // The same file id on another device number: the disk was ejected and connected again.
@@ -274,12 +289,15 @@ export async function checkMove(
   if ("unreadable" in found) {
     return { ok: false, ...found.unreadable };
   }
+  // An item in the Trash goes by the name it goes back to.
+  const original = step.putBack ? step.to : undefined;
   if ("missing" in found) {
-    return { ok: false, reason: await missingReason(fs, step.from), missing: true };
+    return { ok: false, reason: await missingReason(fs, step.from, original), missing: true };
   }
   const item = found.stats;
   if (!isExpectedItem(item, step.id, step.itemKind, !step.putBack)) {
-    return { ok: false, reason: replacedReason(step.from, step.id, item), missing: false };
+    const reason = replacedReason(step.from, step.id, item, original);
+    return { ok: false, reason, missing: false };
   }
   // In the Trash without an id to go by: only an item that looks as it did is taken.
   if (step.stamp && (step.id === null || itemIdOf(item) === null)) {
@@ -288,7 +306,7 @@ export async function checkMove(
       // Found a moment ago: it couldn't be read just now, which says nothing about it.
       const again = await lookUp(fs, step.from);
       if ("missing" in again) {
-        return { ok: false, reason: await missingReason(fs, step.from), missing: true };
+        return { ok: false, reason: await missingReason(fs, step.from, original), missing: true };
       }
       return {
         ok: false,
@@ -311,7 +329,7 @@ export async function checkMove(
       };
     }
     if (!sameStamp(step.stamp, now)) {
-      return { ok: false, reason: replacedReason(step.from, null, item), missing: false };
+      return { ok: false, reason: replacedReason(step.from, null, item, original), missing: false };
     }
   }
   const folderPath = dirname(step.to);

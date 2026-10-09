@@ -170,7 +170,7 @@ describe("checkMove", () => {
       ),
     ).toEqual({
       ok: false,
-      reason: "“b.txt” is on a disk that was disconnected since, so it is left as it is.",
+      reason: "“a.txt” is on a disk that was disconnected since, so it is left as it is.",
       missing: false,
     });
     // Another item on another disk is just another item.
@@ -179,7 +179,7 @@ describe("checkMove", () => {
         disk({ ...trash, "/T/b.txt": { kind: "file", ino: 11 } }),
         moveBack({ from: "/T/b.txt", putBack: true, id: ejected(10) }),
       ),
-    ).toMatchObject({ reason: "The “b.txt” in “T” is another item now." });
+    ).toMatchObject({ reason: "The “a.txt” in the Trash is another item now." });
   });
 
   it("goes by the kind alone on a disk without usable ids", async () => {
@@ -208,7 +208,7 @@ describe("checkMove", () => {
 
     expect(
       await checkMove(disk({ ...docs, ...trash, "/T/a.txt": { kind: "file", ino: null } }), step),
-    ).toMatchObject({ ok: false, reason: "The “a.txt” in “T” is another item now." });
+    ).toMatchObject({ ok: false, reason: "The “a.txt” in the Trash is another item now." });
     expect(
       await checkMove(
         disk({ ...docs, ...trash, "/T/a.txt": { kind: "file", ino: null, size: 5 } }),
@@ -225,6 +225,40 @@ describe("checkMove", () => {
       ok: false,
       reason: "“b.txt” is on “Backup”, which isn't connected.",
       missing: true,
+    });
+  });
+
+  it("names an item gone from the Trash as it was before, and tells a disconnected disk apart", async () => {
+    // Put back from a disk's own Trash folder (".Trashes/501"), under the name it had there.
+    const step = moveBack({
+      from: "/Volumes/Stick/.Trashes/501/1-a.txt",
+      to: "/Volumes/Stick/a.txt",
+      putBack: true,
+    });
+    const stick = {
+      "/Volumes/Stick": { kind: "dir" as const, ino: 1 },
+      "/Volumes/Stick/.Trashes/501": { kind: "dir" as const, ino: 2 },
+    };
+
+    expect(await checkMove(disk(stick), step)).toEqual({
+      ok: false,
+      reason: "“a.txt” isn't in the Trash any more.",
+      missing: true,
+    });
+    expect(await checkMove(disk({}), step)).toEqual({
+      ok: false,
+      reason: "“a.txt” is on “Stick”, which isn't connected.",
+      missing: true,
+    });
+    expect(
+      await checkMove(
+        disk({ ...stick, "/Volumes/Stick/.Trashes/501/1-a.txt": { kind: "file", ino: 99 } }),
+        step,
+      ),
+    ).toEqual({
+      ok: false,
+      reason: "The “a.txt” in the Trash is another item now.",
+      missing: false,
     });
   });
 

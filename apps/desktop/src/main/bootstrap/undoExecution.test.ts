@@ -473,7 +473,7 @@ describe("changes made outside the app", () => {
     const undone = await t.undo();
 
     expect(undone.result?.items).toEqual([
-      expect.objectContaining({ status: "skipped", error: "“1-a.txt” is no longer in “.Trash”." }),
+      expect.objectContaining({ status: "skipped", error: "“a.txt” isn't in the Trash any more." }),
     ]);
     await t.coordinator.shutdown();
   });
