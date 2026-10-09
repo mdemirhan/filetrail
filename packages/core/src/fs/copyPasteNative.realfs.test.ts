@@ -7,19 +7,13 @@ import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
 import { createStoppableCopyFile } from "./stoppableCopy";
-import {
-  type CopyPasteOperationResult,
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-  type WriteServiceFileSystem,
-} from "./writeServiceTypes";
+import { native, nativeFileSystem as nativePasteFileSystem } from "./testNativePaste";
+import type { CopyPasteOperationResult, WriteServiceFileSystem } from "./writeServiceTypes";
 
 // The paste engine on the app's native copy (copyfile(3)), as the app runs it.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const native = require("../../../native-fs/index.js") as typeof import("../../../native-fs");
-
 const nativeCopy = createStoppableCopyFile(native.nativeCopyFile);
 const nativeFileSystem: WriteServiceFileSystem = {
-  ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+  ...nativePasteFileSystem,
   renameExclusive: native.nativeRenameExclusive,
   isCaseSensitive: native.nativeIsCaseSensitive,
   getFlags: native.nativeGetFlags,

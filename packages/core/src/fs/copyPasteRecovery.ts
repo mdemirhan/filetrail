@@ -251,11 +251,11 @@ async function moveUnlocked(
     await moveExclusive(fileSystem, from, to);
   } catch (error) {
     if (flags !== null) {
-      await fileSystem.setFlags?.(from, flags).catch(() => undefined);
+      await fileSystem.setFlags(from, flags).catch(() => undefined);
     }
     throw error;
   }
   if (flags !== null) {
-    await fileSystem.setFlags?.(to, flags).catch(() => undefined);
+    await fileSystem.setFlags(to, flags).catch(() => undefined);
   }
 }

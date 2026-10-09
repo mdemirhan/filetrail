@@ -38,7 +38,6 @@ describe("recovering a Replace or a move at start", () => {
       "/target/.a.txt.filetrail-0000abcd": { kind: "file", size: 1 },
       "/target/a.txt": { kind: "file", size: 2 },
     });
-    fileSystem.enableRename();
     hangUnder(fileSystem, "/away");
     const entry: ReplaceJournalEntry = {
       id: "1",
@@ -72,7 +71,6 @@ describe("recovering a Replace or a move at start", () => {
       "/away/a.txt": { kind: "file", size: 1 },
       "/target/.a.txt.filetrail-0000abcd": { kind: "file", size: 1 },
     });
-    fileSystem.enableRename();
     hangUnder(fileSystem, "/away");
     const entry: ReplaceJournalEntry = {
       id: "1",
@@ -98,7 +96,6 @@ describe("recovering a Replace by its hidden name", () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/target/notes.txt": { kind: "file", size: 3 },
     });
-    fileSystem.enableRename();
     const entry: ReplaceJournalEntry = {
       id: "1",
       stagingPath: "/target/notes.txt",
@@ -221,10 +218,9 @@ describe("copying a large file", () => {
   // Copies `sourcePaths` into /target, noting the journal's entries as each file's contents
   // are written.
   async function copyLarge(fileSystem: MockWriteServiceFileSystem, sourcePaths: string[]) {
-    fileSystem.enableRename();
     const live = new Map<string, WriteJournalEntry>();
     const seen: Array<{ destination: string; entries: WriteJournalEntry[] }> = [];
-    fileSystem.copyFileStreamImpl = async (_source, destination) => {
+    fileSystem.copyFileImpl = async (_source, destination) => {
       seen.push({ destination, entries: [...live.values()] });
       fileSystem.addFile(destination, { size: JOURNALED_FILE_BYTES });
     };

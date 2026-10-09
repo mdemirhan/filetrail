@@ -18,14 +18,13 @@ import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { NO_TRASH_ERROR_CODE } from "./copyPasteErrors";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy, resolveSingleNodeWithAction } from "./copyPastePolicy";
-import { native } from "./testNativePaste";
-import {
-  type CopyPastePolicy,
-  type CopyPasteProgressEvent,
-  type CopyPasteRuntimeConflict,
-  type CopyPasteRuntimeResolutionAction,
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-  type WriteServiceFileSystem,
+import { native, nativeFileSystem } from "./testNativePaste";
+import type {
+  CopyPastePolicy,
+  CopyPasteProgressEvent,
+  CopyPasteRuntimeConflict,
+  CopyPasteRuntimeResolutionAction,
+  WriteServiceFileSystem,
 } from "./writeServiceTypes";
 
 let testDir: string;
@@ -54,7 +53,7 @@ function noTrashHere(): Error {
 
 // A Trash that keeps what was moved into it, for checking what a replace removed.
 const fileSystemWithTrash: WriteServiceFileSystem = {
-  ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+  ...nativeFileSystem,
   trash: async (path) => {
     await rename(path, join(trashDir, basename(path)));
     return join(trashDir, basename(path));
@@ -301,7 +300,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
         destinationDirectoryPath: target,
         policy: REPLACE_ALL,
         fileSystem: {
-          ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+          ...nativeFileSystem,
           trash: async () => {
             throw noTrashHere();
           },
@@ -529,7 +528,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       sourcePaths: [join(source, "notes.txt")],
       destinationDirectoryPath: target,
       policy: REPLACE_ALL,
-      fileSystem: DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      fileSystem: nativeFileSystem,
       resolve: () => null,
     });
 
@@ -555,7 +554,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       policy: REPLACE_ALL,
       fileSystem: {
         ...fileSystemWithTrash,
-        copyFileStream: async (_sourcePath, destinationPath) => {
+        copyFile: async (_sourcePath, destinationPath) => {
           // The disk fills up half way through.
           await writeFile(destinationPath, "new no");
           throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
@@ -628,7 +627,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       destinationDirectoryPath: target,
       policy: REPLACE_ALL,
       fileSystem: {
-        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        ...nativeFileSystem,
         trash: async () => {
           throw new Error("“notes.txt” couldn’t be moved to the trash because it’s in use.");
         },
@@ -660,7 +659,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       destinationDirectoryPath: target,
       policy: REPLACE_ALL,
       fileSystem: {
-        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        ...nativeFileSystem,
         trash: async () => {
           throw noTrashHere();
         },
@@ -682,7 +681,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       destinationDirectoryPath: target,
       policy: REPLACE_ALL,
       fileSystem: {
-        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        ...nativeFileSystem,
         trash: async () => {
           throw noTrashHere();
         },

@@ -22,7 +22,6 @@ import {
   type CopyPasteRuntimeConflict,
   type CopyPasteRuntimeResolutionAction,
   DEFAULT_COPY_PASTE_POLICY,
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
   type RequiredCopyPasteAnalysisRequest,
   WRITE_OPERATION_BUSY_ERROR,
   type WriteJournal,
@@ -123,8 +122,8 @@ export class WriteService {
   private sequence = 0;
   private analysisSequence = 0;
 
-  constructor(dependencies: WriteServiceDependencies = {}) {
-    this.fileSystem = dependencies.fileSystem ?? DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+  constructor(dependencies: WriteServiceDependencies) {
+    this.fileSystem = dependencies.fileSystem;
     this.writeJournal = dependencies.writeJournal ?? null;
     this.now = dependencies.now ?? (() => new Date());
     this.largeBatchItemThreshold = dependencies.largeBatchItemThreshold ?? 100;
@@ -460,6 +459,6 @@ export class WriteService {
   }
 }
 
-export function createWriteService(dependencies: WriteServiceDependencies = {}): WriteService {
+export function createWriteService(dependencies: WriteServiceDependencies): WriteService {
   return new WriteService(dependencies);
 }

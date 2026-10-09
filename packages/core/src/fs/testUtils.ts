@@ -56,18 +56,19 @@ export type MockFileSystemSnapshotEntry =
 export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
   readonly nodes = new Map<string, MockNode>();
   readonly realpathOverrides = new Map<string, string>();
-  copyFileStreamImpl: WriteServiceFileSystem["copyFileStream"] | null = null;
-  copyFileImpl: NonNullable<WriteServiceFileSystem["copyFile"]> | null = null;
+  copyFileImpl: WriteServiceFileSystem["copyFile"] | null = null;
   utimesImpl: NonNullable<WriteServiceFileSystem["utimes"]> | null = null;
-  lutimesImpl: NonNullable<WriteServiceFileSystem["lutimes"]> | null = null;
   chmodImpl: WriteServiceFileSystem["chmod"] | null = null;
-  renameImpl: NonNullable<WriteServiceFileSystem["rename"]> | null = null;
+  // Every rename goes through it, the exclusive ones included (see renameExclusive).
+  renameImpl: ((oldPath: string, newPath: string) => Promise<void>) | null = null;
   mkdirImpl: WriteServiceFileSystem["mkdir"] | null = null;
   rmImpl: WriteServiceFileSystem["rm"] | null = null;
   rmdirImpl: WriteServiceFileSystem["rmdir"] | null = null;
   // The macOS default; tests of case-sensitive volumes set this to true.
   caseSensitive = false;
-  symlinkImpl: WriteServiceFileSystem["symlink"] | null = null;
+  // Each item's BSD flags (getFlags/setFlags), 0 when none were set; kept with the item
+  // through renames.
+  private readonly flags = new WeakMap<MockNode, number>();
   readlinkImpl: WriteServiceFileSystem["readlink"] | null = null;
   lstatImpl: WriteServiceFileSystem["lstat"] | null = null;
   statImpl: WriteServiceFileSystem["stat"] | null = null;
@@ -236,34 +237,29 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     });
   }
 
-  async symlink(target: string, path: string): Promise<void> {
-    if (this.symlinkImpl) {
-      return this.symlinkImpl(target, path);
+  /** rename(2): replaces what is at `newPath`. Through `renameImpl` when set. */
+  async rename(oldPath: string, newPath: string): Promise<void> {
+    if (this.renameImpl) {
+      return this.renameImpl(oldPath, newPath);
     }
-    this.ensureDirectory(dirname(path), true);
-    if (this.nodes.has(this.existingKey(path))) {
-      throw createFsError("EEXIST", path);
-    }
-    this.nodes.set(this.newKey(path), this.createNode({ kind: "symlink", target, at: path }));
+    return this.renameDirectly(oldPath, newPath);
   }
 
-  /** Enables the `rename` method, opting this mock into same-filesystem rename support. */
-  enableRename(): void {
-    // Use Object.defineProperty to add the optional `rename` property without
-    // conflicting with exactOptionalPropertyTypes (which forbids `T | undefined`
-    // on optional interface members).
-    const renameFn = async (oldPath: string, newPath: string): Promise<void> => {
-      if (this.renameImpl) {
-        return this.renameImpl(oldPath, newPath);
-      }
-      return this.renameDirectly(oldPath, newPath);
-    };
-    Object.defineProperty(this, "rename", {
-      value: renameFn,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
+  /** Fails with EEXIST when another item is at `newPath`, else renames (see `rename`). */
+  async renameExclusive(oldPath: string, newPath: string): Promise<void> {
+    const there = this.nodes.get(this.existingKey(newPath));
+    if (there !== undefined && there !== this.nodes.get(this.existingKey(oldPath))) {
+      throw createFsError("EEXIST", newPath);
+    }
+    return this.rename(oldPath, newPath);
+  }
+
+  async getFlags(path: string): Promise<number> {
+    return this.flags.get(this.getNodeOrThrow(path)) ?? 0;
+  }
+
+  async setFlags(path: string, flags: number): Promise<void> {
+    this.flags.set(this.getNodeOrThrow(path), flags);
   }
 
   /** rename(2) as the mock does it, for a `renameImpl` that changes only some renames. */
@@ -311,42 +307,37 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     }
   }
 
-  /** Enables the `copyFile` method, opting this mock into native file copy support. */
-  enableCopyFile(): void {
-    const copyFileFn = async (
-      sourcePath: string,
-      destinationPath: string,
-      signal?: AbortSignal,
-      onProgress?: (copiedBytes: number) => void,
-    ): Promise<void> => {
-      if (this.copyFileImpl) {
-        return this.copyFileImpl(sourcePath, destinationPath, signal, onProgress);
-      }
-      const source = this.getNodeOrThrow(sourcePath);
-      if (source.kind !== "file") {
-        throw createFsError("EISDIR", sourcePath);
-      }
-      this.ensureDirectory(dirname(destinationPath), true);
-      if (this.nodes.has(this.existingKey(destinationPath))) {
-        throw createFsError("EEXIST", destinationPath);
-      }
-      this.nodes.set(
-        this.newKey(destinationPath),
-        this.createNode({
-          at: destinationPath,
-          kind: "file",
-          size: source.size,
-          mode: source.mode,
-          mtimeMs: source.mtimeMs,
-        }),
-      );
-    };
-    Object.defineProperty(this, "copyFile", {
-      value: copyFileFn,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
+  /** copyfile(3): a file, or a link as a link, with its mode and date; never replaces an
+   *  item at `destinationPath`. Through `copyFileImpl` when set. */
+  async copyFile(
+    sourcePath: string,
+    destinationPath: string,
+    signal?: AbortSignal,
+    onProgress?: (copiedBytes: number) => void,
+  ): Promise<void> {
+    if (this.copyFileImpl) {
+      return this.copyFileImpl(sourcePath, destinationPath, signal, onProgress);
+    }
+    signal?.throwIfAborted();
+    const source = this.getNodeOrThrow(sourcePath);
+    if (source.kind === "directory") {
+      throw createFsError("EISDIR", sourcePath);
+    }
+    this.ensureDirectory(dirname(destinationPath), true);
+    if (this.nodes.has(this.existingKey(destinationPath))) {
+      throw createFsError("EEXIST", destinationPath);
+    }
+    this.nodes.set(
+      this.newKey(destinationPath),
+      this.createNode({
+        at: destinationPath,
+        kind: source.kind,
+        size: source.size,
+        mode: source.mode,
+        mtimeMs: source.mtimeMs,
+        ...(source.target !== null ? { target: source.target } : {}),
+      }),
+    );
   }
 
   /** Enables the `utimes` method, opting this mock into timestamp preservation support. */
@@ -364,51 +355,6 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       enumerable: true,
       configurable: true,
     });
-  }
-
-  /** Enables the `lutimes` method, opting this mock into symlink timestamp preservation support. */
-  enableLutimes(): void {
-    const lutimesFn = async (path: string, _atimeMs: number, mtimeMs: number): Promise<void> => {
-      if (this.lutimesImpl) {
-        return this.lutimesImpl(path, _atimeMs, mtimeMs);
-      }
-      const node = this.getNodeOrThrow(path);
-      node.mtimeMs = mtimeMs;
-    };
-    Object.defineProperty(this, "lutimes", {
-      value: lutimesFn,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
-  }
-
-  async copyFileStream(
-    sourcePath: string,
-    destinationPath: string,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    if (this.copyFileStreamImpl) {
-      return this.copyFileStreamImpl(sourcePath, destinationPath, signal);
-    }
-    signal?.throwIfAborted();
-    const source = this.getNodeOrThrow(sourcePath);
-    if (source.kind !== "file") {
-      throw new Error(`Cannot stream-copy non-file source: ${sourcePath}`);
-    }
-    this.ensureDirectory(dirname(destinationPath), true);
-    if (this.nodes.has(this.existingKey(destinationPath))) {
-      throw createFsError("EEXIST", destinationPath);
-    }
-    this.nodes.set(
-      this.newKey(destinationPath),
-      this.createNode({
-        at: destinationPath,
-        kind: "file",
-        size: source.size,
-        mode: source.mode,
-      }),
-    );
   }
 
   addDirectory(

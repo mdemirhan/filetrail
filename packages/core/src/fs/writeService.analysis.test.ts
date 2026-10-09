@@ -137,7 +137,7 @@ describe("writeService analysis and runtime coordination", () => {
   });
 
   it("rejects runtime conflict resolutions for unknown conflicts", () => {
-    const service = createWriteService();
+    const service = createWriteService({ fileSystem: new MockWriteServiceFileSystem() });
 
     expect(service.resolveRuntimeConflict("missing-op", "missing-conflict", "skip")).toEqual({
       ok: false,

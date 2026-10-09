@@ -17,12 +17,12 @@ import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis, removeStagedItem } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
 import { recoverInterruptedReplaces } from "./copyPasteRecovery";
-import {
-  type CopyPasteOperationResult,
-  type CopyPastePolicy,
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-  type ReplaceJournalEntry,
-  type WriteServiceFileSystem,
+import { nativeFileSystem } from "./testNativePaste";
+import type {
+  CopyPasteOperationResult,
+  CopyPastePolicy,
+  ReplaceJournalEntry,
+  WriteServiceFileSystem,
 } from "./writeServiceTypes";
 import { type WriteJournalEntry, isReplaceJournalEntry } from "./writeServiceTypes";
 
@@ -49,7 +49,7 @@ async function paste(args: {
   fileSystem?: WriteServiceFileSystem;
   writeJournal?: Parameters<typeof executeCopyPasteFromAnalysis>[0]["writeJournal"];
 }): Promise<CopyPasteOperationResult> {
-  const fileSystem = args.fileSystem ?? DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+  const fileSystem = args.fileSystem ?? nativeFileSystem;
   const policy = args.policy ?? { file: "skip", directory: "merge", mismatch: "skip" };
   const report = await buildCopyPasteAnalysisReport({
     analysisId: "analysis-folder-safety",
@@ -130,7 +130,7 @@ describe("read-only folders", () => {
     await mkdir(join(testDir, "dst", "module"), { recursive: true });
     await writeFile(join(testDir, "dst", "module", "old.txt"), "old");
     const fileSystem: WriteServiceFileSystem = {
-      ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      ...nativeFileSystem,
       // A Trash that keeps nothing: only where things went matters here, not what they were.
       trash: async (path) => {
         await rm(path, { recursive: true, force: true });
@@ -160,7 +160,7 @@ describe("read-only folders", () => {
     await chmod(join(staged, "inner"), 0o555);
     await chmod(staged, 0o555);
 
-    await removeStagedItem(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, staged);
+    await removeStagedItem(nativeFileSystem, staged);
 
     expect(await exists(staged)).toBe(false);
   });
@@ -236,7 +236,7 @@ describe("Replace journal", () => {
     await writeFile(join(testDir, "dst", "a.txt"), "old");
     const { live, history, journal } = recordingJournal();
     const fileSystem: WriteServiceFileSystem = {
-      ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      ...nativeFileSystem,
       trash: async (path) => {
         await rm(path);
         return path;
@@ -269,7 +269,7 @@ describe("Replace journal", () => {
     const { live, history, journal } = recordingJournal();
     const sourceSeenWhenRecorded: boolean[] = [];
     const fileSystem: WriteServiceFileSystem = {
-      ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      ...nativeFileSystem,
       trash: async (path) => {
         await rm(path);
         return path;
@@ -322,10 +322,7 @@ describe("recovering interrupted Replaces", () => {
     const interrupted = entry({ moved: true, staged: true });
     await writeFile(interrupted.stagingPath, "moved");
 
-    const [outcome] = await recoverInterruptedReplaces(
-      [interrupted],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-    );
+    const [outcome] = await recoverInterruptedReplaces([interrupted], nativeFileSystem);
 
     expect(outcome?.outcome).toBe("finished");
     expect(await readFile(interrupted.finalPath, "utf8")).toBe("moved");
@@ -336,11 +333,9 @@ describe("recovering interrupted Replaces", () => {
     const interrupted = entry({ moved: true, staged: true });
     await writeFile(interrupted.stagingPath, "moved");
 
-    const [outcome] = await recoverInterruptedReplaces(
-      [interrupted],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-      { runWriteAlone: async () => ({ ran: false }) },
-    );
+    const [outcome] = await recoverInterruptedReplaces([interrupted], nativeFileSystem, {
+      runWriteAlone: async () => ({ ran: false }),
+    });
 
     expect(outcome).toEqual({ entry: interrupted, outcome: "deferred" });
     expect(await readFile(interrupted.stagingPath, "utf8")).toBe("moved");
@@ -353,19 +348,15 @@ describe("recovering interrupted Replaces", () => {
     let inside = false;
     let stagingGoneInside = false;
 
-    const [outcome] = await recoverInterruptedReplaces(
-      [interrupted],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-      {
-        runWriteAlone: async (write) => {
-          inside = true;
-          const value = await write();
-          stagingGoneInside = !(await exists(interrupted.stagingPath));
-          inside = false;
-          return { ran: true, value };
-        },
+    const [outcome] = await recoverInterruptedReplaces([interrupted], nativeFileSystem, {
+      runWriteAlone: async (write) => {
+        inside = true;
+        const value = await write();
+        stagingGoneInside = !(await exists(interrupted.stagingPath));
+        inside = false;
+        return { ran: true, value };
       },
-    );
+    });
 
     expect(outcome?.outcome).toBe("finished");
     expect(stagingGoneInside).toBe(true);
@@ -378,10 +369,7 @@ describe("recovering interrupted Replaces", () => {
     await writeFile(interrupted.stagingPath, "moved");
     await writeFile(interrupted.finalPath, "old");
 
-    const [outcome] = await recoverInterruptedReplaces(
-      [interrupted],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-    );
+    const [outcome] = await recoverInterruptedReplaces([interrupted], nativeFileSystem);
 
     expect(outcome?.outcome).toBe("restored");
     expect(await readFile(interrupted.sourcePath, "utf8")).toBe("moved");
@@ -394,10 +382,7 @@ describe("recovering interrupted Replaces", () => {
     await writeFile(interrupted.finalPath, "old");
     await writeFile(interrupted.sourcePath, "someone else's");
 
-    const [outcome] = await recoverInterruptedReplaces(
-      [interrupted],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-    );
+    const [outcome] = await recoverInterruptedReplaces([interrupted], nativeFileSystem);
 
     expect(outcome).toMatchObject({
       outcome: "kept_visible",
@@ -411,10 +396,7 @@ describe("recovering interrupted Replaces", () => {
     await writeFile(interrupted.stagingPath, "copy");
     await writeFile(interrupted.sourcePath, "copy");
 
-    const [outcome] = await recoverInterruptedReplaces(
-      [interrupted],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-    );
+    const [outcome] = await recoverInterruptedReplaces([interrupted], nativeFileSystem);
 
     expect(outcome?.outcome).toBe("finished");
     expect(await readFile(interrupted.finalPath, "utf8")).toBe("copy");
@@ -429,10 +411,7 @@ describe("recovering interrupted Replaces", () => {
     await chmod(join(interrupted.stagingPath, "inner"), 0o555);
     await mkdir(interrupted.finalPath);
 
-    const [outcome] = await recoverInterruptedReplaces(
-      [interrupted],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-    );
+    const [outcome] = await recoverInterruptedReplaces([interrupted], nativeFileSystem);
 
     expect(outcome?.outcome).toBe("removed_copy");
     expect(await readdir(join(testDir, "dst"))).toEqual(["module"]);
@@ -442,10 +421,7 @@ describe("recovering interrupted Replaces", () => {
     const interrupted = entry({ staged: false });
     await writeFile(interrupted.stagingPath, "partial");
 
-    const [outcome] = await recoverInterruptedReplaces(
-      [interrupted],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-    );
+    const [outcome] = await recoverInterruptedReplaces([interrupted], nativeFileSystem);
 
     expect(outcome?.outcome).toBe("removed_copy");
     expect(await exists(interrupted.finalPath)).toBe(false);
@@ -456,7 +432,7 @@ describe("recovering interrupted Replaces", () => {
 
     const [outcome] = await recoverInterruptedReplaces(
       [entry({ moved: true, staged: true })],
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      nativeFileSystem,
     );
 
     expect(outcome?.outcome).toBe("nothing_left");
@@ -471,7 +447,7 @@ describe("recovering interrupted Replaces", () => {
       finalPath: join(testDir, "dst", "other.txt"),
     });
     const fileSystem: WriteServiceFileSystem = {
-      ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      ...nativeFileSystem,
       renameExclusive: async () => {
         throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
       },

@@ -10,9 +10,8 @@ import {
   type WriteService,
   createWriteService,
 } from "@filetrail/core";
-import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
-import { createOriginalWriteOperationFs } from "../originalFileSystem";
+import { createOriginalWriteOperationFs, originalFileSystem } from "../originalFileSystem";
 import { clearResponseCaches, noteWriteEnded, noteWriteStarting } from "./responseCache";
 import { createUndoHistory } from "./undoHistory";
 import {
@@ -637,7 +636,7 @@ describe("copy analyses and their windows", () => {
     const coordinator = createWriteOperationCoordinator(
       createWriteService({
         fileSystem: {
-          ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+          ...originalFileSystem,
           lstat: () => new Promise(() => undefined),
         },
       }),
@@ -693,7 +692,7 @@ describe("copy analyses and their windows", () => {
     await mkdir(join(root, "two"));
     await writeFile(join(root, "src", "a.txt"), "a");
     const coordinator = createWriteOperationCoordinator(
-      createWriteService(),
+      createWriteService({ fileSystem: originalFileSystem }),
       createOriginalWriteOperationFs(async (path) => path),
     );
     const first = createWindow();

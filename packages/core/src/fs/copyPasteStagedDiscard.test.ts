@@ -96,7 +96,6 @@ describe("a complete hidden copy given up, whose removal stops part way", () => 
       "/source/dir/b.txt": { kind: "file", size: 2 },
       "/target": { kind: "directory" },
     });
-    fileSystem.enableRename();
     // Complete, but it can't take its name.
     fileSystem.renameImpl = async (from, to) => {
       if (to === "/target/dir") {
@@ -137,7 +136,6 @@ describe("a complete hidden copy given up, whose removal stops part way", () => 
       "/source/dir/b.txt": { kind: "file", size: 2 },
       "/target/dir/old.txt": { kind: "file", size: 3 },
     });
-    fileSystem.enableRename();
     fileSystem.enableTrash();
     const { live, journal } = recordingJournal((entry) => {
       if (entry.staged) {
@@ -175,7 +173,6 @@ describe("a complete hidden copy given up, whose removal stops part way", () => 
       "/source/dir/b.txt": { kind: "file", size: 2 },
       "/target": { kind: "directory" },
     });
-    fileSystem.enableRename();
     fileSystem.renameImpl = async (from, to) => {
       if (to === "/target/dir") {
         throw codeError("EIO");

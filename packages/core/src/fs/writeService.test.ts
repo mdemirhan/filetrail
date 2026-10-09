@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { native, nativeFileSystem } from "./testNativePaste";
 import {
   type CopyPasteAnalysisReport,
   type CopyPasteAnalysisRequest,
@@ -27,7 +28,7 @@ import {
 
 describe("writeService", () => {
   it("stays usable after being asked to start an unknown analysis", () => {
-    const service = createWriteService();
+    const service = createWriteService({ fileSystem: nativeFileSystem });
     expect(() =>
       service.startCopyPaste({
         analysisId: "missing-analysis",
@@ -159,6 +160,7 @@ describe("writeService", () => {
 
     const service = createWriteService({
       createOperationId: () => "symlink-op",
+      fileSystem: nativeFileSystem,
     });
     const events: CopyPasteProgressEvent[] = [];
     const unsubscribe = service.subscribe((event) => {
@@ -185,6 +187,7 @@ describe("writeService", () => {
 
     const service = createWriteService({
       createOperationId: () => "cut-op",
+      fileSystem: nativeFileSystem,
     });
     const events: CopyPasteProgressEvent[] = [];
     service.subscribe((event) => {
@@ -212,6 +215,7 @@ describe("writeService", () => {
 
     const service = createWriteService({
       createOperationId: () => "cut-tree-op",
+      fileSystem: nativeFileSystem,
     });
     const events: CopyPasteProgressEvent[] = [];
     service.subscribe((event) => {
@@ -245,7 +249,7 @@ describe("writeService", () => {
           "/source/one.txt": 5,
           "/source/two.txt": 7,
         },
-        copyFileStream: async (sourcePath, _destinationPath, signal) => {
+        copyFile: async (sourcePath, _destinationPath, signal) => {
           if (sourcePath.endsWith("one.txt")) {
             await Promise.resolve();
             return;
@@ -294,7 +298,7 @@ describe("writeService", () => {
           "/source/one.txt": 5,
           "/source/two.txt": 7,
         },
-        copyFileStream: async (sourcePath, _destinationPath, signal) => {
+        copyFile: async (sourcePath, _destinationPath, signal) => {
           if (sourcePath.endsWith("one.txt")) {
             await new Promise((resolve) => setTimeout(resolve, 250));
             signal?.throwIfAborted();
@@ -328,6 +332,7 @@ describe("writeService", () => {
 
     const service = createWriteService({
       createOperationId: () => "tree-op",
+      fileSystem: nativeFileSystem,
     });
     const events: CopyPasteProgressEvent[] = [];
     service.subscribe((event) => {
@@ -363,6 +368,7 @@ describe("writeService", () => {
 
     const service = createWriteService({
       createOperationId: () => "perms-op",
+      fileSystem: nativeFileSystem,
     });
     const events: CopyPasteProgressEvent[] = [];
     service.subscribe((event) => {
@@ -460,12 +466,14 @@ describe("writeService", () => {
       rmdir: async (p) => {
         await ofs.promises.rmdir(p);
       },
-      symlink: async (t, p) => {
-        await ofs.promises.symlink(t, p);
-      },
-      copyFileStream: async (src, dst, signal) => {
+      renameExclusive: native.nativeRenameExclusive,
+      getFlags: native.nativeGetFlags,
+      setFlags: native.nativeSetFlags,
+      copyFile: async (src, dst, signal) => {
         await ofs.promises.mkdir(dirname(dst), { recursive: true });
-        await pipeline(ofs.createReadStream(src), ofs.createWriteStream(dst), { signal });
+        await pipeline(ofs.createReadStream(src), ofs.createWriteStream(dst, { flags: "wx" }), {
+          signal,
+        });
       },
     };
 
@@ -523,6 +531,7 @@ describe("writeService", () => {
 
     const service = createWriteService({
       createOperationId: () => "duplicate-file-op",
+      fileSystem: nativeFileSystem,
     });
     const events: CopyPasteProgressEvent[] = [];
     service.subscribe((event) => {
@@ -551,6 +560,7 @@ describe("writeService", () => {
 
     const service = createWriteService({
       createOperationId: () => "duplicate-dir-op",
+      fileSystem: nativeFileSystem,
     });
     const events: CopyPasteProgressEvent[] = [];
     service.subscribe((event) => {
@@ -578,7 +588,7 @@ function createMockFileSystem(args: {
   realPathMap?: Record<string, string>;
   symlinkTargets?: Record<string, string>;
   chmod?: WriteServiceFileSystem["chmod"];
-  copyFileStream?: WriteServiceFileSystem["copyFileStream"];
+  copyFile?: WriteServiceFileSystem["copyFile"];
 }): WriteServiceFileSystem {
   const existingPaths = new Set(args.existingPaths);
   const directoryPaths = new Set(args.directoryPaths ?? []);
@@ -645,12 +655,23 @@ function createMockFileSystem(args: {
       existingPaths.delete(path);
       directoryPaths.delete(path);
     }),
-    symlink: vi.fn(async (target, path) => {
-      existingPaths.add(path);
-      symlinkTargets[path] = target;
+    renameExclusive: vi.fn(async (from, to) => {
+      if (existingPaths.has(to)) {
+        throw Object.assign(new Error(`EEXIST: ${to}`), { code: "EEXIST" });
+      }
+      for (const paths of [existingPaths, directoryPaths]) {
+        for (const path of [...paths]) {
+          if (path === from || path.startsWith(`${from}/`)) {
+            paths.delete(path);
+            paths.add(`${to}${path.slice(from.length)}`);
+          }
+        }
+      }
     }),
-    copyFileStream:
-      args.copyFileStream ??
+    getFlags: vi.fn(async () => 0),
+    setFlags: vi.fn(async () => {}),
+    copyFile:
+      args.copyFile ??
       vi.fn(async (_sourcePath, destinationPath) => {
         existingPaths.add(destinationPath);
       }),

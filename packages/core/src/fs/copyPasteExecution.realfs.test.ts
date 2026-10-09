@@ -17,10 +17,8 @@ import { basename, join } from "node:path";
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
-import {
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-  type WriteServiceFileSystem,
-} from "./writeServiceTypes";
+import { asOnAnotherDisk, nativeFileSystem } from "./testNativePaste";
+import type { WriteServiceFileSystem } from "./writeServiceTypes";
 
 let testDir: string;
 
@@ -86,7 +84,7 @@ describe("copyPasteExecution real filesystem", () => {
       await mkdir(dstDir, { recursive: true });
       await writeFile(join(srcDir, "hello.txt"), "hello world");
 
-      const fileSystem = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+      const fileSystem = nativeFileSystem;
       const { report, resolvedNodes } = await createResolvedOperationRealFs({
         fileSystem,
         mode: "cut",
@@ -125,18 +123,13 @@ describe("copyPasteExecution real filesystem", () => {
 
       const controller = new AbortController();
       let copyCount = 0;
-      // Disable rename so the copy+delete path is exercised
-      const { rename: _, ...baseFs } = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+      // As to another disk, so the copy+delete path is exercised
       const fileSystem: WriteServiceFileSystem = {
-        ...baseFs,
-        copyFileStream: async (sourcePath, destinationPath, signal) => {
+        ...asOnAnotherDisk(),
+        copyFile: async (sourcePath, destinationPath, signal) => {
           signal?.throwIfAborted();
           copyCount++;
-          await DEFAULT_WRITE_SERVICE_FILE_SYSTEM.copyFileStream(
-            sourcePath,
-            destinationPath,
-            signal,
-          );
+          await nativeFileSystem.copyFile(sourcePath, destinationPath, signal);
           if (copyCount === 3) {
             controller.abort();
           }
@@ -182,16 +175,11 @@ describe("copyPasteExecution real filesystem", () => {
       await mkdir(dstDir, { recursive: true });
       await writeFile(join(srcDir, "data.txt"), "original");
 
-      // Disable rename so the copy+delete path is exercised
-      const { rename: _r, ...baseFsCut } = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+      // As to another disk, so the copy+delete path is exercised
       const fileSystem: WriteServiceFileSystem = {
-        ...baseFsCut,
-        copyFileStream: async (sourcePath, destinationPath, signal) => {
-          await DEFAULT_WRITE_SERVICE_FILE_SYSTEM.copyFileStream(
-            sourcePath,
-            destinationPath,
-            signal,
-          );
+        ...asOnAnotherDisk(),
+        copyFile: async (sourcePath, destinationPath, signal) => {
+          await nativeFileSystem.copyFile(sourcePath, destinationPath, signal);
           // Mutate source after copy completes
           await writeFile(sourcePath, "modified after copy");
         },
@@ -239,7 +227,7 @@ describe("copyPasteExecution real filesystem", () => {
       const srcStat = await stat(join(srcDir, "data.txt"));
       const originalIno = srcStat.ino;
 
-      const fileSystem = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+      const fileSystem = nativeFileSystem;
       const { report, resolvedNodes } = await createResolvedOperationRealFs({
         fileSystem,
         mode: "cut",
@@ -285,10 +273,10 @@ describe("copyPasteExecution real filesystem", () => {
       // Nothing is deleted permanently: the replaced file goes to the Trash.
       const rmPaths: string[] = [];
       const fileSystem: WriteServiceFileSystem = {
-        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        ...nativeFileSystem,
         rm: async (path, options) => {
           rmPaths.push(path);
-          await DEFAULT_WRITE_SERVICE_FILE_SYSTEM.rm(path, options);
+          await nativeFileSystem.rm(path, options);
         },
         trash: async (path) => {
           await rename(path, join(trashDir, basename(path)));
@@ -337,7 +325,7 @@ describe("copyPasteExecution real filesystem", () => {
       const targetMtime = new Date("2020-06-15T10:30:00.000Z");
       await utimes(join(srcDir, "timed.txt"), targetMtime, targetMtime);
 
-      const fileSystem = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+      const fileSystem = nativeFileSystem;
       const { report, resolvedNodes } = await createResolvedOperationRealFs({
         fileSystem,
         mode: "cut",
@@ -378,7 +366,7 @@ describe("copyPasteExecution real filesystem", () => {
       const targetMtime = new Date("2019-03-20T08:00:00.000Z");
       await utimes(srcSubDir, targetMtime, targetMtime);
 
-      const fileSystem = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+      const fileSystem = nativeFileSystem;
       const { report, resolvedNodes } = await createResolvedOperationRealFs({
         fileSystem,
         mode: "copy",
@@ -416,7 +404,7 @@ describe("copyPasteExecution real filesystem", () => {
       await writeFile(targetPath, "target content");
       await symlink(targetPath, join(srcDir, "link"));
 
-      const fileSystem = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+      const fileSystem = nativeFileSystem;
       const { report, resolvedNodes } = await createResolvedOperationRealFs({
         fileSystem,
         mode: "copy",
@@ -442,47 +430,6 @@ describe("copyPasteExecution real filesystem", () => {
       const dstStat = await lstat(dstLink);
       expect(dstStat.isSymbolicLink()).toBe(true);
     });
-
-    it("copy preserves file content and mtime via copyFileStream + utimes", async () => {
-      const srcDir = join(testDir, "src");
-      const dstDir = join(testDir, "dst");
-      await mkdir(srcDir, { recursive: true });
-      await mkdir(dstDir, { recursive: true });
-      await writeFile(join(srcDir, "doc.txt"), "file mtime test content");
-
-      // Set a specific mtime
-      const targetMtime = new Date("2018-01-15T12:00:00.000Z");
-      await utimes(join(srcDir, "doc.txt"), targetMtime, targetMtime);
-
-      // Use FS without rename or copyFile — exercises copyFileStream + utimes path
-      const { rename: _, copyFile: _c, ...baseFs } = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
-      const fileSystem: WriteServiceFileSystem = { ...baseFs };
-
-      const { report, resolvedNodes } = await createResolvedOperationRealFs({
-        fileSystem,
-        mode: "copy",
-        sourcePaths: [join(srcDir, "doc.txt")],
-        destinationDirectoryPath: dstDir,
-      });
-
-      await executeCopyPasteFromAnalysis({
-        operationId: "realfs-utimes-file-1",
-        report,
-        mode: "copy",
-        policy: { file: "skip", directory: "merge", mismatch: "skip" },
-        fileSystem,
-        now: () => new Date(),
-        signal: new AbortController().signal,
-        resolvedNodes,
-        emit: () => undefined,
-        requestResolution: async () => null,
-      });
-
-      const dstFile = join(dstDir, "doc.txt");
-      expect(await fileExists(dstFile)).toBe(true);
-      const content = await readFile(dstFile, "utf-8");
-      expect(content).toBe("file mtime test content");
-    });
   });
 
   describe("cross-phase integration", () => {
@@ -496,11 +443,11 @@ describe("copyPasteExecution real filesystem", () => {
       const srcStat = await stat(join(srcDir, "atom.txt"));
       const originalIno = srcStat.ino;
 
-      let copyStreamCalled = false;
+      let copyCalled = false;
       const fileSystem: WriteServiceFileSystem = {
-        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-        copyFileStream: async () => {
-          copyStreamCalled = true;
+        ...nativeFileSystem,
+        copyFile: async () => {
+          copyCalled = true;
         },
       };
 
@@ -524,7 +471,7 @@ describe("copyPasteExecution real filesystem", () => {
         requestResolution: async () => null,
       });
 
-      expect(copyStreamCalled).toBe(false);
+      expect(copyCalled).toBe(false);
       expect(await fileExists(join(srcDir, "atom.txt"))).toBe(false);
       expect(await fileExists(join(dstDir, "atom.txt"))).toBe(true);
       const dstStat = await stat(join(dstDir, "atom.txt"));
@@ -538,7 +485,7 @@ describe("copyPasteExecution real filesystem", () => {
       await mkdir(dstDir, { recursive: true });
       await writeFile(join(srcDir, "keep.txt"), "keep me");
 
-      const fileSystem = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+      const fileSystem = nativeFileSystem;
       const { report, resolvedNodes } = await createResolvedOperationRealFs({
         fileSystem,
         mode: "copy",

@@ -1,7 +1,22 @@
 // The paste engine as the app runs it, for real-disk tests: the native copy (copyfile(3)),
 // exclusive rename, lock flags, and a Trash that keeps what goes into it.
 
-import { mkdir, open, rename } from "node:fs/promises";
+import { constants } from "node:fs";
+import {
+  access,
+  chmod,
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  readlink,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  stat,
+  utimes,
+} from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import {
@@ -19,10 +34,11 @@ import {
   type CopyPasteProgressEvent,
   type CopyPasteRuntimeConflict,
   type CopyPasteRuntimeResolutionAction,
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
   type WriteJournal,
   type WriteServiceFileSystem,
+  type WriteServiceStats,
   isAppleDoubleOnItsVolume,
+  removeEmptyFolder,
 } from "./writeServiceTypes";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -30,8 +46,21 @@ export const native = require("../../../native-fs/index.js") as typeof import(".
 
 const nativeCopy = createStoppableCopyFile(native.nativeCopyFile);
 
+// As originalFileSystem in the desktop app builds it, on node:fs.
 export const nativeFileSystem: WriteServiceFileSystem = {
-  ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+  lstat: (path) => lstat(path) as Promise<WriteServiceStats>,
+  stat: (path) => stat(path) as Promise<WriteServiceStats>,
+  realpath: (path) => realpath(path),
+  readdir: (path) => readdir(path),
+  readlink: (path) => readlink(path),
+  chmod: (path, mode) => chmod(path, mode),
+  mkdir: async (path, options) => {
+    await mkdir(path, options);
+  },
+  rm: (path, options) => rm(path, options),
+  rmdir: (path) => removeEmptyFolder(readdir, rmdir, path),
+  utimes: (path, atimeMs, mtimeMs) => utimes(path, atimeMs / 1000, mtimeMs / 1000),
+  canModifyFolder: (path) => access(path, constants.W_OK),
   renameExclusive: native.nativeRenameExclusive,
   isCaseSensitive: native.nativeIsCaseSensitive,
   isPackage: native.nativeIsPackage,
@@ -44,6 +73,23 @@ export const nativeFileSystem: WriteServiceFileSystem = {
   },
   copyMetadata: native.nativeCopyMetadata,
 };
+
+// As on a move to another disk: an item being pasted can't be renamed into place (EXDEV),
+// so it is copied and the original removed; what is built under a hidden name still takes
+// its name.
+export function asOnAnotherDisk(
+  fileSystem: WriteServiceFileSystem = nativeFileSystem,
+): WriteServiceFileSystem {
+  return {
+    ...fileSystem,
+    renameExclusive: async (from, to) => {
+      if (!basename(from).includes(".filetrail-")) {
+        throw Object.assign(new Error(`EXDEV: ${from}`), { code: "EXDEV", path: from });
+      }
+      await fileSystem.renameExclusive(from, to);
+    },
+  };
+}
 
 // The native file system with a Trash: a folder items are moved into (with a number when
 // the name is taken), so a test can see what a Replace removed.

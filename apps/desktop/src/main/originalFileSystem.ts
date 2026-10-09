@@ -16,7 +16,6 @@
 
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { pipeline } from "node:stream/promises";
 
 import type { Volume } from "@filetrail/contracts";
 import {
@@ -95,7 +94,6 @@ const {
     chmod,
     open,
     lstat,
-    lutimes,
     mkdir,
     readdir,
     readlink,
@@ -104,11 +102,8 @@ const {
     rm,
     rmdir,
     stat,
-    symlink,
     utimes,
   },
-  createReadStream,
-  createWriteStream,
 } = originalFs;
 
 /** WriteServiceFileSystem backed by original-fs for copy/paste operations. */
@@ -121,9 +116,6 @@ export const originalFileSystem: WriteServiceFileSystem = {
   chmod: async (path, mode) => {
     await chmod(path, mode);
   },
-  rename: async (oldPath, newPath) => {
-    await rename(oldPath, newPath);
-  },
   mkdir: async (path, options) => {
     await mkdir(path, options);
   },
@@ -135,9 +127,6 @@ export const originalFileSystem: WriteServiceFileSystem = {
   rmdir: (path) => removeEmptyFolder(readdir, rmdir, path),
   isCaseSensitive: (path) => nativeIsCaseSensitive(path),
   isPackage: (path) => nativeIsPackage(path),
-  symlink: async (target, path) => {
-    await symlink(target, path);
-  },
   copyFile: async (sourcePath, destinationPath, signal, onProgress) => {
     await copyFileStoppable(sourcePath, destinationPath, signal, onProgress);
   },
@@ -145,19 +134,8 @@ export const originalFileSystem: WriteServiceFileSystem = {
   setFlags: (path, flags) => nativeSetFlags(path, flags),
   setAcl: (path, acl) => nativeSetAcl(path, acl),
   copyMetadata: nativeCopyMetadata,
-  copyFileStream: async (sourcePath, destinationPath, signal) => {
-    // "wx": never truncate an item that appeared at the destination in the meantime.
-    await pipeline(
-      createReadStream(sourcePath),
-      createWriteStream(destinationPath, { flags: "wx" }),
-      { signal },
-    );
-  },
   utimes: async (path, atimeMs, mtimeMs) => {
     await utimes(path, atimeMs / 1000, mtimeMs / 1000);
-  },
-  lutimes: async (path, atimeMs, mtimeMs) => {
-    await lutimes(path, atimeMs / 1000, mtimeMs / 1000);
   },
   canModifyFolder: async (path) => {
     await access(path, fsConstants.W_OK);

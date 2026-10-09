@@ -20,7 +20,6 @@ function searchResults(): MockWriteServiceFileSystem {
     "/d/a.txt": { kind: "file", size: 7 },
   });
   fileSystem.enableTrash();
-  fileSystem.enableRename();
   return fileSystem;
 }
 
@@ -111,7 +110,6 @@ describe("Replace for all, over another item being pasted", () => {
       "/data/d/a/keep.txt": { kind: "file", size: 4, ino: 501 },
     });
     fileSystem.enableTrash();
-    fileSystem.enableRename();
     const report = await analyze(fileSystem, {
       mode: "cut",
       sourcePaths: ["/x/a", "/data/d/a/keep.txt"],

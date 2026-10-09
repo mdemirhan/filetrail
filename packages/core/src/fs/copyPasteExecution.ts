@@ -897,8 +897,7 @@ async function performNode(
     }
     if (
       context.stagingFor === null &&
-      (currentNode.action === "create" || currentNode.action === "keep_both") &&
-      (context.fileSystem.renameExclusive !== undefined || context.fileSystem.rename !== undefined)
+      (currentNode.action === "create" || currentNode.action === "keep_both")
     ) {
       return executeStagedDirectory(context, currentNode);
     }
@@ -1127,7 +1126,6 @@ function unreadableFolderMessage(mode: CopyPasteMode, reason: string | null): st
 function canRenameForCut(context: ExecutionContext, node: ResolvedCopyPasteNode): boolean {
   return (
     context.mode === "cut" &&
-    context.fileSystem.rename !== undefined &&
     context.destinationDev !== null &&
     node.node.sourceFingerprint.dev === context.destinationDev &&
     node.action !== "merge"
@@ -1186,52 +1184,22 @@ async function writeLeaf(
   targetPath: string,
 ): Promise<void> {
   if (node.node.sourceKind === "symlink") {
-    if (context.fileSystem.copyFile) {
-      // copyfile(3) makes the link itself (never what it points to), with its tags, flags
-      // and dates: a link made anew would have none of them, and a move would lose them.
-      try {
-        await context.fileSystem.copyFile(node.node.sourcePath, targetPath, context.signal);
-      } catch (error) {
-        throw errorCode(error) === "EEXIST"
-          ? new DestinationTakenError(error)
-          : await explainMissingFolder(context.fileSystem, targetPath, error);
-      }
-      return;
-    }
-    const linkTarget = await context.fileSystem.readlink(node.node.sourcePath);
+    // copyfile(3) makes the link itself (never what it points to), with its tags, flags
+    // and dates: a link made anew would have none of them, and a move would lose them.
     try {
-      await context.fileSystem.symlink(linkTarget, targetPath);
+      await context.fileSystem.copyFile(node.node.sourcePath, targetPath, context.signal);
     } catch (error) {
       throw errorCode(error) === "EEXIST"
         ? new DestinationTakenError(error)
         : await explainMissingFolder(context.fileSystem, targetPath, error);
     }
-    await preserveSymlinkTimestamps(
-      context.fileSystem,
-      targetPath,
-      node.node.sourceFingerprint.mtimeMs,
-    );
     return;
   }
   // A large file shows its progress as it is copied, not only once it is done.
   await copyFileContents(context, node.node.sourcePath, targetPath, (copiedBytes) =>
     emitProgress(context, "running", node, null, copiedBytes),
   );
-  if (context.fileSystem.copyFile) {
-    await restoreDroppedFileMetadata(context.fileSystem, targetPath, node.node.sourceFingerprint);
-    return;
-  }
-  // A copy that worked isn't reported as failed over its mode or dates.
-  await preserveModeIfSupported(
-    context.fileSystem,
-    targetPath,
-    node.node.sourceFingerprint.mode,
-  ).catch(() => undefined);
-  await preserveTimestampsIfSupported(
-    context.fileSystem,
-    targetPath,
-    node.node.sourceFingerprint.mtimeMs,
-  ).catch(() => undefined);
+  await restoreDroppedFileMetadata(context.fileSystem, targetPath, node.node.sourceFingerprint);
 }
 
 // Native copyFile (copyfile(3) COPYFILE_ALL) carries the mode, flags and dates, but some
@@ -1476,14 +1444,6 @@ async function executeReplace(
     throw new DestinationTakenError(
       new Error(`“${basename(finalPath)}” changed before it could be replaced.`),
     );
-  }
-
-  if (!fileSystem.rename) {
-    // Nothing can be swapped into place without rename: clear the way first instead.
-    if ((await removeReplacedItem(context, currentNode, destination)) === "skipped") {
-      return skippedOutcome("runtime_conflict_resolution", finalPath);
-    }
-    return performNode(context, { ...currentNode, action: "create" }, source);
   }
 
   // A move that copies (to another disk) removes the originals only after the swap, and
@@ -1980,9 +1940,6 @@ async function findLockedInside(
   fileSystem: WriteServiceFileSystem,
   folderPath: string,
 ): Promise<string | null> {
-  if (!fileSystem.getFlags) {
-    return null;
-  }
   const names = await fileSystem.readdir(folderPath).catch(() => [] as string[]);
   for (const name of names) {
     const path = join(folderPath, name);
@@ -2020,7 +1977,7 @@ async function temporarySiblingPath(
 // flags to put back once it has its new name; null when it wasn't locked. An item locked
 // in a way its owner can't undo is refused here, before anything else changes.
 export async function unlockForMove(
-  fileSystem: Pick<WriteServiceFileSystem, "getFlags" | "setFlags">,
+  fileSystem: Partial<Pick<WriteServiceFileSystem, "getFlags" | "setFlags">>,
   path: string,
 ): Promise<number | null> {
   if (!fileSystem.getFlags || !fileSystem.setFlags) {
@@ -2071,7 +2028,7 @@ async function restoreAfterMove(
     await fileSystem.chmod?.(path, mode).catch(() => undefined);
   }
   if (flags !== null) {
-    await fileSystem.setFlags?.(path, flags).catch(() => undefined);
+    await fileSystem.setFlags(path, flags).catch(() => undefined);
   }
 }
 
@@ -2086,10 +2043,7 @@ export async function removeStagedItem(
     return;
   } catch (error) {
     const code = errorCode(error);
-    if (
-      (code !== "EACCES" && code !== "EPERM") ||
-      (!fileSystem.chmod && !fileSystem.setFlags && !fileSystem.setAcl)
-    ) {
+    if (code !== "EACCES" && code !== "EPERM") {
       throw error;
     }
   }
@@ -2101,11 +2055,9 @@ export async function removeStagedItem(
 // locked too) are unlocked, rules against deleting them (a copy of ~/Documents has one)
 // taken off, and read-only folders made writable.
 async function makeFoldersWritable(fileSystem: WriteServiceFileSystem, path: string) {
-  if (fileSystem.getFlags && fileSystem.setFlags) {
-    const flags = await fileSystem.getFlags(path).catch(() => 0);
-    if ((flags & USER_LOCK_FLAGS) !== 0) {
-      await fileSystem.setFlags(path, flags & ~USER_LOCK_FLAGS).catch(() => undefined);
-    }
+  const flags = await fileSystem.getFlags(path).catch(() => 0);
+  if ((flags & USER_LOCK_FLAGS) !== 0) {
+    await fileSystem.setFlags(path, flags & ~USER_LOCK_FLAGS).catch(() => undefined);
   }
   await fileSystem.setAcl?.(path, null).catch(() => undefined);
   const fingerprint = await captureFingerprint(fileSystem, path);
@@ -2205,11 +2157,7 @@ async function copyFileContents(
 ): Promise<void> {
   const { fileSystem } = context;
   if (context.folderMadeAt !== null) {
-    await writeIntoHiddenFolder(context, sourcePath, targetPath);
-    return;
-  }
-  if (!fileSystem.renameExclusive && !fileSystem.rename) {
-    await writeFileContents(context, sourcePath, targetPath, onProgress);
+    await writeIntoHiddenFolder(context, sourcePath, targetPath, onProgress);
     return;
   }
   if ((await captureFingerprint(fileSystem, targetPath)).exists) {
@@ -2238,7 +2186,7 @@ async function copyFileContents(
       const flags = await unlockForMove(fileSystem, partialPath);
       await moveExclusive(fileSystem, partialPath, targetPath);
       if (flags !== null) {
-        await fileSystem.setFlags?.(targetPath, flags).catch(() => undefined);
+        await fileSystem.setFlags(targetPath, flags).catch(() => undefined);
       }
     } catch (error) {
       await removeStagedItem(fileSystem, partialPath).catch(() => undefined);
@@ -2263,9 +2211,10 @@ async function writeIntoHiddenFolder(
   context: ExecutionContext,
   sourcePath: string,
   targetPath: string,
+  onProgress?: (copiedBytes: number) => void,
 ): Promise<void> {
   try {
-    await writeFileContents(context, sourcePath, targetPath);
+    await writeFileContents(context, sourcePath, targetPath, onProgress);
   } catch (error) {
     if (error instanceof DestinationTakenError || isAbortError(error) || context.signal.aborted) {
       throw error;
@@ -2381,11 +2330,7 @@ async function writeFileContents(
 ): Promise<void> {
   const before = await captureFingerprint(context.fileSystem, targetPath);
   try {
-    if (context.fileSystem.copyFile) {
-      await context.fileSystem.copyFile(sourcePath, targetPath, context.signal, onProgress);
-    } else {
-      await context.fileSystem.copyFileStream(sourcePath, targetPath, context.signal);
-    }
+    await context.fileSystem.copyFile(sourcePath, targetPath, context.signal, onProgress);
   } catch (error) {
     if (errorCode(error) === "EEXIST") {
       throw new DestinationTakenError(error);
@@ -2474,18 +2419,7 @@ export async function moveExclusive(
   from: string,
   to: string,
 ): Promise<void> {
-  if (fileSystem.renameExclusive) {
-    await fileSystem.renameExclusive(from, to);
-    return;
-  }
-  if (!fileSystem.rename) {
-    throw new Error("Moving items isn't supported here.");
-  }
-  // Without an exclusive rename, check first: that leaves only a tiny window.
-  if ((await captureFingerprint(fileSystem, to)).exists) {
-    throw Object.assign(new Error(`EEXIST: ${to}`), { code: "EEXIST", path: to });
-  }
-  await fileSystem.rename(from, to);
+  await fileSystem.renameExclusive(from, to);
 }
 
 // The clash an item has with what is at its destination, as the review would classify
@@ -3040,18 +2974,4 @@ async function preserveTimestampsIfSupported(
     }
     throw error;
   }
-}
-
-// A copied link's dates, set on the link itself. As for a file, a link that was made isn't
-// reported as failed over its dates (a move would then leave it in both places): a disk
-// that refuses them leaves them as it made them.
-async function preserveSymlinkTimestamps(
-  fileSystem: WriteServiceFileSystem,
-  destinationPath: string,
-  mtimeMs: number | null | undefined,
-): Promise<void> {
-  if (!fileSystem.lutimes || mtimeMs == null) {
-    return;
-  }
-  await fileSystem.lutimes(destinationPath, mtimeMs, mtimeMs).catch(() => undefined);
 }

@@ -1,23 +1,5 @@
-import { constants, createReadStream, createWriteStream } from "node:fs";
-import {
-  access,
-  chmod,
-  lstat,
-  lutimes,
-  mkdir,
-  type open,
-  readdir,
-  readlink,
-  realpath,
-  rename,
-  rm,
-  rmdir,
-  stat,
-  symlink,
-  utimes,
-} from "node:fs/promises";
+import type { open } from "node:fs/promises";
 import { dirname } from "node:path";
-import { pipeline } from "node:stream/promises";
 
 import type { UndoLog } from "./undoLog";
 
@@ -74,10 +56,9 @@ export type WriteServiceFileSystem = {
   readdir: (path: string) => Promise<string[]>;
   readlink: (path: string) => Promise<string>;
   chmod?: (path: string, mode: number) => Promise<void>;
-  rename?: (oldPath: string, newPath: string) => Promise<void>;
-  /** Like `rename` but fails with EEXIST instead of replacing an item at `newPath`
-   *  (macOS `renamex_np(RENAME_EXCL)`). Without it, the destination is checked first. */
-  renameExclusive?: (oldPath: string, newPath: string) => Promise<void>;
+  /** rename(2) that fails with EEXIST instead of replacing an item at `newPath` (macOS
+   *  `renamex_np(RENAME_EXCL)`, checking first on a volume that can't do that). */
+  renameExclusive: (oldPath: string, newPath: string) => Promise<void>;
   mkdir: (path: string, options?: { recursive?: boolean }) => Promise<void>;
   rm: (path: string, options?: { recursive?: boolean; force?: boolean }) => Promise<void>;
   /** Removes an empty folder; fails (ENOTEMPTY or EEXIST) when anything is inside,
@@ -87,23 +68,22 @@ export type WriteServiceFileSystem = {
    *  `pathconf(_PC_CASE_SENSITIVE)`), or null when it doesn't say. Without it, an
    *  existing name is looked up with its case swapped. */
   isCaseSensitive?: (path: string) => Promise<boolean | null>;
-  symlink: (target: string, path: string) => Promise<void>;
-  /** Copies a file preserving metadata (mode, flags, timestamps, xattrs). When provided,
-   *  used instead of `copyFileStream`, and the copy's metadata is left as it made it.
-   *  `signal` stops it part way through the file (rejecting with an AbortError), leaving
-   *  no partial file. `onProgress` is told the bytes of the file copied so far, every
-   *  quarter second or so while a large file is being copied. */
-  copyFile?: (
+  /** Copies a file, or a symlink as a link, preserving metadata (mode, flags, timestamps,
+   *  xattrs), never replacing an item at `destinationPath` (copyfile(3)). `signal` stops it
+   *  part way through the file (rejecting with an AbortError), leaving no partial file.
+   *  `onProgress` is told the bytes of the file copied so far, every quarter second or so
+   *  while a large file is being copied. */
+  copyFile: (
     sourcePath: string,
     destinationPath: string,
     signal?: AbortSignal,
     onProgress?: (copiedBytes: number) => void,
   ) => Promise<void>;
   /** The item's BSD flags (`st_flags`, a symlink not followed); `UF_IMMUTABLE` is
-   *  Finder's "Locked". Without it no item is seen as locked. */
-  getFlags?: (path: string) => Promise<number>;
+   *  Finder's "Locked". */
+  getFlags: (path: string) => Promise<number>;
   /** Sets the item's BSD flags (a symlink not followed). */
-  setFlags?: (path: string, flags: number) => Promise<void>;
+  setFlags: (path: string, flags: number) => Promise<void>;
   /** Gives the item the access control list `acl` (acl_to_text(3) text), or none at all
    *  for null (a symlink not followed). A hidden copy that can't be removed has its rules
    *  against deleting it taken off with it. */
@@ -116,17 +96,9 @@ export type WriteServiceFileSystem = {
   /** Whether macOS shows the folder as one item, a package (`NSURLIsPackageKey`); null
    *  when it can't tell. Without it, the folder's extension decides. */
   isPackage?: (path: string) => Promise<boolean | null>;
-  copyFileStream: (
-    sourcePath: string,
-    destinationPath: string,
-    signal?: AbortSignal,
-  ) => Promise<void>;
   /** Sets access and modification times on a path (follows symlinks). Used to
    *  preserve timestamps on directories and regular files after creation. */
   utimes?: (path: string, atimeMs: number, mtimeMs: number) => Promise<void>;
-  /** Like `utimes` but operates on the symlink itself, not its target. Used to
-   *  preserve timestamps on symlinks after creation. */
-  lutimes?: (path: string, atimeMs: number, mtimeMs: number) => Promise<void>;
   /** Moves a path to the Trash and resolves with the path it has there (null when the
    *  Trash didn't say where it went). Items replaced by a paste are trashed so a replace
    *  can be undone. Without it (or when it fails), the person is asked before anything is
@@ -363,7 +335,9 @@ export const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already ru
 export const ANALYSIS_BUSY_ERROR = "Another copy/paste analysis is already running.";
 
 export type WriteServiceDependencies = {
-  fileSystem?: WriteServiceFileSystem;
+  // In Electron, one backed by original-fs (see originalFileSystem.ts in the desktop app):
+  // Electron's node:fs takes .asar files for folders, which breaks copying app bundles.
+  fileSystem: WriteServiceFileSystem;
   // Remembers Replaces and large file copies in progress, so an interrupted one can be
   // finished or undone at the next start (see `recoverInterruptedWrites`).
   writeJournal?: WriteJournal;
@@ -378,51 +352,6 @@ export const DEFAULT_COPY_PASTE_POLICY: CopyPastePolicy = {
   file: "skip",
   directory: "skip",
   mismatch: "skip",
-};
-
-// Default implementation using node:fs. In Electron, callers should provide an
-// original-fs backed implementation instead (see originalFileSystem.ts in the
-// desktop app) because Electron patches node:fs to treat .asar files as virtual
-// directories, which breaks copy operations on app bundles.
-export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
-  lstat: async (path) => lstat(path) as Promise<WriteServiceStats>,
-  stat: async (path) => stat(path) as Promise<WriteServiceStats>,
-  realpath: async (path) => realpath(path),
-  readdir: async (path) => readdir(path),
-  readlink: async (path) => readlink(path),
-  chmod: async (path, mode) => {
-    await chmod(path, mode);
-  },
-  rename: async (oldPath, newPath) => {
-    await rename(oldPath, newPath);
-  },
-  mkdir: async (path, options) => {
-    await mkdir(path, options);
-  },
-  rm: async (path, options) => {
-    await rm(path, options);
-  },
-  rmdir: (path) => removeEmptyFolder(readdir, rmdir, path),
-  symlink: async (target, path) => {
-    await symlink(target, path);
-  },
-  copyFileStream: async (sourcePath, destinationPath, signal) => {
-    // "wx": never truncate an item that appeared at the destination in the meantime.
-    await pipeline(
-      createReadStream(sourcePath),
-      createWriteStream(destinationPath, { flags: "wx" }),
-      { signal },
-    );
-  },
-  utimes: async (path, atimeMs, mtimeMs) => {
-    await utimes(path, atimeMs / 1000, mtimeMs / 1000);
-  },
-  lutimes: async (path, atimeMs, mtimeMs) => {
-    await lutimes(path, atimeMs / 1000, mtimeMs / 1000);
-  },
-  canModifyFolder: async (path) => {
-    await access(path, constants.W_OK);
-  },
 };
 
 // rmdir(2) on macOS also removes a folder that holds nothing but "._name" files, deleting

@@ -5,12 +5,9 @@ import { join } from "node:path";
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
+import { nativeFileSystem } from "./testNativePaste";
 import { createWriteService } from "./writeService";
-import {
-  type CopyPasteAnalysisNode,
-  type CopyPasteProgressEvent,
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-} from "./writeServiceTypes";
+import type { CopyPasteAnalysisNode, CopyPasteProgressEvent } from "./writeServiceTypes";
 
 let testDir: string;
 let source: string;
@@ -36,7 +33,7 @@ async function analyze(sourceNames: string[]) {
       sourcePaths: sourceNames.map((name) => join(source, name)),
       destinationDirectoryPath: target,
     },
-    fileSystem: DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+    fileSystem: nativeFileSystem,
     thresholds: { largeBatchItemThreshold: 1000, largeBatchByteThreshold: 1e9 },
   });
 }
@@ -132,7 +129,7 @@ describe("copy/paste review data (real filesystem)", () => {
         sourcePaths: [join(target, "foo", "foo")],
         destinationDirectoryPath: target,
       },
-      fileSystem: DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      fileSystem: nativeFileSystem,
       thresholds: { largeBatchItemThreshold: 1000, largeBatchByteThreshold: 1e9 },
     });
 
@@ -155,7 +152,7 @@ describe("copy/paste review data (real filesystem)", () => {
         // "merge" makes no sense for a file and is ignored.
         { nodeId: findNode(report.nodes, "c.txt").id, action: "merge" },
       ],
-      fileSystem: DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      fileSystem: nativeFileSystem,
     });
 
     expect(resolvedNodes.map((node) => node.action)).toEqual(["overwrite", "skip", "keep_both"]);
@@ -164,7 +161,7 @@ describe("copy/paste review data (real filesystem)", () => {
       report,
       mode: "copy",
       policy,
-      fileSystem: DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      fileSystem: nativeFileSystem,
       now: () => new Date(),
       signal: new AbortController().signal,
       resolvedNodes,
@@ -182,7 +179,7 @@ describe("copy/paste review data (real filesystem)", () => {
     for (const name of ["a.txt", "b.txt", "c.txt"]) {
       await writeFile(join(source, name), `new ${name}`);
     }
-    const service = createWriteService();
+    const service = createWriteService({ fileSystem: nativeFileSystem });
     const events: CopyPasteProgressEvent[] = [];
     service.subscribe((event) => {
       events.push(event);

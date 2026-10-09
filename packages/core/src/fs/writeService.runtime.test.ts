@@ -391,7 +391,6 @@ describe("writeService runtime conflicts", () => {
       "/source/X copy.txt": { kind: "file", size: 2 },
       "/target": { kind: "directory" },
     });
-    fileSystem.enableRename();
     const { result } = await runPaste({
       fileSystem,
       mode: "cut",

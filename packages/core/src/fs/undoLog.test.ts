@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { nativeFileSystem } from "./testNativePaste";
 import { itemIdOf, readItemId, readItemStamp, sameItemId, stampWithoutId } from "./undoLog";
-import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "./writeServiceTypes";
 
 let root: string;
 
@@ -24,9 +24,7 @@ describe("item ids", () => {
   });
 
   it("is null for an item that can't be read", async () => {
-    await expect(
-      readItemId(DEFAULT_WRITE_SERVICE_FILE_SYSTEM.lstat, join(root, "gone")),
-    ).resolves.toBeNull();
+    await expect(readItemId(nativeFileSystem.lstat, join(root, "gone"))).resolves.toBeNull();
   });
 
   it("tells the same item only by two known ids", () => {
@@ -45,21 +43,20 @@ describe("readItemStamp", () => {
     await writeFile(join(root, "Folder", "inside.txt"), "");
     await symlink("a.txt", join(root, "link"));
 
-    await expect(
-      readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "a.txt")),
-    ).resolves.toEqual({ kind: "file", size: 3, mtimeMs: expect.any(Number), entryCount: null });
-    await expect(
-      readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder")),
-    ).resolves.toEqual({
+    await expect(readItemStamp(nativeFileSystem, join(root, "a.txt"))).resolves.toEqual({
+      kind: "file",
+      size: 3,
+      mtimeMs: expect.any(Number),
+      entryCount: null,
+    });
+    await expect(readItemStamp(nativeFileSystem, join(root, "Folder"))).resolves.toEqual({
       kind: "directory",
       size: null,
       mtimeMs: expect.any(Number),
       entryCount: 1,
       entryNames: expect.any(String),
     });
-    await expect(
-      readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "link")),
-    ).resolves.toEqual({
+    await expect(readItemStamp(nativeFileSystem, join(root, "link"))).resolves.toEqual({
       kind: "symlink",
       size: null,
       mtimeMs: expect.any(Number),
@@ -76,30 +73,28 @@ describe("readItemStamp", () => {
     // An item of its own: there is no "notes" beside it.
     await writeFile(join(root, "Folder", "._notes"), "");
 
-    await expect(
-      readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder")),
-    ).resolves.toMatchObject({ entryCount: 3 });
+    await expect(readItemStamp(nativeFileSystem, join(root, "Folder"))).resolves.toMatchObject({
+      entryCount: 3,
+    });
   });
 
   // A folder whose item was renamed holds as many items, but not the same ones.
   it("tells a folder whose items were renamed from one left as it was", async () => {
     await mkdir(join(root, "Folder"));
     await writeFile(join(root, "Folder", "a.txt"), "");
-    const before = await readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder"));
+    const before = await readItemStamp(nativeFileSystem, join(root, "Folder"));
     await writeFile(join(root, "Folder", ".DS_Store"), "");
-    expect(
-      (await readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder")))?.entryNames,
-    ).toBe(before?.entryNames);
+    expect((await readItemStamp(nativeFileSystem, join(root, "Folder")))?.entryNames).toBe(
+      before?.entryNames,
+    );
     await rename(join(root, "Folder", "a.txt"), join(root, "Folder", "b.txt"));
-    expect(
-      (await readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "Folder")))?.entryNames,
-    ).not.toBe(before?.entryNames);
+    expect((await readItemStamp(nativeFileSystem, join(root, "Folder")))?.entryNames).not.toBe(
+      before?.entryNames,
+    );
   });
 
   it("is null for an item that can't be read", async () => {
-    await expect(
-      readItemStamp(DEFAULT_WRITE_SERVICE_FILE_SYSTEM, join(root, "gone")),
-    ).resolves.toBeNull();
+    await expect(readItemStamp(nativeFileSystem, join(root, "gone"))).resolves.toBeNull();
   });
 
   it("leaves what it can't tell unknown", async () => {
@@ -133,7 +128,7 @@ describe("readItemStamp", () => {
 describe("stampWithoutId", () => {
   it("keeps how an item looks only when it has no id to go by", async () => {
     await writeFile(join(root, "a.txt"), "abc");
-    const fs = DEFAULT_WRITE_SERVICE_FILE_SYSTEM;
+    const fs = nativeFileSystem;
     expect(await stampWithoutId(fs, join(root, "a.txt"), { dev: 1, ino: 2 })).toEqual({});
     expect(await stampWithoutId(fs, join(root, "a.txt"), null)).toEqual({
       stamp: expect.objectContaining({ kind: "file", size: 3 }),

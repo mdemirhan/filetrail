@@ -24,6 +24,7 @@ import { JOURNALED_FILE_BYTES } from "./copyPasteExecution";
 import {
   KEEP_EXISTING,
   REPLACE_ALL,
+  asOnAnotherDisk,
   nativeFileSystem,
   nativeFileSystemWithTrash,
   runPaste,
@@ -35,10 +36,9 @@ import {
   isReplaceJournalEntry,
 } from "./writeServiceTypes";
 
-// As on a move to another disk: no rename, so items are copied and the originals removed.
+// As on a move to another disk: items are copied and the originals removed.
 function withoutRenameAtAll(): WriteServiceFileSystem {
-  const { rename: _rename, ...rest } = nativeFileSystem;
-  return rest;
+  return asOnAnotherDisk();
 }
 
 // The start of an AppleDouble file (its magic number and version).
@@ -286,7 +286,7 @@ describe("duplicating several items", () => {
 // The person is asked when the item being pasted changed after the review; going on must
 // paste what is there now, not what the review saw.
 describe("going on after the item being pasted changed", () => {
-  const { rename: _rename, ...withoutRename } = nativeFileSystem;
+  const withoutRename = asOnAnotherDisk();
 
   async function becomePackage(path: string, files: Record<string, string>) {
     await rm(path, { recursive: true, force: true });
@@ -1479,7 +1479,7 @@ describe("smaller cases a Replace and a copy get right", () => {
   it("says a moved folder was kept when it changed during the move", async () => {
     await mkdir(join(src, "F"));
     await writeFile(join(src, "F", "a.txt"), "a");
-    const { rename: _rename, ...withoutRename } = nativeFileSystem;
+    const withoutRename = asOnAnotherDisk();
 
     const { result } = await runPaste({
       mode: "cut",
@@ -1496,7 +1496,7 @@ describe("smaller cases a Replace and a copy get right", () => {
   });
 
   it("deletes nothing of a folder that holds a locked item, on a disk without a Trash", async () => {
-    const { rename: _rename, ...withoutRename } = nativeFileSystem;
+    const withoutRename = asOnAnotherDisk();
     await writeFile(join(src, "F"), "a file now");
     await mkdir(join(dst, "F"));
     await writeFile(join(dst, "F", "keep.txt"), "keep");

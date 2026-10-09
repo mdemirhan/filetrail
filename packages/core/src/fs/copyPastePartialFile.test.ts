@@ -33,7 +33,6 @@ function largeFileOnAnotherDisk(): MockWriteServiceFileSystem {
     [SOURCE]: { kind: "file", size: JOURNALED_FILE_BYTES, dev: 2 },
     "/target": { kind: "directory" },
   });
-  fileSystem.enableRename();
   return fileSystem;
 }
 
@@ -102,7 +101,7 @@ function copyPartThen(
   fileSystem: MockWriteServiceFileSystem,
   then: (destination: string, signal: AbortSignal | undefined) => void,
 ): void {
-  fileSystem.copyFileStreamImpl = async (_source, destination, signal) => {
+  fileSystem.copyFileImpl = async (_source, destination, signal) => {
     fileSystem.addFile(destination, { size: 1024 });
     then(destination, signal);
   };
@@ -249,7 +248,7 @@ describe("a large file's copy cut short by a crash", () => {
       wrote = resolve;
     });
     const entries: WriteJournalEntry[] = [];
-    fileSystem.copyFileStreamImpl = async (_source, destination) => {
+    fileSystem.copyFileImpl = async (_source, destination) => {
       fileSystem.addFile(destination, { size: 1024 });
       wrote(entries[0] as PartialFileJournalEntry);
       await new Promise(() => undefined);
@@ -305,9 +304,8 @@ describe("a file that failed inside a folder being copied", () => {
       "/source/dir/b.txt": { kind: "file", size: 10, dev: 2 },
       "/target": { kind: "directory" },
     });
-    fileSystem.enableRename();
     const written: string[] = [];
-    fileSystem.copyFileStreamImpl = async (source, destination) => {
+    fileSystem.copyFileImpl = async (source, destination) => {
       written.push(destination);
       const fails = source.endsWith("/a.txt");
       fileSystem.addFile(destination, { size: fails ? 4 : 10 });

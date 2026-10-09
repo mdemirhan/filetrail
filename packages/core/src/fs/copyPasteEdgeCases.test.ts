@@ -18,7 +18,6 @@ import type {
   CopyPasteRuntimeConflict,
   CopyPasteRuntimeResolutionAction,
   ReplaceJournalEntry,
-  WriteServiceFileSystem,
 } from "./writeServiceTypes";
 import { type WriteJournalEntry, isReplaceJournalEntry } from "./writeServiceTypes";
 
@@ -144,7 +143,7 @@ describe("items that keep changing while they are pasted", () => {
       "/source/a.txt": { kind: "file", size: 1 },
       "/target": { kind: "directory" },
     });
-    fileSystem.copyFileStreamImpl = async () => {
+    fileSystem.copyFileImpl = async () => {
       throw codeError("EEXIST");
     };
 
@@ -156,27 +155,17 @@ describe("items that keep changing while they are pasted", () => {
     });
   });
 
-  it("asks about a folder that appeared just as it was being made", async () => {
+  it("asks about a folder that took its name while it was being copied", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source/Docs/a.txt": { kind: "file", size: 1 },
       "/target": { kind: "directory" },
     });
-    const makeFolder = fileSystem.mkdir.bind(fileSystem);
-    let appeared = false;
-    fileSystem.mkdirImpl = async (path, options) => {
-      if (path === "/target/Docs" && !options?.recursive && !appeared) {
-        appeared = true;
-        fileSystem.addDirectory("/target/Docs");
-        throw codeError("EEXIST");
-      }
-      fileSystem.mkdirImpl = null;
-      try {
-        await makeFolder(path, options);
-      } finally {
-        fileSystem.mkdirImpl = hook;
-      }
+    fileSystem.copyFileImpl = async (sourcePath, destinationPath) => {
+      fileSystem.copyFileImpl = null;
+      // Another app makes a folder at the name while the copy is built under a hidden one.
+      fileSystem.addDirectory("/target/Docs");
+      await fileSystem.copyFile(sourcePath, destinationPath);
     };
-    const hook = fileSystem.mkdirImpl;
 
     const { result, conflicts } = await paste({
       fileSystem,
@@ -194,8 +183,8 @@ describe("items that keep changing while they are pasted", () => {
       "/source/link": { kind: "symlink", target: "/elsewhere" },
       "/target": { kind: "directory" },
     });
-    fileSystem.symlinkImpl = async (_target, path) => {
-      fileSystem.symlinkImpl = null;
+    fileSystem.copyFileImpl = async (_source, path) => {
+      fileSystem.copyFileImpl = null;
       fileSystem.addFile(path, { size: 3 });
       throw codeError("EEXIST");
     };
@@ -240,7 +229,7 @@ describe("items that keep changing while they are pasted", () => {
 });
 
 describe("stopping part way", () => {
-  it("stops inside a folder, keeping what was done and naming the item it was on", async () => {
+  it("stopped inside a folder being copied, leaves nothing of it", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source/Docs/a.txt": { kind: "file", size: 1 },
       "/source/Docs/b.txt": { kind: "file", size: 1 },
@@ -248,7 +237,7 @@ describe("stopping part way", () => {
       "/target": { kind: "directory" },
     });
     const controller = new AbortController();
-    fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
+    fileSystem.copyFileImpl = async (sourcePath, destinationPath, signal) => {
       if (sourcePath.endsWith("b.txt")) {
         controller.abort();
         signal?.throwIfAborted();
@@ -258,10 +247,9 @@ describe("stopping part way", () => {
 
     const { result } = await paste({ fileSystem, sourcePaths: ["/source/Docs"], controller });
 
-    expect(result.status).toBe("partial");
-    expect(itemFor(result, "/source/Docs/a.txt")?.status).toBe("completed");
-    expect(itemFor(result, "/source/Docs/b.txt")?.status).toBe("cancelled");
-    expect(fileSystem.exists("/target/Docs/b.txt")).toBe(false);
+    // It was built under a hidden name, which went with the stop.
+    expect(result.status).toBe("cancelled");
+    expect(await fileSystem.readdir("/target")).toEqual([]);
   });
 
   it("stopped while building a replacement, leaves the existing item as it was", async () => {
@@ -270,10 +258,9 @@ describe("stopping part way", () => {
       "/source/Docs/b.txt": { kind: "file", size: 1 },
       "/target/Docs/old.txt": { kind: "file", size: 7 },
     });
-    fileSystem.enableRename();
     fileSystem.enableTrash();
     const controller = new AbortController();
-    fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
+    fileSystem.copyFileImpl = async (sourcePath, destinationPath) => {
       if (sourcePath.endsWith("b.txt")) {
         controller.abort();
         throw Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
@@ -304,7 +291,6 @@ describe("the last step of a Replace", () => {
       "/source/a.txt": { kind: "file", size: 2 },
       "/target/a.txt": { kind: "file", size: 1 },
     });
-    fileSystem.enableRename();
     fileSystem.enableTrash();
     return fileSystem;
   }
@@ -322,7 +308,7 @@ describe("the last step of a Replace", () => {
         if (fileSystem.exists(to)) {
           throw codeError("EEXIST");
         }
-        await (fileSystem as WriteServiceFileSystem).rename?.(from, to);
+        await fileSystem.rename(from, to);
       },
     });
 
@@ -348,7 +334,7 @@ describe("the last step of a Replace", () => {
         if (!to.includes(".filetrail-")) {
           throw codeError("EIO");
         }
-        await (fileSystem as WriteServiceFileSystem).rename?.(from, to);
+        await fileSystem.rename(from, to);
       },
     });
     const { live, journal } = recordingJournal();
@@ -385,7 +371,7 @@ describe("the last step of a Replace", () => {
     expect(fileSystem.trashed).toEqual([]);
   });
 
-  it("without rename, clears the way first and asks before deleting for good", async () => {
+  it("asks before deleting the old item for good on a disk without a Trash", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source/a.txt": { kind: "file", size: 2 },
       "/target/a.txt": { kind: "file", size: 1 },
@@ -423,7 +409,6 @@ describe("a replacing move to another disk", () => {
       "/target": { kind: "directory", dev: 2 },
       "/target/Docs/old.txt": { kind: "file", size: 1, dev: 2 },
     });
-    fileSystem.enableRename();
     fileSystem.enableTrash();
     fileSystem.rmImpl = async (path) => {
       if (path === "/source/Docs/Inner/b.txt") {
@@ -457,7 +442,6 @@ describe("a replacing move to another disk", () => {
       "/source/Docs/a.txt": { kind: "file", size: 1 },
       "/target": { kind: "directory", dev: 2 },
     });
-    fileSystem.enableRename();
 
     const { result } = await paste({
       fileSystem,
@@ -483,7 +467,6 @@ describe("a Replace that would destroy what it pastes", () => {
       "/source/a.txt": { kind: "file", size: 2, ino: 500 },
       "/target/a.txt": { kind: "file", size: 1 },
     });
-    fileSystem.enableRename();
     fileSystem.enableTrash();
 
     const { result } = await paste({

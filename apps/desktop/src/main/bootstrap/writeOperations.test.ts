@@ -25,6 +25,7 @@ import { NO_TRASH_ERROR_CODE, type WriteService, createWriteService } from "@fil
 import { canMountDiskImages, mountTestDiskImage } from "@filetrail/core/fs/testDiskImage";
 import {
   createOriginalWriteOperationFs,
+  originalFileSystem,
   originalRename,
   originalRenameExclusive,
 } from "../originalFileSystem";
@@ -867,7 +868,7 @@ describe("createWriteOperationCoordinator", () => {
     }
     await writeFile(join(destination, "shared", "clash.txt"), "already here");
 
-    const writeService = createWriteService();
+    const writeService = createWriteService({ fileSystem: originalFileSystem });
     const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
     const sender = createSender();
     const { analysisId } = await coordinator.handlers["copyPaste:analyzeStart"](
@@ -1979,7 +1980,7 @@ describe("starting a paste", () => {
     const root = await mkdtemp(join(tmpdir(), "filetrail-early-end-"));
     await writeFile(join(root, "a.txt"), "a");
     await mkdir(join(root, "target"));
-    const writeService = createWriteService();
+    const writeService = createWriteService({ fileSystem: originalFileSystem });
     const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
     const sender = createSender();
     const { analysisId } = await coordinator.handlers["copyPaste:analyzeStart"](

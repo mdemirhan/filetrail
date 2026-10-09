@@ -7,9 +7,8 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ReplaceJournalEntry, RunWriteAlone } from "@filetrail/core";
 import { nativeFileSystem } from "@filetrail/core/fs/testNativePaste";
-import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
-import { createOriginalWriteOperationFs } from "../originalFileSystem";
+import { createOriginalWriteOperationFs, originalFileSystem } from "../originalFileSystem";
 import { runBatchRename } from "./batchRenameExecution";
 import { getCachedResponse, getResponseCacheSizes, resetResponseCacheState } from "./responseCache";
 import { openWriteJournal, recoverWrites, retryRecovery } from "./writeJournal";
@@ -123,7 +122,7 @@ describe("recoverWrites", () => {
     }
     const logger = { info: vi.fn(), error: vi.fn() };
 
-    const { notices } = await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
+    const { notices } = await recoverWrites(journal, originalFileSystem, logger);
 
     expect(await readFile(finished.finalPath, "utf8")).toBe("new contents");
     expect(existsSync(finished.stagingPath)).toBe(false);
@@ -154,7 +153,7 @@ describe("recoverWrites", () => {
     await journal.add(unreachable);
     await journal.add(unfinishedCopy);
 
-    const { notices } = await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, {
+    const { notices } = await recoverWrites(journal, originalFileSystem, {
       info: vi.fn(),
       error: vi.fn(),
     });
@@ -172,7 +171,7 @@ describe("recoverWrites", () => {
     const hanging = createEntry("hanging", { moved: true });
     await journal.add(hanging);
     const fileSystem = {
-      ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      ...originalFileSystem,
       lstat: () => new Promise<never>(() => undefined),
     };
 
@@ -200,7 +199,7 @@ describe("recoverWrites", () => {
 
     const report = await recoverWrites(
       journal,
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      originalFileSystem,
       { info: vi.fn(), error: vi.fn() },
       { entryIds: new Set([waiting.id]), retry: true },
     );
@@ -221,7 +220,7 @@ describe("recoverWrites", () => {
 
     await recoverWrites(
       journal,
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      originalFileSystem,
       { info: vi.fn(), error: vi.fn() },
       {
         entryIds: new Set([waiting.id]),
@@ -245,7 +244,7 @@ describe("recoverWrites", () => {
 
     await recoverWrites(
       journal,
-      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      originalFileSystem,
       { info: vi.fn(), error: vi.fn() },
       {
         entryIds: new Set([waiting.id]),
@@ -268,7 +267,7 @@ describe("recoverWrites", () => {
     const logger = { info: vi.fn(), error: vi.fn() };
     const busy = vi.fn(async () => ({ ran: false as const }));
 
-    const report = await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger, {
+    const report = await recoverWrites(journal, originalFileSystem, logger, {
       entryIds: new Set([waiting.id]),
       retry: true,
       runWriteAlone: busy,
@@ -289,10 +288,10 @@ describe("recoverWrites", () => {
         writing = false;
       }
     };
-    const lstat = DEFAULT_WRITE_SERVICE_FILE_SYSTEM.lstat;
+    const lstat = originalFileSystem.lstat;
     const seenWhileWriting: boolean[] = [];
     const watchingFileSystem = {
-      ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      ...originalFileSystem,
       // Whether the disk answers is checked before the slot is taken.
       lstat: (path: string) => {
         seenWhileWriting.push(writing);
@@ -357,9 +356,10 @@ describe("recoverWrites", () => {
       }),
     };
 
-    await expect(
-      recoverWrites(failingJournal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger),
-    ).resolves.toEqual({ notices: [], finished: [] });
+    await expect(recoverWrites(failingJournal, originalFileSystem, logger)).resolves.toEqual({
+      notices: [],
+      finished: [],
+    });
     expect(await readFile(finished.finalPath, "utf8")).toBe("new contents");
     expect(logger.error).toHaveBeenCalledWith(
       "[filetrail] couldn't update the write journal",
@@ -384,7 +384,7 @@ describe("recoverWrites", () => {
     }
     const logger = { info: vi.fn(), error: vi.fn() };
 
-    expect(await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger)).toEqual({
+    expect(await recoverWrites(journal, originalFileSystem, logger)).toEqual({
       notices: [],
       finished: [],
     });
@@ -399,7 +399,7 @@ describe("recoverWrites", () => {
       partialPath: unreachable,
       finalPath: "x",
     });
-    await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
+    await recoverWrites(journal, originalFileSystem, logger);
     expect(journal.entries().map((entry) => entry.id)).toEqual(["away"]);
     expect(logger.info).toHaveBeenCalledWith(
       "[filetrail] an interrupted copy wasn't removed",
@@ -574,7 +574,7 @@ describe("recoverWrites", () => {
     const reopened = await openWriteJournal(journalPath);
     const report = await recoverWrites(
       reopened,
-      { ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM, renameExclusive: fs.renameExclusive },
+      { ...originalFileSystem, renameExclusive: fs.renameExclusive },
       { info: vi.fn(), error: vi.fn() },
     );
 
@@ -611,7 +611,7 @@ describe("recoverWrites", () => {
       await journal.add(entry);
       const renameExclusive = vi.fn(async () => undefined);
       const fileSystem = {
-        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        ...originalFileSystem,
         lstat: (path: string) =>
           path.startsWith("/Volumes/Share")
             ? new Promise<never>(() => undefined)
@@ -668,7 +668,7 @@ describe("recoverWrites", () => {
     const journal = await openWriteJournal(filePath);
     const logger = { info: vi.fn(), error: vi.fn() };
 
-    await recoverWrites(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
+    await recoverWrites(journal, originalFileSystem, logger);
 
     expect(logger.info).not.toHaveBeenCalled();
     expect(existsSync(filePath)).toBe(false);

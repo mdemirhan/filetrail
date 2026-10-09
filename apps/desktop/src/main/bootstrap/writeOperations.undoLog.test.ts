@@ -18,7 +18,7 @@ import {
   createWriteService,
 } from "@filetrail/core";
 
-import { createOriginalWriteOperationFs } from "../originalFileSystem";
+import { createOriginalWriteOperationFs, originalFileSystem } from "../originalFileSystem";
 import type { ItemSize } from "./folderSizeAdjust";
 import { createUndoHistory } from "./undoHistory";
 import {
@@ -808,7 +808,7 @@ describe("a paste that changed nothing", () => {
     writeFileSync(join(root, "dst", "Folder", "x.txt"), "old");
     const history = createUndoHistory();
     const coordinator = createWriteOperationCoordinator(
-      createWriteService(),
+      createWriteService({ fileSystem: originalFileSystem }),
       createOriginalWriteOperationFs(folderTrash()),
       { homePath: root, recordUndo: history.record, undoHistory: history },
     );

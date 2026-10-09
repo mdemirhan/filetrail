@@ -88,10 +88,26 @@ function largeFolderFileSystem(): WriteServiceFileSystem {
     mkdir: async (path) => create(path, "directory"),
     rm: async () => undefined,
     rmdir: async () => undefined,
-    symlink: async () => undefined,
+    // A folder copied is built under a hidden name, then given its own.
+    renameExclusive: async (from, to) => {
+      if (nodes.has(to)) {
+        throw Object.assign(new Error(`EEXIST: ${to}`), { code: "EEXIST", path: to });
+      }
+      for (const map of [nodes, children] as Map<string, unknown>[]) {
+        for (const [path, value] of [...map]) {
+          if (path === from || path.startsWith(`${from}/`)) {
+            map.delete(path);
+            map.set(`${to}${path.slice(from.length)}`, value);
+          }
+        }
+      }
+      const siblings = children.get(dirname(from)) ?? [];
+      siblings.splice(siblings.indexOf(basename(from)), 1);
+      children.get(dirname(to))?.push(basename(to));
+    },
+    getFlags: async () => 0,
+    setFlags: async () => undefined,
     copyFile: async (sourcePath, destinationPath) =>
-      create(destinationPath, "file", lookUp(sourcePath).size),
-    copyFileStream: async (sourcePath, destinationPath) =>
       create(destinationPath, "file", lookUp(sourcePath).size),
   };
 }

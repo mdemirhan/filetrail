@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readdir, readlink, rm, symlink } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { nativeFileSystem, runPaste } from "./testNativePaste";
+import { asOnAnotherDisk, runPaste } from "./testNativePaste";
 
 let testDir: string;
 
@@ -17,8 +17,8 @@ afterEach(async () => {
   await rm(testDir, { recursive: true, force: true });
 });
 
-// Without rename, a move copies, as to another disk.
-const { rename: _rename, renameExclusive: _renameExclusive, ...withoutRename } = nativeFileSystem;
+// A move copies, as to another disk.
+const fromAnotherDisk = asOnAnotherDisk();
 
 function linkAttribute(path: string): string {
   return execFileSync("xattr", ["-s", "-p", "com.example.tag", path], { encoding: "utf8" }).trim();
@@ -37,7 +37,7 @@ describe("a link pasted", () => {
 
       const { result } = await runPaste({
         mode,
-        fileSystem: withoutRename,
+        fileSystem: fromAnotherDisk,
         sourcePaths: [join(src, "folder")],
         destinationDirectoryPath: dst,
       });

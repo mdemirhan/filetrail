@@ -25,7 +25,6 @@ function folderOnAnotherDisk(): MockWriteServiceFileSystem {
     "/source/dir/link": { kind: "symlink", target: "a.txt", dev: 2 },
     "/target": { kind: "directory" },
   });
-  fileSystem.enableRename();
   return fileSystem;
 }
 
@@ -134,7 +133,7 @@ describe("a move to another disk removes an original only once its copy is check
   it("keeps the original of a single file whose copy came out short", async () => {
     const fileSystem = folderOnAnotherDisk();
     const report = await analyze(fileSystem, ["/source/dir/a.txt"]);
-    fileSystem.copyFileStreamImpl = async (_source, destination) => {
+    fileSystem.copyFileImpl = async (_source, destination) => {
       fileSystem.addFile(destination, { size: 1 });
     };
 
@@ -271,7 +270,7 @@ describe("a move to another disk removes an original only once its copy is check
     fileSystem.nodes.delete("/source/dir/sub/c.txt");
     fileSystem.nodes.delete("/source/dir/sub");
     fileSystem.addFile("/source/dir/sub", { size: 7, dev: 2 });
-    fileSystem.copyFileStreamImpl = async () => {
+    fileSystem.copyFileImpl = async () => {
       throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
     };
 
