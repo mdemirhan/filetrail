@@ -515,5 +515,34 @@ describe("copyPasteClipboard", () => {
         expect(followClipboardThroughWrite(cut, result)).toBe(cut);
       }
     });
+
+    // Each item is looked up along its own path, not compared with every item the write
+    // moved: 10,000 items took half a second, twice over, when the move finished.
+    it("follows a move of thousands of items at once", () => {
+      const count = 20_000;
+      const paths = Array.from({ length: count }, (_, index) => `/Users/demo/a/item-${index}`);
+      const copied = setCopyPasteClipboard("copy", paths, NOW);
+      const result = writeResult(
+        "move_to",
+        paths.map((path, index) => ({
+          sourcePath: path,
+          destinationPath: path.replace("/a/", "/b/"),
+          // One left behind keeps its place.
+          ...(index === 0 ? { status: "failed" as const } : {}),
+        })),
+      );
+
+      const startedAt = performance.now();
+      const followed = followClipboardThroughWrite(copied, result);
+      const movedTo = clipboardPathsMovedBy(copied, result);
+      const elapsed = performance.now() - startedAt;
+
+      expect(followed.type === "ready" && followed.sourcePaths.slice(0, 2)).toEqual([
+        "/Users/demo/a/item-0",
+        "/Users/demo/b/item-1",
+      ]);
+      expect(movedTo).toHaveLength(count - 1);
+      expect(elapsed).toBeLessThan(1000);
+    });
   });
 });

@@ -83,9 +83,10 @@ export function dropClipboardPaths(
   if (clipboard.type !== "ready" || removedPaths.length === 0) {
     return clipboard;
   }
-  const isRemoved = (path: string) =>
-    removedPaths.some((removed) => path === removed || path.startsWith(`${removed}/`));
-  const sourcePaths = clipboard.sourcePaths.filter((path) => !isRemoved(path));
+  const removed = new Set(removedPaths);
+  const sourcePaths = clipboard.sourcePaths.filter(
+    (path) => deepestHolder(path, (holder) => removed.has(holder)) === null,
+  );
   if (sourcePaths.length === clipboard.sourcePaths.length) {
     return clipboard;
   }
@@ -114,7 +115,8 @@ export function remapClipboardPaths(
   if (clipboard.type !== "ready" || moves.length === 0) {
     return clipboard;
   }
-  const remap = (path: string) => remappedPath(path, moves, left) ?? path;
+  const movesByFrom = indexMoves(moves);
+  const remap = (path: string) => remappedPath(path, movesByFrom, left) ?? path;
   let changed = false;
   const sourcePaths: string[] = [];
   const keptPaths = new Set<string>();
@@ -135,19 +137,45 @@ export function remapClipboardPaths(
   return changed ? { ...clipboard, sourcePaths, sourceEntries } : clipboard;
 }
 
-// Where `path` is after `moves`, or null when none of them moved it. The deepest move that
-// holds the path decides, in case a folder and an item inside it were both moved.
+// Where each moved item went, by where it was (the first move of a path counts).
+function indexMoves(moves: ReadonlyArray<{ from: string; to: string }>): Map<string, string> {
+  const movesByFrom = new Map<string, string>();
+  for (const { from, to } of moves) {
+    if (!movesByFrom.has(from)) {
+      movesByFrom.set(from, to);
+    }
+  }
+  return movesByFrom;
+}
+
+// Where `path` is after the moves (by `indexMoves`), or null when none of them moved it.
+// The deepest move that holds the path decides, in case a folder and an item inside it were
+// both moved.
 function remappedPath(
   path: string,
-  moves: ReadonlyArray<{ from: string; to: string }>,
+  movesByFrom: ReadonlyMap<string, string>,
   left: LeftInPlace,
 ): string | null {
-  const move = moves
-    .filter(({ from }) => path === from || path.startsWith(`${from}/`))
-    .sort((one, other) => other.from.length - one.from.length)[0];
-  return move && !staysInPlace(path, move.from, left)
-    ? replacePathPrefix(path, move.from, move.to)
+  const from = deepestHolder(path, (holder) => movesByFrom.has(holder));
+  return from !== null && !staysInPlace(path, from, left)
+    ? replacePathPrefix(path, from, movesByFrom.get(from) ?? from)
     : null;
+}
+
+// `path` itself or the deepest folder holding it that `matches`, or null. Each item is
+// looked up along its own path, so a write of thousands of items is not compared with every
+// item on the clipboard.
+function deepestHolder(path: string, matches: (holder: string) => boolean): string | null {
+  for (
+    let holder = path;
+    holder.length > 0;
+    holder = holder.slice(0, Math.max(0, holder.lastIndexOf("/")))
+  ) {
+    if (matches(holder)) {
+      return holder;
+    }
+  }
+  return null;
 }
 
 // What a write that moved items left where they were: the items it skipped, or that failed
@@ -225,12 +253,12 @@ export function clipboardPathsMovedBy(
   if (clipboard.type !== "ready" || !movedItems(result)) {
     return [];
   }
-  const moves = collectFollowedMoves(result);
+  const movesByFrom = indexMoves(collectFollowedMoves(result));
   const left = leftInPlaceBy(result);
   const kept = dropClipboardPaths(clipboard, removedByWrite(result));
   return kept.type === "ready"
     ? kept.sourcePaths.flatMap((path) => {
-        const moved = remappedPath(path, moves, left);
+        const moved = remappedPath(path, movesByFrom, left);
         return moved === null ? [] : [moved];
       })
     : [];
@@ -255,9 +283,9 @@ function followClipboard(
     return clipboard;
   }
   if (clipboard.mode === "cut") {
-    const changedPaths = [...moves.map(({ from }) => from), ...removedPaths];
-    const changesAnItem = clipboard.sourcePaths.some((path) =>
-      changedPaths.some((changed) => path === changed || path.startsWith(`${changed}/`)),
+    const changedPaths = new Set([...moves.map(({ from }) => from), ...removedPaths]);
+    const changesAnItem = clipboard.sourcePaths.some(
+      (path) => deepestHolder(path, (holder) => changedPaths.has(holder)) !== null,
     );
     return changesAnItem ? EMPTY_COPY_PASTE_CLIPBOARD : clipboard;
   }
