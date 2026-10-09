@@ -6,12 +6,30 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ReplaceJournalEntry, RunWriteAlone } from "@filetrail/core";
-import { nativeFileSystem } from "@filetrail/core/fs/testNativePaste";
+import { asOnAnotherDisk, nativeFileSystem, runPaste } from "@filetrail/core/fs/testNativePaste";
 
 import { createOriginalWriteOperationFs, originalFileSystem } from "../originalFileSystem";
 import { runBatchRename } from "./batchRenameExecution";
 import { getCachedResponse, getResponseCacheSizes, resetResponseCacheState } from "./responseCache";
 import { openWriteJournal, recoverWrites, retryRecovery } from "./writeJournal";
+
+// The code the journal's own file fails to be written with, while set: a full startup disk
+// can't be had for real in a test.
+const journalWrite = vi.hoisted(() => ({ failsWith: null as string | null }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    open: (async (path, ...rest) => {
+      if (journalWrite.failsWith !== null && String(path).endsWith("journal.json.tmp")) {
+        throw Object.assign(new Error(`${journalWrite.failsWith}: ${path}`), {
+          code: journalWrite.failsWith,
+        });
+      }
+      return actual.open(path, ...rest);
+    }) as typeof actual.open,
+  };
+});
 
 let testDir: string;
 
@@ -20,6 +38,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  journalWrite.failsWith = null;
   await rm(testDir, { recursive: true, force: true });
 });
 
@@ -75,6 +94,63 @@ describe("openWriteJournal", () => {
 
     expect(journal.entries()).toEqual([createEntry("b")]);
     expect((await openWriteJournal(filePath)).entries()).toEqual([createEntry("b")]);
+  });
+
+  // The journal is on the startup disk: when that is full, the copy to another disk with
+  // room isn't blamed on the destination.
+  it("says the startup disk is full when it can't be written for lack of space", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const source = join(testDir, "source");
+    const destination = join(testDir, "destination");
+    await mkdir(join(source, "Photos"), { recursive: true });
+    await writeFile(join(source, "Photos", "a.jpg"), "a");
+    await mkdir(destination);
+    journalWrite.failsWith = "ENOSPC";
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(source, "Photos")],
+      destinationDirectoryPath: destination,
+      fileSystem: asOnAnotherDisk(() => source),
+      writeJournal: journal,
+    });
+
+    expect(result?.items.map((item) => [item.status, item.error])).toEqual([
+      [
+        "failed",
+        "File Trail couldn't save its recovery information because the startup disk is full. Free some space there and try again.",
+      ],
+    ]);
+    expect(await readdir(destination)).toEqual([]);
+  });
+
+  it("says it couldn't save its recovery information when it can't be written otherwise", async () => {
+    const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+    const folder = join(testDir, "trip");
+    await mkdir(folder);
+    await writeFile(join(folder, "a.jpg"), "a");
+    await writeFile(join(folder, "b.jpg"), "b");
+    journalWrite.failsWith = "EIO";
+
+    const result = await runBatchRename({
+      request: {
+        items: [
+          { sourcePath: join(folder, "a.jpg"), destinationName: "b.jpg", isFolder: false },
+          { sourcePath: join(folder, "b.jpg"), destinationName: "a.jpg", isFolder: false },
+        ],
+        onConflict: "number",
+        numberSeparator: " ",
+      },
+      fs: createOriginalWriteOperationFs(async () => null),
+      signal: new AbortController().signal,
+      journal,
+    });
+
+    expect(result.items.map((item) => item.error)).toEqual([
+      "It wasn't renamed. File Trail couldn't save its recovery information.",
+      "It wasn't renamed. File Trail couldn't save its recovery information.",
+    ]);
+    expect(await readFile(join(folder, "a.jpg"), "utf8")).toBe("a");
   });
 
   it("opens empty when the file is missing, unreadable as JSON, or not a list of entries", async () => {

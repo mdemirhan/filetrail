@@ -10,6 +10,7 @@ import {
   type WriteJournalEntry,
   type WriteServiceFileSystem,
   answersWithin,
+  errorCode,
   isReplaceJournalEntry,
   recoverInterruptedReplaces,
   recoverPartialFiles,
@@ -37,7 +38,9 @@ export async function openWriteJournal(filePath: string): Promise<FileWriteJourn
     const snapshot = JSON.stringify([...entries.values()]);
     const write = pending.then(() => writeWhole(filePath, snapshot));
     pending = write.catch(() => undefined);
-    return write;
+    return write.catch((error: unknown) => {
+      throw recoveryInfoError(error);
+    });
   };
   return {
     entries: () => [...entries.values()],
@@ -51,6 +54,17 @@ export async function openWriteJournal(filePath: string): Promise<FileWriteJourn
       }
     },
   };
+}
+
+// The file is on the startup disk, wherever the items go: a failure to write it is said as
+// that, never as the destination's ("There isn't enough free space on the destination disk.").
+function recoveryInfoError(error: unknown): Error {
+  return new Error(
+    errorCode(error) === "ENOSPC"
+      ? "File Trail couldn't save its recovery information because the startup disk is full. Free some space there and try again."
+      : "File Trail couldn't save its recovery information.",
+    { cause: error },
+  );
 }
 
 export type RecoveryReport = {

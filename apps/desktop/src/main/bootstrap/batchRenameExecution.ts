@@ -192,7 +192,7 @@ export async function runBatchRename(args: {
           if (results[item.index] === null) {
             results[item.index] = failed(
               item,
-              `It wasn't renamed, as File Trail couldn't write down what it was about to do. ${describeCopyPasteError(error)}`,
+              `It wasn't renamed. ${describeCopyPasteError(error)}`,
             );
           }
         }

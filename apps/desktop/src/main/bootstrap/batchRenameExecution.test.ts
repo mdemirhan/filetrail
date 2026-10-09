@@ -1070,9 +1070,7 @@ describe("writing down the items moved aside", () => {
     });
     expect(disk.names()).toEqual(["a", "b"]);
     expect(result.items.map((item) => item.status)).toEqual(["failed", "failed"]);
-    expect(result.items[0]?.error).toMatch(
-      /^It wasn't renamed, as File Trail couldn't write down what it was about to do\./u,
-    );
+    expect(result.items[0]?.error).toMatch(/^It wasn't renamed\. /u);
   });
 });
 
