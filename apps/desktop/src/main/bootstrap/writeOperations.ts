@@ -1517,7 +1517,6 @@ export function createWriteOperationCoordinator(
     // failed part way. One refused before deleting (it changed after the question), or a
     // file still there after its delete failed, was never touched.
     let deletingBegan = false;
-    const realHomePath = await readRealHomePath();
     // What this window was asked about, kept for the whole operation: a reload of the
     // page, or the window closing, lets go of its records.
     const askedItems = itemsWithoutTrash.get(sender);
@@ -1550,12 +1549,6 @@ export function createWriteOperationCoordinator(
           asked !== undefined
             ? (await assertStillAskedItem(path, asked)) === "missing"
             : (await lstatUnlessMissing(path, fs.lstat)) === "missing";
-        // A folder in the Trash swapped for a link since it was checked would lead the
-        // delete out of it, so the Trash is looked at again right before. (An item asked
-        // about isn't in a Trash: it was checked by its id above instead.)
-        if (!gone && asked === undefined && (await placeInTrash(path, realHomePath)) !== "inside") {
-          throw new Error(`“${basename(path)}” is no longer in the Trash, so it wasn't deleted.`);
-        }
         if (!gone) {
           try {
             await fs.rm(path, { recursive: true, force: true });
