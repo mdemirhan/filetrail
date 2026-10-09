@@ -193,6 +193,36 @@ describe("writeService runtime conflicts", () => {
     expect(result?.items.map((item) => item.status)).toEqual(["skipped"]);
   });
 
+  // A file saved again while its question was open is asked about again, as a new question:
+  // the window remembers which question it answered by its id.
+  it("gives a question asked again about the same item an id of its own", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source/a.txt": { kind: "file", size: 1 },
+      "/target": { kind: "directory" },
+    });
+    let questions = 0;
+    const { asked, result } = await runPaste({
+      fileSystem,
+      sourcePaths: ["/source/a.txt"],
+      destinationDirectoryPath: "/target",
+      policy: KEEP_BOTH,
+      afterAnalysis: () => {
+        fileSystem.mutateNode("/source/a.txt", (node) => ({ ...node, size: 2 }));
+      },
+      answer: () => {
+        questions += 1;
+        if (questions === 1) {
+          fileSystem.mutateNode("/source/a.txt", (node) => ({ ...node, size: 3 }));
+        }
+        return { action: "overwrite" };
+      },
+    });
+
+    expect(asked.map((conflict) => conflict.reason)).toEqual(["source_changed", "source_changed"]);
+    expect(asked[1]?.conflictId).not.toBe(asked[0]?.conflictId);
+    expect(result?.items.map((item) => item.status)).toEqual(["completed"]);
+  });
+
   // Changed after the look that follows the answer, just before the Replace itself: the
   // newer item isn't taken for the one agreed to.
   it("asks again when the item a Replace answer was about changes just before the Replace", async () => {

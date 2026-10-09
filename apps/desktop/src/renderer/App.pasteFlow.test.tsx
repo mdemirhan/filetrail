@@ -197,6 +197,48 @@ describe("App copy/paste integration", () => {
       conflictId: "runtime-1",
       resolution: "overwrite",
     });
+
+    // Changed again while it was asked: the new question can be answered too.
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        action: "paste",
+        status: "awaiting_resolution",
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: "/Users/demo/Folder",
+        currentDestinationPath: "/Users/demo/Folder",
+        runtimeConflict: {
+          conflictId: "runtime-2",
+          analysisId: "analysis-1",
+          sourcePath: "/Users/demo/Folder",
+          destinationPath: "/Users/demo/Folder",
+          sourceKind: "directory",
+          destinationKind: "directory",
+          conflictClass: "directory_conflict",
+          reason: "destination_changed",
+          sourceFingerprint: createNodeFingerprint("directory"),
+          destinationFingerprint: createNodeFingerprint("directory"),
+          currentSourceFingerprint: createNodeFingerprint("directory"),
+          currentDestinationFingerprint: createNodeFingerprint("directory"),
+        },
+        result: null,
+      });
+    });
+
+    expect(screen.getByRole("button", { name: "Replace" })).toBeEnabled();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:resolveConflict")?.payload,
+    ).toEqual({
+      operationId: "copy-op-1",
+      conflictId: "runtime-2",
+      resolution: "overwrite",
+    });
   });
 
   it("offers only skip for runtime conflicts when the source item is missing", async () => {

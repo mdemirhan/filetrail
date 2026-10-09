@@ -669,6 +669,11 @@ async function executeResolvedNode(
   }
 }
 
+// Every question asked gets an id of its own, even one asked again about the same item:
+// an answer to an earlier question never answers a later one, and the window, which
+// remembers by id which question it has answered, shows the new one ready to answer.
+let questionsAsked = 0;
+
 // Asks about a conflict, unless an earlier "apply to the rest" answer covers it.
 async function answerRuntimeConflict(
   context: ExecutionContext,
@@ -679,9 +684,11 @@ async function answerRuntimeConflict(
   if (standing !== null) {
     return standing;
   }
+  questionsAsked += 1;
+  const question = { ...conflict, conflictId: `${conflict.conflictId}-${questionsAsked}` };
   // Asked for before the question goes out, so an answer given right away isn't lost.
-  const answer = context.requestResolution(conflict);
-  emitProgress(context, "awaiting_resolution", node, conflict);
+  const answer = context.requestResolution(question);
+  emitProgress(context, "awaiting_resolution", node, question);
   const resolution = await answer;
   context.signal.throwIfAborted();
   if (!resolution) {
