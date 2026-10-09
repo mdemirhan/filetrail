@@ -849,4 +849,103 @@ describe("copyPasteAnalysis", () => {
       expect(asked).toEqual(["/target"]);
     });
   });
+
+  // Each item in the way is checked against the others pasted by a lookup, not by reading
+  // every item pasted again: 2,000 items in the way took 4 million reads.
+  it("reads the disk in proportion to the items pasted", async () => {
+    async function readsFor(count: number): Promise<number> {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/src": { kind: "directory" },
+        "/dst": { kind: "directory" },
+      });
+      const sourcePaths: string[] = [];
+      for (let index = 0; index < count; index += 1) {
+        fileSystem.addFile(`/src/item-${index}.txt`, { size: 1 });
+        fileSystem.addFile(`/dst/item-${index}.txt`, { size: 2 });
+        sourcePaths.push(`/src/item-${index}.txt`);
+      }
+      const lstat = vi.spyOn(fileSystem, "lstat");
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "analysis-1",
+        request: { mode: "copy", sourcePaths, destinationDirectoryPath: "/dst" },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100_000, largeBatchByteThreshold: 1_000_000 },
+      });
+      expect(report.summary.fileConflictCount).toBe(count);
+      return lstat.mock.calls.length;
+    }
+
+    expect(await readsFor(300)).toBeLessThan(2.5 * (await readsFor(150)));
+  });
+
+  describe("a disk mounted inside a folder", () => {
+    function withMountedDisk(
+      seed: ConstructorParameters<typeof MockWriteServiceFileSystem>[0] = {},
+    ): MockWriteServiceFileSystem {
+      return new MockWriteServiceFileSystem({
+        "/Users/me/project": { kind: "directory", dev: 1 },
+        "/Users/me/project/notes.txt": { kind: "file", size: 1 },
+        "/Users/me/project/mnt": { kind: "directory", dev: 7 },
+        "/Users/me/project/mnt/disk-file.txt": { kind: "file", size: 1 },
+        "/Users/me/target": { kind: "directory", dev: 1 },
+        "/Volumes/Other": { kind: "directory", dev: 3 },
+        ...seed,
+      });
+    }
+
+    function analyze(
+      fileSystem: MockWriteServiceFileSystem,
+      mode: "copy" | "cut",
+      destinationDirectoryPath: string,
+    ): ReturnType<typeof buildCopyPasteAnalysisReport> {
+      return buildCopyPasteAnalysisReport({
+        analysisId: "analysis-1",
+        request: { mode, sourcePaths: ["/Users/me/project"], destinationDirectoryPath },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 1000 },
+      });
+    }
+
+    // A move to another disk copies the folder and then removes it, the mounted disk's
+    // items with it.
+    it("refuses to move the folder to another disk", async () => {
+      const report = await analyze(withMountedDisk(), "cut", "/Volumes/Other");
+
+      expect(report.issues).toEqual([
+        {
+          code: "source_unreadable",
+          message: "“project” can't be moved because a disk is mounted inside it (“mnt”).",
+          sourcePath: "/Users/me/project",
+          destinationPath: "/Volumes/Other/project",
+        },
+      ]);
+      expect(report.nodes).toEqual([]);
+    });
+
+    it("copies the folder, disk and all", async () => {
+      const report = await analyze(withMountedDisk(), "copy", "/Volumes/Other");
+
+      expect(report.issues).toEqual([]);
+      expect(report.summary.totalNodeCount).toBe(4);
+    });
+
+    // On the same disk the folder is renamed whole, and the disk stays mounted in it.
+    it("moves the folder on its own disk", async () => {
+      const report = await analyze(withMountedDisk(), "cut", "/Users/me/target");
+
+      expect(report.issues).toEqual([]);
+    });
+
+    // Merged into a folder of the same name, its items are moved one by one: the mounted
+    // disk's would be copied and removed.
+    it("refuses to merge the folder into another on its own disk", async () => {
+      const report = await analyze(
+        withMountedDisk({ "/Users/me/target/project": { kind: "directory", dev: 1 } }),
+        "cut",
+        "/Users/me/target",
+      );
+
+      expect(report.issues.map((issue) => issue.code)).toEqual(["source_unreadable"]);
+    });
+  });
 });

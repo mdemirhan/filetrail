@@ -274,6 +274,21 @@ export async function buildCopyPasteAnalysisReport(args: {
       destinationScanCache,
       ...(args.signal ? { signal: args.signal } : {}),
     });
+    // A disk mounted inside a folder being moved: a move that copies the folder would copy
+    // that disk's items too, then remove them from it. Refused before anything is written.
+    const mountPoint =
+      request.mode === "cut"
+        ? findMountPointMovedByCopy(node, node.sourceFingerprint.dev !== destinationFingerprint.dev)
+        : null;
+    if (mountPoint !== null) {
+      issues.push({
+        code: "source_unreadable",
+        message: `“${basename(sourcePath)}” can't be moved because a disk is mounted inside it (“${basename(mountPoint)}”).`,
+        sourcePath,
+        destinationPath,
+      });
+      continue;
+    }
     nodes.push(node);
   }
 
@@ -714,6 +729,34 @@ async function realSourcePaths(
     fileSystem,
     nodes.map((node) => node.sourcePath),
   );
+}
+
+// A folder inside `node` that is on another disk than the folder holding it (a disk mounted
+// there), when a move would copy it rather than rename it along with its folder: always on
+// the way to another disk, and on the same disk inside folders merged into others, whose
+// items are moved one by one (each folder that isn't merged is renamed whole).
+function findMountPointMovedByCopy(
+  node: CopyPasteAnalysisNode,
+  toAnotherDisk: boolean,
+): string | null {
+  if (!toAnotherDisk && node.conflictClass !== "directory_conflict") {
+    return null;
+  }
+  for (const child of node.children) {
+    if (
+      child.sourceKind === "directory" &&
+      child.sourceFingerprint.dev !== null &&
+      node.sourceFingerprint.dev !== null &&
+      child.sourceFingerprint.dev !== node.sourceFingerprint.dev
+    ) {
+      return child.sourcePath;
+    }
+    const found = findMountPointMovedByCopy(child, toAnotherDisk);
+    if (found !== null) {
+      return found;
+    }
+  }
+  return null;
 }
 
 // The identities ("dev:ino") of the folder at `realPath` and of every folder holding it.
