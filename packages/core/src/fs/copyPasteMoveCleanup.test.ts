@@ -255,6 +255,37 @@ describe("a move to another disk removes an original only once its copy is check
     expect(fileSystem.exists("/source/dir")).toBe(false);
   });
 
+  it("says so when a file saved anew as a folder keeps its original folder", async () => {
+    const fileSystem = folderOnAnotherDisk();
+    const report = await analyze(fileSystem, ["/source/dir"]);
+    fileSystem.nodes.delete("/source/dir/a.txt");
+    fileSystem.addDirectory("/source/dir/a.txt", { dev: 2 });
+    fileSystem.addFile("/source/dir/a.txt/inside.txt", { size: 2, dev: 2 });
+    Object.assign(fileSystem, {
+      copyMetadata: async (source: string) => {
+        if (source === "/source/dir/a.txt") {
+          throw Object.assign(new Error("ENOTSUP"), { code: "ENOTSUP" });
+        }
+      },
+    });
+
+    const result = await move(fileSystem, report, () => "overwrite");
+
+    expect(fileSystem.exists("/target/dir/a.txt/inside.txt")).toBe(true);
+    expect(fileSystem.exists("/source/dir/a.txt/inside.txt")).toBe(false);
+    expect(fileSystem.exists("/source/dir/a.txt")).toBe(true);
+    expect(result.status).not.toBe("completed");
+    expect(result.items).toContainEqual(
+      expect.objectContaining({
+        sourcePath: "/source/dir/a.txt",
+        sourceKind: "directory",
+        status: "failed",
+        error:
+          "Its items were moved, but the folder's own information (such as its tags) couldn't all be copied, so the original “a.txt” was kept.",
+      }),
+    );
+  });
+
   it("keeps an original folder whose own metadata its copy couldn't take", async () => {
     const fileSystem = folderOnAnotherDisk();
     fileSystem.addDirectory("/source/dir/sub", { dev: 2 });

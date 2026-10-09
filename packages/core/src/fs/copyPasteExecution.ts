@@ -1840,7 +1840,8 @@ async function removeMovedSources(
       return error;
     }
     const keptNames = new Set<string>();
-    for (const child of current.children) {
+    for (const reviewedChild of current.children) {
+      const child = asExecuted(context, reviewedChild);
       // A folder skipped (or stopped) wasn't copied: it and everything in it stay.
       const childStatus = itemsBySource.get(child.node.sourcePath)?.status;
       if (
