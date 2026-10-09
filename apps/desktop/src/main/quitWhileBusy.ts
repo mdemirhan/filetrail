@@ -49,7 +49,9 @@ export function describeQuitWhileBusy(
     case "move":
       return {
         message: "A move is still in progress.",
-        detail: `${stops} Items already moved stay in their new place; the rest, and a folder still being moved, stay where they were.`,
+        // A folder moved to another disk is copied whole, then its original removed: stopped
+        // during the removal, the copy is in place and part of the original is still there.
+        detail: `${stops} Items already moved stay in their new place, and the rest stay where they were. A folder being moved to another disk may already be there in full, with some of its items still in the old place too.`,
       };
     case "trash":
       return {

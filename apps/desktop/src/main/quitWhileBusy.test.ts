@@ -33,7 +33,13 @@ describe("describeQuitWhileBusy", () => {
       detail:
         "If you quit now, it stops after the current item. Items already copied stay where they are; a folder still being copied isn't left half copied.",
     });
-    expect(describeQuitWhileBusy("move")?.message).toBe("A move is still in progress.");
+    // Stopped while a move to another disk removes its originals, the copy is in place
+    // and some of the originals are still there: nothing promises otherwise.
+    expect(describeQuitWhileBusy("move")).toEqual({
+      message: "A move is still in progress.",
+      detail:
+        "If you quit now, it stops after the current item. Items already moved stay in their new place, and the rest stay where they were. A folder being moved to another disk may already be there in full, with some of its items still in the old place too.",
+    });
     expect(describeQuitWhileBusy("trash")?.message).toBe(
       "Items are still being moved to the Trash.",
     );

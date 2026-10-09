@@ -660,8 +660,9 @@ function installProcessLoggingHandlers(logger: ReturnType<typeof createAppLogger
   });
 }
 
-// Items a crash left half replaced that couldn't be put right: the person is told where
-// they are, once the window is on screen.
+// What was done at start about work a crash cut short (items put back, or put in place, or
+// still under hidden names): the person is told where they are, once the window is on
+// screen.
 function showPendingStartupNotices(window: BrowserWindow): void {
   if (pendingStartupNotices.length === 0) {
     return;
@@ -673,10 +674,7 @@ function showPendingStartupNotices(window: BrowserWindow): void {
     }
     void dialog.showMessageBox(window, {
       type: "warning",
-      message:
-        notices.length === 1
-          ? "An item replaced before File Trail last quit isn't in place yet"
-          : "Some items replaced before File Trail last quit aren't in place yet",
+      message: "Work was cut short when File Trail last stopped",
       detail: notices.join("\n\n"),
       buttons: ["OK"],
     });
