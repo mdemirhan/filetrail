@@ -24,8 +24,8 @@ export type FileWriteJournal = WriteJournal & {
 };
 
 // Keeps the writes in progress that leave items under hidden names (Replaces, large file
-// copies) in a small file, so the next start can finish or undo one that a crash or power
-// cut interrupted. Each change is on disk before the write goes on.
+// copies) in a small file, so the next start can finish or undo one that a crash or force
+// quit interrupted. Each change is in the file before the write goes on.
 export async function openWriteJournal(filePath: string): Promise<FileWriteJournal> {
   const entries = new Map<string, WriteJournalEntry>();
   for (const entry of await readEntries(filePath)) {
@@ -35,7 +35,7 @@ export async function openWriteJournal(filePath: string): Promise<FileWriteJourn
   let pending: Promise<void> = Promise.resolve();
   const save = () => {
     const snapshot = JSON.stringify([...entries.values()]);
-    const write = pending.then(() => writeDurably(filePath, snapshot));
+    const write = pending.then(() => writeWhole(filePath, snapshot));
     pending = write.catch(() => undefined);
     return write;
   };
@@ -404,14 +404,15 @@ function isEntry(value: unknown): value is WriteJournalEntry {
   );
 }
 
-// Written next to the file, flushed, then renamed over it: a crash mid-write leaves the
-// previous list, never half of one.
-async function writeDurably(filePath: string, contents: string): Promise<void> {
+// Written next to the file, then renamed over it: a crash or force quit mid-write leaves
+// the previous list, never half of one. It isn't flushed to the drive, which on macOS costs
+// milliseconds each time and a paste writes many times, so a power cut may lose the latest
+// changes.
+async function writeWhole(filePath: string, contents: string): Promise<void> {
   const temporaryPath = `${filePath}.tmp`;
   const handle = await open(temporaryPath, "w");
   try {
     await handle.writeFile(contents, "utf8");
-    await handle.sync();
   } finally {
     await handle.close();
   }

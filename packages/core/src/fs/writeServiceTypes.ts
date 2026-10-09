@@ -528,7 +528,8 @@ export type WriteJournalEntry =
 
 /** Where writes that leave items under hidden names while they run are written down, so a
  *  crash can't strand one there: the next start finishes or undoes each. `add` replaces an
- *  entry with the same id. Writes must be durable before they resolve. */
+ *  entry with the same id. Each write must be in the file, whole, before it resolves, so it
+ *  outlasts a crash or force quit (a power cut may still lose the latest ones). */
 export type WriteJournal = {
   add: (entry: WriteJournalEntry) => Promise<void>;
   remove: (id: string) => Promise<void>;
