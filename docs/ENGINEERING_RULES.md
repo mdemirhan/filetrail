@@ -29,6 +29,10 @@
 - Keep test files small enough to run side by side: one file runs on one worker, so a file that takes far longer than the rest sets the time of the whole run. The App tests share their mocks and harness through `apps/desktop/src/renderer/test/appMocks.tsx` and `appHarness.tsx`.
 - Renderer tests should verify state transitions and visible behavior, not implementation details.
 
+## File Operations
+
+- A file-operation finding is fixed only when it clears the bar in `docs/FILE_OPERATION_RISKS.md`; cases below it go on that file's list of accepted risks instead of into the code.
+
 ## Avoid
 
 - Cross-platform abstraction layers.
