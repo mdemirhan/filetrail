@@ -125,6 +125,22 @@ export async function buildCopyPasteAnalysisReport(args: {
     return same;
   };
 
+  // The destination folder and each folder holding it, by identity, found once: a folder
+  // pasted into any of them would be pasted into itself. Paths alone miss one reached by
+  // another spelling: the real path of a folder in Home can still start with the firmlinked
+  // "/System/Volumes/Data", and the copied folder's with "/Users".
+  let destinationHolderIds: Promise<Set<string>> | null = null;
+  const holdsDestination = async (
+    source: NodeFingerprint,
+    destinationRealPath: string,
+  ): Promise<boolean> => {
+    if (source.dev === null || source.ino === null) {
+      return false;
+    }
+    destinationHolderIds ??= folderIdsHolding(fileSystem, destinationRealPath);
+    return (await destinationHolderIds).has(`${source.dev}:${source.ino}`);
+  };
+
   // Items that keep their own name claim it first, so a " copy" name picked for an item
   // copied into its own folder never takes it, whatever order the items come in.
   if (request.mode === "copy") {
@@ -213,7 +229,8 @@ export async function buildCopyPasteAnalysisReport(args: {
         const sourcePrefix = sourceRealPath.endsWith("/") ? sourceRealPath : `${sourceRealPath}/`;
         if (
           destinationRealPath === sourceRealPath ||
-          destinationRealPath.startsWith(sourcePrefix)
+          destinationRealPath.startsWith(sourcePrefix) ||
+          (await holdsDestination(sourceFingerprint, destinationRealPath))
         ) {
           issues.push({
             code: "parent_into_child",
@@ -696,6 +713,25 @@ async function realSourcePaths(
     fileSystem,
     nodes.map((node) => node.sourcePath),
   );
+}
+
+// The identities ("dev:ino") of the folder at `realPath` and of every folder holding it.
+// A real path has no symlinks left in it, so its ancestors are the folders that really
+// hold it (as findSourceRelation walks them).
+async function folderIdsHolding(
+  fileSystem: WriteServiceFileSystem,
+  realPath: string,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (let folder = realPath; ; folder = dirname(folder)) {
+    const fingerprint = await captureFingerprint(fileSystem, folder);
+    if (fingerprint.dev !== null && fingerprint.ino !== null) {
+      ids.add(`${fingerprint.dev}:${fingerprint.ino}`);
+    }
+    if (dirname(folder) === folder) {
+      return ids;
+    }
+  }
 }
 
 type DestinationScanCache = {

@@ -246,6 +246,43 @@ describe("copyPasteAnalysis", () => {
     ]);
   });
 
+  // A firmlink: "/Users/me/A" and "/System/Volumes/Data/Users/me/A" are one folder, and
+  // each keeps its own real path.
+  it("blocks pasting a folder into its own inside reached by another spelling", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/Users": { kind: "directory", ino: 900, dev: 1 },
+      "/Users/me": { kind: "directory", ino: 901, dev: 1 },
+      "/Users/me/A": { kind: "directory", ino: 902, dev: 1 },
+      "/Users/me/B": { kind: "directory", ino: 903, dev: 1 },
+      "/System/Volumes/Data/Users": { kind: "directory", ino: 900, dev: 1 },
+      "/System/Volumes/Data/Users/me": { kind: "directory", ino: 901, dev: 1 },
+      "/System/Volumes/Data/Users/me/A": { kind: "directory", ino: 902, dev: 1 },
+      "/System/Volumes/Data/Users/me/A/sub": { kind: "directory", ino: 904, dev: 1 },
+    });
+    const analyze = (sourcePaths: string[], destinationDirectoryPath: string) =>
+      buildCopyPasteAnalysisReport({
+        analysisId: "analysis-1",
+        request: { mode: "copy", sourcePaths, destinationDirectoryPath },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 1000 },
+      });
+
+    const intoItself = await analyze(["/Users/me/A"], "/System/Volumes/Data/Users/me/A/sub");
+    expect(intoItself.issues).toEqual([
+      expect.objectContaining({ code: "parent_into_child", sourcePath: "/Users/me/A" }),
+    ]);
+    expect(intoItself.nodes).toEqual([]);
+    // Its holder too; a folder beside it is pasted.
+    const intoHolder = await analyze(
+      ["/Users/me", "/Users/me/B"],
+      "/System/Volumes/Data/Users/me/A/sub",
+    );
+    expect(intoHolder.issues).toEqual([
+      expect.objectContaining({ code: "parent_into_child", sourcePath: "/Users/me" }),
+    ]);
+    expect(intoHolder.nodes.map((node) => node.sourcePath)).toEqual(["/Users/me/B"]);
+  });
+
   it("blocks sources from different folders that would land on the same destination name", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/a": { kind: "directory" },
