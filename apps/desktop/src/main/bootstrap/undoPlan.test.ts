@@ -494,6 +494,21 @@ describe("findQuestions", () => {
     ).toEqual({ nameTaken: [], changed: [] });
   });
 
+  // The copy couldn't be read once made (EIO), so neither its id nor its looks were kept:
+  // what is at its place now may be another item, and isn't taken to the Trash unasked.
+  it("asks about a made item it kept nothing of", async () => {
+    const fs = disk({ "/D": { kind: "dir", ino: 1 }, "/D/x": { kind: "file", ino: 40 } });
+
+    expect(
+      await findQuestions(fs, [
+        { steps: [{ kind: "created", path: "/D/x", id: null, stamp: null }] },
+      ]),
+    ).toEqual({
+      nameTaken: [],
+      changed: [{ name: "x", path: "/D/x", putBack: false, replaced: false }],
+    });
+  });
+
   it("asks about a taken name in a batch", async () => {
     const fs = disk({
       "/D": { kind: "dir", ino: 1 },

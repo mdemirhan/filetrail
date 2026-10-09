@@ -391,8 +391,10 @@ export async function checkTrash(
     return { ok: false, reason: replacedReason(step.path, step.id, item), missing: false };
   }
   const id = itemIdOf(item);
+  // Without an id or a stamp (the item couldn't be read once made), nothing tells the item
+  // at the path from another one: it is asked about, not taken unasked.
   if (step.stamp === null) {
-    return { ok: true, changed: false, id };
+    return { ok: true, changed: step.id === null, id };
   }
   const now = await readItemStamp(fs, step.path);
   return { ok: true, changed: now === null || !sameStamp(step.stamp, now), id };
