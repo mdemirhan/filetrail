@@ -56,9 +56,16 @@ export function mountTestDiskImage(
     format === "MS-DOS FAT32"
       ? (options.name ?? "FTTEST").toUpperCase().slice(0, 11)
       : (options.name ?? "FileTrailTest");
-  const template = blankDiskImage(format, options.sizeMb ?? 64, volumeName);
-  // A clone of the blank disk: a fresh, empty disk in a few milliseconds.
-  copyFileSync(template, imagePath, constants.COPYFILE_FICLONE);
+  let template: string;
+  try {
+    template = blankDiskImage(format, options.sizeMb ?? 64, volumeName);
+    // A clone of the blank disk: a fresh, empty disk in a few milliseconds.
+    copyFileSync(template, imagePath, constants.COPYFILE_FICLONE);
+  } catch (error) {
+    // A disk that couldn't be made leaves no folder behind.
+    rmSync(root, { recursive: true, force: true });
+    throw error;
+  }
   try {
     runHdiutil(["attach", "-quiet", "-nobrowse", "-noverify", "-mountpoint", mountPath, imagePath]);
   } catch (error) {
