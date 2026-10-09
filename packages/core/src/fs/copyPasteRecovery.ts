@@ -134,12 +134,15 @@ async function removePartialFile(
 // The hidden name this app builds an item under: "."+name+".filetrail-" and 8 hex digits.
 const STAGING_NAME = /^\..*\.filetrail-[0-9a-f]{8}$/su;
 
-// Every folder recovering `entry` looks in: the hidden item's, its final place's, and its
-// original's (on another disk, for a move), which may not answer either.
+// Every folder recovering `entry` looks in: the hidden item's, its final place's, and for a
+// moved item its original's (on another disk, maybe), which may not answer either.
 function foldersReadFor(entry: ReplaceJournalEntry): string[] {
-  return [
-    ...new Set([dirname(entry.stagingPath), dirname(entry.finalPath), dirname(entry.sourcePath)]),
-  ];
+  const folders = [dirname(entry.stagingPath), dirname(entry.finalPath)];
+  // Only a moved item may go back where it came from; a copy never looks there.
+  if (entry.moved) {
+    folders.push(dirname(entry.sourcePath));
+  }
+  return [...new Set(folders)];
 }
 
 // Whether looking up each of `paths` comes back within `ms`, all looked up at once.

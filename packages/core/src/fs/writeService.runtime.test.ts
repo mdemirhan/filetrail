@@ -284,6 +284,45 @@ describe("writeService runtime conflicts", () => {
     },
   );
 
+  // The folder a question about the destination showed wasn't counted by the review: it is
+  // counted before the no-Trash question, so an item it takes in meanwhile still keeps it.
+  it("keeps a folder agreed to at a question that took in an item while deleting it was asked", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source/F": { kind: "directory" },
+      "/source/F/a.txt": { kind: "file", size: 1 },
+      "/target": { kind: "directory" },
+      "/target/F": { kind: "directory" },
+      "/target/F/old.txt": { kind: "file", size: 5 },
+    });
+    const { asked, result } = await runPaste({
+      fileSystem,
+      sourcePaths: ["/source/F"],
+      destinationDirectoryPath: "/target",
+      policy: { file: "overwrite", directory: "overwrite", mismatch: "skip" },
+      // Another folder of that name since the review.
+      afterAnalysis: () => {
+        fileSystem.nodes.delete("/target/F/old.txt");
+        fileSystem.nodes.delete("/target/F");
+        fileSystem.addDirectory("/target/F");
+        fileSystem.addFile("/target/F/other.txt", { size: 3 });
+      },
+      answer: (conflict) => {
+        if (conflict.reason === "trash_unavailable") {
+          fileSystem.addFile("/target/F/new.txt", { size: 2 });
+        }
+        return { action: "overwrite" };
+      },
+    });
+
+    expect(asked.map((conflict) => conflict.reason)).toEqual([
+      "destination_changed",
+      "trash_unavailable",
+    ]);
+    expect(fileSystem.exists("/target/F/new.txt")).toBe(true);
+    expect(fileSystem.exists("/target/F/other.txt")).toBe(true);
+    expect(result?.items.find((item) => item.sourcePath === "/source/F")?.status).toBe("failed");
+  });
+
   it("accepts an answer given while the question is being announced", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source/a.txt": { kind: "file", size: 1 },

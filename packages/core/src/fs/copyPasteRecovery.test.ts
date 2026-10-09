@@ -63,6 +63,32 @@ describe("recovering a Replace or a move at start", () => {
     expect(fileSystem.exists("/target/.a.txt.filetrail-0000abcd")).toBe(true);
     expect(fileSystem.readNode("/target/a.txt")?.size).toBe(2);
   });
+
+  // A copy never goes back to its original's place: a share there that hangs doesn't hold
+  // up the copy, already whole, from being put in place.
+  it("puts a copy in place when only its original's disk doesn't answer", async () => {
+    vi.useFakeTimers();
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/away/a.txt": { kind: "file", size: 1 },
+      "/target/.a.txt.filetrail-0000abcd": { kind: "file", size: 1 },
+    });
+    fileSystem.enableRename();
+    hangUnder(fileSystem, "/away");
+    const entry: ReplaceJournalEntry = {
+      id: "1",
+      stagingPath: "/target/.a.txt.filetrail-0000abcd",
+      finalPath: "/target/a.txt",
+      sourcePath: "/away/a.txt",
+      moved: false,
+      staged: true,
+    };
+
+    const recovery = recoverInterruptedReplaces([entry], fileSystem, { answerWithinMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(await recovery).toEqual([{ entry, outcome: "finished", path: "/target/a.txt" }]);
+    expect(fileSystem.readNode("/target/a.txt")?.size).toBe(1);
+  });
 });
 
 describe("recovering a Replace by its hidden name", () => {

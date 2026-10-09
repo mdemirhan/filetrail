@@ -625,10 +625,12 @@ async function executeResolvedNode(
           destinationPathKey(outcome.destinationPath, context.caseSensitive),
         );
         const folder = dirname(outcome.destinationPath);
-        context.writtenByFolder.set(folder, [
-          ...(context.writtenByFolder.get(folder) ?? []),
-          outcome.destinationPath,
-        ]);
+        const written = context.writtenByFolder.get(folder);
+        if (written === undefined) {
+          context.writtenByFolder.set(folder, [outcome.destinationPath]);
+        } else {
+          written.push(outcome.destinationPath);
+        }
       }
       return outcome;
     } catch (caught) {
@@ -1894,6 +1896,19 @@ async function removeReplacedItem(
       }
     }
   }
+  // A folder deleted for good may hold only what it held when it was agreed to: the review's
+  // count, or (after a question about it, which the review didn't count) what it holds now,
+  // before asking. One that can't be counted isn't deleted for good.
+  const approvedCount =
+    destination.kind === "directory"
+      ? (node.node.destinationTotalNodeCount ??
+        (await countItemsInside(fileSystem, node.destinationPath)))
+      : null;
+  if (destination.kind === "directory" && approvedCount === null) {
+    throw new Error(
+      `“${basename(node.destinationPath)}” couldn't be looked through, so it wasn't deleted for good and nothing was replaced.`,
+    );
+  }
   const conflict: CopyPasteRuntimeConflict = {
     conflictId: `runtime-${node.node.id}-trash`,
     analysisId: context.report.analysisId,
@@ -1928,12 +1943,7 @@ async function removeReplacedItem(
   // Last, after the long look inside: the question may have been open a while, and what
   // is deleted is what it was about. A folder holds only what the review counted in it: an
   // item added since (a cloud sync) would be lost unseen, with no Trash to get it back from.
-  await assertReplacedItemUnchanged(
-    context,
-    node,
-    destination,
-    destination.kind === "directory" ? node.node.destinationTotalNodeCount : null,
-  );
+  await assertReplacedItemUnchanged(context, node, destination, approvedCount);
   markCantUndo(context, "deleted_for_good");
   noteChanged(context);
   // Named before deleting: a delete that fails part way has still removed some of it.
