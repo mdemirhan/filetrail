@@ -164,24 +164,24 @@ export async function realItemPaths(
 // Whether the folder at `destinationPath` is or holds any of the items (given by their
 // real paths): replacing it would destroy them along with it. Told by identity: a real path
 // can still name a folder another way (the firmlinked "/System/Volumes/Data/Users/…" for
-// "/Users/…"), so the folder is looked for among each item's own folders. Paths are
-// compared too, ignoring case, for a disk that gives no identities.
+// "/Users/…"), so the folder is looked for among each item's own folders. On a disk that
+// gives no identities, paths are compared ignoring case: such disks (FAT, exFAT) don't tell
+// case apart, while ignoring it elsewhere would take "/d/Sub" for "/d/sub" on a disk that does.
 export async function holdsAnyOf(
   fileSystem: WriteServiceFileSystem,
   destinationPath: string,
   realPaths: readonly string[],
 ): Promise<boolean> {
   const realDestination = await fileSystem.realpath(destinationPath).catch(() => destinationPath);
-  const prefix = realDestination.endsWith("/") ? realDestination : `${realDestination}/`;
-  const destinationId = idKey(await captureFingerprint(fileSystem, destinationPath));
-  const holders = await holderIdsOf(fileSystem, realPaths);
-  for (const path of realPaths) {
-    const held =
-      key(path) === key(realDestination) ||
-      key(path).startsWith(key(prefix)) ||
-      (destinationId !== null && (holders.get(path)?.has(destinationId) ?? false));
+  const id = idKey(await captureFingerprint(fileSystem, destinationPath));
+  const { holders } = await pastedItemsOf(fileSystem, realPaths);
+  const held =
+    id === null
+      ? (holders.get(foldedPathKey(realDestination)) ?? [])
+      : [...(holders.get(id) ?? []), ...(holders.get(pathKey(realDestination)) ?? [])];
+  for (const path of held) {
     // One already moved out (earlier in the same move) is no longer at risk.
-    if (held && (await captureFingerprint(fileSystem, path)).exists) {
+    if ((await captureFingerprint(fileSystem, path)).exists) {
       return true;
     }
   }
@@ -190,28 +190,42 @@ export async function holdsAnyOf(
 
 // Whether the item at `path` is one of the items (given by their real paths), as the review
 // tells "another item being pasted": replacing it would destroy that item. Told by identity
-// too, as for holdsAnyOf. One already moved away (earlier in the same move) no longer is.
+// too, as for holdsAnyOf, so a hard link to an item counts. One already moved away (earlier
+// in the same move) no longer is: what is at `path` now is what is looked up.
 export async function isAnyOf(
   fileSystem: WriteServiceFileSystem,
   path: string,
   realPaths: readonly string[],
 ): Promise<boolean> {
-  const candidates = new Set([
-    key(await realItemPath(fileSystem, path)),
-    key(await fileSystem.realpath(path).catch(() => path)),
-  ]);
   const id = idKey(await captureFingerprint(fileSystem, path));
-  for (const realPath of realPaths) {
-    const item = await captureFingerprint(fileSystem, realPath);
-    if (item.exists && (candidates.has(key(realPath)) || (id !== null && idKey(item) === id))) {
+  const { items } = await pastedItemsOf(fileSystem, realPaths);
+  if (id !== null && items.has(id)) {
+    return true;
+  }
+  const spellings = [
+    await realItemPath(fileSystem, path),
+    await fileSystem.realpath(path).catch(() => path),
+  ];
+  if (id !== null) {
+    return spellings.some((spelling) => items.has(pathKey(spelling)));
+  }
+  for (const spelling of spellings) {
+    const item = items.get(foldedPathKey(spelling));
+    if (item !== undefined && (await captureFingerprint(fileSystem, item)).exists) {
       return true;
     }
   }
   return false;
 }
 
-function key(path: string): string {
-  return path.normalize("NFD").toLowerCase();
+// Keys for the items of a paste and the folders holding them: an identity ("dev:ino"), a
+// path, or a path ignoring case, each spelled so that no two kinds can meet.
+function pathKey(path: string): string {
+  return `=${path.normalize("NFD")}`;
+}
+
+function foldedPathKey(path: string): string {
+  return `~${path.normalize("NFD").toLowerCase()}`;
 }
 
 function idKey(fingerprint: NodeFingerprint): string | null {
@@ -220,27 +234,36 @@ function idKey(fingerprint: NodeFingerprint): string | null {
     : null;
 }
 
-// For each item (by its real path), the identities of the item and of every folder holding
-// it: its real path's folders are the ones that really hold it. Read once for each list of
-// items, which a review or a paste keeps for its whole run.
-const holderIdCache = new WeakMap<readonly string[], Promise<Map<string, Set<string>>>>();
+type PastedItems = {
+  // Each item's real path, by the item's identity and by its real path.
+  items: Map<string, string>;
+  // The items' real paths, by the identity and the path of each item and of every folder
+  // holding it.
+  holders: Map<string, string[]>;
+};
 
-function holderIdsOf(
+// Read once for each list of items, which a review or a paste keeps for its whole run, so
+// asking about one more item costs a look at that item alone, not at every item pasted.
+const pastedItemsCache = new WeakMap<readonly string[], Promise<PastedItems>>();
+
+function pastedItemsOf(
   fileSystem: WriteServiceFileSystem,
   realPaths: readonly string[],
-): Promise<Map<string, Set<string>>> {
-  let cached = holderIdCache.get(realPaths);
+): Promise<PastedItems> {
+  let cached = pastedItemsCache.get(realPaths);
   if (cached === undefined) {
-    cached = readHolderIds(fileSystem, realPaths);
-    holderIdCache.set(realPaths, cached);
+    cached = readPastedItems(fileSystem, realPaths);
+    pastedItemsCache.set(realPaths, cached);
   }
   return cached;
 }
 
-async function readHolderIds(
+// An item's real path has no symlinks left in it, so its folders are the ones that really
+// hold it.
+async function readPastedItems(
   fileSystem: WriteServiceFileSystem,
   realPaths: readonly string[],
-): Promise<Map<string, Set<string>>> {
+): Promise<PastedItems> {
   // Items side by side share their folders: each folder is read once.
   const folderIds = new Map<string, string | null>();
   const idOf = async (path: string) => {
@@ -249,21 +272,32 @@ async function readHolderIds(
     }
     return folderIds.get(path) ?? null;
   };
-  const holders = new Map<string, Set<string>>();
+  const items = new Map<string, string>();
+  const holders = new Map<string, string[]>();
   for (const realPath of realPaths) {
-    const ids = new Set<string>();
+    for (const key of [await idOf(realPath), pathKey(realPath), foldedPathKey(realPath)]) {
+      if (key !== null) {
+        items.set(key, realPath);
+      }
+    }
     for (let path = realPath; ; path = dirname(path)) {
-      const id = await idOf(path);
-      if (id !== null) {
-        ids.add(id);
+      for (const key of [await idOf(path), pathKey(path), foldedPathKey(path)]) {
+        if (key === null) {
+          continue;
+        }
+        const held = holders.get(key);
+        if (held === undefined) {
+          holders.set(key, [realPath]);
+        } else {
+          held.push(realPath);
+        }
       }
       if (dirname(path) === path) {
         break;
       }
     }
-    holders.set(realPath, ids);
   }
-  return holders;
+  return { items, holders };
 }
 
 // Where an item really is: its folder resolved, but not the item itself (a pasted

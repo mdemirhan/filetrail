@@ -213,7 +213,72 @@ describe("items of a paste, by identity", () => {
 
     expect(await isAnyOf(fileSystem, "/Users/me/a.txt", pasted)).toBe(true);
     expect(await isAnyOf(fileSystem, "/Users/me/b.txt", pasted)).toBe(false);
-    // By path, ignoring case, on a disk that gives no identities.
-    expect(await isAnyOf(fileSystem, "/Users/me/B.txt", ["/Users/me/b.txt"])).toBe(true);
+  });
+
+  // FAT and exFAT give no identities (for empty files), and don't tell case apart.
+  it("compares paths ignoring case on a disk that gives no identities", async () => {
+    const noId = Number("18446744073709551602");
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/v": { kind: "directory", ino: noId },
+      "/v/a.txt": { kind: "file", ino: noId },
+      "/v/sub": { kind: "directory", ino: noId },
+      "/v/sub/x.txt": { kind: "file", ino: noId },
+    });
+
+    expect(await isAnyOf(fileSystem, "/v/A.txt", ["/v/a.txt"])).toBe(true);
+    expect(await holdsAnyOf(fileSystem, "/v/SUB", ["/v/sub/x.txt"])).toBe(true);
+    // Moved away already (earlier in the same move): no longer at risk.
+    fileSystem.nodes.delete("/v/a.txt");
+    expect(await isAnyOf(fileSystem, "/v/A.txt", ["/v/a.txt"])).toBe(false);
+  });
+
+  it("finds a hard link to an item pasted", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/x/a.txt": { kind: "file", ino: 50, dev: 1 },
+      "/d/link.txt": { kind: "file", ino: 50, dev: 1 },
+      "/d/other.txt": { kind: "file", ino: 51, dev: 1 },
+    });
+
+    expect(await isAnyOf(fileSystem, "/d/link.txt", ["/x/a.txt"])).toBe(true);
+    expect(await isAnyOf(fileSystem, "/d/other.txt", ["/x/a.txt"])).toBe(false);
+  });
+
+  // On a disk that tells case apart, "a.txt" and "A.txt" are two items.
+  it("tells names apart by case on a case-sensitive disk", async () => {
+    const fileSystem = new MockWriteServiceFileSystem();
+    fileSystem.caseSensitive = true;
+    fileSystem.addDirectory("/d");
+    fileSystem.addFile("/d/a.txt");
+    fileSystem.addFile("/d/A.txt");
+    fileSystem.addDirectory("/d/sub");
+    fileSystem.addDirectory("/d/Sub");
+    fileSystem.addFile("/d/Sub/x.txt");
+
+    expect(await isAnyOf(fileSystem, "/d/a.txt", ["/d/A.txt"])).toBe(false);
+    expect(await isAnyOf(fileSystem, "/d/A.txt", ["/d/A.txt"])).toBe(true);
+    expect(await holdsAnyOf(fileSystem, "/d/sub", ["/d/Sub/x.txt"])).toBe(false);
+    expect(await holdsAnyOf(fileSystem, "/d/Sub", ["/d/Sub/x.txt"])).toBe(true);
+  });
+
+  // Asked once for each item in the way: each answer looks at that one item, not at every
+  // item pasted again (2,000 items took 4 million looks).
+  it("reads each item once, however many items are asked about", async () => {
+    const count = 300;
+    const fileSystem = new MockWriteServiceFileSystem({ "/src": { kind: "directory" } });
+    fileSystem.addDirectory("/dst");
+    const pasted: string[] = [];
+    for (let index = 0; index < count; index += 1) {
+      fileSystem.addFile(`/src/item-${index}.txt`);
+      fileSystem.addDirectory(`/dst/item-${index}`);
+      pasted.push(`/src/item-${index}.txt`);
+    }
+    const lstat = vi.spyOn(fileSystem, "lstat");
+
+    for (let index = 0; index < count; index += 1) {
+      expect(await isAnyOf(fileSystem, `/dst/item-${index}`, pasted)).toBe(false);
+      expect(await holdsAnyOf(fileSystem, `/dst/item-${index}`, pasted)).toBe(false);
+    }
+
+    expect(lstat.mock.calls.length).toBeLessThan(5 * count);
   });
 });
