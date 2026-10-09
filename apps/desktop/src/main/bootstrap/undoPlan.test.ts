@@ -514,6 +514,31 @@ describe("findQuestions", () => {
     ).toEqual({ nameTaken: [{ name: "a", path: "/D/a" }], changed: [] });
   });
 
+  // "a.txt" and "b.txt" swapped names, then the item now at "a.txt" was replaced by a
+  // folder: that one stays, holding "a.txt", so the other can't go back there unasked.
+  it("asks about a name a refused item of a batch still holds", async () => {
+    const fs = disk({
+      "/D": { kind: "dir", ino: 1 },
+      "/D/b.txt": { kind: "file", ino: 10 },
+      "/D/a.txt": { kind: "dir", ino: 99 },
+    });
+    expect(
+      await findQuestions(fs, [
+        {
+          steps: [
+            {
+              kind: "batchRenamed",
+              items: [
+                { from: "/D/a.txt", to: "/D/b.txt", id: id(10), itemKind: "file" },
+                { from: "/D/b.txt", to: "/D/a.txt", id: id(11), itemKind: "file" },
+              ],
+            },
+          ],
+        },
+      ]),
+    ).toEqual({ nameTaken: [{ name: "a.txt", path: "/D/a.txt" }], changed: [] });
+  });
+
   it("looks at several units at once, and answers in their order", async () => {
     const items: Parameters<typeof disk>[0] = { "/D": { kind: "dir", ino: 1 } };
     const units: UndoUnit[] = [];

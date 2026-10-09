@@ -429,42 +429,47 @@ export async function checkBatch(
   fs: PlanFs,
   step: Extract<PlannedStep, { kind: "batch" }>,
 ): Promise<BatchItemCheck[]> {
-  // Places the batch's own items leave, compared as the disk compares names, and the items
-  // themselves: on a disk that ignores case, "B" finds the batch's own item now at "b".
-  const vacated = new Set(step.items.map((item) => item.from));
-  // Each item of the batch by id, with where it is: found under another spelling of that
-  // place it is the item itself; elsewhere (a hard link to it) it is another entry.
-  const ownPlaces = new Map(
-    step.items.flatMap((item) =>
-      item.id === null ? [] : [[idKey(item.id), placeKey(item.from)] as const],
-    ),
-  );
-  const checks: BatchItemCheck[] = [];
+  type BatchItem = (typeof step.items)[number];
+  // Each item first as it is now: one refused stays where it is, holding its name, so only
+  // the items that go back make way for the others.
+  const sources: Array<BatchItemCheck | { item: BatchItem; stats: PlanStats }> = [];
   for (const item of step.items) {
     const found = await lookUp(fs, item.from);
     if ("unreadable" in found) {
-      checks.push({ item, refusal: found.unreadable, nameTaken: false, isFolder: false });
+      sources.push({ item, refusal: found.unreadable, nameTaken: false, isFolder: false });
       continue;
     }
     const stats = "stats" in found ? found.stats : null;
     if (stats === null) {
-      checks.push({
-        item,
-        refusal: { reason: await missingReason(fs, item.from), missing: true },
-        nameTaken: false,
-        isFolder: false,
-      });
+      const refusal = { reason: await missingReason(fs, item.from), missing: true };
+      sources.push({ item, refusal, nameTaken: false, isFolder: false });
       continue;
     }
     if (!isExpectedItem(stats, item.id, item.itemKind, true)) {
-      checks.push({
-        item,
-        refusal: { reason: replacedReason(item.from, item.id, stats), missing: false },
-        nameTaken: false,
-        isFolder: false,
-      });
+      const refusal = { reason: replacedReason(item.from, item.id, stats), missing: false };
+      sources.push({ item, refusal, nameTaken: false, isFolder: false });
       continue;
     }
+    sources.push({ item, stats });
+  }
+  const goingBack = sources.flatMap((source) => ("stats" in source ? [source.item] : []));
+  // Places the batch's own items leave, compared as the disk compares names, and the items
+  // themselves: on a disk that ignores case, "B" finds the batch's own item now at "b".
+  const vacated = new Set(goingBack.map((item) => item.from));
+  // Each item of the batch by id, with where it is: found under another spelling of that
+  // place it is the item itself; elsewhere (a hard link to it) it is another entry.
+  const ownPlaces = new Map(
+    goingBack.flatMap((item) =>
+      item.id === null ? [] : [[idKey(item.id), placeKey(item.from)] as const],
+    ),
+  );
+  const checks: BatchItemCheck[] = [];
+  for (const source of sources) {
+    if (!("stats" in source)) {
+      checks.push(source);
+      continue;
+    }
+    const { item, stats } = source;
     // The name it goes back to, in the folder it is in now (its folder may be renamed back
     // in the same batch, after it).
     const target = `${dirname(item.from)}/${basename(item.to)}`;
@@ -474,7 +479,6 @@ export async function checkBatch(
       continue;
     }
     const there = foundThere !== null && "stats" in foundThere ? foundThere.stats : null;
-    const itemId = itemIdOf(stats);
     checks.push({
       item,
       refusal: null,
