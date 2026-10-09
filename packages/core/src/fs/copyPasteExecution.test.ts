@@ -88,6 +88,40 @@ async function createResolvedOperation(args: {
 }
 
 describe("copyPasteExecution", () => {
+  // Add Missing leaves the files already there: progress runs to what is copied, not to
+  // the size of everything picked.
+  it("counts only what an Add Missing merge copies toward the bytes to go", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source/F/a.txt": { kind: "file", size: 10 },
+      "/source/F/b.txt": { kind: "file", size: 20 },
+      "/target/F/a.txt": { kind: "file", size: 10 },
+    });
+    const { report, resolvedNodes } = await createResolvedOperation({
+      fileSystem,
+      sourcePaths: ["/source/F"],
+      destinationDirectoryPath: "/target",
+    });
+    const events: CopyPasteProgressEvent[] = [];
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "op-add-missing",
+      report,
+      mode: "copy",
+      policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      fileSystem,
+      now: () => new Date("2026-10-09T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes,
+      emit: (event) => events.push(event),
+      requestResolution: async () => null,
+    });
+
+    expect(report.summary.totalBytes).toBe(30);
+    expect(events.map((event) => event.totalBytes)).toEqual(events.map(() => 20));
+    const result = expectDefined(expectLastEvent(events).result);
+    expect(result.summary).toMatchObject({ completedByteCount: 20, totalBytes: 20 });
+  });
+
   it("copies a new file and emits a completed result", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source": { kind: "directory" },
@@ -4573,5 +4607,55 @@ describe("names the destination can't tell apart", () => {
     expect(fileSystem.trashed).toEqual([]);
     // Its original stays where it was.
     expect(expectNode(fileSystem, "/source/F/a.txt").size).toBe(6);
+  });
+
+  // Some disks take other names for one item too ("Strasse.txt" for "Straße.txt"): the item
+  // there is known by its id as the one this paste just wrote, and isn't replaced.
+  it("never lets a later item replace one this paste wrote under a name the disk takes as its", async () => {
+    const fileSystem = new MockWriteServiceFileSystem();
+    fileSystem.addFile("/one/Straße.txt", { size: 5 });
+    fileSystem.addFile("/two/Strasse.txt", { size: 6 });
+    fileSystem.addDirectory("/target");
+    fileSystem.enableTrash();
+    // A volume that takes "ß" for "ss" as well as ignoring case.
+    (fileSystem as unknown as { foldName: (path: string) => string }).foldName = (path) =>
+      path.normalize("NFD").toLowerCase().replaceAll("ß", "ss");
+    const replaceAll = {
+      file: "overwrite",
+      directory: "overwrite",
+      mismatch: "overwrite",
+    } as const;
+    const { report, resolvedNodes } = await createResolvedOperation({
+      fileSystem,
+      mode: "copy",
+      sourcePaths: ["/one/Straße.txt", "/two/Strasse.txt"],
+      destinationDirectoryPath: "/target",
+      policy: replaceAll,
+    });
+    const requestResolution = vi.fn(async () => "overwrite" as const);
+    const events: CopyPasteProgressEvent[] = [];
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "op-fold",
+      report,
+      mode: "copy",
+      policy: replaceAll,
+      fileSystem,
+      now: () => new Date("2026-10-09T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes,
+      emit: (event) => events.push(event),
+      requestResolution,
+    });
+
+    const result = expectDefined(expectLastEvent(events).result);
+    expect(requestResolution).not.toHaveBeenCalled();
+    expect(result.items.find((item) => item.sourcePath === "/two/Strasse.txt")).toMatchObject({
+      status: "failed",
+      error:
+        "“Strasse.txt” wasn't pasted because another item of this paste has the same name on this disk, which doesn't tell upper and lower case apart.",
+    });
+    expect(expectNode(fileSystem, "/target/Straße.txt").size).toBe(5);
+    expect(fileSystem.trashed).toEqual([]);
   });
 });

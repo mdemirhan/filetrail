@@ -239,66 +239,50 @@ describe("writeService runtime conflicts", () => {
     expect(result?.items.map((item) => item.status)).toEqual(["skipped"]);
   });
 
-  it("asks again when a folder a Replace answer was about took in an item meanwhile", async () => {
-    const fileSystem = new MockWriteServiceFileSystem({
-      "/source/F": { kind: "directory" },
-      "/source/F/a.txt": { kind: "file", size: 1 },
-      "/target": { kind: "directory" },
-      "/target/F": { kind: "directory" },
-      "/target/F/old.txt": { kind: "file", size: 5 },
-    });
-    fileSystem.enableTrash();
-    let questions = 0;
-    const { asked, result } = await runPaste({
-      fileSystem,
-      sourcePaths: ["/source/F"],
-      destinationDirectoryPath: "/target",
-      policy: { file: "overwrite", directory: "overwrite", mismatch: "skip" },
-      afterAnalysis: () => {
-        fileSystem.addFile("/target/F/new.txt", { size: 2 });
-      },
-      answer: () => {
-        questions += 1;
-        if (questions === 1) {
-          fileSystem.addFile("/target/F/newer.txt", { size: 3 });
+  // On a disk with no Trash a folder replaced is deleted for good: one that took in an item
+  // since the review, or while the question about deleting it was open, is kept, never
+  // deleted with an item the person didn't see.
+  it.each([
+    ["since the review", "afterAnalysis"],
+    ["while the no-Trash question was open", "answer"],
+  ] as const)(
+    "keeps a folder that took in an item %s instead of deleting it for good",
+    async (_when, at) => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source/F": { kind: "directory" },
+        "/source/F/a.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/F": { kind: "directory" },
+        "/target/F/old.txt": { kind: "file", size: 5 },
+      });
+      const addItem = () => fileSystem.addFile("/target/F/new.txt", { size: 2 });
+      const { asked, result } = await runPaste({
+        fileSystem,
+        sourcePaths: ["/source/F"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "skip" },
+        afterAnalysis: () => {
+          if (at === "afterAnalysis") {
+            addItem();
+          }
+        },
+        answer: () => {
+          if (at === "answer") {
+            addItem();
+          }
           return { action: "overwrite" };
-        }
-        return { action: "skip" };
-      },
-    });
+        },
+      });
 
-    expect(asked.map((conflict) => conflict.reason)).toEqual([
-      "destination_changed",
-      "destination_changed",
-    ]);
-    expect(fileSystem.trashed).toEqual([]);
-    expect(result?.items.map((item) => item.status)).toEqual(["skipped"]);
-  });
-
-  it("replaces a folder a Replace answer was about once it is as the question showed it", async () => {
-    const fileSystem = new MockWriteServiceFileSystem({
-      "/source/F": { kind: "directory" },
-      "/source/F/a.txt": { kind: "file", size: 1 },
-      "/target": { kind: "directory" },
-      "/target/F": { kind: "directory" },
-      "/target/F/old.txt": { kind: "file", size: 5 },
-    });
-    fileSystem.enableTrash();
-    const { asked, result } = await runPaste({
-      fileSystem,
-      sourcePaths: ["/source/F"],
-      destinationDirectoryPath: "/target",
-      policy: { file: "overwrite", directory: "overwrite", mismatch: "skip" },
-      afterAnalysis: () => {
-        fileSystem.addFile("/target/F/new.txt", { size: 2 });
-      },
-      answer: () => ({ action: "overwrite" }),
-    });
-
-    expect(asked.map((conflict) => conflict.reason)).toEqual(["destination_changed"]);
-    expect(fileSystem.trashed).toEqual(["/target/F"]);
-    expect(result?.items.find((item) => item.sourcePath === "/source/F")?.status).toBe("completed");
-  });
+      expect(asked.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
+      expect(fileSystem.exists("/target/F/old.txt")).toBe(true);
+      expect(fileSystem.exists("/target/F/new.txt")).toBe(true);
+      expect(result?.items.find((item) => item.sourcePath === "/source/F")).toMatchObject({
+        status: "failed",
+        error: "“F” changed while it was being replaced, so it was kept and nothing was replaced.",
+      });
+    },
+  );
 
   it("accepts an answer given while the question is being announced", async () => {
     const fileSystem = new MockWriteServiceFileSystem({

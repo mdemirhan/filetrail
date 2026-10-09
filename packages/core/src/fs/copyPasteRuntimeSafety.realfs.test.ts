@@ -2,7 +2,7 @@
 // review and the paste, on the real disk.
 
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -17,7 +17,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
   buildCopyPasteAnalysisReport,
@@ -749,115 +749,6 @@ describe("a folder copied or moved whole", () => {
     expect(copied).toHaveLength(4);
   });
 
-  // An item put at the hidden name a folder is being built under is someone else's: when
-  // the paste can't go on, only what it made goes.
-  it("leaves alone another item that took its hidden name", async () => {
-    await mkdir(join(src, "F"));
-    await writeFile(join(src, "F", "a.txt"), "a");
-    const plain = withoutRenameAtAll();
-    let hidden = "";
-
-    const { result } = await runPaste({
-      mode: "cut",
-      sourcePaths: [join(src, "F")],
-      destinationDirectoryPath: dst,
-      fileSystem: {
-        ...plain,
-        copyFile: async () => {
-          hidden = (await readdir(dst)).find((name) => name.startsWith(".F.filetrail-")) ?? "";
-          await rename(join(dst, hidden), join(testDir, "ours"));
-          await mkdir(join(dst, hidden));
-          await writeFile(join(dst, hidden, "theirs.txt"), "theirs");
-          throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
-        },
-      },
-    });
-
-    expect(result?.status).toBe("failed");
-    expect(await readdir(join(dst, hidden))).toEqual(["theirs.txt"]);
-    expect(await readdir(join(src, "F"))).toEqual(["a.txt"]);
-  });
-
-  // Another app swapped the finished hidden copy for a folder of its own: that folder is
-  // never put in place, and the originals stay.
-  function swappingHiddenCopy(fileSystem: WriteServiceFileSystem): {
-    fileSystem: WriteServiceFileSystem;
-    hidden: () => string;
-  } {
-    let copied = false;
-    let hidden = "";
-    return {
-      hidden: () => hidden,
-      fileSystem: {
-        ...fileSystem,
-        // As on another disk: nothing is renamed out of "src".
-        renameExclusive: async (from, to) => {
-          if (from.startsWith(`${src}/`)) {
-            throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
-          }
-          await rename(from, to);
-        },
-        copyFile: async (from, to, signal) => {
-          await fileSystem.copyFile?.(from, to, signal);
-          copied = true;
-        },
-        // The next look at the hidden folder once everything is copied: it has been swapped.
-        lstat: async (path) => {
-          if (copied && basename(path).startsWith(".F.filetrail-") && dirname(path) === dst) {
-            copied = false;
-            hidden = basename(path);
-            await rename(path, join(testDir, "ours"));
-            await mkdir(path);
-            await writeFile(join(path, "theirs.txt"), "theirs");
-          }
-          return fileSystem.lstat(path);
-        },
-      },
-    };
-  }
-
-  it("doesn't put in place, or remove originals for, a hidden copy another app swapped", async () => {
-    await mkdir(join(src, "F"));
-    await writeFile(join(src, "F", "a.txt"), "a");
-    const swapping = swappingHiddenCopy(nativeFileSystem);
-
-    const { result } = await runPaste({
-      mode: "cut",
-      sourcePaths: [join(src, "F")],
-      destinationDirectoryPath: dst,
-      fileSystem: swapping.fileSystem,
-    });
-
-    expect(result?.status).toBe("failed");
-    expect(result?.items[0]?.error).toBe(
-      "“F” wasn't moved because another app changed its copy while it was being made. The original is where it was.",
-    );
-    expect(await readdir(dst)).toEqual([swapping.hidden()]);
-    expect(await readdir(join(dst, swapping.hidden()))).toEqual(["theirs.txt"]);
-    expect(await readdir(join(src, "F"))).toEqual(["a.txt"]);
-  });
-
-  it("keeps the old item a Replace was to replace when another app swapped the copy", async () => {
-    await mkdir(join(src, "F"));
-    await writeFile(join(src, "F", "a.txt"), "new");
-    await mkdir(join(dst, "F"));
-    await writeFile(join(dst, "F", "a.txt"), "old");
-    const swapping = swappingHiddenCopy(nativeFileSystemWithTrash(trash));
-
-    const { result } = await runPaste({
-      mode: "cut",
-      sourcePaths: [join(src, "F")],
-      destinationDirectoryPath: dst,
-      policy: REPLACE_ALL,
-      fileSystem: swapping.fileSystem,
-    });
-
-    expect(result?.status).toBe("failed");
-    expect(await readFile(join(dst, "F", "a.txt"), "utf8")).toBe("old");
-    expect(await readdir(trash)).toEqual([]);
-    expect(await readFile(join(src, "F", "a.txt"), "utf8")).toBe("new");
-  });
-
   // A copy of a folder with a rule against deleting it (as ~/Documents has) carries the
   // rule: a move that can't go on still removes all of its hidden copy.
   it("removes a hidden copy holding a folder with a rule against deleting it", async () => {
@@ -1167,11 +1058,9 @@ describe("a large file being copied", () => {
       {
         kind: "partial_file",
         id: expect.any(String),
-        // In a hidden folder made for it, known by its id.
-        partialPath: expect.stringMatching(/\/\.movie\.mov\.filetrail-[0-9a-f]{8}\/part$/u),
+        // Under a hidden name next to its place.
+        partialPath: expect.stringMatching(/\/\.movie\.mov\.filetrail-[0-9a-f]{8}$/u),
         finalPath: join(dst, "movie.mov"),
-        folderId: { dev: expect.any(Number), ino: expect.any(Number) },
-        folderBornMs: expect.any(Number),
       },
     ]);
     expect(live.size).toBe(0);
@@ -1274,32 +1163,40 @@ describe("the item a Replace removes is the one that was there", () => {
     expect(await readdir(trash)).toEqual([]);
   });
 
-  it("keeps a folder that got a new item while the new one was being copied", async () => {
+  // With no Trash to get it back from, an item added to the folder since the review would
+  // be lost unseen: the folder is kept.
+  it("doesn't delete for good a folder that got a new item while the new one was copied", async () => {
     await mkdir(join(src, "F"));
     await writeFile(join(src, "F", "x.txt"), "pasted");
     await mkdir(join(dst, "F"));
     await writeFile(join(dst, "F", "old.txt"), "old");
-    const withTrash = nativeFileSystemWithTrash(trash);
     const fileSystem: WriteServiceFileSystem = {
-      ...withTrash,
+      ...nativeFileSystem,
+      trash: async () => {
+        throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+      },
       copyFile: async (from, to, signal) => {
-        await withTrash.copyFile?.(from, to, signal);
+        await nativeFileSystem.copyFile?.(from, to, signal);
         await writeFile(join(dst, "F", "new work.txt"), "unsaved elsewhere");
       },
     };
 
-    const { result } = await runPaste({
+    const { result, conflicts } = await runPaste({
       mode: "copy",
       sourcePaths: [join(src, "F")],
       destinationDirectoryPath: dst,
       policy: REPLACE_ALL,
       fileSystem,
+      resolve: () => "overwrite",
     });
 
+    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
     expect(result?.status).toBe("failed");
+    expect(result?.items[0]?.error).toBe(
+      "“F” changed while it was being replaced, so it was kept and nothing was replaced.",
+    );
     expect((await readdir(join(dst, "F"))).sort()).toEqual(["new work.txt", "old.txt"]);
     expect(await readdir(dst)).toEqual(["F"]);
-    expect(await readdir(trash)).toEqual([]);
   });
 
   // Looking for a locked item inside a large folder takes a while: one swapped in for it
@@ -1370,43 +1267,6 @@ describe("the item a Replace removes is the one that was there", () => {
     expect(result?.status).toBe("failed");
     expect(await readFile(join(dst, "a.txt"), "utf8")).toBe("never asked about");
     expect(await readdir(dst)).toEqual(["a.txt"]);
-  });
-
-  // Another app swapped the hidden copy while the question was open: the old item isn't
-  // deleted for it, and it isn't put in place.
-  it("doesn't delete the old item for a copy another app swapped while it asked", async () => {
-    await mkdir(join(src, "F"));
-    await writeFile(join(src, "F", "a.txt"), "new");
-    await mkdir(join(dst, "F"));
-    await writeFile(join(dst, "F", "a.txt"), "old");
-    const fileSystem: WriteServiceFileSystem = {
-      ...nativeFileSystem,
-      trash: async () => {
-        throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
-      },
-    };
-
-    const { result, conflicts } = await runPaste({
-      mode: "copy",
-      sourcePaths: [join(src, "F")],
-      destinationDirectoryPath: dst,
-      policy: REPLACE_ALL,
-      fileSystem,
-      resolve: () => {
-        const hidden = readdirSync(dst).find((name) => name.startsWith(".F.filetrail-")) ?? "";
-        renameSync(join(dst, hidden), join(testDir, "ours"));
-        mkdirSync(join(dst, hidden));
-        writeFileSync(join(dst, hidden, "theirs.txt"), "theirs");
-        return "overwrite";
-      },
-    });
-
-    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
-    expect(result?.status).toBe("failed");
-    expect(await readFile(join(dst, "F", "a.txt"), "utf8")).toBe("old");
-    const hidden = (await readdir(dst)).filter((name) => name !== "F");
-    expect(hidden).toHaveLength(1);
-    expect(await readdir(join(dst, hidden[0] ?? ""))).toEqual(["theirs.txt"]);
   });
 });
 

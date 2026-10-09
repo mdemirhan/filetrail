@@ -480,7 +480,8 @@ export async function startsWithAppleDoubleMagic(
  * A Replace in progress: the new item is built under `stagingPath`, a hidden name next to
  * `finalPath`, then swapped in. `moved` means the source itself was moved there (a move on
  * the same volume), so the staged item is the only copy of it. `staged` means the item at
- * `stagingPath` is complete.
+ * `stagingPath` is complete. What is at `stagingPath`, a random hidden name made for it, is
+ * the Replace's own. (Entries written by v0.4.3 carry ids as well, no longer read.)
  */
 export type ReplaceJournalEntry = {
   // Entries written before the journal held anything else have no kind.
@@ -491,15 +492,6 @@ export type ReplaceJournalEntry = {
   sourcePath: string;
   moved: boolean;
   staged: boolean;
-  // The id of the folder made at `stagingPath` for the item to be built in: what is there
-  // is removed or put in place only while it is that folder.
-  stagingId?: ItemId;
-  // When that folder was made. An external disk connected again gets another device
-  // number: the folder is known there by its file id and this, which the disk keeps.
-  stagingBornMs?: number;
-  // The id of the item copied: its metadata is put on the copy at recovery only while the
-  // item at `sourcePath` is still that one.
-  sourceId?: ItemId;
   // A move to another disk (a folder copied, then its original removed): put in place by
   // recovery, its original is still there too, and the person is told.
   movingCopy?: true;
@@ -515,13 +507,6 @@ export type PartialFileJournalEntry = {
   id: string;
   partialPath: string;
   finalPath: string;
-  // The id of the hidden folder the part is copied in (`partialPath`'s folder), made for it
-  // before anything was copied: only that folder is removed. Entries without one (written
-  // before, or on a disk that gives no ids) have the part itself under a hidden name.
-  folderId?: ItemId;
-  // When that folder was made: an external disk connected again gets another device
-  // number, and the folder is known there by its file id and this.
-  folderBornMs?: number;
 };
 
 /**

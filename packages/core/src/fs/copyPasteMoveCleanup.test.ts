@@ -13,7 +13,7 @@ import type {
 
 const SKIP: CopyPastePolicy = { file: "skip", directory: "skip", mismatch: "skip" };
 const COPY_NOT_WHOLE =
-  "Its copy went away or changed before the original was removed, so the original was kept.";
+  "It changed while it was being moved, or its copy didn't come out whole, so the original was kept.";
 
 // A folder on another disk (dev 2): moving it copies it, then removes the originals.
 function folderOnAnotherDisk(): MockWriteServiceFileSystem {
@@ -102,7 +102,7 @@ describe("a move to another disk removes an original only once its copy is check
     );
   });
 
-  it("keeps the original of a copy cut short or replaced, or of a link changed", async () => {
+  it("keeps the original of a copy cut short, or of a link changed", async () => {
     const fileSystem = folderOnAnotherDisk();
     const report = await analyze(fileSystem, ["/source/dir"]);
     beforeTheCopyTakesItsName(fileSystem, (hidden) => {
@@ -110,9 +110,6 @@ describe("a move to another disk removes an original only once its copy is check
       if (copy) {
         copy.size = 2;
       }
-      // Another file put in the place of b.txt's copy, as large.
-      fileSystem.nodes.delete(`${hidden}/b.txt`);
-      fileSystem.addFile(`${hidden}/b.txt`, { size: 6 });
       const link = fileSystem.readNode(`${hidden}/link`);
       if (link) {
         link.target = "elsewhere";
@@ -121,7 +118,7 @@ describe("a move to another disk removes an original only once its copy is check
 
     const result = await move(fileSystem, report);
 
-    for (const name of ["a.txt", "b.txt", "link"]) {
+    for (const name of ["a.txt", "link"]) {
       expect(fileSystem.exists(`/source/dir/${name}`)).toBe(true);
       expect(result.items).toContainEqual(
         expect.objectContaining({
@@ -131,7 +128,7 @@ describe("a move to another disk removes an original only once its copy is check
         }),
       );
     }
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("partial");
   });
 
   it("keeps the original of a single file whose copy came out short", async () => {
@@ -139,26 +136,6 @@ describe("a move to another disk removes an original only once its copy is check
     const report = await analyze(fileSystem, ["/source/dir/a.txt"]);
     fileSystem.copyFileStreamImpl = async (_source, destination) => {
       fileSystem.addFile(destination, { size: 1 });
-    };
-
-    const result = await move(fileSystem, report);
-
-    expect(fileSystem.exists("/source/dir/a.txt")).toBe(true);
-    expect(result.items).toEqual([
-      expect.objectContaining({ status: "failed", error: COPY_NOT_WHOLE }),
-    ]);
-  });
-
-  it("keeps the original of a single file whose copy was replaced by one as large", async () => {
-    const fileSystem = folderOnAnotherDisk();
-    const report = await analyze(fileSystem, ["/source/dir/a.txt"]);
-    // Another app puts an item as large in the copy's place as soon as it has its name.
-    fileSystem.renameImpl = async (from, to) => {
-      await fileSystem.renameDirectly(from, to);
-      if (to === "/target/a.txt") {
-        fileSystem.nodes.delete("/target/a.txt");
-        fileSystem.addFile("/target/a.txt", { size: 5 });
-      }
     };
 
     const result = await move(fileSystem, report);

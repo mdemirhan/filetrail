@@ -304,7 +304,7 @@ describe("recovering interrupted Replaces", () => {
   function entry(overrides: Partial<ReplaceJournalEntry>): ReplaceJournalEntry {
     return {
       id: "entry-1",
-      stagingPath: join(testDir, "dst", ".report.txt.filetrail-1234"),
+      stagingPath: join(testDir, "dst", ".report.txt.filetrail-00001234"),
       finalPath: join(testDir, "dst", "report.txt"),
       sourcePath: join(testDir, "src", "report.txt"),
       moved: false,
@@ -422,7 +422,7 @@ describe("recovering interrupted Replaces", () => {
 
   it("removes an unfinished copy and leaves the old item alone", async () => {
     const interrupted = entry({
-      stagingPath: join(testDir, "dst", ".module.filetrail-1234"),
+      stagingPath: join(testDir, "dst", ".module.filetrail-00001234"),
       finalPath: join(testDir, "dst", "module"),
     });
     await mkdir(join(interrupted.stagingPath, "inner"), { recursive: true });
@@ -467,7 +467,7 @@ describe("recovering interrupted Replaces", () => {
     await writeFile(stuck.stagingPath, "moved");
     const fine = entry({
       id: "fine",
-      stagingPath: join(testDir, "dst", ".other.txt.filetrail-1234"),
+      stagingPath: join(testDir, "dst", ".other.txt.filetrail-00001234"),
       finalPath: join(testDir, "dst", "other.txt"),
     });
     const fileSystem: WriteServiceFileSystem = {

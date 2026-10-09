@@ -91,8 +91,8 @@ export async function recoverWrites(
     ...(options.answerWithinMs === undefined ? {} : { answerWithinMs: options.answerWithinMs }),
     ...(options.runWriteAlone === undefined ? {} : { runWriteAlone: options.runWriteAlone }),
   };
-  // Parts of large files first: one inside a folder a paste was building goes with it, and
-  // would then look like one on a disk that isn't connected, kept for ever.
+  // Parts of large files first: one inside a folder a paste was building (v0.4.3 wrote those
+  // down too) goes with it, and would then look like one on a disk that isn't connected.
   if (partialFiles.length > 0) {
     await removePartialFiles(journal, partialFiles, fileSystem, logger, recoveryOptions);
   }

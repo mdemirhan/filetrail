@@ -93,8 +93,10 @@ type ExecutionContext = {
   // Every destination this paste planned or has written so far (`destinationPathKey`),
   // so a runtime "Keep Both" never takes a name another item will use.
   reservedPaths: Set<string>;
-  // Every destination this paste has written so far (`destinationPathKey`).
+  // Every destination this paste has written so far (`destinationPathKey`), and the same
+  // by folder as written (see assertNotWrittenByThisPaste).
   writtenPaths: Set<string>;
+  writtenByFolder: Map<string, string[]>;
   pastedItemRealPaths?: Promise<string[]>;
   totalItemCount: number;
   totalBytes: number | null;
@@ -141,10 +143,10 @@ type ExecutionContext = {
   acceptedNodes: Map<string, ResolvedCopyPasteNode>;
 };
 
-// An item a move to another disk copied: where (`path`), and the copy as it was written. The
-// copy must still be that item, as large, before its original goes. `source` is the original
-// as it was copied, a change the person agreed to go on with included.
-type CopiedItem = { path: string; written: NodeFingerprint; source: NodeFingerprint };
+// An item a move to another disk copied: where (`path`), and the original as it was copied
+// (`source`), a change the person agreed to go on with included. The copy must still match
+// it, as large, before the original goes.
+type CopiedItem = { path: string; source: NodeFingerprint };
 
 // Steps are kept only for the items the person picked: undoing one undoes everything
 // inside it. A merge, a move to another disk or a permanent delete anywhere makes the
@@ -237,8 +239,10 @@ export async function executeCopyPasteFromAnalysis(args: {
     caseSensitive,
     reservedPaths: collectDestinationPathKeys(args.resolvedNodes, caseSensitive),
     writtenPaths: new Set(),
+    writtenByFolder: new Map(),
     totalItemCount: countExecutableSteps(args.resolvedNodes),
-    totalBytes: args.report.summary.totalBytes,
+    // What will be written: items skipped (an Add Missing merge's existing ones) don't count.
+    totalBytes: sumSubtreeBytes(args.resolvedNodes),
     progress: { completedItemCount: 0, completedByteCount: 0 },
     writeJournal: args.writeJournal ?? null,
     stagingFor: null,
@@ -588,7 +592,7 @@ async function executeResolvedNode(
           `“${basename(currentNode.node.sourcePath)}” kept changing, so it was left.`,
         );
       }
-      assertNotWrittenByThisPaste(context, currentNode, runtimeConflict);
+      await assertNotWrittenByThisPaste(context, currentNode, runtimeConflict);
       const resolution = await answerRuntimeConflict(context, currentNode, runtimeConflict);
       // An answer about the item being pasted changing says nothing about the destination:
       // if that changed too, it is asked about on its own, never replaced unseen. An answer
@@ -620,6 +624,11 @@ async function executeResolvedNode(
         context.writtenPaths.add(
           destinationPathKey(outcome.destinationPath, context.caseSensitive),
         );
+        const folder = dirname(outcome.destinationPath);
+        context.writtenByFolder.set(folder, [
+          ...(context.writtenByFolder.get(folder) ?? []),
+          outcome.destinationPath,
+        ]);
       }
       return outcome;
     } catch (caught) {
@@ -690,19 +699,30 @@ function isSourceSideConflict(conflict: CopyPasteRuntimeConflict): boolean {
 
 // On a disk that doesn't tell "A.txt" from "a.txt", two items from a disk that does would
 // land on one name: the second is never allowed to replace the first, which this same
-// paste just wrote (its original may already be gone, after a move).
-function assertNotWrittenByThisPaste(
+// paste just wrote (its original may already be gone, after a move). A disk may take other
+// names for one too ("Strasse" for "Straße" on some servers): the item there is then known
+// as one this paste wrote by its id, looked up only now, as a question is rare.
+async function assertNotWrittenByThisPaste(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
   conflict: CopyPasteRuntimeConflict,
-): void {
+): Promise<void> {
   if (isSourceSideConflict(conflict) || conflict.reason === "trash_unavailable") {
     return;
   }
-  if (!context.writtenPaths.has(destinationPathKey(node.destinationPath, context.caseSensitive))) {
+  if (context.writtenPaths.has(destinationPathKey(node.destinationPath, context.caseSensitive))) {
+    throw new Error(sameNameMessage(node));
+  }
+  const there = conflict.currentDestinationFingerprint;
+  if (there.ino === null) {
     return;
   }
-  throw new Error(sameNameMessage(node));
+  for (const path of context.writtenByFolder.get(dirname(node.destinationPath)) ?? []) {
+    const written = await captureFingerprint(context.fileSystem, path);
+    if (written.ino === there.ino && written.dev === there.dev) {
+      throw new Error(sameNameMessage(node));
+    }
+  }
 }
 
 function sameNameMessage(node: ResolvedCopyPasteNode): string {
@@ -722,11 +742,10 @@ async function resolveWithRuntimeAnswer(
   const currentDestination = keepPlannedDestination
     ? node.node.destinationFingerprint
     : conflict.currentDestinationFingerprint;
-  // A folder shown in the question is replaced only while it holds what it held then.
-  const destinationTotalNodeCount =
-    !keepPlannedDestination && shownFolderItemCounts.has(conflict)
-      ? (shownFolderItemCounts.get(conflict) ?? null)
-      : node.node.destinationTotalNodeCount;
+  // The review counted the folder it saw: one a question showed since is another item.
+  const destinationTotalNodeCount = keepPlannedDestination
+    ? node.node.destinationTotalNodeCount
+    : null;
   const source =
     resolution !== "skip" && keepPlannedDestination && conflict.currentSourceFingerprint.exists
       ? await readChangedSourceAgain(context, node, conflict.currentSourceFingerprint)
@@ -905,9 +924,8 @@ async function executeStagedDirectory(
   if (context.mode === "cut") {
     await assertRemovableAfterCopy(context, currentNode, { deep: true });
   }
-  // Made now, under a name nothing else has: only what this paste made is ever removed.
-  const reserved = await reserveStagingFolder(fileSystem, finalPath);
-  const temporaryPath = reserved.path;
+  // Made now, under a hidden name nothing else had: what is there is this paste's own.
+  const temporaryPath = await reserveStagingFolder(fileSystem, finalPath);
   const journal = context.writeJournal;
   const journalEntry = {
     id: randomBytes(8).toString("hex"),
@@ -916,15 +934,12 @@ async function executeStagedDirectory(
     sourcePath: currentNode.node.sourcePath,
     moved: false,
     staged: false,
-    ...(reserved.id ? { stagingId: reserved.id } : {}),
-    ...(reserved.bornMs !== null ? { stagingBornMs: reserved.bornMs } : {}),
-    ...(sourceIdOf(currentNode) ? { sourceId: sourceIdOf(currentNode) as ItemId } : {}),
     ...(context.mode === "cut" ? { movingCopy: true as const } : {}),
   };
   try {
     await journal?.add(journalEntry);
   } catch (error) {
-    await removeOwnStaging(fileSystem, temporaryPath, reserved.id).catch(() => undefined);
+    await removeOwnStaging(fileSystem, temporaryPath).catch(() => undefined);
     throw error;
   }
   // Whether the record says the hidden copy is complete, which the next start puts in place.
@@ -937,7 +952,7 @@ async function executeStagedDirectory(
     }
     recordedComplete = false;
     try {
-      await removeOwnStaging(fileSystem, temporaryPath, reserved.id);
+      await removeOwnStaging(fileSystem, temporaryPath);
     } catch {
       return;
     }
@@ -997,12 +1012,6 @@ async function executeStagedDirectory(
     };
   }
 
-  // Another app could have put something else under the hidden name: only the copy this
-  // paste built is put in place, and only then are originals removed.
-  if (!(await isStillOurs(fileSystem, temporaryPath, reserved.id))) {
-    await discard();
-    return copyChangedOutcome(name, finalPath, context.mode);
-  }
   try {
     // Complete now: a crash from here on puts it in place at the next start. Counted as
     // written before it is: a write that failed may still have reached the disk.
@@ -1030,9 +1039,7 @@ async function executeStagedDirectory(
 
   let error = outcome.error;
   let items = childItems;
-  if (context.mode === "cut" && !(await isStillOurs(fileSystem, finalPath, reserved.id))) {
-    error = hiddenCopyChangedMessage(name, context.mode);
-  } else if (context.mode === "cut") {
+  if (context.mode === "cut") {
     const cleanup = await removeMovedSources(
       context,
       currentNode,
@@ -1131,22 +1138,22 @@ async function executeLeafNode(
   context: ExecutionContext,
   currentNode: ResolvedCopyPasteNode,
 ): Promise<ExecuteNodeResult> {
-  const written = await writeLeaf(context, currentNode, currentNode.destinationPath);
+  await writeLeaf(context, currentNode, currentNode.destinationPath);
   noteChanged(context);
   if (context.mode === "copy") {
     await recordCreated(context, currentNode, currentNode.destinationPath);
   }
   countLeafProgress(context, currentNode);
   let deleteError: string | null = null;
-  const copied: CopiedItem | null =
-    written === null
-      ? null
-      : { path: currentNode.destinationPath, written, source: currentNode.node.sourceFingerprint };
-  if (context.stagingFor === "cut" && copied !== null) {
-    context.copiedForMove.set(currentNode.node.sourcePath, copied);
+  const source = currentNode.node.sourceFingerprint;
+  if (context.stagingFor === "cut") {
+    context.copiedForMove.set(currentNode.node.sourcePath, {
+      path: currentNode.destinationPath,
+      source,
+    });
   }
-  if (context.mode === "cut" && copied !== null) {
-    deleteError = (await copyStillWhole(context.fileSystem, copied.path, copied))
+  if (context.mode === "cut") {
+    deleteError = (await copyStillWhole(context.fileSystem, currentNode.destinationPath, source))
       ? await tryDeleteMovedSource(
           currentNode.node.sourcePath,
           currentNode.node.sourceFingerprint,
@@ -1171,15 +1178,12 @@ function countLeafProgress(context: ExecutionContext, node: ResolvedCopyPasteNod
   }
 }
 
-// Writes the file or link `node` at `targetPath`. For a move, returns the item written, as
-// it was before it had its name when it was written under another: what is checked to be
-// still there before the original is removed. Null for a copy, which needs no such look.
+// Writes the file or link `node` at `targetPath`.
 async function writeLeaf(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
   targetPath: string,
-): Promise<NodeFingerprint | null> {
-  const moving = isMoving(context);
+): Promise<void> {
   if (node.node.sourceKind === "symlink") {
     if (context.fileSystem.copyFile) {
       // copyfile(3) makes the link itself (never what it points to), with its tags, flags
@@ -1191,7 +1195,7 @@ async function writeLeaf(
           ? new DestinationTakenError(error)
           : await explainMissingFolder(context.fileSystem, targetPath, error);
       }
-      return moving ? captureFingerprint(context.fileSystem, targetPath) : null;
+      return;
     }
     const linkTarget = await context.fileSystem.readlink(node.node.sourcePath);
     try {
@@ -1201,20 +1205,17 @@ async function writeLeaf(
         ? new DestinationTakenError(error)
         : await explainMissingFolder(context.fileSystem, targetPath, error);
     }
-    const link = moving ? await captureFingerprint(context.fileSystem, targetPath) : null;
     await preserveSymlinkTimestamps(
       context.fileSystem,
       targetPath,
       node.node.sourceFingerprint.mtimeMs,
     );
-    return link;
+    return;
   }
-  const written = await copyFileContents(context, node.node.sourcePath, targetPath);
-  const file =
-    written ?? (moving ? await captureFingerprint(context.fileSystem, targetPath) : null);
+  await copyFileContents(context, node.node.sourcePath, targetPath);
   if (context.fileSystem.copyFile) {
     await restoreDroppedFileMetadata(context.fileSystem, targetPath, node.node.sourceFingerprint);
-    return file;
+    return;
   }
   // A copy that worked isn't reported as failed over its mode or dates.
   await preserveModeIfSupported(
@@ -1227,7 +1228,6 @@ async function writeLeaf(
     targetPath,
     node.node.sourceFingerprint.mtimeMs,
   ).catch(() => undefined);
-  return file;
 }
 
 // Native copyFile (copyfile(3) COPYFILE_ALL) carries the mode, flags and dates, but some
@@ -1405,12 +1405,13 @@ async function applyDirectoryMetadata(
 ): Promise<void> {
   const { fileSystem } = context;
   const { sourcePath, sourceFingerprint } = node.node;
-  const moving = isMoving(context);
+  // A move, or a copy built for a move to take the originals' place with.
+  const moving = context.mode === "cut" || context.stagingFor === "cut";
   if (fileSystem.copyMetadata) {
     try {
       // Tags, the custom-icon flag, ACLs and flags along with the mode and dates.
       await fileSystem.copyMetadata(sourcePath, node.destinationPath);
-      if (context.mode === "cut" || context.stagingFor === "cut") {
+      if (moving) {
         // Moving the items out (or anything written into it meanwhile, as Finder's view
         // settings) changed the source folder's dates; put back the ones it had before.
         // Only the date is lost if this fails (a locked folder refuses it).
@@ -1465,16 +1466,9 @@ async function executeReplace(
   if (await isLocked(fileSystem, finalPath)) {
     throw new Error(lockedMessage(finalPath));
   }
-  // What the old item holds now (an answer to a question about it may have taken in a
-  // change), to tell when it is about to go whether anything was added to it since.
-  const replaced: ReplacedItem = {
-    fingerprint: destination,
-    itemCount:
-      destination.kind === "directory" ? await countItemsInside(fileSystem, finalPath) : null,
-  };
   // Only the item the review, or the answer to a question, agreed to replace: one that
   // changed since it was last looked at is looked at, and asked about, again.
-  if (!isAsApproved(currentNode.node, destination, replaced.itemCount)) {
+  if (!isAsApproved(currentNode.node.destinationFingerprint, destination)) {
     throw new DestinationTakenError(
       new Error(`“${basename(finalPath)}” changed before it could be replaced.`),
     );
@@ -1482,7 +1476,7 @@ async function executeReplace(
 
   if (!fileSystem.rename) {
     // Nothing can be swapped into place without rename: clear the way first instead.
-    if ((await removeReplacedItem(context, currentNode, replaced)) === "skipped") {
+    if ((await removeReplacedItem(context, currentNode, destination)) === "skipped") {
       return skippedOutcome("runtime_conflict_resolution", finalPath);
     }
     return performNode(context, { ...currentNode, action: "create" }, source);
@@ -1508,10 +1502,9 @@ async function executeReplace(
     staged: false,
   };
   // Whether what is at the hidden name is this paste's own: only then is it ever removed.
-  // A folder is made there first, under a name nothing else has; a file is its own once
+  // A folder is made there first, under a name nothing else had; a file is its own once
   // copied there (a copy that fails leaves nothing there).
   let stagingIsOurs = false;
-  let stagingId: ItemId | null = null;
   let movedByRename = false;
   if (canRenameForCut(context, currentNode)) {
     await journal?.add({ ...journalEntry, moved: true, staged: true });
@@ -1530,27 +1523,15 @@ async function executeReplace(
       expectCantUndo(context, "other_disk_move");
     }
     if (currentNode.node.sourceKind === "directory") {
-      const reserved = await reserveStagingFolder(fileSystem, finalPath);
-      temporaryPath = reserved.path;
-      stagingId = reserved.id;
+      temporaryPath = await reserveStagingFolder(fileSystem, finalPath);
       stagingIsOurs = true;
       journalEntry.stagingPath = temporaryPath;
-      if (reserved.id) {
-        journalEntry.stagingId = reserved.id;
-      }
-      if (reserved.bornMs !== null) {
-        journalEntry.stagingBornMs = reserved.bornMs;
-      }
-      const sourceId = sourceIdOf(currentNode);
-      if (sourceId) {
-        journalEntry.sourceId = sourceId;
-      }
     }
     try {
       await journal?.add(journalEntry);
     } catch (error) {
       if (stagingIsOurs) {
-        await removeOwnStaging(fileSystem, temporaryPath, stagingId).catch(() => undefined);
+        await removeOwnStaging(fileSystem, temporaryPath).catch(() => undefined);
       }
       throw error;
     }
@@ -1571,7 +1552,7 @@ async function executeReplace(
         throw new Error(`The copy of “${basename(finalPath)}” couldn't be cleared away yet.`);
       }
       recordedComplete = false;
-      await removeOwnStaging(fileSystem, temporaryPath, stagingId);
+      await removeOwnStaging(fileSystem, temporaryPath);
     }
     await journal?.remove(journalEntry.id);
   };
@@ -1661,24 +1642,11 @@ async function executeReplace(
   try {
     // A copy of a locked item is locked too, and a locked item can't be renamed: it is
     // unlocked for the swap and locked again after. Done before the old item goes.
-    // Another app could have put something else under the hidden name: nothing is done to
-    // it, and the old item goes only for the copy this paste built.
-    const stillOurs = () =>
-      movedByRename ? Promise.resolve(true) : isStillOurs(fileSystem, temporaryPath, stagingId);
-    if (!(await stillOurs())) {
-      await undoStaging();
-      return copyChangedOutcome(basename(finalPath), finalPath, context.mode);
-    }
     stagedFlags = await unlockForMove(fileSystem, temporaryPath);
     stagedMode = await openForMove(fileSystem, temporaryPath);
-    const removal = await removeReplacedItem(context, currentNode, replaced, stillOurs);
-    if (removal === "skipped") {
+    if ((await removeReplacedItem(context, currentNode, destination)) === "skipped") {
       await undoStaging();
       return skippedOutcome("runtime_conflict_resolution", finalPath);
-    }
-    if (removal === "changed") {
-      await undoStaging();
-      return copyChangedOutcome(basename(finalPath), finalPath, context.mode);
     }
     oldItemRemoved = true;
     try {
@@ -1733,13 +1701,7 @@ async function executeReplace(
 
   let ownError: string | null = null;
   let childItems = stagedChildItems;
-  if (
-    context.mode === "cut" &&
-    !movedByRename &&
-    !(await isStillOurs(fileSystem, finalPath, stagingId))
-  ) {
-    ownError = hiddenCopyChangedMessage(basename(finalPath), context.mode);
-  } else if (context.mode === "cut" && !movedByRename) {
+  if (context.mode === "cut" && !movedByRename) {
     const cleanup = await removeMovedSources(
       context,
       currentNode,
@@ -1812,7 +1774,7 @@ async function removeMovedSources(
       !(await copyStillWhole(
         context.fileSystem,
         rebasePath(copied.path, stagingPath, finalPath),
-        copied,
+        copied.source,
       ))
     ) {
       return COPY_NOT_WHOLE_MESSAGE;
@@ -1875,24 +1837,20 @@ async function removeMovedSources(
   };
 }
 
-// Moves the item being replaced out of the way: to the Trash, or, when there is no
-// Trash here, deleted permanently only if the person agrees.
-// `stillOurs` says whether the new item built under a hidden name is still the one this
-// paste made: asked last, just before the old item goes (a question about deleting it for
-// good may have been open a while). "changed" when it isn't: the old item stays.
+// Moves the item being replaced (`destination`, as the Replace began with it) out of the
+// way: to the Trash, or, when there is no Trash here, deleted permanently only if the person
+// agrees.
 async function removeReplacedItem(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
-  replaced: ReplacedItem,
-  stillOurs?: () => Promise<boolean>,
-): Promise<"removed" | "skipped" | "changed"> {
+  destination: NodeFingerprint,
+): Promise<"removed" | "skipped"> {
   const { fileSystem } = context;
-  const destination = replaced.fingerprint;
   if (fileSystem.trash) {
     try {
       // Staging a large copy takes a while: the item replaced must still be the one that
       // was there, never one an app saved in its place meanwhile.
-      const current = await assertReplacedItemUnchanged(context, node, replaced);
+      const current = await assertReplacedItemUnchanged(context, node, destination);
       // On a disk that ignores case, "X.TXT" may have found "x.txt": Undo puts the old item
       // back under the name it really had.
       const records = context.recordsUndo && context.undo.topLevelNodeIds.has(node.node.id);
@@ -1904,9 +1862,6 @@ async function removeReplacedItem(
           ? itemIdOf({ dev: current.dev, ino: current.ino })
           : null;
       const looks = records ? await stampWithoutId(fileSystem, node.destinationPath, id) : {};
-      if (stillOurs && !(await stillOurs())) {
-        return "changed";
-      }
       const trashPath = await fileSystem.trash(node.destinationPath);
       noteChanged(context);
       context.replacedPaths.push(node.destinationPath);
@@ -1971,11 +1926,14 @@ async function removeReplacedItem(
     }
   }
   // Last, after the long look inside: the question may have been open a while, and what
-  // is deleted is what it was about.
-  await assertReplacedItemUnchanged(context, node, replaced);
-  if (stillOurs && !(await stillOurs())) {
-    return "changed";
-  }
+  // is deleted is what it was about. A folder holds only what the review counted in it: an
+  // item added since (a cloud sync) would be lost unseen, with no Trash to get it back from.
+  await assertReplacedItemUnchanged(
+    context,
+    node,
+    destination,
+    destination.kind === "directory" ? node.node.destinationTotalNodeCount : null,
+  );
   markCantUndo(context, "deleted_for_good");
   noteChanged(context);
   // Named before deleting: a delete that fails part way has still removed some of it.
@@ -1987,36 +1945,22 @@ async function removeReplacedItem(
   return "removed";
 }
 
-// The item a Replace removes, as it was when the Replace began: `itemCount` is how many
-// items a folder held at every depth (null for a file, or when it couldn't be counted).
-type ReplacedItem = { fingerprint: NodeFingerprint; itemCount: number | null };
-
-// The item a Replace is about to remove is still the one it began with: the same file
-// unchanged, or the same folder holding as many items. Throws (nothing removed) when
-// another item is there or it changed; returns what is there.
+// The item a Replace is about to remove is still the one it began with (`replaced`): the
+// same file unchanged, or the same folder, holding `itemCount` items at every depth when
+// that is given. Throws (nothing removed) when another item is there or it changed;
+// returns what is there.
 async function assertReplacedItemUnchanged(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
-  replaced: ReplacedItem,
+  replaced: NodeFingerprint,
+  itemCount: number | null = null,
 ): Promise<NodeFingerprint> {
-  const destination = replaced.fingerprint;
+  // Counting a large folder takes a while: it is looked at once counted.
+  const counted =
+    itemCount === null ||
+    (await countItemsInside(context.fileSystem, node.destinationPath)) === itemCount;
   const current = await captureFingerprint(context.fileSystem, node.destinationPath);
-  let unchanged: boolean;
-  if (destination.kind === "directory" && current.kind === "directory") {
-    // Counting a large folder takes a while: it must still be the same folder once counted.
-    unchanged =
-      sameItemIdentity(destination, current) &&
-      (replaced.itemCount === null ||
-        (await countItemsInside(context.fileSystem, node.destinationPath)) ===
-          replaced.itemCount) &&
-      sameItemIdentity(
-        destination,
-        await captureFingerprint(context.fileSystem, node.destinationPath),
-      );
-  } else {
-    unchanged = current.exists && fingerprintsEqual(destination, current);
-  }
-  if (!unchanged) {
+  if (!counted || !isAsApproved(replaced, current)) {
     throw new Error(
       `“${basename(node.destinationPath)}” changed while it was being replaced, so it was kept and nothing was replaced.`,
     );
@@ -2313,72 +2257,37 @@ const MISSING_FINGERPRINT: NodeFingerprint = {
 // A file is written under a hidden name next to its place, and takes its name only once it
 // is complete: quitting, a crash or a disk that stops answering part way never leaves a
 // cut-short file under the real name, where it would pass for the whole one.
-// Copies a file's contents under a hidden name, then gives it its name. For a move, returns
-// the copy as it was written (see writeLeaf).
 async function copyFileContents(
   context: ExecutionContext,
   sourcePath: string,
   targetPath: string,
-): Promise<NodeFingerprint | null> {
+): Promise<void> {
   const { fileSystem } = context;
   if (!fileSystem.renameExclusive && !fileSystem.rename) {
     await writeFileContents(context, sourcePath, targetPath);
-    return null;
+    return;
   }
   if ((await captureFingerprint(fileSystem, targetPath)).exists) {
     throw new DestinationTakenError(
       Object.assign(new Error(`EEXIST: ${targetPath}`), { code: "EEXIST", path: targetPath }),
     );
   }
+  const partialPath = await temporarySiblingPath(fileSystem, targetPath);
   // A large file is written down first: cut short by a crash, the part copied would take
   // up space under a hidden name, unseen, until the next start removes it. Small ones
-  // aren't, for speed (two writes to the journal for each file).
-  const journal = context.writeJournal;
-  const journaled =
+  // aren't, for speed (two writes to the journal for each file), nor is one inside a folder
+  // built under a hidden name: that folder's own record covers it.
+  const journal = context.folderMadeAt === null ? context.writeJournal : null;
+  const journalId =
     journal !== null &&
-    ((await fileSystem.lstat(sourcePath).catch(() => null))?.size ?? 0) >= JOURNALED_FILE_BYTES;
-  // Written down, the part is copied into a folder made for it under a hidden name, known
-  // by its id from before anything is copied: the next start removes only that folder,
-  // never another item that came to have the name. A disk that gives no ids gets the part
-  // next to its place, as small files do.
-  let partialFolder = journaled ? await reserveStagingFolder(fileSystem, targetPath) : null;
-  if (partialFolder !== null && partialFolder.id === null) {
-    await removeOwnStaging(fileSystem, partialFolder.path, null).catch(() => undefined);
-    partialFolder = null;
-  }
-  const partialPath =
-    partialFolder !== null
-      ? join(partialFolder.path, PARTIAL_FILE_NAME)
-      : await temporarySiblingPath(fileSystem, targetPath);
-  // What is left behind should the copy be cut short: the folder, or the part itself.
-  const leftoverPath = partialFolder?.path ?? partialPath;
-  const journalId = journaled ? randomBytes(8).toString("hex") : null;
+    ((await fileSystem.lstat(sourcePath).catch(() => null))?.size ?? 0) >= JOURNALED_FILE_BYTES
+      ? randomBytes(8).toString("hex")
+      : null;
   if (journal !== null && journalId !== null) {
-    try {
-      await journal.add({
-        kind: "partial_file",
-        id: journalId,
-        partialPath,
-        finalPath: targetPath,
-        ...(partialFolder?.id ? { folderId: partialFolder.id } : {}),
-        ...(partialFolder !== null && partialFolder.bornMs !== null
-          ? { folderBornMs: partialFolder.bornMs }
-          : {}),
-      });
-    } catch (error) {
-      if (partialFolder !== null) {
-        await removeOwnStaging(fileSystem, partialFolder.path, partialFolder.id).catch(
-          () => undefined,
-        );
-      }
-      throw error;
-    }
+    await journal.add({ kind: "partial_file", id: journalId, partialPath, finalPath: targetPath });
   }
   try {
     await writeFileContents(context, sourcePath, partialPath);
-    // A move's copy as written, before it has its name: an item put there in its place
-    // after that is never taken for it.
-    const written = isMoving(context) ? await captureFingerprint(fileSystem, partialPath) : null;
     try {
       // A copy of a locked file is locked too, and a locked file can't be renamed.
       const flags = await unlockForMove(fileSystem, partialPath);
@@ -2386,7 +2295,6 @@ async function copyFileContents(
       if (flags !== null) {
         await fileSystem.setFlags?.(targetPath, flags).catch(() => undefined);
       }
-      return written;
     } catch (error) {
       await removeStagedItem(fileSystem, partialPath).catch(() => undefined);
       throw errorCode(error) === "EEXIST"
@@ -2394,21 +2302,13 @@ async function copyFileContents(
         : await explainMissingFolder(fileSystem, targetPath, error);
     }
   } finally {
-    if (partialFolder !== null) {
-      await removeOwnStaging(fileSystem, partialFolder.path, partialFolder.id).catch(
-        () => undefined,
-      );
-    }
     // Complete under its name, or cleared away: nothing is left to recover. A part that
     // couldn't be cleared away (its disk went away) stays written down for the next start.
-    if (journal !== null && journalId !== null && (await isGone(fileSystem, leftoverPath))) {
+    if (journal !== null && journalId !== null && (await isGone(fileSystem, partialPath))) {
       await journal.remove(journalId).catch(() => undefined);
     }
   }
 }
-
-// The name a large file is copied under inside the hidden folder made for it.
-const PARTIAL_FILE_NAME = "part";
 
 // Whether nothing is at `path` for certain: not merely unreadable, and not on a disk gone
 // away (its folder is still there).
@@ -2448,74 +2348,24 @@ function incompletePackageMessage(
     : `“${name}” wasn't copied because some items in it were skipped or couldn't be copied.`;
 }
 
-// The id of the item being pasted, as the review found it; null when its disk gives none.
-function sourceIdOf(node: ResolvedCopyPasteNode): ItemId | null {
-  const { dev, ino } = node.node.sourceFingerprint;
-  return dev !== null && ino !== null ? { dev, ino } : null;
-}
-
-// A folder made under a hidden name next to `finalPath` for an item to be built in, with
-// its id: made exclusively (a name found taken is passed over), so it is this paste's own.
+// A folder made under a hidden name next to `finalPath` for an item to be built in: made
+// exclusively (a name found taken is passed over), so what is at that name is this paste's.
 async function reserveStagingFolder(
   fileSystem: WriteServiceFileSystem,
   finalPath: string,
-): Promise<{ path: string; id: ItemId | null; bornMs: number | null }> {
+): Promise<string> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const path = await temporarySiblingPath(fileSystem, finalPath);
     try {
       await fileSystem.mkdir(path);
+      return path;
     } catch (error) {
-      if (errorCode(error) === "EEXIST") {
-        continue;
+      if (errorCode(error) !== "EEXIST") {
+        throw await explainMissingFolder(fileSystem, path, error);
       }
-      throw await explainMissingFolder(fileSystem, path, error);
     }
-    const made = await captureFingerprint(fileSystem, path);
-    const bornMs = await fileSystem.lstat(path).then(
-      (stats) => (typeof stats.birthtimeMs === "number" ? stats.birthtimeMs : null),
-      () => null,
-    );
-    return {
-      path,
-      id: made.dev !== null && made.ino !== null ? { dev: made.dev, ino: made.ino } : null,
-      bornMs,
-    };
   }
   throw new Error(`Couldn't find a free temporary name next to “${basename(finalPath)}”.`);
-}
-
-// Whether the item at `path` is still the folder a paste built under a hidden name (`id`,
-// when the disk gives one), found by its id: renaming it into place keeps it.
-async function isStillOurs(
-  fileSystem: WriteServiceFileSystem,
-  path: string,
-  id: ItemId | null,
-): Promise<boolean> {
-  if (id === null) {
-    return true;
-  }
-  const there = await captureFingerprint(fileSystem, path);
-  return there.dev === id.dev && there.ino === id.ino;
-}
-
-function copyChangedOutcome(
-  name: string,
-  destinationPath: string,
-  mode: CopyPasteMode,
-): ExecuteNodeResult {
-  return {
-    itemStatus: "failed",
-    skipReason: null,
-    error: hiddenCopyChangedMessage(name, mode),
-    destinationPath,
-    childItems: [],
-  };
-}
-
-function hiddenCopyChangedMessage(name: string, mode: CopyPasteMode): string {
-  return mode === "cut"
-    ? `“${name}” wasn't moved because another app changed its copy while it was being made. The original is where it was.`
-    : `“${name}” wasn't copied because another app changed the copy while it was being made.`;
 }
 
 // A hidden copy written down as complete is put in place at the next start: before any of
@@ -2538,21 +2388,14 @@ async function recordIncomplete(
   }
 }
 
-// Removes what a paste built under a hidden name, only when the item there is still the one
-// it made (`id`, when the disk gives one): another item that took the name is left alone.
-async function removeOwnStaging(
-  fileSystem: WriteServiceFileSystem,
-  path: string,
-  id: ItemId | null,
-): Promise<void> {
+// Removes what a paste built under a hidden name; nothing when it is gone already.
+async function removeOwnStaging(fileSystem: WriteServiceFileSystem, path: string): Promise<void> {
   if (await isGone(fileSystem, path)) {
     return;
   }
-  // Read for certain (an error here is thrown: the record of it then stays).
-  const there = await fileSystem.lstat(path);
-  if (id !== null && (there.dev !== id.dev || there.ino !== id.ino)) {
-    return;
-  }
+  // Read for certain (an error here is thrown: the record of it then stays). Removing with
+  // `force` would take a disk gone away for an item removed.
+  await fileSystem.lstat(path);
   await removeStagedItem(fileSystem, path);
 }
 
@@ -2683,10 +2526,6 @@ async function conflictClassFor(
   return (await classifyConflict(fileSystem, source, destination)) ?? "type_mismatch";
 }
 
-// How many items a destination folder held when a question showed it (countItemsInside), by
-// the question: an answer to replace it holds only while it still holds that many.
-const shownFolderItemCounts = new WeakMap<CopyPasteRuntimeConflict, number | null>();
-
 // What changed since the review, if anything, along with the item being pasted as it is now.
 async function detectRuntimeConflict(
   resolvedNode: ResolvedCopyPasteNode,
@@ -2747,89 +2586,62 @@ async function findRuntimeConflict(
 
   const destinationExists =
     currentDestinationFingerprint.exists && currentDestinationFingerprint.kind !== "missing";
-  const found = await findDestinationConflict();
-  if (found !== null && found.destinationKind === "directory" && found.conflictClass !== null) {
-    shownFolderItemCounts.set(
-      found,
-      await countItemsInside(fileSystem, resolvedNode.destinationPath),
-    );
-  }
-  return found;
-
-  async function findDestinationConflict(): Promise<CopyPasteRuntimeConflict | null> {
-    switch (resolvedNode.action) {
-      case "create":
-      case "keep_both":
-        return destinationExists
-          ? conflict(
-              "destination_created",
-              await conflictClassFor(
-                fileSystem,
-                { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
-                { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
-              ),
-              "destination",
-            )
-          : null;
-      case "overwrite": {
-        // Gone already: nothing is left to replace, so this simply becomes a copy.
-        if (!destinationExists) {
-          return null;
-        }
-        const planned = resolvedNode.node.destinationFingerprint;
-        const unchanged = isAsApproved(
-          resolvedNode.node,
-          currentDestinationFingerprint,
-          planned.kind === "directory" && currentDestinationFingerprint.kind === "directory"
-            ? await countItemsInside(fileSystem, resolvedNode.destinationPath)
-            : null,
-        );
-        return unchanged
-          ? null
-          : conflict(
-              planned.exists ? "destination_changed" : "destination_created",
-              await conflictClassFor(
-                fileSystem,
-                { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
-                { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
-              ),
-              "destination",
-            );
-      }
-      case "merge":
-        if (!destinationExists) {
-          // The folder to merge into was removed: recreating it silently would bring back
-          // a folder someone just deleted.
-          return conflict("destination_deleted", "directory_conflict", "destination");
-        }
-        return currentDestinationFingerprint.kind !== "directory"
-          ? conflict("destination_changed", "type_mismatch", "destination")
-          : null;
-      default:
+  switch (resolvedNode.action) {
+    case "create":
+    case "keep_both":
+      return destinationExists
+        ? conflict(
+            "destination_created",
+            await conflictClassFor(
+              fileSystem,
+              { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
+              { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
+            ),
+            "destination",
+          )
+        : null;
+    case "overwrite": {
+      // Gone already: nothing is left to replace, so this simply becomes a copy.
+      if (!destinationExists) {
         return null;
+      }
+      const planned = resolvedNode.node.destinationFingerprint;
+      return isAsApproved(planned, currentDestinationFingerprint)
+        ? null
+        : conflict(
+            planned.exists ? "destination_changed" : "destination_created",
+            await conflictClassFor(
+              fileSystem,
+              { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
+              { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
+            ),
+            "destination",
+          );
     }
+    case "merge":
+      if (!destinationExists) {
+        // The folder to merge into was removed: recreating it silently would bring back
+        // a folder someone just deleted.
+        return conflict("destination_deleted", "directory_conflict", "destination");
+      }
+      return currentDestinationFingerprint.kind !== "directory"
+        ? conflict("destination_changed", "type_mismatch", "destination")
+        : null;
+    default:
+      return null;
   }
 }
 
-// Whether the item now at a destination (`current`, holding `currentItemCount` items when a
-// folder) is the one the review, or the answer to a question, agreed to replace. A folder's
-// timestamps change whenever anything inside it does (Finder writes .DS_Store just by
-// showing it), so for folders their identity counts, and what is inside them: an item added
-// since would go to the Trash unseen.
-function isAsApproved(
-  approved: Pick<CopyPasteAnalysisNode, "destinationFingerprint" | "destinationTotalNodeCount">,
-  current: NodeFingerprint,
-  currentItemCount: number | null,
-): boolean {
-  const planned = approved.destinationFingerprint;
+// Whether the item now at a destination (`current`) is the one the review, or the answer to
+// a question, agreed to replace (`planned`). A folder's timestamps change whenever anything
+// inside it does (Finder writes .DS_Store just by showing it), so for folders only their
+// identity counts: an item added to one since goes to the Trash with it, where it can be got
+// back (a folder deleted for good is counted first, see removeReplacedItem).
+function isAsApproved(planned: NodeFingerprint, current: NodeFingerprint): boolean {
   if (planned.kind === "directory" && current.kind === "directory") {
-    return (
-      sameItemIdentity(planned, current) &&
-      (approved.destinationTotalNodeCount === null ||
-        currentItemCount === approved.destinationTotalNodeCount)
-    );
+    return sameItemIdentity(planned, current);
   }
-  return fingerprintsEqual(planned, current);
+  return current.exists && fingerprintsEqual(planned, current);
 }
 
 // How many items a folder holds at every depth, counted as the review counted them
@@ -2897,14 +2709,10 @@ async function assertDestinationDoesNotContainSource(
   }
 }
 
-// Whether this paste moves its items, or builds a copy that a move then takes the originals'
-// place with.
-function isMoving(context: ExecutionContext): boolean {
-  return context.mode === "cut" || context.stagingFor === "cut";
-}
-
+// The copy doesn't match its original as copied: the original grew (or shrank) while it was
+// copied, or the copy came out short (or went away).
 const COPY_NOT_WHOLE_MESSAGE =
-  "Its copy went away or changed before the original was removed, so the original was kept.";
+  "It changed while it was being moved, or its copy didn't come out whole, so the original was kept.";
 
 // Whether a move's copy is what it copied: the same kind, as large, and for a link the same
 // target. Sizes don't prove the contents, but a copy cut short or replaced is caught.
@@ -2917,19 +2725,13 @@ function copyMatchesSource(copy: NodeFingerprint, source: NodeFingerprint): bool
   );
 }
 
-// Whether the copy at `path` is still the one written (`copied`), as it was written, and
-// still matches its original.
+// Whether the copy at `path`, where it is now, matches its original (`source`).
 async function copyStillWhole(
   fileSystem: WriteServiceFileSystem,
   path: string,
-  copied: CopiedItem,
+  source: NodeFingerprint,
 ): Promise<boolean> {
-  const now = await captureFingerprint(fileSystem, path);
-  return (
-    sameItemIdentity(copied.written, now) &&
-    now.size === copied.written.size &&
-    copyMatchesSource(now, copied.source)
-  );
+  return copyMatchesSource(await captureFingerprint(fileSystem, path), source);
 }
 
 /** Attempts to delete the source after a successful copy in cut mode.

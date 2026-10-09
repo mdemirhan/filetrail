@@ -1,5 +1,3 @@
-import { dirname } from "node:path";
-
 import { vi } from "vitest";
 
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
@@ -67,72 +65,111 @@ describe("recovering a Replace or a move at start", () => {
   });
 });
 
+describe("recovering a Replace by its hidden name", () => {
+  // Only an item under a hidden name this app makes is ever moved or removed: a record that
+  // names anything else (a journal written wrong) leaves it alone.
+  it("leaves alone an item that isn't under a hidden name of this app's", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/target/notes.txt": { kind: "file", size: 3 },
+    });
+    fileSystem.enableRename();
+    const entry: ReplaceJournalEntry = {
+      id: "1",
+      stagingPath: "/target/notes.txt",
+      finalPath: "/target/a.txt",
+      sourcePath: "/source/a.txt",
+      moved: false,
+      staged: false,
+    };
+
+    expect(await recoverInterruptedReplaces([entry], fileSystem)).toEqual([
+      { entry, outcome: "nothing_left" },
+    ]);
+    expect(fileSystem.readNode("/target/notes.txt")?.size).toBe(3);
+  });
+});
+
 describe("removing the part of a large file a crash cut short", () => {
   const folder = "/target/.movie.mov.filetrail-0000abcd";
 
-  function withPart(): MockWriteServiceFileSystem {
-    return new MockWriteServiceFileSystem({
-      [folder]: { kind: "directory", ino: 700, dev: 1 },
-      [`${folder}/part`]: { kind: "file", size: 9, ino: 701, dev: 1 },
+  // Written by builds after v0.4.3 that were never released: the part was copied as "part"
+  // in a hidden folder of its own, written down with the folder's id.
+  const legacyEntry = {
+    kind: "partial_file",
+    id: "p",
+    partialPath: `${folder}/part`,
+    finalPath: "/target/movie.mov",
+    folderId: { dev: 1, ino: 700 },
+  } as PartialFileJournalEntry;
+
+  it("removes the hidden folder a build after v0.4.3 copied it in", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      [folder]: { kind: "directory" },
+      [`${folder}/part`]: { kind: "file", size: 9 },
     });
-  }
 
-  function entryFor(id: { dev: number; ino: number }): PartialFileJournalEntry {
-    return {
-      kind: "partial_file",
-      id: "p",
-      partialPath: `${folder}/part`,
-      finalPath: "/target/movie.mov",
-      folderId: id,
-    };
-  }
-
-  it("removes the hidden folder it was copied in, known by its id", async () => {
-    const fileSystem = withPart();
-
-    const [outcome] = await recoverPartialFiles([entryFor({ dev: 1, ino: 700 })], fileSystem);
+    const [outcome] = await recoverPartialFiles([legacyEntry], fileSystem);
 
     expect(outcome?.outcome).toBe("removed_copy");
     expect(fileSystem.exists(folder)).toBe(false);
   });
 
-  it("leaves another item that came to have the folder's name", async () => {
-    const fileSystem = withPart();
-
-    const [outcome] = await recoverPartialFiles([entryFor({ dev: 1, ino: 999 })], fileSystem);
-
-    expect(outcome?.outcome).toBe("nothing_left");
-    expect(fileSystem.exists(`${folder}/part`)).toBe(true);
-  });
-
-  it("knows the folder on a disk connected again by its file id and when it was made", async () => {
-    const fileSystem = withPart();
-    fileSystem.lstatImpl = async (path) => {
-      fileSystem.lstatImpl = null;
-      const stats = await fileSystem.lstat(path);
-      fileSystem.lstatImpl = impl;
-      return { ...stats, dev: 9, birthtimeMs: 1234 };
-    };
-    const impl = fileSystem.lstatImpl;
-
-    const [other] = await recoverPartialFiles([entryFor({ dev: 1, ino: 700 })], fileSystem);
-    expect(other?.outcome).toBe("nothing_left");
-    const [same] = await recoverPartialFiles(
-      [{ ...entryFor({ dev: 1, ino: 700 }), folderBornMs: 1234 }],
-      fileSystem,
-    );
-    expect(same?.outcome).toBe("removed_copy");
-  });
-
-  it("finds nothing left once the folder is gone", async () => {
+  it("finds nothing left once that folder is gone", async () => {
     const fileSystem = new MockWriteServiceFileSystem({ "/target": { kind: "directory" } });
 
-    const [outcome] = await recoverPartialFiles([entryFor({ dev: 1, ino: 700 })], fileSystem);
+    const [outcome] = await recoverPartialFiles([legacyEntry], fileSystem);
 
     expect(outcome?.outcome).toBe("nothing_left");
   });
 
-  it("removes a part written down without a folder by its hidden name, as before", async () => {
+  it("leaves a part for later when its disk doesn't answer, or another write runs", async () => {
+    vi.useFakeTimers();
+    const part = "/target/.movie.mov.filetrail-0000abcd";
+    const fileSystem = new MockWriteServiceFileSystem({ [part]: { kind: "file", size: 9 } });
+    const entry: PartialFileJournalEntry = {
+      kind: "partial_file",
+      id: "p",
+      partialPath: part,
+      finalPath: "/target/movie.mov",
+    };
+
+    expect(
+      await recoverPartialFiles([entry], fileSystem, {
+        runWriteAlone: async () => ({ ran: false }),
+      }),
+    ).toEqual([{ entry, outcome: "deferred" }]);
+    hangUnder(fileSystem, "/target");
+    const recovery = recoverPartialFiles([entry], fileSystem, { answerWithinMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await recovery).toEqual([
+      { entry, outcome: "unreachable", error: "The disk didn't answer." },
+    ]);
+    vi.useRealTimers();
+    expect(fileSystem.exists(part)).toBe(true);
+  });
+
+  it("says why a part couldn't be removed", async () => {
+    const part = "/target/.movie.mov.filetrail-0000abcd";
+    const fileSystem = new MockWriteServiceFileSystem({ [part]: { kind: "file", size: 9 } });
+    fileSystem.rmImpl = async () => {
+      throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    };
+    const entry: PartialFileJournalEntry = {
+      kind: "partial_file",
+      id: "p",
+      partialPath: part,
+      finalPath: "/target/movie.mov",
+    };
+
+    const [outcome] = await recoverPartialFiles([entry], fileSystem, {
+      runWriteAlone: async (write) => ({ ran: true, value: await write() }),
+    });
+
+    expect(outcome).toMatchObject({ entry, outcome: "failed", error: expect.any(String) });
+    expect(fileSystem.exists(part)).toBe(true);
+  });
+
+  it("removes a part by its hidden name", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/target/.movie.mov.filetrail-0000abcd": { kind: "file", size: 9 },
     });
@@ -155,31 +192,23 @@ describe("removing the part of a large file a crash cut short", () => {
 });
 
 describe("copying a large file", () => {
-  it("writes down the folder it is copied in, by its id, before copying anything", async () => {
-    const fileSystem = new MockWriteServiceFileSystem({
-      "/source/movie.mov": { kind: "file", size: JOURNALED_FILE_BYTES },
-      "/target": { kind: "directory" },
-    });
+  // Copies `sourcePaths` into /target, noting the journal's entries as each file's contents
+  // are written.
+  async function copyLarge(fileSystem: MockWriteServiceFileSystem, sourcePaths: string[]) {
     fileSystem.enableRename();
     const live = new Map<string, WriteJournalEntry>();
-    const seen: Array<{ entry: WriteJournalEntry | undefined; folderId: string }> = [];
+    const seen: Array<{ destination: string; entries: WriteJournalEntry[] }> = [];
     fileSystem.copyFileStreamImpl = async (_source, destination) => {
-      const folder = await fileSystem.lstat(dirname(destination));
-      seen.push({ entry: [...live.values()][0], folderId: `${folder.dev}:${folder.ino}` });
+      seen.push({ destination, entries: [...live.values()] });
       fileSystem.addFile(destination, { size: JOURNALED_FILE_BYTES });
     };
     const report = await buildCopyPasteAnalysisReport({
       analysisId: "analysis-1",
-      request: {
-        mode: "copy",
-        sourcePaths: ["/source/movie.mov"],
-        destinationDirectoryPath: "/target",
-      },
+      request: { mode: "copy", sourcePaths, destinationDirectoryPath: "/target" },
       fileSystem,
       thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 1e12 },
     });
     const policy = { file: "skip", directory: "skip", mismatch: "skip" } as const;
-
     await executeCopyPasteFromAnalysis({
       operationId: "op-1",
       report,
@@ -200,18 +229,50 @@ describe("copying a large file", () => {
         },
       },
     });
+    return { seen, live };
+  }
 
-    const [{ entry, folderId } = { entry: undefined, folderId: "" }] = seen;
-    expect(entry).toMatchObject({
-      kind: "partial_file",
-      partialPath: expect.stringMatching(/^\/target\/\.movie\.mov\.filetrail-[0-9a-f]{8}\/part$/u),
-      finalPath: "/target/movie.mov",
+  it("writes down the hidden name it is copied under before copying anything", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source/movie.mov": { kind: "file", size: JOURNALED_FILE_BYTES },
+      "/target": { kind: "directory" },
     });
-    const recorded = entry?.kind === "partial_file" ? entry.folderId : undefined;
-    expect(`${recorded?.dev}:${recorded?.ino}`).toBe(folderId);
+
+    const { seen, live } = await copyLarge(fileSystem, ["/source/movie.mov"]);
+
+    expect(seen).toEqual([
+      {
+        destination: expect.stringMatching(/^\/target\/\.movie\.mov\.filetrail-[0-9a-f]{8}$/u),
+        entries: [
+          {
+            kind: "partial_file",
+            id: expect.any(String),
+            partialPath: seen[0]?.destination,
+            finalPath: "/target/movie.mov",
+          },
+        ],
+      },
+    ]);
     // Done: the file has its name, and nothing is left under a hidden one.
     expect(live.size).toBe(0);
     expect(fileSystem.readNode("/target/movie.mov")?.size).toBe(JOURNALED_FILE_BYTES);
     expect([...fileSystem.nodes.keys()].filter((path) => path.includes(".filetrail-"))).toEqual([]);
+  });
+
+  // The folder's own record covers what is inside it: a crash leaves both to go with it.
+  it("isn't written down on its own inside a folder built under a hidden name", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source/F": { kind: "directory" },
+      "/source/F/movie.mov": { kind: "file", size: JOURNALED_FILE_BYTES },
+      "/target": { kind: "directory" },
+    });
+
+    const { seen, live } = await copyLarge(fileSystem, ["/source/F"]);
+
+    expect(seen).toHaveLength(1);
+    // Only the folder's own record.
+    expect(seen[0]?.entries).toEqual([expect.objectContaining({ finalPath: "/target/F" })]);
+    expect(live.size).toBe(0);
+    expect(fileSystem.readNode("/target/F/movie.mov")?.size).toBe(JOURNALED_FILE_BYTES);
   });
 });

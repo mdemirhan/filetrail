@@ -4,12 +4,10 @@ import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
 import { moveExclusive, removeStagedItem, unlockForMove } from "./copyPasteExecution";
 import { captureFingerprint } from "./copyPasteFingerprint";
 import { isPackageFolder, resolveDuplicateName } from "./copyPasteNames";
-import type { ItemId } from "./undoLog";
 import type {
   PartialFileJournalEntry,
   ReplaceJournalEntry,
   WriteServiceFileSystem,
-  WriteServiceStats,
 } from "./writeServiceTypes";
 
 export type ReplaceRecoveryOutcome =
@@ -65,11 +63,7 @@ export async function recoverInterruptedReplaces(
       const run = await options.runWriteAlone(() => recoverEntry(entry, fileSystem));
       outcomes.push(run.ran ? run.value : { entry, outcome: "deferred" });
     } catch (error) {
-      outcomes.push(
-        error instanceof StagingUnreadableError
-          ? { entry, outcome: "unreachable", error: error.message }
-          : { entry, outcome: "failed", error: describeCopyPasteError(error) },
-      );
+      outcomes.push({ entry, outcome: "failed", error: describeCopyPasteError(error) });
     }
   }
   return outcomes;
@@ -113,91 +107,28 @@ async function removePartialFile(
   entry: PartialFileJournalEntry,
   fileSystem: WriteServiceFileSystem,
 ): Promise<PartialFileRecoveryOutcome> {
-  if (entry.folderId !== undefined) {
-    return removePartialFolder(entry, entry.folderId, fileSystem);
-  }
-  let isFile: boolean;
+  // Builds after v0.4.3 that were never released copied a large file as "part" inside a
+  // hidden folder of its own: that folder goes, with the part.
+  const inFolder =
+    basename(entry.partialPath) === "part" &&
+    STAGING_NAME.test(basename(dirname(entry.partialPath)));
+  const path = inFolder ? dirname(entry.partialPath) : entry.partialPath;
   try {
-    isFile = (await fileSystem.lstat(entry.partialPath)).isFile();
+    await fileSystem.lstat(path);
   } catch (error) {
-    if (
-      errorCode(error) === "ENOENT" &&
-      ((await folderIsThere(fileSystem, entry.partialPath)) ||
-        (await hiddenFolderAroundIsGone(fileSystem, entry.partialPath)))
-    ) {
+    if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, path))) {
       return { entry, outcome: "nothing_left" };
     }
     return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
   }
   // Only what this app names its partial files (see STAGING_NAME).
-  if (!isFile || !STAGING_NAME.test(basename(entry.partialPath))) {
+  if (!STAGING_NAME.test(basename(path))) {
     return { entry, outcome: "nothing_left" };
   }
   // A copy is locked, or carries a rule against deleting it, as its original does: those
   // go on as it is finished, and come off for it to be removed.
-  await removeStagedItem(fileSystem, entry.partialPath);
+  await removeStagedItem(fileSystem, path);
   return { entry, outcome: "removed_copy" };
-}
-
-// The hidden folder a large file was being copied in, known by its id: removed with the
-// part in it only while it is that folder. Anything else at its name is left alone.
-async function removePartialFolder(
-  entry: PartialFileJournalEntry,
-  id: ItemId,
-  fileSystem: WriteServiceFileSystem,
-): Promise<PartialFileRecoveryOutcome> {
-  const folder = dirname(entry.partialPath);
-  let stats: WriteServiceStats;
-  try {
-    stats = await fileSystem.lstat(folder);
-  } catch (error) {
-    if (
-      errorCode(error) === "ENOENT" &&
-      ((await folderIsThere(fileSystem, folder)) ||
-        (await hiddenFolderAroundIsGone(fileSystem, folder)))
-    ) {
-      return { entry, outcome: "nothing_left" };
-    }
-    return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
-  }
-  if (
-    !stats.isDirectory() ||
-    !STAGING_NAME.test(basename(folder)) ||
-    !isItemMadeAs(stats, id, entry.folderBornMs)
-  ) {
-    return { entry, outcome: "nothing_left" };
-  }
-  await removeStagedItem(fileSystem, folder);
-  return { entry, outcome: "removed_copy" };
-}
-
-// Whether `stats` are of the item made with id `id` (at `bornMs`): an external disk
-// connected again has another device number, and the item is known there by its file id
-// and when it was made, which the disk keeps; another disk at the same place has neither.
-function isItemMadeAs(stats: WriteServiceStats, id: ItemId, bornMs: number | undefined): boolean {
-  return (
-    stats.ino === id.ino &&
-    (stats.dev === id.dev || (bornMs !== undefined && stats.birthtimeMs === bornMs))
-  );
-}
-
-// A large file copied inside a folder a paste was building under a hidden name: that folder
-// may have gone since (removed by recovery after this part couldn't be), taking the part
-// with it. Told from a disk that isn't connected by the folder that held it being there.
-async function hiddenFolderAroundIsGone(
-  fileSystem: WriteServiceFileSystem,
-  path: string,
-): Promise<boolean> {
-  for (let folder = dirname(path); folder !== dirname(folder); folder = dirname(folder)) {
-    if (STAGING_NAME.test(basename(folder))) {
-      const gone = await fileSystem.lstat(folder).then(
-        () => false,
-        (error) => errorCode(error) === "ENOENT",
-      );
-      return gone && (await folderIsThere(fileSystem, folder));
-    }
-  }
-  return false;
 }
 
 // The hidden name this app builds an item under: "."+name+".filetrail-" and 8 hex digits.
@@ -248,27 +179,17 @@ async function recoverEntry(
 ): Promise<ReplaceRecoveryOutcome> {
   // Only an item that is really gone counts as gone. A disk that isn't connected, or a
   // folder that can't be read, hides an item that may be the only copy of someone's data.
+  let isDirectory: boolean;
   try {
-    await fileSystem.lstat(entry.stagingPath);
+    isDirectory = (await fileSystem.lstat(entry.stagingPath)).isDirectory();
   } catch (error) {
     if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, entry.stagingPath))) {
-      // A folder built under a hidden name and put in place before its own metadata went on:
-      // it is in place (the same folder, by its id), and gets it now.
-      if (entry.staged && (await isOwnStaging(fileSystem, entry.finalPath, entry))) {
-        await applyFolderMetadata(fileSystem, entry);
-        return { entry, outcome: "finished", path: entry.finalPath };
-      }
       return { entry, outcome: "nothing_left" };
     }
     return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
   }
-  const staged = await captureFingerprint(fileSystem, entry.stagingPath);
-  // A folder made there for the item to be built in is known by its id: another item that
-  // took the name since isn't this paste's, and is left alone.
-  if (
-    entry.stagingId !== undefined &&
-    !(await isOwnStaging(fileSystem, entry.stagingPath, entry))
-  ) {
+  // The hidden name was made for this Replace alone (see STAGING_NAME): what is there is its.
+  if (!STAGING_NAME.test(basename(entry.stagingPath))) {
     return { entry, outcome: "nothing_left" };
   }
   const finalTaken = (await captureFingerprint(fileSystem, entry.finalPath)).exists;
@@ -288,79 +209,23 @@ async function recoverEntry(
       fileSystem,
       undefined,
       {
-        isDirectory: staged.kind === "directory",
+        isDirectory,
         // The staged item's hidden name has no package extension: its source tells.
-        isPackage:
-          staged.kind === "directory" && (await isPackageFolder(fileSystem, entry.sourcePath)),
+        isPackage: isDirectory && (await isPackageFolder(fileSystem, entry.sourcePath)),
       },
     );
     await moveUnlocked(fileSystem, entry.stagingPath, visiblePath);
     return { entry, outcome: "kept_visible", path: visiblePath };
   }
   // A copy: the original is still in place. Only a complete copy whose old item already
-  // went to the Trash is worth keeping.
+  // went to the Trash is worth keeping. A folder put in place here goes without its own
+  // tags and dates, which it would have had once named (see metadataLaterFor).
   if (entry.staged && !finalTaken) {
     await moveUnlocked(fileSystem, entry.stagingPath, entry.finalPath);
-    if (entry.stagingId !== undefined) {
-      await applyFolderMetadata(fileSystem, entry);
-    }
     return { entry, outcome: "finished", path: entry.finalPath };
   }
   await removeStagedItem(fileSystem, entry.stagingPath);
   return { entry, outcome: "removed_copy" };
-}
-
-// A folder built under a hidden name gets its own metadata once it has its name (see
-// metadataLaterFor): from its original, when that is still there.
-async function applyFolderMetadata(
-  fileSystem: WriteServiceFileSystem,
-  entry: ReplaceJournalEntry,
-): Promise<void> {
-  const source = await captureFingerprint(fileSystem, entry.sourcePath);
-  // Only from the very item copied: another put at its path since would give the copy
-  // permissions that were never its own.
-  if (
-    !fileSystem.copyMetadata ||
-    entry.sourceId === undefined ||
-    source.dev !== entry.sourceId.dev ||
-    source.ino !== entry.sourceId.ino
-  ) {
-    return;
-  }
-  await fileSystem.copyMetadata(entry.sourcePath, entry.finalPath).catch(() => undefined);
-}
-
-// Whether the item at `path` is the folder the entry's paste made to build in (it keeps its
-// id when renamed into place). An external disk connected again since has another device
-// number: the folder is then known by its file id and when it was made, which the disk
-// keeps; another disk at the same place has neither.
-class StagingUnreadableError extends Error {
-  constructor(readonly original: unknown) {
-    super(describeCopyPasteError(original));
-  }
-}
-
-async function isOwnStaging(
-  fileSystem: WriteServiceFileSystem,
-  path: string,
-  entry: ReplaceJournalEntry,
-): Promise<boolean> {
-  const id = entry.stagingId;
-  if (id === undefined) {
-    return false;
-  }
-  let stats: WriteServiceStats;
-  try {
-    stats = await fileSystem.lstat(path);
-  } catch (error) {
-    if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, path))) {
-      return false;
-    }
-    // Not read (a disk with a moment's trouble, or one gone just now): not known to be
-    // someone else's, so the entry is kept for later.
-    throw new StagingUnreadableError(error);
-  }
-  return isItemMadeAs(stats, id, entry.stagingBornMs);
 }
 
 async function folderIsThere(fileSystem: WriteServiceFileSystem, path: string): Promise<boolean> {

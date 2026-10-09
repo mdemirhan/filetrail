@@ -1,5 +1,3 @@
-import { dirname } from "node:path";
-
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { JOURNALED_FILE_BYTES, executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
@@ -16,9 +14,9 @@ import type {
   WriteJournalEntry,
 } from "./writeServiceTypes";
 
-// A large file is copied inside a hidden folder made for it, written down in the journal
-// first. Whatever stops it part way, nothing is left at its name, the folder goes, and the
-// journal lets go of it; a folder that can't be removed stays written down for the next start.
+// A large file is copied under a hidden name next to its place, written down in the journal
+// first. Whatever stops it part way, nothing is left at its name, the part goes, and the
+// journal lets go of it; a part that can't be removed stays written down for the next start.
 
 const SKIP: CopyPastePolicy = { file: "skip", directory: "skip", mismatch: "skip" };
 const SOURCE = "/source/movie.mov";
@@ -99,7 +97,7 @@ async function paste(
   return { result, live, recorded, questions };
 }
 
-// Copies part of the file into the hidden folder, then does `then` (throws, aborts...).
+// Copies part of the file under its hidden name, then does `then` (throws, aborts...).
 function copyPartThen(
   fileSystem: MockWriteServiceFileSystem,
   then: (destination: string, signal: AbortSignal | undefined) => void,
@@ -111,14 +109,13 @@ function copyPartThen(
 }
 
 // Nothing at the file's name or under a hidden one, the journal let go of the entry it
-// wrote (in the hidden folder, by its id), and the original is where it was.
+// wrote (the part's hidden name), and the original is where it was.
 function expectNothingLeft(fileSystem: MockWriteServiceFileSystem, run: Run): void {
   expect(run.recorded).toEqual([
     expect.objectContaining({
       kind: "partial_file",
-      partialPath: expect.stringMatching(/^\/target\/\.movie\.mov\.filetrail-[0-9a-f]{8}\/part$/u),
+      partialPath: expect.stringMatching(/^\/target\/\.movie\.mov\.filetrail-[0-9a-f]{8}$/u),
       finalPath: FINAL,
-      folderId: { dev: 1, ino: expect.any(Number) },
     }),
   ]);
   expect(run.live.size).toBe(0);
@@ -180,7 +177,7 @@ describe.each(["copy", "cut"] as const)("a large file (%s) cut short", (mode) =>
   it("fails the item when it can't take its name, and clears its own away", async () => {
     const fileSystem = largeFileOnAnotherDisk();
     fileSystem.renameImpl = async (from, to) => {
-      if (to === FINAL && from.endsWith("/part")) {
+      if (to === FINAL && from.includes(".filetrail-")) {
         throw fsError("EIO", to);
       }
       await fileSystem.renameDirectly(from, to);
@@ -196,9 +193,9 @@ describe.each(["copy", "cut"] as const)("a large file (%s) cut short", (mode) =>
   });
 });
 
-describe.each(["copy", "cut"] as const)("a large file's hidden folder (%s)", (mode) => {
-  // rm of the hidden folder fails (a disk error) until `working` is set.
-  function folderRemovalFails(fileSystem: MockWriteServiceFileSystem): { working: boolean } {
+describe.each(["copy", "cut"] as const)("a large file's hidden part (%s)", (mode) => {
+  // rm of the hidden part fails (a disk error) until `working` is set.
+  function partRemovalFails(fileSystem: MockWriteServiceFileSystem): { working: boolean } {
     const state = { working: false };
     fileSystem.rmImpl = async (path, options) => {
       if (!state.working && /\.filetrail-[0-9a-f]{8}$/u.test(path)) {
@@ -215,33 +212,9 @@ describe.each(["copy", "cut"] as const)("a large file's hidden folder (%s)", (mo
     return state;
   }
 
-  it("stays written down when it can't be removed, for the next start to remove", async () => {
+  it("stays written down when a failed copy can't clear it away", async () => {
     const fileSystem = largeFileOnAnotherDisk();
-    const removal = folderRemovalFails(fileSystem);
-
-    const run = await paste(fileSystem, mode);
-
-    // The file itself is in place; only the (empty) folder it was copied in is left.
-    expect(run.result.items).toEqual([
-      expect.objectContaining({ sourcePath: SOURCE, status: "completed" }),
-    ]);
-    expect(fileSystem.readNode(FINAL)?.size).toBe(JOURNALED_FILE_BYTES);
-    const entries = [...run.live.values()] as PartialFileJournalEntry[];
-    expect(entries).toHaveLength(1);
-    const folder = dirname(entries[0]?.partialPath ?? "");
-    expect(hiddenItems(fileSystem)).toEqual([folder]);
-
-    removal.working = true;
-    const outcomes = await recoverPartialFiles(entries, fileSystem);
-
-    expect(outcomes.map((outcome) => outcome.outcome)).toEqual(["removed_copy"]);
-    expect(hiddenItems(fileSystem)).toEqual([]);
-    expect(fileSystem.readNode(FINAL)?.size).toBe(JOURNALED_FILE_BYTES);
-  });
-
-  it("stays written down with its part when a failed copy can't clear it away", async () => {
-    const fileSystem = largeFileOnAnotherDisk();
-    const removal = folderRemovalFails(fileSystem);
+    const removal = partRemovalFails(fileSystem);
     copyPartThen(fileSystem, (destination) => {
       throw fsError("ENOSPC", destination);
     });
@@ -267,7 +240,7 @@ describe.each(["copy", "cut"] as const)("a large file's hidden folder (%s)", (mo
 
 describe("a large file's copy cut short by a crash", () => {
   // The copy never comes back, as when the app is killed part way: the journal entry it
-  // wrote and the folder holding the part are all that is left.
+  // wrote and the part are all that is left.
   async function crashPartWay(
     fileSystem: MockWriteServiceFileSystem,
   ): Promise<PartialFileJournalEntry> {
@@ -308,7 +281,7 @@ describe("a large file's copy cut short by a crash", () => {
     return written;
   }
 
-  it("has its hidden folder removed at the next start, known by the id written down", async () => {
+  it("has its part removed at the next start", async () => {
     const fileSystem = largeFileOnAnotherDisk();
     const entry = await crashPartWay(fileSystem);
     expect(fileSystem.exists(entry.partialPath)).toBe(true);
@@ -319,19 +292,5 @@ describe("a large file's copy cut short by a crash", () => {
     expect(hiddenItems(fileSystem)).toEqual([]);
     expect(fileSystem.exists(FINAL)).toBe(false);
     expect(fileSystem.readNode(SOURCE)?.size).toBe(JOURNALED_FILE_BYTES);
-  });
-
-  it("leaves another folder that came to have its name", async () => {
-    const fileSystem = largeFileOnAnotherDisk();
-    const entry = await crashPartWay(fileSystem);
-    const folder = dirname(entry.partialPath);
-    // Removed, and another folder made at the name since (a new id).
-    await fileSystem.rm(folder, { recursive: true, force: true });
-    fileSystem.addFile(`${folder}/part`, { size: 7 });
-
-    const outcomes = await recoverPartialFiles([entry], fileSystem);
-
-    expect(outcomes.map((outcome) => outcome.outcome)).toEqual(["nothing_left"]);
-    expect(fileSystem.readNode(`${folder}/part`)?.size).toBe(7);
   });
 });

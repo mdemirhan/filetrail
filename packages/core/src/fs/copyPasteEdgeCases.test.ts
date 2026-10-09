@@ -237,37 +237,6 @@ describe("items that keep changing while they are pasted", () => {
     expect(itemFor(result, "/source/Docs")?.status).toBe("skipped");
     expect(fileSystem.readNode("/target/Docs")?.kind).toBe("file");
   });
-
-  it("asks again before replacing a folder whose contents can't be counted now", async () => {
-    const fileSystem = new MockWriteServiceFileSystem({
-      "/source/Docs/a.txt": { kind: "file", size: 1 },
-      "/target/Docs/old.txt": { kind: "file", size: 1 },
-    });
-    fileSystem.enableTrash();
-
-    const { conflicts } = await paste({
-      fileSystem,
-      sourcePaths: ["/source/Docs"],
-      policy: REPLACE_ALL,
-      beforeExecute: () => {
-        fileSystem.readdirImpl = async (path) => {
-          if (path === "/target/Docs") {
-            throw codeError("EACCES");
-          }
-          fileSystem.readdirImpl = null;
-          try {
-            return await fileSystem.readdir(path);
-          } finally {
-            fileSystem.readdirImpl = null;
-          }
-        };
-      },
-    });
-
-    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["destination_changed"]);
-    expect(fileSystem.exists("/target/Docs/old.txt")).toBe(true);
-    expect(fileSystem.trashed).toEqual([]);
-  });
 });
 
 describe("stopping part way", () => {
@@ -539,7 +508,7 @@ describe("a Replace that would destroy what it pastes", () => {
 describe("putting right a Replace cut short", () => {
   it("locks the hidden item again when it can't be moved into place", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
-      "/target/.a.txt.filetrail-1": { kind: "file", size: 2 },
+      "/target/.a.txt.filetrail-00000001": { kind: "file", size: 2 },
     });
     const setFlags = vi.fn(async () => undefined);
     Object.assign(fileSystem, {
@@ -554,7 +523,7 @@ describe("putting right a Replace cut short", () => {
       [
         {
           id: "1",
-          stagingPath: "/target/.a.txt.filetrail-1",
+          stagingPath: "/target/.a.txt.filetrail-00000001",
           finalPath: "/target/a.txt",
           sourcePath: "/source/a.txt",
           moved: false,
@@ -566,8 +535,8 @@ describe("putting right a Replace cut short", () => {
 
     expect(outcome).toMatchObject({ outcome: "failed", error: "A disk error occurred." });
     expect(setFlags.mock.calls).toEqual([
-      ["/target/.a.txt.filetrail-1", 0],
-      ["/target/.a.txt.filetrail-1", 0x2],
+      ["/target/.a.txt.filetrail-00000001", 0],
+      ["/target/.a.txt.filetrail-00000001", 0x2],
     ]);
   });
 });

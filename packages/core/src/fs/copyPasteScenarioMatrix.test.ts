@@ -219,47 +219,23 @@ describe("copyPaste scenario matrix", () => {
     mismatch: "overwrite",
   };
 
-  // The review said what the Replace would delete; an item added after it would go to the
-  // Trash unseen, so the folder is asked about again.
-  it("asks again before replacing a folder that gained an item after the review", async () => {
+  // A folder is known by its identity: an item added to it after the review goes to the
+  // Trash with it, where it can be got back, without asking.
+  it("sends a folder that gained an item after the review to the Trash with it", async () => {
     const result = await runScenario({
       mode: "copy",
       seed: folderGainedItemSeed,
       sourcePaths: ["/source/Folder"],
       destinationDirectoryPath: "/target",
       policy: replaceEverything,
-      runtimeResolution: "skip",
       mutateAfterResolve: (fileSystem) => {
         fileSystem.addFile("/target/Folder/late-change.txt", { size: 5 });
       },
     });
 
-    expect(result.runtimeConflicts).toHaveLength(1);
-    expect(result.runtimeConflicts[0]).toMatchObject({
-      reason: "destination_changed",
-      destinationPath: "/target/Folder",
-    });
-    expect(snapshotRelevantTree(result.fileSystem)).toMatchObject({
-      "/target/Folder/stale.txt": file(1),
-      "/target/Folder/late-change.txt": file(5),
-    });
-  });
-
-  it("replaces the folder once the person agrees after seeing it changed", async () => {
-    const result = await runScenario({
-      mode: "copy",
-      seed: folderGainedItemSeed,
-      sourcePaths: ["/source/Folder"],
-      destinationDirectoryPath: "/target",
-      policy: replaceEverything,
-      runtimeResolution: "overwrite",
-      mutateAfterResolve: (fileSystem) => {
-        fileSystem.addFile("/target/Folder/late-change.txt", { size: 5 });
-      },
-    });
-
-    expect(result.runtimeConflicts).toHaveLength(1);
+    expect(result.runtimeConflicts).toEqual([]);
     expect(result.result?.status).toBe("completed");
+    expect(result.fileSystem.trashed).toEqual(["/target/Folder"]);
     expect(snapshotRelevantTree(result.fileSystem)).toEqual({
       "/source": dir(),
       "/source/Folder": dir(),

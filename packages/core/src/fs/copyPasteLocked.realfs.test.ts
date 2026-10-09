@@ -3,7 +3,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -376,64 +376,8 @@ describe("stopping part way through a file", () => {
 });
 
 describe("putting right a Replace a crash cut short", () => {
-  // A folder built under a hidden name was put in place, and the crash came before its own
-  // metadata went on: it gets it at the next start.
-  it("puts a folder's own metadata on when it was put in place just before a crash", async () => {
-    await mkdir(join(src, "F"));
-    await chmod(join(src, "F"), 0o750);
-    await mkdir(join(dst, "F"));
-    const stats = await stat(join(dst, "F"));
-    const source = await stat(join(src, "F"));
-
-    const [outcome] = await recoverInterruptedReplaces(
-      [
-        {
-          id: "1",
-          stagingPath: join(dst, ".F.filetrail-0a0a0a0a"),
-          finalPath: join(dst, "F"),
-          sourcePath: join(src, "F"),
-          moved: false,
-          staged: true,
-          stagingId: { dev: stats.dev, ino: stats.ino },
-          sourceId: { dev: source.dev, ino: source.ino },
-        },
-      ],
-      nativeFileSystem,
-    );
-
-    expect(outcome).toMatchObject({ outcome: "finished", path: join(dst, "F") });
-    expect((await stat(join(dst, "F"))).mode & 0o777).toBe(0o750);
-  });
-
-  // Another folder was put where the original was: its permissions were never the copy's.
-  it("leaves a recovered folder's metadata alone when its original was replaced", async () => {
-    await mkdir(join(src, "F"));
-    await chmod(join(src, "F"), 0o700);
-    await mkdir(join(dst, "F"));
-    await chmod(join(dst, "F"), 0o755);
-    const stats = await stat(join(dst, "F"));
-
-    await recoverInterruptedReplaces(
-      [
-        {
-          id: "1",
-          stagingPath: join(dst, ".F.filetrail-0a0a0a0a"),
-          finalPath: join(dst, "F"),
-          sourcePath: join(src, "F"),
-          moved: false,
-          staged: true,
-          stagingId: { dev: stats.dev, ino: stats.ino },
-          sourceId: { dev: stats.dev, ino: 1 },
-        },
-      ],
-      nativeFileSystem,
-    );
-
-    expect((await stat(join(dst, "F"))).mode & 0o777).toBe(0o755);
-  });
-
   it("finishes a Replace whose new item is locked", async () => {
-    const staged = join(dst, ".f.txt.filetrail-1234");
+    const staged = join(dst, ".f.txt.filetrail-00001234");
     await writeFile(staged, "new");
     lock(staged);
 
@@ -457,7 +401,7 @@ describe("putting right a Replace a crash cut short", () => {
   });
 
   it("removes an unfinished locked copy", async () => {
-    const staged = join(dst, ".f.txt.filetrail-1234");
+    const staged = join(dst, ".f.txt.filetrail-00001234");
     await writeFile(staged, "half");
     lock(staged);
     await writeFile(join(dst, "f.txt"), "old");
@@ -483,7 +427,7 @@ describe("putting right a Replace a crash cut short", () => {
   it("keeps an entry whose hidden item can't be reached, and drops one that is gone", async () => {
     const unreadable = join(testDir, "unreadable");
     await mkdir(unreadable);
-    await writeFile(join(unreadable, ".moved.filetrail-1"), "only copy");
+    await writeFile(join(unreadable, ".moved.filetrail-00000001"), "only copy");
     await chmod(unreadable, 0o000);
     const entry = (id: string, stagingPath: string) => ({
       id,
@@ -497,11 +441,11 @@ describe("putting right a Replace a crash cut short", () => {
     const outcomes = await recoverInterruptedReplaces(
       [
         // Its disk isn't connected.
-        entry("unmounted", "/Volumes/FileTrailNotConnected/.moved.filetrail-1"),
+        entry("unmounted", "/Volumes/FileTrailNotConnected/.moved.filetrail-00000001"),
         // Its folder can't be read.
-        entry("unreadable", join(unreadable, ".moved.filetrail-1")),
+        entry("unreadable", join(unreadable, ".moved.filetrail-00000001")),
         // Really gone: its folder is there, the item isn't.
-        entry("gone", join(dst, ".moved.filetrail-1")),
+        entry("gone", join(dst, ".moved.filetrail-00000001")),
       ],
       nativeFileSystem,
     );
@@ -512,6 +456,6 @@ describe("putting right a Replace a crash cut short", () => {
       ["gone", "nothing_left"],
     ]);
     await chmod(unreadable, 0o755);
-    expect(await readFile(join(unreadable, ".moved.filetrail-1"), "utf8")).toBe("only copy");
+    expect(await readFile(join(unreadable, ".moved.filetrail-00000001"), "utf8")).toBe("only copy");
   });
 });
