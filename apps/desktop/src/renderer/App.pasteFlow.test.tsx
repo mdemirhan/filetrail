@@ -31,6 +31,8 @@ vi.mock("./lib/progressCardDelay", async () =>
   (await import("./test/appMocks")).progressCardDelayMock(),
 );
 
+import type { IpcRequestInput } from "@filetrail/contracts";
+
 import { App } from "./App";
 import { FiletrailClientProvider } from "./lib/filetrailClient";
 import {
@@ -41,6 +43,7 @@ import {
   dragBetween,
   expectNoFileClipboardActions,
   expectNoRefusedRequests,
+  finishedResultEvent,
   openDirectory,
   selectItem,
 } from "./test/appHarness";
@@ -2110,6 +2113,93 @@ describe("App copy/paste integration", () => {
       },
       overrides: [{ nodeId: expect.any(String), action: "keep_both" }],
     });
+  });
+
+  it("clears only the cut it pasted, not one made while the review sheet was open", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/test3_1"],
+        destinationDirectoryPath: "/Users/demo/test2",
+        items: [
+          {
+            sourcePath: "/Users/demo/test3_1",
+            destinationPath: "/Users/demo/test2/test3_1",
+            kind: "directory",
+            status: "conflict",
+            sizeBytes: null,
+          },
+        ],
+        issues: [],
+        warnings: [],
+        summary: { topLevelItemCount: 1, totalItemCount: 1, totalBytes: 0 },
+      },
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/test2", "directory"),
+            createDirectoryEntry("/Users/demo/test3_1", "directory"),
+          ],
+        },
+        "/Users/demo/test2": { path: "/Users/demo/test2", parentPath: "/Users/demo", entries: [] },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/test3_1");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    const pasted = harness.invocations.findLast((call) => call.channel === "app:setClipboard")
+      ?.payload as IpcRequestInput<"app:setClipboard">;
+    const pastedCapturedAt = pasted.clipboard.type === "ready" ? pasted.clipboard.capturedAt : "";
+    await openDirectory("/Users/demo/test2");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+    const sheet = await screen.findByRole("dialog", { name: /already exists? in/ });
+
+    // Another window cuts something else while the sheet is open.
+    await act(async () => {
+      harness.emitClipboardChanged({
+        type: "ready",
+        mode: "cut",
+        sourcePaths: ["/Users/demo/other.txt"],
+        sourceEntries: {},
+        capturedAt: "2099-01-01T00:00:00.000Z",
+      });
+    });
+    await act(async () => {
+      fireEvent.change(within(sheet).getByLabelText("Choice for test3_1"), {
+        target: { value: "keep_both" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Move" }));
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
+      ).toMatchObject({ clearsCutClipboard: pastedCapturedAt });
+    });
+
+    await act(async () => {
+      harness.emitProgress(
+        finishedResultEvent("cut", "completed", [
+          { sourcePath: "/Users/demo/test3_1", status: "completed", error: null },
+        ]),
+      );
+    });
+
+    // The new cut is still there.
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
   });
 
   it("shows the same move review for Move To folder collisions", async () => {

@@ -1888,14 +1888,15 @@ export function useExplorerActions(args: {
     action: CopyLikeAction,
     options: {
       pasteAttemptId?: number | null;
-      clearClipboardOnStart?: boolean;
+      // The cut (by when it was made) to clear once something was moved; null for none.
+      clearsCutClipboard?: string | null;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
       overrides?: CopyPasteOverrides;
     } = {},
   ): Promise<CopyLikePreStartOutcome> {
     const pasteAttemptId = options.pasteAttemptId ?? null;
-    const clearClipboardOnStart = options.clearClipboardOnStart ?? false;
+    const clearsCutClipboardOnStart = options.clearsCutClipboard ?? null;
     const sourceSurface = options.sourceSurface ?? null;
     rememberPendingTreeSelectionPath(options.pendingTreeSelectionPath ?? null);
     if (pasteAttemptId !== null) {
@@ -1930,15 +1931,9 @@ export function useExplorerActions(args: {
       noteFolderUsed();
       // Like Finder: copied items stay on the clipboard for more pastes; cut items are
       // cleared once something was actually moved. Main is told too, for the window that
-      // takes the paste over should this one close.
-      const clipboard = copyPasteClipboardRef.current;
-      const clearsCutClipboard =
-        clearClipboardOnStart &&
-        report.mode === "cut" &&
-        clipboard.type === "ready" &&
-        clipboard.mode === "cut"
-          ? clipboard.capturedAt
-          : null;
+      // takes the paste over should this one close. Only the cut the paste was made from
+      // is cleared: one made since (while the review sheet was open) stays.
+      const clearsCutClipboard = report.mode === "cut" ? clearsCutClipboardOnStart : null;
       const response = await earlyWriteOperationEventsRef.current.whileStarting(() =>
         client.invoke("copyPaste:start", {
           analysisId: report.analysisId,
@@ -2050,7 +2045,7 @@ export function useExplorerActions(args: {
     policy: CopyPastePolicy,
     action: CopyLikeAction,
     options: {
-      clearClipboardOnStart: boolean;
+      clearsCutClipboard: string | null;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
       overrides?: CopyPasteOverrides;
@@ -2083,7 +2078,7 @@ export function useExplorerActions(args: {
     destinationDirectoryPath: string;
     action: CopyLikeAction;
     pasteAttemptId: number;
-    clearClipboardOnStart: boolean;
+    clearsCutClipboard: string | null;
     sourceSurface?: InternalMoveSourceSurface | null;
     pendingTreeSelectionPath?: string | null;
     defaultPolicy?: CopyPastePolicy;
@@ -2106,7 +2101,7 @@ export function useExplorerActions(args: {
         type: "analysis",
         analysisId: handle.analysisId,
         action: args.action,
-        clearClipboardOnStart: args.clearClipboardOnStart,
+        clearsCutClipboard: args.clearsCutClipboard,
         sourceSurface: args.sourceSurface ?? null,
         pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
       });
@@ -2212,7 +2207,7 @@ export function useExplorerActions(args: {
             policy: defaultPolicy,
             overrides: {},
             action: args.action,
-            clearClipboardOnStart: args.clearClipboardOnStart,
+            clearsCutClipboard: args.clearsCutClipboard,
             sourceSurface: args.sourceSurface ?? null,
             pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
           });
@@ -2220,7 +2215,7 @@ export function useExplorerActions(args: {
         }
         return await executeCopyLikePlan(update.report, defaultPolicy, args.action, {
           pasteAttemptId: args.pasteAttemptId,
-          clearClipboardOnStart: args.clearClipboardOnStart,
+          clearsCutClipboard: args.clearsCutClipboard,
           sourceSurface: args.sourceSurface ?? null,
           pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
         });
@@ -2280,8 +2275,9 @@ export function useExplorerActions(args: {
     if (pasteDestinationPath === null) {
       return;
     }
-    const request = buildPasteRequest(copyPasteClipboardRef.current, pasteDestinationPath);
-    if (!request) {
+    const clipboardPasted = copyPasteClipboardRef.current;
+    const request = buildPasteRequest(clipboardPasted, pasteDestinationPath);
+    if (!request || clipboardPasted.type !== "ready") {
       return;
     }
     const action = request.mode === "cut" ? "move_to" : "paste";
@@ -2303,7 +2299,8 @@ export function useExplorerActions(args: {
         request.sourcePaths,
         request.destinationDirectoryPath,
         {
-          clearClipboardOnStart: true,
+          // This cut, and not one made while the review sheet is open, is cleared.
+          clearsCutClipboard: clipboardPasted.capturedAt,
           initiator: "clipboard",
           onSourcesMissing,
         },
@@ -2322,7 +2319,7 @@ export function useExplorerActions(args: {
         destinationDirectoryPath: request.destinationDirectoryPath,
         action: "paste",
         pasteAttemptId,
-        clearClipboardOnStart: true,
+        clearsCutClipboard: null,
         initiator: "clipboard",
         onSourcesMissing,
       });
@@ -2442,11 +2439,13 @@ export function useExplorerActions(args: {
     // a normal cut and paste. Only a cut of these same items is cleared, never an
     // unrelated clipboard.
     const clipboard = copyPasteClipboardRef.current;
-    const retriesClipboardCut =
+    const retriedCut =
       event.action === "move_to" &&
       clipboard.type === "ready" &&
       clipboard.mode === "cut" &&
-      failedSourcePaths.some((path) => clipboard.sourcePaths.includes(path));
+      failedSourcePaths.some((path) => clipboard.sourcePaths.includes(path))
+        ? clipboard.capturedAt
+        : null;
     const pasteAttemptId = beginPendingPasteAttempt({
       action: event.action,
       targetPath: result.targetPath ?? currentPathRef.current,
@@ -2462,7 +2461,7 @@ export function useExplorerActions(args: {
       destinationDirectoryPath: result.targetPath ?? currentPathRef.current,
       action: event.action,
       pasteAttemptId,
-      clearClipboardOnStart: retriesClipboardCut,
+      clearsCutClipboard: retriedCut,
       defaultPolicy: RETRY_COPY_PASTE_POLICY,
     });
     if (outcome.status === "blocked" || outcome.status === "error") {
@@ -3304,7 +3303,7 @@ export function useExplorerActions(args: {
       destinationDirectoryPath,
       action: "duplicate",
       pasteAttemptId,
-      clearClipboardOnStart: false,
+      clearsCutClipboard: null,
       pendingTreeSelectionPath: options.selectInTreeOnSuccess ? destinationDirectoryPath : null,
     });
     if (outcome.status === "blocked" || outcome.status === "error") {
@@ -3339,7 +3338,7 @@ export function useExplorerActions(args: {
       reviewLargeBatchWarning?: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
       validateDestinationBeforeAnalyze?: boolean;
-      clearClipboardOnStart?: boolean;
+      clearsCutClipboard?: string | null;
       initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
       onSourcesMissing?: (paths: string[]) => void;
     } = {},
@@ -3375,7 +3374,7 @@ export function useExplorerActions(args: {
       destinationDirectoryPath,
       action: "move_to",
       pasteAttemptId,
-      clearClipboardOnStart: options.clearClipboardOnStart ?? false,
+      clearsCutClipboard: options.clearsCutClipboard ?? null,
       sourceSurface: options.sourceSurface ?? null,
       pendingTreeSelectionPath: options.pendingTreeSelectionPath ?? null,
       initiator: options.initiator ?? null,
@@ -3432,7 +3431,7 @@ export function useExplorerActions(args: {
       destinationDirectoryPath,
       action: "copy_to",
       pasteAttemptId,
-      clearClipboardOnStart: false,
+      clearsCutClipboard: null,
       sourceSurface: options.sourceSurface ?? null,
       pendingTreeSelectionPath: options.pendingTreeSelectionPath ?? null,
       initiator: options.initiator ?? null,

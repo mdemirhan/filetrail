@@ -45,7 +45,7 @@ type CopyPasteDialogState =
       type: "analysis";
       analysisId: string;
       action: "paste" | "copy_to" | "move_to" | "duplicate";
-      clearClipboardOnStart: boolean;
+      clearsCutClipboard: string | null;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
     }
@@ -56,7 +56,9 @@ type CopyPasteDialogState =
       // Per-item choices made in the review, by analysis node id.
       overrides: Readonly<Record<string, CopyPasteChoice>>;
       action: "paste" | "copy_to" | "move_to" | "duplicate";
-      clearClipboardOnStart: boolean;
+      // The cut (by when it was made) the move clears once it moves something: the one
+      // pasted, never one made while the sheet is open. Null for none.
+      clearsCutClipboard: string | null;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
     }

@@ -121,7 +121,7 @@ export function AppDialogs({
     policy: CopyPastePolicy,
     action: "paste" | "copy_to" | "move_to" | "duplicate",
     options: {
-      clearClipboardOnStart: boolean;
+      clearsCutClipboard: string | null;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
       overrides?: CopyPasteOverrides;
@@ -297,7 +297,7 @@ export function AppDialogs({
               choices?.policy ?? copyPasteDialogState.policy,
               copyPasteDialogState.action,
               {
-                clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
+                clearsCutClipboard: copyPasteDialogState.clearsCutClipboard,
                 sourceSurface: copyPasteDialogState.sourceSurface ?? null,
                 pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
                 overrides: choices?.overrides ?? copyPasteDialogState.overrides,
