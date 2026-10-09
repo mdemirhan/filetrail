@@ -286,6 +286,30 @@ describe("a move to another disk removes an original only once its copy is check
     );
   });
 
+  it("names a folder saved anew as a file by what it is when its copy fails", async () => {
+    const fileSystem = folderOnAnotherDisk();
+    fileSystem.addDirectory("/source/dir/sub", { dev: 2 });
+    fileSystem.addFile("/source/dir/sub/c.txt", { size: 1, dev: 2 });
+    const report = await analyze(fileSystem, ["/source/dir/sub"]);
+    fileSystem.nodes.delete("/source/dir/sub/c.txt");
+    fileSystem.nodes.delete("/source/dir/sub");
+    fileSystem.addFile("/source/dir/sub", { size: 7, dev: 2 });
+    fileSystem.copyFileStreamImpl = async () => {
+      throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    };
+
+    const result = await move(fileSystem, report, () => "overwrite");
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        sourcePath: "/source/dir/sub",
+        sourceKind: "file",
+        status: "failed",
+      }),
+    ]);
+    expect(fileSystem.readNode("/source/dir/sub")?.size).toBe(7);
+  });
+
   it("keeps an original folder whose own metadata its copy couldn't take", async () => {
     const fileSystem = folderOnAnotherDisk();
     fileSystem.addDirectory("/source/dir/sub", { dev: 2 });

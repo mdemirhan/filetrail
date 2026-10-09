@@ -291,7 +291,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     } catch (error) {
       if (isAbortError(error) || args.signal.aborted) {
         cancelled = true;
-        itemResults.push(itemResult(node, "cancelled", CANCELLED_MESSAGE));
+        itemResults.push(itemResult(asExecuted(context, node), "cancelled", CANCELLED_MESSAGE));
         if (error instanceof CancelledWithItemsError) {
           appendItems(itemResults, error.childItems);
         }
@@ -300,7 +300,7 @@ export async function executeCopyPasteFromAnalysis(args: {
       }
       const message = describeCopyPasteError(error);
       encounteredError ??= error instanceof Error ? error : new Error(message);
-      itemResults.push(failedItemResult(node, error, message));
+      itemResults.push(failedItemResult(asExecuted(context, node), error, message));
       // Keep going: one failed item must not stop the rest of the operation.
     } finally {
       // What was done for this item counts, even when it then failed or was stopped.
@@ -1305,9 +1305,10 @@ async function executeDirectoryNode(
       }
       if (isAbortError(error) || context.signal.aborted) {
         const nestedItems = error instanceof CancelledWithItemsError ? error.childItems : [];
+        const stopped = asExecuted(context, child);
         const inProgress =
-          child.node.sourceKind !== "directory" && !(error instanceof CancelledWithItemsError)
-            ? [itemResult(child, "cancelled", CANCELLED_MESSAGE)]
+          stopped.node.sourceKind !== "directory" && !(error instanceof CancelledWithItemsError)
+            ? [itemResult(stopped, "cancelled", CANCELLED_MESSAGE)]
             : [];
         throw new CancelledWithItemsError([bubbledChildItems, inProgress, nestedItems]);
       }
