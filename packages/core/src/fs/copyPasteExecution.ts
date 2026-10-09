@@ -1448,6 +1448,13 @@ async function executeReplace(
     itemCount:
       destination.kind === "directory" ? await countItemsInside(fileSystem, finalPath) : null,
   };
+  // Only the item the review, or the answer to a question, agreed to replace: one that
+  // changed since it was last looked at is looked at, and asked about, again.
+  if (!isAsApproved(currentNode.node, destination, replaced.itemCount)) {
+    throw new DestinationTakenError(
+      new Error(`“${basename(finalPath)}” changed before it could be replaced.`),
+    );
+  }
 
   if (!fileSystem.rename) {
     // Nothing can be swapped into place without rename: clear the way first instead.
@@ -2738,16 +2745,13 @@ async function findRuntimeConflict(
           return null;
         }
         const planned = resolvedNode.node.destinationFingerprint;
-        // A folder's timestamps change whenever anything inside it does (Finder writes
-        // .DS_Store just by showing it), so for folders their identity counts, and what is
-        // inside them: an item added after the review would go to the Trash unseen.
-        const unchanged =
+        const unchanged = isAsApproved(
+          resolvedNode.node,
+          currentDestinationFingerprint,
           planned.kind === "directory" && currentDestinationFingerprint.kind === "directory"
-            ? sameItemIdentity(planned, currentDestinationFingerprint) &&
-              (resolvedNode.node.destinationTotalNodeCount === null ||
-                (await countItemsInside(fileSystem, resolvedNode.destinationPath)) ===
-                  resolvedNode.node.destinationTotalNodeCount)
-            : fingerprintsEqual(planned, currentDestinationFingerprint);
+            ? await countItemsInside(fileSystem, resolvedNode.destinationPath)
+            : null,
+        );
         return unchanged
           ? null
           : conflict(
@@ -2773,6 +2777,27 @@ async function findRuntimeConflict(
         return null;
     }
   }
+}
+
+// Whether the item now at a destination (`current`, holding `currentItemCount` items when a
+// folder) is the one the review, or the answer to a question, agreed to replace. A folder's
+// timestamps change whenever anything inside it does (Finder writes .DS_Store just by
+// showing it), so for folders their identity counts, and what is inside them: an item added
+// since would go to the Trash unseen.
+function isAsApproved(
+  approved: Pick<CopyPasteAnalysisNode, "destinationFingerprint" | "destinationTotalNodeCount">,
+  current: NodeFingerprint,
+  currentItemCount: number | null,
+): boolean {
+  const planned = approved.destinationFingerprint;
+  if (planned.kind === "directory" && current.kind === "directory") {
+    return (
+      sameItemIdentity(planned, current) &&
+      (approved.destinationTotalNodeCount === null ||
+        currentItemCount === approved.destinationTotalNodeCount)
+    );
+  }
+  return fingerprintsEqual(planned, current);
 }
 
 // How many items a folder holds at every depth, counted as the review counted them

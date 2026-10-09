@@ -193,6 +193,52 @@ describe("writeService runtime conflicts", () => {
     expect(result?.items.map((item) => item.status)).toEqual(["skipped"]);
   });
 
+  // Changed after the look that follows the answer, just before the Replace itself: the
+  // newer item isn't taken for the one agreed to.
+  it("asks again when the item a Replace answer was about changes just before the Replace", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source/a.txt": { kind: "file", size: 1 },
+      "/target": { kind: "directory" },
+      "/target/a.txt": { kind: "file", size: 5 },
+    });
+    fileSystem.enableTrash();
+    let answered = false;
+    let changed = false;
+    const lstat = fileSystem.lstat.bind(fileSystem);
+    fileSystem.lstat = async (path: string) => {
+      const stats = await lstat(path);
+      if (path === "/target/a.txt" && answered && !changed) {
+        changed = true;
+        fileSystem.mutateNode("/target/a.txt", (node) => ({ ...node, size: 999 }));
+      }
+      return stats;
+    };
+    const { asked, result } = await runPaste({
+      fileSystem,
+      sourcePaths: ["/source/a.txt"],
+      destinationDirectoryPath: "/target",
+      policy: { file: "overwrite", directory: "merge", mismatch: "skip" },
+      afterAnalysis: () => {
+        fileSystem.mutateNode("/target/a.txt", (node) => ({ ...node, size: 6 }));
+      },
+      answer: () => {
+        if (answered) {
+          return { action: "skip" };
+        }
+        answered = true;
+        return { action: "overwrite" };
+      },
+    });
+
+    expect(changed).toBe(true);
+    expect(asked.map((conflict) => conflict.reason)).toEqual([
+      "destination_changed",
+      "destination_changed",
+    ]);
+    expect(fileSystem.trashed).toEqual([]);
+    expect(result?.items.map((item) => item.status)).toEqual(["skipped"]);
+  });
+
   it("asks again when a folder a Replace answer was about took in an item meanwhile", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source/F": { kind: "directory" },
