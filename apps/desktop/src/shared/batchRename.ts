@@ -848,83 +848,88 @@ export function planBatchRename(input: BatchRenamePlanInput): BatchRenamePlan {
         leftAsIs.add(entry);
       }
     }
-    // An item skipped for a clash keeps its old name, which may take a name another item was
-    // given: the folder is settled again until no new item is skipped.
-    for (let newlySkipped = true; newlySkipped; ) {
-      newlySkipped = false;
-      const taken = new Set((folder?.names ?? []).map(key));
-      // The number to try first for each name wanted more than once: names are only ever
-      // added to `taken`, so the numbers below the last one given stay taken.
-      const nextNumber = new Map<string, number>();
-      // The names given to items of the batch so far.
-      const given = new Set<string>();
-      for (const entry of entries) {
-        if (leftAsIs.has(entry)) {
-          taken.add(key(entry.item.name));
-        } else {
-          taken.delete(key(entry.item.name));
-        }
+    const taken = new Set((folder?.names ?? []).map(key));
+    // The number to try first for each name wanted more than once: names are only ever
+    // added to `taken`, so the numbers below the last one given stay taken.
+    const nextNumber = new Map<string, number>();
+    // The names given to items of the batch so far, and the item given each.
+    const given = new Map<string, Entry>();
+    // Items skipped for a clash: they keep their old names.
+    const skipped: Entry[] = [];
+    for (const entry of entries) {
+      if (leftAsIs.has(entry)) {
+        taken.add(key(entry.item.name));
+      } else {
+        taken.delete(key(entry.item.name));
       }
-      for (const entry of entries) {
-        const { item, name, index } = entry;
-        if (leftAsIs.has(entry) || name.kind !== "renamed") {
+    }
+    for (const entry of entries) {
+      const { item, name, index } = entry;
+      if (leftAsIs.has(entry) || name.kind !== "renamed") {
+        continue;
+      }
+      if (!taken.has(key(name.name))) {
+        taken.add(key(name.name));
+        given.set(key(name.name), entry);
+        plan[index] = renamed(item, name, name.name, name.segments, null, false);
+        continue;
+      }
+      const byItemInBatch = given.has(key(name.name));
+      if (input.settings.onConflict === "number") {
+        const numbered = findNumberedName(
+          name,
+          item,
+          input.settings,
+          nextNumber.get(key(name.name)) ?? 2,
+          (candidate) => taken.has(key(candidate)),
+        );
+        taken.add(key(numbered.name));
+        given.set(key(numbered.name), entry);
+        nextNumber.set(key(name.name), numbered.number + 1);
+        const tooLong = getItemNameError(numbered.name);
+        // "File 1 2.jpg" asking for the taken "File 1.jpg" is numbered back to its own name:
+        // it stays as it is.
+        if (numbered.name.normalize("NFC") === item.name.normalize("NFC")) {
+          plan[index] = { status: "unchanged" };
           continue;
         }
-        if (!taken.has(key(name.name))) {
-          taken.add(key(name.name));
-          given.add(key(name.name));
-          plan[index] = renamed(item, name, name.name, name.segments, null, false);
-          continue;
-        }
-        const byItemInBatch = given.has(key(name.name));
-        if (input.settings.onConflict === "number") {
-          const numbered = findNumberedName(
-            name,
-            item,
-            input.settings,
-            nextNumber.get(key(name.name)) ?? 2,
-            (candidate) => taken.has(key(candidate)),
-          );
-          taken.add(key(numbered.name));
-          given.add(key(numbered.name));
-          nextNumber.set(key(name.name), numbered.number + 1);
-          const tooLong = getItemNameError(numbered.name);
-          // "File 1 2.jpg" asking for the taken "File 1.jpg" is numbered back to its own name:
-          // it stays as it is.
-          if (numbered.name.normalize("NFC") === item.name.normalize("NFC")) {
-            plan[index] = { status: "unchanged" };
-            continue;
-          }
-          plan[index] =
-            tooLong === null
-              ? renamed(
-                  item,
-                  name,
-                  numbered.name,
-                  numbered.segments,
-                  numbered.number,
-                  byItemInBatch,
-                )
-              : {
-                  status: "problem",
-                  proposedName: numbered.name,
-                  segments: numbered.segments,
-                  problem: { kind: "invalid", message: tooLong },
-                };
-        } else {
-          const skip = input.settings.onConflict === "skip";
-          plan[index] = {
-            status: "problem",
-            proposedName: name.name,
-            segments: name.segments,
-            problem: { kind: skip ? "skippedTaken" : "taken", byItemInBatch },
-          };
-          if (skip) {
-            leftAsIs.add(entry);
-            newlySkipped = true;
-          }
+        plan[index] =
+          tooLong === null
+            ? renamed(item, name, numbered.name, numbered.segments, numbered.number, byItemInBatch)
+            : {
+                status: "problem",
+                proposedName: numbered.name,
+                segments: numbered.segments,
+                problem: { kind: "invalid", message: tooLong },
+              };
+      } else {
+        const skip = input.settings.onConflict === "skip";
+        plan[index] = {
+          status: "problem",
+          proposedName: name.name,
+          segments: name.segments,
+          problem: { kind: skip ? "skippedTaken" : "taken", byItemInBatch },
+        };
+        if (skip) {
+          skipped.push(entry);
         }
       }
+    }
+    // An item skipped for a clash keeps its old name, so the item given that name finds it
+    // taken and is skipped too, keeping its own old name in turn, and so on along the chain.
+    // Nothing else changes: the other items' names stay free.
+    for (let next = skipped.pop(); next !== undefined; next = skipped.pop()) {
+      const holder = given.get(key(next.item.name));
+      if (holder?.name.kind !== "renamed") {
+        continue;
+      }
+      plan[holder.index] = {
+        status: "problem",
+        proposedName: holder.name.name,
+        segments: holder.name.segments,
+        problem: { kind: "skippedTaken", byItemInBatch: false },
+      };
+      skipped.push(holder);
     }
   }
 

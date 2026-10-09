@@ -1,6 +1,8 @@
+import { getItemNameError } from "@filetrail/contracts";
 import {
   type BatchRenameFolder,
   type BatchRenameItem,
+  type BatchRenamePlanInput,
   type BatchRenamePlanItem,
   type BatchRenameSettings,
   DEFAULT_BATCH_RENAME_SETTINGS,
@@ -728,6 +730,40 @@ describe("the plan", () => {
     expect(cascade).toMatchObject({ renameCount: 0, skippedCount: 2 });
   });
 
+  it("skips a whole batch whose names each wait on the next one's, at once", () => {
+    // "File 1" … "File 10000" numbered from 2: the last can't take the unselected
+    // "File 10001", so it keeps its name, which the one before it wanted, and so on back.
+    const folderNames = Array.from({ length: 10_001 }, (_, index) => `File ${index + 1}.txt`);
+    const started = performance.now();
+    const result = plan(
+      { mode: "format", startAt: 2, onConflict: "skip" },
+      folderNames.slice(0, 10_000),
+      folderNames,
+    );
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(result).toMatchObject({ renameCount: 0, skippedCount: 10_000 });
+    expect(result.items[0]).toMatchObject({
+      proposedName: "File 2.txt",
+      problem: { kind: "skippedTaken", byItemInBatch: false },
+    });
+  });
+
+  it("settles clashes as settling the folder again until nothing more is skipped would", () => {
+    const rng = seededRandom(8_053);
+    for (let round = 0; round < 3_000; round += 1) {
+      const input = randomClashCase(rng);
+      const label = JSON.stringify({
+        settings: input.settings,
+        items: input.items.map((each) => each.name),
+        folders: [...input.folders.values()],
+        cannotRename: [...(input.cannotRename?.keys() ?? [])],
+      });
+      expect(planBatchRename(input).items.map(outcomeWithClash), label).toEqual(
+        settleByRescanning(input),
+      );
+    }
+  });
+
   it("holds the rename with Don't Rename until the clash is fixed", () => {
     const result = plan(
       { find: "IMG_", replaceWith: "Lisbon ", onConflict: "block" },
@@ -849,3 +885,108 @@ describe("the plan", () => {
     expect(result.renameCount).toBe(0);
   });
 });
+
+// ── Checking the plan against the simplest way to settle clashes ─────────────────────────
+
+function outcomeWithClash(planItem: BatchRenamePlanItem | undefined): string {
+  if (planItem?.status === "problem" && "byItemInBatch" in planItem.problem) {
+    return `${outcome(planItem)}:${planItem.problem.byItemInBatch ? "batch" : "folder"}`;
+  }
+  return outcome(planItem);
+}
+
+// The plan with Skip or Don't Rename, worked out the slow way: each item skipped keeps its
+// old name, so the folder is settled again from the start until no new item is skipped.
+function settleByRescanning(input: BatchRenamePlanInput): string[] {
+  const proposed = proposeNames(input.settings, input.items, input.now).names;
+  const folder = input.folders.get("/trip");
+  const key = (name: string) => nameKey(name, folder?.caseSensitive ?? false);
+  const result = input.items.map(() => "unchanged");
+  const leftAsIs = new Set<number>();
+  proposed.forEach((name, index) => {
+    if (name.kind === "unchanged") {
+      leftAsIs.add(index);
+      return;
+    }
+    const invalid = name.emptyName || getItemNameError(name.name) !== null;
+    if (invalid || input.cannotRename?.has(input.items[index]?.path ?? "")) {
+      result[index] = `${invalid ? "invalid" : "cannotRename"}:${name.name}`;
+      leftAsIs.add(index);
+    }
+  });
+  for (let newlySkipped = true; newlySkipped; ) {
+    newlySkipped = false;
+    const taken = new Set((folder?.names ?? []).map(key));
+    const given = new Set<string>();
+    input.items.forEach((each, index) => {
+      if (leftAsIs.has(index)) {
+        taken.add(key(each.name));
+      } else {
+        taken.delete(key(each.name));
+      }
+    });
+    proposed.forEach((name, index) => {
+      if (leftAsIs.has(index) || name.kind !== "renamed") {
+        return;
+      }
+      if (!taken.has(key(name.name))) {
+        taken.add(key(name.name));
+        given.add(key(name.name));
+        result[index] = name.name;
+        return;
+      }
+      const skip = input.settings.onConflict === "skip";
+      const by = given.has(key(name.name)) ? "batch" : "folder";
+      result[index] = `${skip ? "skippedTaken" : "taken"}:${name.name}:${by}`;
+      if (skip) {
+        leftAsIs.add(index);
+        newlySkipped = true;
+      }
+    });
+  }
+  return result;
+}
+
+// A few numbered files, some of them selected in any order, renamed so that their new names
+// often are each other's old ones or the unselected files'.
+function randomClashCase(rng: () => number): BatchRenamePlanInput {
+  const integer = (least: number, most: number) => least + Math.floor(rng() * (most - least + 1));
+  const folderNames: string[] = [];
+  for (let number = 1; number <= 8; number += 1) {
+    if (rng() < 0.7) {
+      folderNames.push(`${rng() < 0.8 ? "File" : "file"} ${number}.txt`);
+    }
+  }
+  const selected = folderNames
+    .filter(() => rng() < 0.6)
+    .map((name) => ({ name, order: rng() }))
+    .sort((a, b) => a.order - b.order)
+    .map(({ name }) => name);
+  const kind = integer(0, 2);
+  const options: Partial<BatchRenameSettings> =
+    kind === 0
+      ? { mode: "format", startAt: integer(1, 4), step: integer(1, 2) }
+      : kind === 1
+        ? { mode: "replace", find: String(integer(1, 8)), replaceWith: String(integer(1, 9)) }
+        : { mode: "case", caseStyle: rng() < 0.5 ? "lower" : "title" };
+  const locked = selected.find(() => rng() < 0.1);
+  return {
+    settings: settings({ ...options, onConflict: rng() < 0.8 ? "skip" : "block" }),
+    items: selected.map((name) => item(name)),
+    folders: new Map([["/trip", { names: folderNames, caseSensitive: rng() < 0.3 }]]),
+    ...(locked ? { cannotRename: new Map([[`/trip/${locked}`, "The item is locked."]]) } : {}),
+    now: NOW,
+  };
+}
+
+// mulberry32: the same numbers for the same seed, so a failure can be run again.
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
