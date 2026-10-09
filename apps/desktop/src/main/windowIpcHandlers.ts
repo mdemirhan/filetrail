@@ -113,9 +113,6 @@ export const WINDOW_IPC_CHANNELS = [
 
 export type WindowIpcChannel = (typeof WINDOW_IPC_CHANNELS)[number];
 
-// What a change to the clipboard was (see clipboardItemIds).
-export type ClipboardChange = { copied: true } | { copied: false; followedTo: readonly string[] };
-
 export function createWindowIpcHandlers(deps: {
   store: Pick<
     AppStateStore,
@@ -124,12 +121,6 @@ export function createWindowIpcHandlers(deps: {
   windows: WindowHost;
   // Told of every change, with only the keys the whole app shares.
   onPreferencesChanged: (preferences: AppPreferences, change: PreferencesChange) => void;
-  // Told of every change to the clipboard: whether it is something newly copied, or a
-  // change following what it held (and then the paths it followed items to).
-  onClipboardChanged?: (
-    clipboard: IpcResponse<"app:getClipboard">["clipboard"],
-    change: ClipboardChange,
-  ) => void;
 }): Pick<IpcHandlerMap, WindowIpcChannel> {
   const { store, windows } = deps;
   // What Copy or Cut put on the clipboard, in whichever window: every window pastes it.
@@ -190,12 +181,6 @@ export function createWindowIpcHandlers(deps: {
         return { ok: false };
       }
       sharedClipboard = payload.clipboard;
-      deps.onClipboardChanged?.(
-        sharedClipboard,
-        payload.follows === undefined
-          ? { copied: true }
-          : { copied: false, followedTo: payload.followedTo ?? [] },
-      );
       windows.sendToOtherWindows(senderIdOf(event), "filetrail:clipboardChanged", sharedClipboard);
       return { ok: true };
     },

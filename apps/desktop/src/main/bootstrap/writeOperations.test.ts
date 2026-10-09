@@ -1694,48 +1694,6 @@ describe("moving to the Trash and deleting", () => {
     coordinator.shutdown();
   });
 
-  // A paste from the clipboard is checked against the items copied, so one put at an item's
-  // path since is left out; a drag or Move To names what is there now.
-  it("gives the analysis the ids of the items copied, for a paste from the clipboard", async () => {
-    const writeService = createWriteServiceStub();
-    const clipboardItemIds = vi.fn(async (paths: readonly string[]) =>
-      Object.fromEntries(paths.map((path) => [path, { dev: 1, ino: 2 }])),
-    );
-    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
-      clipboardItemIds,
-    });
-    const request = {
-      mode: "copy" as const,
-      sourcePaths: ["/Users/demo/a.txt"],
-      destinationDirectoryPath: "/Users/demo/Folder",
-      action: "paste" as const,
-    };
-
-    await coordinator.handlers["copyPaste:analyzeStart"](request, { sender: createSender() });
-    await coordinator.handlers["copyPaste:analyzeStart"](
-      { ...request, fromClipboard: true },
-      { sender: createSender() },
-    );
-
-    expect(vi.mocked(writeService.startCopyPasteAnalysis).mock.calls.map(([sent]) => sent)).toEqual(
-      [
-        {
-          mode: "copy",
-          sourcePaths: ["/Users/demo/a.txt"],
-          destinationDirectoryPath: "/Users/demo/Folder",
-        },
-        {
-          mode: "copy",
-          sourcePaths: ["/Users/demo/a.txt"],
-          destinationDirectoryPath: "/Users/demo/Folder",
-          expectedSourceIds: { "/Users/demo/a.txt": { dev: 1, ino: 2 } },
-        },
-      ],
-    );
-    expect(clipboardItemIds).toHaveBeenCalledTimes(1);
-    coordinator.shutdown();
-  });
-
   // The home folder it is given, as for everything else it checks.
   it("protects the folders of the home folder it is given", async () => {
     const writeService = createWriteServiceStub();

@@ -39,18 +39,12 @@ import type {
 export function normalizeCopyPasteAnalysisRequest(
   request: CopyPasteAnalysisRequest,
 ): RequiredCopyPasteAnalysisRequest {
-  const expectedSourceIds = request.expectedSourceIds
-    ? Object.fromEntries(
-        Object.entries(request.expectedSourceIds).map(([path, id]) => [resolve(path), id]),
-      )
-    : undefined;
   return {
     mode: request.mode,
     sourcePaths: withoutNestedPaths(
       Array.from(new Set(request.sourcePaths.map((path) => resolve(path)))),
     ),
     destinationDirectoryPath: resolve(request.destinationDirectoryPath),
-    ...(expectedSourceIds ? { expectedSourceIds } : {}),
   };
 }
 
@@ -181,23 +175,6 @@ export async function buildCopyPasteAnalysisReport(args: {
       issues.push({
         code: "source_missing",
         message: `Source does not exist: ${sourcePath}`,
-        sourcePath,
-        destinationPath,
-      });
-      continue;
-    }
-    // The item copied isn't there any more: another one has its name (an app saved a new
-    // file in its place, say). As for an item moved away, it is left out of the paste.
-    const expectedId = request.expectedSourceIds?.[sourcePath];
-    if (
-      expectedId !== undefined &&
-      sourceFingerprint.dev !== null &&
-      sourceFingerprint.ino !== null &&
-      (sourceFingerprint.dev !== expectedId.dev || sourceFingerprint.ino !== expectedId.ino)
-    ) {
-      issues.push({
-        code: "source_missing",
-        message: `Source was replaced since it was copied: ${sourcePath}`,
         sourcePath,
         destinationPath,
       });

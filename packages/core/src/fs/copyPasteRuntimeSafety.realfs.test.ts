@@ -2,7 +2,7 @@
 // review and the paste, on the real disk.
 
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -19,10 +19,6 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import {
-  buildCopyPasteAnalysisReport,
-  normalizeCopyPasteAnalysisRequest,
-} from "./copyPasteAnalysis";
 import { NO_TRASH_ERROR_CODE } from "./copyPasteErrors";
 import { JOURNALED_FILE_BYTES } from "./copyPasteExecution";
 import {
@@ -43,11 +39,6 @@ import {
 function withoutRenameAtAll(): WriteServiceFileSystem {
   const { rename: _rename, ...rest } = nativeFileSystem;
   return rest;
-}
-
-function idOf(path: string) {
-  const stats = lstatSync(path);
-  return { dev: stats.dev, ino: stats.ino };
 }
 
 // The start of an AppleDouble file (its magic number and version).
@@ -1096,37 +1087,6 @@ describe("a large file being copied", () => {
     expect(result?.status).toBe("failed");
     expect(live.size).toBe(0);
     expect(await readdir(dst)).toEqual([]);
-  });
-});
-
-describe("an item copied that was replaced before the paste", () => {
-  it("is left out as missing, while one renamed into place by the app is pasted", async () => {
-    await writeFile(join(src, "a.txt"), "copied");
-    await writeFile(join(src, "b.txt"), "copied too");
-    const copiedIds = {
-      [join(src, "a.txt")]: idOf(join(src, "a.txt")),
-      [join(src, "b.txt")]: idOf(join(src, "b.txt")),
-    };
-    // An app saves a new a.txt in its place (a new file renamed over it).
-    await writeFile(join(testDir, "new.tmp"), "saved since");
-    await rename(join(testDir, "new.tmp"), join(src, "a.txt"));
-
-    const report = await buildCopyPasteAnalysisReport({
-      analysisId: "analysis-test",
-      request: normalizeCopyPasteAnalysisRequest({
-        mode: "copy",
-        sourcePaths: [join(src, "a.txt"), join(src, "b.txt")],
-        destinationDirectoryPath: dst,
-        expectedSourceIds: copiedIds,
-      }),
-      fileSystem: nativeFileSystem,
-      thresholds: { largeBatchItemThreshold: 100_000, largeBatchByteThreshold: 1e12 },
-    });
-
-    expect(report.issues).toEqual([
-      expect.objectContaining({ code: "source_missing", sourcePath: join(src, "a.txt") }),
-    ]);
-    expect(report.nodes.map((node) => node.sourcePath)).toEqual([join(src, "b.txt")]);
   });
 });
 

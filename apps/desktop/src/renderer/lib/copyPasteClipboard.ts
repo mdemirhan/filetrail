@@ -243,27 +243,6 @@ export function followClipboardThroughWrite(
   return followClipboard(clipboard, moves, removedByWrite(result), left);
 }
 
-// The paths `followClipboardThroughWrite` takes items on `clipboard` to: where the write
-// moved them. Only items on it that moved, not others already where they went (a folder
-// merged into).
-export function clipboardPathsMovedBy(
-  clipboard: CopyPasteClipboardState,
-  result: WriteOperationResult,
-): string[] {
-  if (clipboard.type !== "ready" || !movedItems(result)) {
-    return [];
-  }
-  const movesByFrom = indexMoves(collectFollowedMoves(result));
-  const left = leftInPlaceBy(result);
-  const kept = dropClipboardPaths(clipboard, removedByWrite(result));
-  return kept.type === "ready"
-    ? kept.sourcePaths.flatMap((path) => {
-        const moved = remappedPath(path, movesByFrom, left);
-        return moved === null ? [] : [moved];
-      })
-    : [];
-}
-
 // What another app moving items away, or putting them in the Trash, did to the clipboard:
 // they are no longer where it says, so they are taken off, and a cut of any is cancelled.
 export function followClipboardThroughRemoval(

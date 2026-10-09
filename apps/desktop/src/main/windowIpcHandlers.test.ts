@@ -56,14 +56,8 @@ function setUp() {
     sendToOtherWindows: vi.fn(),
   } satisfies WindowHost;
   const onPreferencesChanged = vi.fn();
-  const onClipboardChanged = vi.fn();
-  const handlers = createWindowIpcHandlers({
-    store,
-    windows,
-    onPreferencesChanged,
-    onClipboardChanged,
-  });
-  return { store, windows, handlers, onPreferencesChanged, onClipboardChanged };
+  const handlers = createWindowIpcHandlers({ store, windows, onPreferencesChanged });
+  return { store, windows, handlers, onPreferencesChanged };
 }
 
 describe("createWindowIpcHandlers", () => {
@@ -167,24 +161,14 @@ describe("following the clipboard", () => {
   });
 
   it("follows what it holds", async () => {
-    const { windows, handlers, onClipboardChanged } = setUp();
+    const { windows, handlers } = setUp();
     const before = copied("/Users/demo/a.txt", "2026-10-08T10:00:00.000Z");
     await handlers["app:setClipboard"]({ clipboard: before }, from(1));
     const moved = copied("/Users/demo/Folder/a.txt", before.capturedAt);
 
     expect(
-      await handlers["app:setClipboard"](
-        { clipboard: moved, follows: before.capturedAt, followedTo: ["/Users/demo/Folder/a.txt"] },
-        from(1),
-      ),
+      await handlers["app:setClipboard"]({ clipboard: moved, follows: before.capturedAt }, from(1)),
     ).toEqual({ ok: true });
-    expect(onClipboardChanged).toHaveBeenLastCalledWith(moved, {
-      copied: false,
-      followedTo: ["/Users/demo/Folder/a.txt"],
-    });
-    // A follow that names no new place keeps every item's id.
-    await handlers["app:setClipboard"]({ clipboard: moved, follows: before.capturedAt }, from(1));
-    expect(onClipboardChanged).toHaveBeenLastCalledWith(moved, { copied: false, followedTo: [] });
     expect(await handlers["app:getClipboard"]({}, from(2))).toEqual({ clipboard: moved });
     expect(windows.sendToOtherWindows).toHaveBeenLastCalledWith(
       1,
@@ -196,7 +180,7 @@ describe("following the clipboard", () => {
   // The window that moved an item follows it on the clipboard, after another window copied
   // something else.
   it("doesn't take a Copy made since in another window off", async () => {
-    const { windows, handlers, onClipboardChanged } = setUp();
+    const { windows, handlers } = setUp();
     const before = copied("/Users/demo/a.txt", "2026-10-08T10:00:00.000Z");
     await handlers["app:setClipboard"]({ clipboard: before }, from(1));
     const since = copied("/Users/demo/b.txt", "2026-10-08T10:00:05.000Z");
@@ -217,9 +201,6 @@ describe("following the clipboard", () => {
     ).toEqual({ ok: false });
     expect(await handlers["app:getClipboard"]({}, from(1))).toEqual({ clipboard: since });
     expect(windows.sendToOtherWindows).not.toHaveBeenCalled();
-    // Only what the clipboard holds is told: the Copy made since.
-    expect(onClipboardChanged).toHaveBeenCalledTimes(2);
-    expect(onClipboardChanged).toHaveBeenLastCalledWith(since, { copied: true });
   });
 });
 

@@ -211,8 +211,6 @@ export function createWriteOperationCoordinator(
     // Where writes that leave items under hidden names are written down (see writeJournal):
     // a rename of several, for a crash not to strand what it moved aside.
     writeJournal?: WriteJournal;
-    // Which item each of these clipboard paths was when copied (see clipboardItemIds).
-    clipboardItemIds?: (paths: readonly string[]) => Promise<Record<string, ItemId>>;
     // Every window hears how the running operation is doing, so the others know one is
     // running (and refuse to start another) and can follow what it changed. Called with
     // each progress event and the window it was sent to.
@@ -1919,16 +1917,11 @@ export function createWriteOperationCoordinator(
           await assertNotSystemLocation(payload.sourcePaths, "moved", fs, homePath);
         }
         ensureNoWriteOperationInFlight();
-        const expectedSourceIds =
-          payload.fromClipboard && options.clipboardItemIds
-            ? await options.clipboardItemIds(payload.sourcePaths)
-            : undefined;
         const handle = writeService.startCopyPasteAnalysis(
           {
             mode: payload.mode,
             sourcePaths: payload.sourcePaths,
             destinationDirectoryPath: payload.destinationDirectoryPath,
-            ...(expectedSourceIds ? { expectedSourceIds } : {}),
           },
           analysesOfOtherWindows(event.sender),
         );

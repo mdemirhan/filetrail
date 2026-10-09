@@ -19,7 +19,7 @@ import {
 import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
 
-import type { ItemId, UndoLog } from "./undoLog";
+import type { UndoLog } from "./undoLog";
 
 export type CopyPasteMode = "copy" | "cut";
 export type CopyPasteOperationStatus =
@@ -154,16 +154,12 @@ export type CopyPasteAnalysisRequest = {
   mode: CopyPasteMode;
   sourcePaths: string[];
   destinationDirectoryPath: string;
-  // For items pasted from the clipboard: each item's id when it was copied. Another item at
-  // its path now (the one copied was replaced) is reported missing, never pasted instead.
-  expectedSourceIds?: Readonly<Record<string, ItemId>>;
 };
 
 export type RequiredCopyPasteAnalysisRequest = {
   mode: CopyPasteMode;
   sourcePaths: string[];
   destinationDirectoryPath: string;
-  expectedSourceIds?: Readonly<Record<string, ItemId>>;
 };
 
 // A choice made for one item in the review, overriding the policy for its kind.

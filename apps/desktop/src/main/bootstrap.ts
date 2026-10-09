@@ -4,12 +4,7 @@ import { join } from "node:path";
 import { BrowserWindow, type WebContents, app, clipboard, ipcMain, shell } from "electron";
 
 import type { AppLogEntry, HelpTopic, SettingsTab } from "@filetrail/contracts";
-import {
-  ExplorerWorkerClient,
-  createWriteService,
-  getPathSuggestions,
-  readItemId,
-} from "@filetrail/core";
+import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
 import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
 import {
@@ -72,7 +67,6 @@ import {
   createWriteOperationCoordinator,
   sendToEachWindow,
 } from "./bootstrap/writeOperations";
-import { createClipboardItemIds } from "./clipboardItemIds";
 import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
 import { type FolderWatches, createFolderWatches } from "./folderWatch";
 import { registerIpcHandlers } from "./ipc";
@@ -228,10 +222,6 @@ export async function bootstrapMainProcess(
   const undoHistory = createUndoHistory();
   undoHistory.onChange(() => windows.onUndoHistoryChanged(undoHistory.menu()));
   windows.onUndoHistoryChanged(undoHistory.menu());
-  // Which item each clipboard path was when copied, for telling it from one put there since.
-  const clipboardItemIds = createClipboardItemIds((path) =>
-    readItemId(originalFileSystem.lstat, path),
-  );
   const writeCoordinator = createWriteOperationCoordinator(
     writeService,
     createOriginalWriteOperationFs(trashItem),
@@ -240,7 +230,6 @@ export async function bootstrapMainProcess(
       recordUndo: undoHistory.record,
       undoHistory,
       writeJournal,
-      clipboardItemIds: clipboardItemIds.expectedIds,
       broadcastProgress: (event, owner) =>
         sendToEachWindow(
           BrowserWindow.getAllWindows()
@@ -311,7 +300,6 @@ export async function bootstrapMainProcess(
         store: appStateStore,
         windows,
         onPreferencesChanged,
-        onClipboardChanged: clipboardItemIds.update,
       }),
       "places:list": () => ({
         folders: appStateStore.getVisitedFolders(),

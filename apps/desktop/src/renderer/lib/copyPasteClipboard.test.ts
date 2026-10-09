@@ -3,7 +3,6 @@ import {
   buildPasteRequest,
   clearClipboardAfterSuccessfulPaste,
   clearCopyPasteClipboard,
-  clipboardPathsMovedBy,
   describeClipboard,
   dropClipboardPaths,
   followClipboardThroughWrite,
@@ -352,31 +351,13 @@ describe("copyPasteClipboard", () => {
       });
     });
 
-    it("says which of its paths it followed items to", () => {
-      const result = writeResult("move_to", [
-        { sourcePath: "/Users/demo/Folder", destinationPath: "/Volumes/Backup/Folder" },
-        { sourcePath: "/Users/demo/other.txt", destinationPath: "/x/other.txt", status: "failed" },
-      ]);
-      expect(clipboardPathsMovedBy(clipboard, result)).toEqual([
-        "/Volumes/Backup/Folder/inner.txt",
-      ]);
-      expect(clipboardPathsMovedBy(EMPTY_COPY_PASTE_CLIPBOARD, result)).toEqual([]);
-      expect(
-        clipboardPathsMovedBy(
-          clipboard,
-          writeResult("trash", [{ sourcePath: "/a", destinationPath: null }]),
-        ),
-      ).toEqual([]);
-    });
-
-    // "F" is merged into "/dst/F": "y", already there, didn't move, and keeps its id.
-    it("doesn't name an item already in a folder merged into", () => {
+    // "F" is merged into "/dst/F": "y", already there, didn't move.
+    it("keeps an item already in a folder merged into", () => {
       const copied = setCopyPasteClipboard("copy", ["/src/F/x", "/dst/F/y"], NOW);
       const result = writeResult("move_to", [{ sourcePath: "/src/F", destinationPath: "/dst/F" }]);
       expect(followClipboardThroughWrite(copied, result)).toMatchObject({
         sourcePaths: ["/dst/F/x", "/dst/F/y"],
       });
-      expect(clipboardPathsMovedBy(copied, result)).toEqual(["/dst/F/x"]);
     });
 
     // "F" is cut and merged into "/dst/F", which already has an "a": "a" is skipped and
@@ -408,11 +389,6 @@ describe("copyPasteClipboard", () => {
           "/dst/G",
         ],
       });
-      expect(clipboardPathsMovedBy(copied, result)).toEqual([
-        "/dst/F/b",
-        "/dst/F/other/e",
-        "/dst/G",
-      ]);
       // The merged folder itself is still at its old path while anything is left in it...
       const folder = setCopyPasteClipboard("copy", ["/src/F"], NOW);
       expect(followClipboardThroughWrite(folder, result)).toBe(folder);
@@ -534,14 +510,12 @@ describe("copyPasteClipboard", () => {
 
       const startedAt = performance.now();
       const followed = followClipboardThroughWrite(copied, result);
-      const movedTo = clipboardPathsMovedBy(copied, result);
       const elapsed = performance.now() - startedAt;
 
       expect(followed.type === "ready" && followed.sourcePaths.slice(0, 2)).toEqual([
         "/Users/demo/a/item-0",
         "/Users/demo/b/item-1",
       ]);
-      expect(movedTo).toHaveLength(count - 1);
       expect(elapsed).toBeLessThan(1000);
     });
   });

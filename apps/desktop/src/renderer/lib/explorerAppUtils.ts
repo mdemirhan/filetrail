@@ -36,8 +36,7 @@ export function formatQuotedNames(paths: readonly string[], maxShown = 3): strin
 }
 
 // Why items on the clipboard were left out of a paste: since they were copied, they were
-// moved, renamed or deleted outside the app, or another item was put in their place. A
-// cut is "moved", as everything else about it.
+// moved, renamed or deleted outside the app. A cut is "moved", as everything else about it.
 export function formatMissingClipboardItemsMessage(
   paths: readonly string[],
   verb: "pasted" | "moved" = "pasted",
@@ -45,8 +44,8 @@ export function formatMissingClipboardItemsMessage(
   const one = paths.length === 1;
   const why =
     verb === "moved"
-      ? `${one ? "it was" : "they were"} deleted, replaced or moved elsewhere since ${one ? "it was" : "they were"} cut`
-      : `${one ? "it was" : "they were"} moved, deleted or replaced since ${one ? "it was" : "they were"} copied`;
+      ? `${one ? "it was" : "they were"} deleted or moved elsewhere since ${one ? "it was" : "they were"} cut`
+      : `${one ? "it was" : "they were"} moved or deleted since ${one ? "it was" : "they were"} copied`;
   if (paths.length <= 3) {
     return `${formatQuotedNames(paths)} couldn’t be ${verb} because ${why}.`;
   }
