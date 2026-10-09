@@ -7,7 +7,8 @@
  *     ("notes 2.txt"), so the path is the only way to find it again. Resolves with null when
  *     the item went to the Trash but the Trash didn't say where. Rejects with an Error
  *     carrying the Trash's own sentence as its message and, when it can be told, an errno
- *     `code` ("EACCES", "ENOENT", "ENOTSUP" for a disk without a Trash).
+ *     `code` ("EACCES", "ENOENT", "ENOSPC", "ENOTSUP" for a disk without a Trash), plus the
+ *     Cocoa error's number as `cocoaCode` when it was one.
  *
  * Runs on a libuv thread pool thread: the Trash of a network disk can be slow.
  */
@@ -32,6 +33,8 @@ typedef struct {
   /* On failure: the Trash's sentence, and the errno it stands for (0 when unknown). */
   char *message;
   int errnum;
+  /* On failure with a Cocoa error: its code; -1 for an error of another kind. */
+  long cocoa_code;
 } trash_work_t;
 
 static char *copy_utf8(NSString *text) {
@@ -39,8 +42,18 @@ static char *copy_utf8(NSString *text) {
   return utf8 ? strdup(utf8) : NULL;
 }
 
+/* The file system's "operation not supported" (errFSOperationNotSupported, MacErrors.h). */
+static const NSInteger kFSOperationNotSupported = -1426;
+
 /* The errno an NSError from the Trash stands for: the POSIX error under it when there is
- * one, otherwise what its Cocoa code means; 0 when it can't be told. */
+ * one, otherwise what its Cocoa code means; 0 when it can't be told.
+ * ENOTSUP says the disk has no Trash, and only what says so positively gives it: the
+ * Trash's NSFeatureUnsupportedError ("the volume doesn't have one"), or a failure resting on
+ * the file system's "not supported". Not every disk without a Trash is told this way: /dev
+ * answers the first only until the process has moved something to the Trash, then a bare
+ * NSFileWriteUnknownError (resting on "not supported" for some items, not for others).
+ * Still, a failure that can't be told must never pass for a missing Trash, or deleting for
+ * good would be offered for it, with a reason that isn't so. */
 static int errno_of(NSError *error) {
   if ([error.domain isEqualToString:NSPOSIXErrorDomain]) {
     return (int)error.code;
@@ -61,9 +74,26 @@ static int errno_of(NSError *error) {
         return EACCES;
       case NSFileWriteVolumeReadOnlyError:
         return EROFS;
+      case NSFileWriteOutOfSpaceError:
+        return ENOSPC;
+      case NSUserCancelledError:
+        return ECANCELED;
+      case NSFileWriteFileExistsError:
+        return EEXIST;
+      case NSFileWriteInvalidFileNameError:
+      case NSFileReadInvalidFileNameError:
+        return EINVAL;
+      case NSFileLockingError:
+        return ENOLCK;
+      case NSFileReadTooLargeError:
+        return EFBIG;
       default:
         break;
     }
+  }
+  if (underlying && [underlying.domain isEqualToString:NSOSStatusErrorDomain] &&
+      underlying.code == kFSOperationNotSupported) {
+    return ENOTSUP;
   }
   return 0;
 }
@@ -90,6 +120,8 @@ static void execute_trash_item(napi_env env, void *data) {
       return;
     }
     w->errnum = error ? errno_of(error) : 0;
+    w->cocoa_code =
+        error && [error.domain isEqualToString:NSCocoaErrorDomain] ? (long)error.code : -1;
     w->message = error ? copy_utf8(error.localizedDescription) : NULL;
     if (!w->message && w->errnum == 0) {
       w->errnum = EIO;
@@ -120,6 +152,10 @@ static napi_value trash_error(napi_env env, trash_work_t *w) {
     napi_set_named_property(env, error, "code", value);
     napi_create_int32(env, w->errnum, &value);
     napi_set_named_property(env, error, "errno", value);
+  }
+  if (w->cocoa_code >= 0) {
+    napi_create_int64(env, (int64_t)w->cocoa_code, &value);
+    napi_set_named_property(env, error, "cocoaCode", value);
   }
   napi_create_string_utf8(env, "trash", NAPI_AUTO_LENGTH, &value);
   napi_set_named_property(env, error, "syscall", value);
@@ -170,6 +206,7 @@ static napi_value native_trash_item(napi_env env, napi_callback_info info) {
   }
   napi_get_value_string_utf8(env, argv[0], path, length + 1, NULL);
   w->path = path;
+  w->cocoa_code = -1;
 
   napi_value promise;
   napi_create_promise(env, &w->deferred, &promise);

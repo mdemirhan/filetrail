@@ -77,7 +77,10 @@ static void execute_rename(napi_env env, void *data) {
   }
 
   /* The volume can't do an exclusive rename. Checking first leaves a tiny window,
-     but still never replaces an item that was there before the move started. */
+     but still never replaces an item that was there before the move started.
+     That window is a known, accepted limit: an item made at `to` between the lstat and
+     the rename is replaced. Such volumes offer no move that refuses to replace (link(2)
+     could do it for a file, but not for a folder), so nothing closer is possible here. */
   struct stat existing;
   if (lstat(w->to, &existing) == 0) {
     w->errnum = EEXIST;

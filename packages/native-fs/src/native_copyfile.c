@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/xattr.h>
 
 #include "native_errors.h"
 
@@ -34,12 +35,21 @@ typedef struct {
   napi_deferred deferred;
   char *source;
   char *destination;
-  int errnum; /* 0 on success, errno on failure */
+  /* 0 on success, errno on failure. Also set by copy_status when it ends the copy over a
+     resource fork that couldn't be written. */
+  int errnum;
   /* The caller's stop flag (an Int32Array's first element), kept alive by stop_ref;
      NULL when the copy can't be stopped part way. */
   int32_t *stop;
   napi_ref stop_ref;
 } copy_work_t;
+
+/* Whether the extended attribute copyfile is at is the resource fork. */
+static bool at_resource_fork(copyfile_state_t state) {
+  const char *name = NULL;
+  return copyfile_state_get(state, COPYFILE_STATE_XATTRNAME, &name) == 0 && name != NULL &&
+         strcmp(name, XATTR_RESOURCEFORK_NAME) == 0;
+}
 
 /* Called by copyfile(3) between chunks of data and between the parts of a file (data,
    extended attributes, ...): stops the copy once the caller has asked it to, but only
@@ -50,18 +60,28 @@ typedef struct {
    copyfile also calls it when a step fails (stage COPYFILE_ERR), and there CONTINUE means
    "try that again": a write that keeps failing (the disk is full, or was unplugged) would
    be retried forever. A failed data write ends the copy with its error instead; a failed
-   extended attribute is skipped, as copyfile does when no callback is set. */
+   extended attribute is skipped, as metadata the destination may not take (a disk that
+   refuses com.apple.provenance). Except the resource fork: that is the file's content for
+   old Mac files, and copyfile goes on as if it had been copied whole unless told to quit,
+   so a move would then remove the original. The copy fails there as it does without a
+   callback, with the write's own errno (quitting makes copyfile report ECANCELED), and
+   leaves the file it made behind: callers remove a copy that failed. */
 static int copy_status(int what, int stage, copyfile_state_t state, const char *src,
                        const char *dst, void *ctx) {
-  (void)state;
   (void)src;
   (void)dst;
-  const int32_t *stop = (const int32_t *)ctx;
-  if (what == COPYFILE_COPY_DATA && __atomic_load_n(stop, __ATOMIC_RELAXED) != 0) {
+  copy_work_t *w = (copy_work_t *)ctx;
+  if (what == COPYFILE_COPY_DATA && __atomic_load_n(w->stop, __ATOMIC_RELAXED) != 0) {
     return COPYFILE_QUIT;
   }
   if (stage == COPYFILE_ERR) {
-    return what == COPYFILE_COPY_XATTR ? COPYFILE_SKIP : COPYFILE_QUIT;
+    if (what == COPYFILE_COPY_XATTR && !at_resource_fork(state)) {
+      return COPYFILE_SKIP;
+    }
+    if (what == COPYFILE_COPY_XATTR) {
+      w->errnum = errno != 0 ? errno : EIO;
+    }
+    return COPYFILE_QUIT;
   }
   return COPYFILE_CONTINUE;
 }
@@ -96,7 +116,7 @@ static void execute_copy(napi_env env, void *data) {
     return;
   }
   copyfile_state_set(state, COPYFILE_STATE_STATUS_CB, (const void *)&copy_status);
-  copyfile_state_set(state, COPYFILE_STATE_STATUS_CTX, (const void *)w->stop);
+  copyfile_state_set(state, COPYFILE_STATE_STATUS_CTX, (const void *)w);
   int rc = copyfile(w->source, w->destination, state, flags);
   int saved = errno;
   copyfile_state_free(state);
@@ -106,7 +126,8 @@ static void execute_copy(napi_env env, void *data) {
     /* A copy told to quit reports ECANCELED, though some versions leave errno as
        it was: a stop asked for is a stop. */
     w->errnum = ECANCELED;
-  } else {
+  } else if (w->errnum == 0) {
+    /* Unless copy_status ended it over the resource fork and kept that write's errno. */
     w->errnum = saved;
   }
 }

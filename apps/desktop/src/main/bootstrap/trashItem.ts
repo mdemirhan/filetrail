@@ -11,15 +11,18 @@ type TrashFs = {
 // when the Trash didn't say), with a failure that says why.
 // The Trash gives its reason as a sentence, with the errno it stands for when that can be
 // told (see native_trash.m). A locked item says so. A disk without a Trash (a network
-// share, some USB drives) answers ENOTSUP, or gives no code at all: on a disk other than
-// the startup disk that is marked with NO_TRASH_ERROR_CODE, so callers can offer to delete
-// instead. Any other reason (no permission, a read-only disk, an item that is gone) is the
-// Trash's own sentence, and nothing is offered for permanent deletion; nor is anything on
-// the startup disk ever.
+// share, some USB drives) answers ENOTSUP, or, once the app has trashed something, often
+// no errno at all (NSFileWriteUnknownError): ENOTSUP, or no errno on a disk `diskHasTrash`
+// takes to have none (a network share), is marked on a disk other than the startup disk
+// with NO_TRASH_ERROR_CODE, so callers can offer to delete instead. Any other reason
+// (no permission, a read-only or full disk, an item that is gone, a failure the Trash gives
+// no errno for) is the Trash's own sentence, and nothing is offered for permanent deletion;
+// nor is anything on the startup disk ever.
 export function createTrashItem(args: {
   trash: (path: string) => Promise<string | null>;
   fs: TrashFs;
   homePath: string;
+  diskHasTrash?: (path: string) => boolean;
 }): (path: string) => Promise<string | null> {
   return async (path) => {
     try {
@@ -36,7 +39,10 @@ export function createTrashItem(args: {
       const onStartupDisk =
         item?.dev !== undefined && home?.dev !== undefined && item.dev === home.dev;
       const code = (error as { code?: unknown } | null)?.code;
-      const mayHaveNoTrash = code === undefined || code === "ENOTSUP" || code === "EOPNOTSUPP";
+      const mayHaveNoTrash =
+        code === "ENOTSUP" ||
+        code === "EOPNOTSUPP" ||
+        (code === undefined && args.diskHasTrash?.(path) === false);
       if (onStartupDisk || item === null || !mayHaveNoTrash) {
         throw new Error(reason ?? `“${basename(path)}” couldn’t be moved to the Trash.`);
       }

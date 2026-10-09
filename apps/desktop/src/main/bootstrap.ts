@@ -203,11 +203,14 @@ export async function bootstrapMainProcess(
     assertRenamable: (path) =>
       assertNotSystemLocation([path], "renamed", originalFileSystem, app.getPath("home")),
   });
+  // Read from the mount table each time: disks come and go.
+  const diskHasTrash = createDiskHasTrash(listMounts, realpathNow);
   // Items replaced by a paste go to the Trash, so a replace can always be undone.
   const trashItem = createTrashItem({
     trash: originalTrashItem,
     fs: originalFileSystem,
     homePath: app.getPath("home"),
+    diskHasTrash,
   });
   const writeFileSystem = { ...originalFileSystem, trash: trashItem };
   // A Replace cut short by a crash is finished or undone before anything else is written.
@@ -233,8 +236,7 @@ export async function bootstrapMainProcess(
     writeService,
     createOriginalWriteOperationFs(trashItem),
     {
-      // Read from the mount table each time: disks come and go.
-      diskHasTrash: createDiskHasTrash(listMounts, realpathNow),
+      diskHasTrash,
       recordUndo: undoHistory.record,
       undoHistory,
       writeJournal,

@@ -851,6 +851,31 @@ describe("nativeCopyFile stop flag", () => {
     30_000,
   );
 
+  // copyfile goes on as if a resource fork that couldn't be written had been copied, unless
+  // the callback quits: the copy then succeeded without it, and a move removed the original.
+  // A full disk makes the write fail; the file's own data is empty, so nothing else does.
+  it.runIf(canMountDiskImages)(
+    "fails with the write's errno when the resource fork can't be written",
+    async () => {
+      const volume = mountTestDiskImage({ sizeMb: 20 });
+      try {
+        fillDisk(volume.mountPath);
+        const source = join(root, "old.rsrc");
+        writeFileSync(source, "");
+        // Over 1 MB, which copyfile copies through the fork's own file, in chunks.
+        writeFileSync(join(source, "..namedfork", "rsrc"), Buffer.alloc(2 * 1024 * 1024, 7));
+        const destination = join(volume.mountPath, "old.rsrc");
+
+        await expect(
+          addon.nativeCopyFile(source, destination, new Int32Array(1)),
+        ).rejects.toMatchObject({ code: "ENOSPC", syscall: "copyfile" });
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
   it.runIf(canMountDiskImages)(
     "keeps a sparse file sparse, so it fits on a disk smaller than its length",
     async () => {
@@ -870,6 +895,27 @@ describe("nativeCopyFile stop flag", () => {
     30_000,
   );
 });
+
+// Fills a (small) disk until a write of even 64 KB no longer fits.
+function fillDisk(mountPath: string): void {
+  let count = 0;
+  for (const chunkSize of [1024 * 1024, 64 * 1024]) {
+    const chunk = Buffer.alloc(chunkSize, 1);
+    for (;;) {
+      const path = join(mountPath, `fill-${count}`);
+      count += 1;
+      try {
+        writeFileSync(path, chunk);
+      } catch (error) {
+        rmSync(path, { force: true });
+        if ((error as NodeJS.ErrnoException).code !== "ENOSPC") {
+          throw error;
+        }
+        break;
+      }
+    }
+  }
+}
 
 function waitForSync(condition: () => boolean, timeoutMs = 10_000): void {
   const deadline = Date.now() + timeoutMs;
@@ -1038,6 +1084,19 @@ describe("nativeDatesTaken", () => {
 // Tried on a disk image only: its Trash goes away with it, and the person's own Trash is
 // never touched by a test.
 describe("nativeTrashItem", () => {
+  // /dev is a disk without a Trash, which the Trash tells with NSFeatureUnsupportedError:
+  // the one failure for which deleting for good may be offered (see createTrashItem).
+  // Nothing there can be moved by anyone but root, who doesn't run this. First in this
+  // file: once the process has moved anything to the Trash, /dev answers a bare
+  // NSFileWriteUnknownError instead (see errno_of in native_trash.m).
+  it.runIf(process.getuid?.() !== 0)("fails with ENOTSUP on a disk without a Trash", async () => {
+    await expect(wrapper.nativeTrashItem("/dev/null")).rejects.toMatchObject({
+      code: "ENOTSUP",
+      cocoaCode: 3328, // NSFeatureUnsupportedError
+      message: expect.stringContaining("null"),
+    });
+  });
+
   it.runIf(canMountDiskImages)(
     "moves items to their disk's Trash and says where each went, even under a new name",
     async () => {
@@ -1084,6 +1143,7 @@ describe("nativeTrashItem", () => {
     try {
       await expect(wrapper.nativeTrashItem(join(root, "missing.txt"))).rejects.toMatchObject({
         code: "ENOENT",
+        cocoaCode: 4, // NSFileNoSuchFileError
         syscall: "trash",
         path: join(root, "missing.txt"),
         message: expect.stringContaining("missing.txt"),

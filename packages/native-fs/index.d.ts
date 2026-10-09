@@ -11,6 +11,9 @@
  * @param destinationPath - Absolute path to the destination file. Parent directory must exist.
  * @param stopFlag - Optional. Setting `stopFlag[0]` to a non-zero value stops the copy part
  *   way through the file; it then fails with `code: "ECANCELED"` and leaves no partial file.
+ *   Extended attributes the destination won't take are skipped, except the resource fork:
+ *   a copy that can't write it fails with the write's errno (as without a stop flag) and
+ *   may leave the file it made behind, which the caller removes.
  * @returns A promise that resolves when the copy completes.
  * @throws An error with a `code` property (the errno name, e.g. `"ENOENT"`, `"ENOTSUP"`)
  *   plus `errno`, `syscall`, `path` and `dest` on failure.
@@ -187,8 +190,13 @@ export function nativeItemSize(path: string): Promise<{
 
 /**
  * Moves `from` to `to` without ever replacing an item at `to`, using `renamex_np(2)`
- * with `RENAME_EXCL`. Volumes that don't support that flag fall back to checking for
- * `to` first, then `rename(2)`. Both paths must be on the same volume.
+ * with `RENAME_EXCL`. Volumes that don't support that flag (some network and FAT volumes)
+ * fall back to checking for `to` first, then `rename(2)`. Both paths must be on the same
+ * volume.
+ *
+ * Known limitation of that fallback: an item made at `to` by someone else between the
+ * check and the rename is replaced. Those volumes have no move that refuses to replace a
+ * folder, so the window is accepted; an item there before the call is never replaced.
  *
  * @throws An error with `code: "EEXIST"` when something is already at `to`, `"EXDEV"`
  *   across volumes, or another errno name.
@@ -220,9 +228,11 @@ export function nativeUsesAppleDouble(path: string): Promise<boolean | null>;
  * Trash renames an item whose name is taken there ("notes 2.txt"), so only this path finds
  * it again. Resolves `null` when the item went to the Trash but the Trash didn't say where.
  *
- * @throws An error whose message is the Trash's own sentence, with `code: "ENOTSUP"` when
- *   the disk has no Trash, `"ENOENT"`, `"EACCES"`, or another errno name when it can be
- *   told (no `code` otherwise).
+ * @throws An error whose message is the Trash's own sentence, with `code: "ENOTSUP"` only
+ *   when the Trash says positively that the disk has none (not every such disk is told),
+ *   `"ENOENT"`, `"EACCES"`, `"ENOSPC"`, or another errno name when it can be told (no
+ *   `code` otherwise), and `cocoaCode`, the `NSCocoaErrorDomain` code, when the Trash's
+ *   error was a Cocoa one (3328, `NSFeatureUnsupportedError`, for a disk without a Trash).
  */
 export function nativeTrashItem(path: string): Promise<string | null>;
 
