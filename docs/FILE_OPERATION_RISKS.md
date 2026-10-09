@@ -29,6 +29,8 @@ Every finding states its scenario, how likely it is and what it costs the person
 - The Trash reached through another spelling of its path (`/System/Volumes/Data/...`, an alias) may let a paste or New Folder land inside it.
 - A Favorite that is a folder alias may show a drop it then refuses.
 - Move To and ⌘V started at the same instant may both cancel, writing nothing.
-- Recovery after a crash goes by path: an item whose folder was renamed or moved before File Trail opened again has to be put back by hand. A folder recovery puts in place may lack its own tags and dates.
+- Recovery after a crash goes by path: an item whose folder was renamed or moved before File Trail opened again has to be put back by hand. A folder recovery puts in place goes without its own tags and dates.
+- A crash in the moment after a folder moved to another disk took its name leaves its originals in place too, without a notice.
+- A large file that failed inside a folder being copied, and whose partial copy then couldn't be removed either, is put in place with the folder under its hidden name.
 - A recovery that finishes on a later retry may not say so.
 - A power cut, or a journal that can't be read, may leave hidden items for the person to put back by hand: crash recovery is not a transaction across disks.
