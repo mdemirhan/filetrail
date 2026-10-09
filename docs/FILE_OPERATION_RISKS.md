@@ -35,6 +35,9 @@ Every finding states its scenario, how likely it is and what it costs the person
 - A folder moved within its disk is renamed whole, without reading what is inside it. If its destination changes between the review and the move (its name taken, or the folder now on another disk), it isn't moved or asked about; the person is told to try again.
 - Batch Change Case on a disk that says it ignores case trusts that answer and each item's identity instead of reading the folder; the app's case folding may differ from the disk's for rare letters.
 - Undo of a copy locked by the system (a flag only an administrator can clear) fails as locked each time and stays on the Undo list.
+- Moving items with accented names off an exFAT disk on macOS 27 can leave the originals in place, with a message that says they no longer exist: the disk refuses to remove a name created in composed form by the name it lists (a macOS bug). An emptied folder with such a name can stay behind, reported as moved.
+- Stop isn't taken while a finished move to another disk removes its originals: the move completes as asked.
+- Batch rename gives an item one random hidden name to wait under; if another item already has it, that item fails rather than trying another name. Nothing is replaced.
 - Recovery after a crash goes by path: an item whose folder was renamed or moved before File Trail opened again has to be put back by hand. A folder recovery puts in place goes without its own tags and dates.
 - A crash in the moment after a folder moved to another disk took its name leaves its originals in place too, without a notice.
 - A recovery that finishes on a later retry may not say so.
