@@ -64,7 +64,7 @@ import {
   pluralize,
 } from "../lib/copyPasteReview";
 import { createEarlyWriteOperationEvents } from "../lib/earlyWriteOperationEvents";
-import { resolveEntriesAtPaths } from "../lib/entriesAtPaths";
+import { findEntryAtPath, resolveEntriesAtPaths } from "../lib/entriesAtPaths";
 import {
   collectFollowedMoves,
   collectRetrySourcePaths,
@@ -855,11 +855,7 @@ export function useExplorerActions(args: {
     if (contextMenuState.surface === "treeFolder" || contextMenuState.surface === "favorite") {
       return;
     }
-    if (
-      contextMenuState.paths.some(
-        (path) => !activeContentEntries.some((entry) => entry.path === path),
-      )
-    ) {
+    if (contextMenuState.paths.some((path) => !findEntryAtPath(activeContentEntries, path))) {
       setContextMenuState(null);
     }
   }, [activeContentEntries, contextMenuState, setContextMenuState]);
