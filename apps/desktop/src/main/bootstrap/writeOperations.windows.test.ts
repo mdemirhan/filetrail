@@ -1021,7 +1021,9 @@ describe("deleting immediately what a disk without a Trash couldn't take", () =>
 
   // The window that moved items to the Trash closes while it runs: the window it goes on in
   // is told what couldn't go, and may delete it, found before the handover or after.
-  it("goes to the window a Trash is handed to", async () => {
+  // A window a Trash is handed to never asks about deleting its items (it wasn't the one
+  // asked to trash them): it shows them as not trashed, and can't delete them unasked.
+  it("stays with the window that asked, not one a Trash is handed to", async () => {
     const rm = vi.fn(async () => undefined);
     let letBGo: () => void = () => undefined;
     const bTried = new Promise<void>((resolveTried) => {
@@ -1063,12 +1065,13 @@ describe("deleting immediately what a disk without a Trash couldn't take", () =>
     const end = await waitForEnd(second, operationId);
     expect(end.result?.items.map((item) => item.noTrash)).toEqual([true, true]);
 
-    const deleting = await coordinator.handlers["writeOperation:deleteImmediately"](
-      { paths: ["/Volumes/Share/a.txt", "/Volumes/Share/b.txt"] },
-      { sender: second },
-    );
-    expect((await waitForEnd(second, deleting.operationId)).status).toBe("completed");
-    expect(rm).toHaveBeenCalledTimes(2);
+    await expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Volumes/Share/a.txt", "/Volumes/Share/b.txt"] },
+        { sender: second },
+      ),
+    ).rejects.toThrow("isn't in the Trash, so it can't be deleted immediately.");
+    expect(rm).not.toHaveBeenCalled();
     await coordinator.shutdown();
   });
 

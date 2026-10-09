@@ -385,9 +385,6 @@ export function createWriteOperationCoordinator(
   // was never asked about.
   const itemsWithoutTrash = new WeakMap<WriteOperationSender, Map<string, AskedItem>>();
   const sendersWatchedForReload = new WeakSet<WriteOperationSender>();
-  // The same records by the Trash or Delete Immediately running with them: an operation
-  // handed to another window takes them along (see handOver), as that window now asks.
-  const itemsWithoutTrashByOperation = new Map<string, Map<string, AskedItem>>();
 
   function rememberItemsWithoutTrash(
     sender: WriteOperationSender,
@@ -722,11 +719,6 @@ export function createWriteOperationCoordinator(
     senderDetachers.get(operationId)?.();
     senderDetachers.delete(operationId);
     attachSender(operationId, successor);
-    // The same records, not a copy: what a Trash finds after this is the successor's too.
-    const withoutTrash = itemsWithoutTrashByOperation.get(operationId);
-    if (withoutTrash !== undefined) {
-      rememberItemsWithoutTrash(successor, withoutTrash);
-    }
     const clearsCutClipboard = copyPasteRequests.get(operationId)?.clearsCutClipboard;
     pendingAdoptions.set(successor, {
       operationId,
@@ -749,7 +741,6 @@ export function createWriteOperationCoordinator(
     senderDetachers.get(operationId)?.();
     senderDetachers.delete(operationId);
     latestProgress.delete(operationId);
-    itemsWithoutTrashByOperation.delete(operationId);
   }
 
   // Cancel and conflict answers are only taken from the window that started the
@@ -1369,7 +1360,6 @@ export function createWriteOperationCoordinator(
     // Only what this Trash finds without a Trash may be deleted next.
     const withoutTrash = new Map<string, AskedItem>();
     rememberItemsWithoutTrash(sender, withoutTrash);
-    itemsWithoutTrashByOperation.set(operationId, withoutTrash);
     const removedItems: RemovedItem[] = [];
     // One unit per item, so an item put back from the Trash doesn't depend on the others.
     const trashedUnits: UndoUnit[] = [];
@@ -1526,11 +1516,8 @@ export function createWriteOperationCoordinator(
     let deletingBegan = false;
     const realHomePath = await readRealHomePath();
     // What this window was asked about, kept for the whole operation: a reload of the
-    // page lets go of its records, and a window this is handed to takes them along.
+    // page, or the window closing, lets go of its records.
     const askedItems = itemsWithoutTrash.get(sender);
-    if (askedItems !== undefined) {
-      itemsWithoutTrashByOperation.set(operationId, askedItems);
-    }
     for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
         cancelled = true;
