@@ -876,6 +876,37 @@ describe("nativeCopyFile stop flag", () => {
     30_000,
   );
 
+  // A fork under 1 MB is copied like any other extended attribute, in one write, so a
+  // failed write there reaches the callback's extended-attribute branch, which skipped it.
+  // On a FAT disk the fork goes in the "._" file beside the copy, in the disk's clusters:
+  // once they are full the copy can still be made (an empty file takes none) but its fork
+  // can't. An APFS disk keeps space back that a fork this small still fits in.
+  it.runIf(canMountDiskImages)(
+    "fails with the write's errno when a small resource fork can't be written",
+    async () => {
+      const volume = mountTestDiskImage({ format: "MS-DOS FAT32", name: "FTFORK" });
+      try {
+        fillDisk(volume.mountPath);
+        const source = join(root, "small.rsrc");
+        writeFileSync(source, "");
+        const fork = Buffer.alloc(512 * 1024, 7);
+        writeFileSync(join(source, "..namedfork", "rsrc"), fork);
+        const destination = join(volume.mountPath, "small.rsrc");
+
+        await expect(
+          addon.nativeCopyFile(source, destination, new Int32Array(1)),
+        ).rejects.toMatchObject({ code: "ENOSPC", syscall: "copyfile" });
+        // The copy got as far as the fork: it left the file it made, for the caller to
+        // remove, without the fork.
+        expect(existsSync(destination)).toBe(true);
+        expect(() => readFileSync(join(destination, "..namedfork", "rsrc"))).toThrow();
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
   it.runIf(canMountDiskImages)(
     "keeps a sparse file sparse, so it fits on a disk smaller than its length",
     async () => {
