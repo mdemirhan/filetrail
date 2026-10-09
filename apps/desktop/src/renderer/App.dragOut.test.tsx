@@ -692,9 +692,11 @@ describe("a drag of the window's own while an operation starts", () => {
 
 describe("a drop the disks turn into a move", () => {
   it("is refused when the move would be into the items' own folder", async () => {
-    // A disk in /Volumes dragged onto /Volumes: by their paths, a copy to another disk; by
-    // the disks, a move onto the one /Volumes is on, into the folder it is in.
+    // A folder left in /Volumes that is no disk, dragged onto /Volumes: by their paths, a
+    // copy to another disk; by the disks, a move onto the one /Volumes is on, into the
+    // folder it is in.
     const harness = createAppHarness({
+      diskIds: { "/Volumes": 1 },
       directorySnapshots: {
         [home]: {
           path: home,

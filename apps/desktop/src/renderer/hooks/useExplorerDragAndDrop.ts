@@ -177,7 +177,7 @@ export function useExplorerDragAndDrop<Start>(args: {
   /** Holding a drag over a tab that is not on screen brings that tab to the front. */
   onActivateTab: (tabId: string) => void;
   /** Which disk each path is on (`system:getDiskIds`), to tell a move from a copy. */
-  getDiskIds?: (paths: string[]) => Promise<Array<number | null>>;
+  getDiskIds: (paths: string[]) => Promise<Array<number | null>>;
   /**
    * A drag that couldn't start ("drag"), or one from another app that can't be dropped
    * ("drop", once per drag), because something else holds the window.
@@ -185,7 +185,7 @@ export function useExplorerDragAndDrop<Start>(args: {
   onDragRefused?: (gesture: "drag" | "drop") => void;
   /**
    * A drop refused because the disks didn't say in time whether it moves or copies: one of
-   * them (a network share, say) didn't answer.
+   * them (a network share, say) didn't answer, or couldn't be read.
    */
   onDropUndecided?: (targetPath: string) => void;
   /**
@@ -950,14 +950,11 @@ export function useExplorerDragAndDrop<Start>(args: {
 
   // Asks the disks about folders not asked about yet in this drag, and resolves once every
   // one asked for has an answer (or the asking failed). Until then, the folder's path
-  // decides (see resolveInternalDropOperation).
+  // decides the cursor (see resolveInternalDropOperation).
   function requestDiskIds(
     paths: string[],
     answers: DiskAnswers = diskAnswersRef.current,
   ): Promise<void> {
-    if (!getDiskIds) {
-      return Promise.resolve();
-    }
     const { ids, requests } = answers;
     const wanted = paths.filter((path) => !ids.has(path) && !requests.has(path));
     if (wanted.length > 0) {
@@ -968,7 +965,7 @@ export function useExplorerDragAndDrop<Start>(args: {
           });
         })
         .catch(() => {
-          // The paths decide, as before the disks could be asked.
+          // Still unknown: the paths decide the cursor, and a drop is refused.
         })
         .finally(() => {
           for (const path of wanted) {
@@ -1177,9 +1174,8 @@ export function useExplorerDragAndDrop<Start>(args: {
     }
     // The drop does what the disks say, not only what the paths suggested: a network share
     // or a disk mounted outside /Volumes is another disk, and moving there deletes the
-    // originals once copied. A disk that doesn't say in time (a share that doesn't answer)
-    // refuses the drop rather than guess.
-    let stillValid = true;
+    // originals once copied. A disk that doesn't say in time (a share that doesn't answer),
+    // or can't be read, refuses the drop rather than guess.
     if (
       !modifiers.altKey &&
       !modifiers.metaKey &&
@@ -1189,19 +1185,16 @@ export function useExplorerDragAndDrop<Start>(args: {
         requestDiskIds([...getDragFacts(session).folderPaths, path], answers),
         DISK_ANSWER_WAIT_MS,
       );
-      if (!answered) {
+      const onSameDisk = answered ? knownOnSameDisk(session, path, answers.ids) : undefined;
+      if (onSameDisk === undefined) {
         onDropUndecided?.(path);
         return;
       }
-      const onSameDisk = knownOnSameDisk(session, path, answers.ids);
-      if (onSameDisk !== undefined) {
-        operation = allowedBySource(onSameDisk ? "move" : "copy", modifiers.effectAllowed);
-        // A move where the paths suggested a copy may be one into the items' own folder.
-        stillValid = validityFor(operation) === "valid";
+      operation = allowedBySource(onSameDisk ? "move" : "copy", modifiers.effectAllowed);
+      // A move where the paths suggested a copy may be one into the items' own folder.
+      if (validityFor(operation) !== "valid") {
+        return;
       }
-    }
-    if (!stillValid) {
-      return;
     }
     await onDropItems(getDragFacts(session).sourcePaths, path, {
       operation,

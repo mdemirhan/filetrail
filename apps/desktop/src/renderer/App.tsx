@@ -1301,7 +1301,7 @@ export function App() {
       setActionNotice({
         title: "Couldn’t Drop",
         message:
-          "A disk didn’t answer in time, so File Trail couldn’t tell whether to move or copy the items. Nothing was moved or copied.",
+          "A disk didn’t answer in time or couldn’t be read, so File Trail couldn’t tell whether to move or copy the items. Nothing was moved or copied.",
       });
     },
     // Files dragged in from Finder and other apps, read from the drag as it comes in.

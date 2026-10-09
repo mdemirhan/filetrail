@@ -128,7 +128,7 @@ function getVolumeRoots(paths: readonly string[]): ReadonlySet<string> {
 export type DragFacts = {
   sourcePaths: string[];
   paths: ReadonlySet<string>;
-  // The folders that hold the items (see getSourceFolderPaths).
+  // The folders whose disks decide a move (see getSourceFolderPaths).
   folderPaths: string[];
   // The folder each item is in; null for "/".
   parentPaths: ReadonlySet<string | null>;
@@ -145,7 +145,7 @@ export function getDragFacts(session: InternalDragSession): DragFacts {
     facts = {
       sourcePaths,
       paths: new Set(sourcePaths),
-      folderPaths: getSourceFolderPaths(sourcePaths),
+      folderPaths: getSourceFolderPaths(session.sourceItems),
       parentPaths: new Set(sourcePaths.map(parentDirectoryPath)),
       containerPaths: new Set(
         session.sourceItems
@@ -199,17 +199,20 @@ export function isFileDrag(dataTransfer: Pick<DataTransfer, "types"> | null): bo
   return dataTransfer !== null && Array.from(dataTransfer.types ?? []).includes("Files");
 }
 
-// The folders that hold the dragged items: which disk an item is on is the disk of its
-// folder (a dragged symlink is the link, wherever it points).
-export function getSourceFolderPaths(sourcePaths: readonly string[]): string[] {
-  return [
-    ...new Set(
-      sourcePaths.map((path) => {
-        const index = path.lastIndexOf("/");
-        return index <= 0 ? "/" : path.slice(0, index);
-      }),
-    ),
-  ];
+// The folders whose disks decide whether the dragged items move: which disk an item is on
+// is the disk of its folder (a dragged symlink is the link, wherever it points). A dragged
+// folder is asked about too: a disk's own folder (/Volumes/USB, a share) is on that disk,
+// not on the disk of the folder it is mounted in.
+export function getSourceFolderPaths(sourceItems: readonly InternalDragItem[]): string[] {
+  const paths = new Set<string>();
+  for (const { path, kind } of sourceItems) {
+    const index = path.lastIndexOf("/");
+    paths.add(index <= 0 ? "/" : path.slice(0, index));
+    if (kind === "directory") {
+      paths.add(path);
+    }
+  }
+  return [...paths];
 }
 
 // Whether the items' folders and the target are all on one disk, from the disk ids known so

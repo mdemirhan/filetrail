@@ -266,9 +266,23 @@ describe("internalDragAndDrop", () => {
 
 describe("which disk decides a drag", () => {
   it("names the folders that hold the dragged items, once each", () => {
+    const files = ["/Users/demo/a.txt", "/Users/demo/b.txt", "/Volumes/X/c.txt", "/top"];
+    expect(getSourceFolderPaths(files.map((path) => ({ path, kind: "file" as const })))).toEqual([
+      "/Users/demo",
+      "/Volumes/X",
+      "/",
+    ]);
+  });
+
+  // A disk's own folder is on that disk, not its folder's; a link is the link, wherever it
+  // points.
+  it("names dragged folders too, but not links to folders", () => {
     expect(
-      getSourceFolderPaths(["/Users/demo/a.txt", "/Users/demo/b.txt", "/Volumes/X/c.txt", "/top"]),
-    ).toEqual(["/Users/demo", "/Volumes/X", "/"]);
+      getSourceFolderPaths([
+        { path: "/Volumes/USB", kind: "directory" },
+        { path: "/Users/demo/Link", kind: "symlink_directory" },
+      ]),
+    ).toEqual(["/Volumes", "/Volumes/USB", "/Users/demo"]);
   });
 
   it("knows the items share the target's disk only once every disk has answered", () => {
@@ -391,7 +405,7 @@ describe("a drag of many items", () => {
     expect(getDragFacts(session)).toBe(facts);
     expect(facts.sourcePaths).toEqual(session.sourceItems.map((item) => item.path));
     expect([...facts.paths]).toEqual(facts.sourcePaths);
-    expect(facts.folderPaths).toEqual(["/Users/demo", "/Applications", "/"]);
+    expect(facts.folderPaths).toEqual(["/Users/demo", "/Users/demo/Folder", "/Applications", "/"]);
     expect([...facts.parentPaths]).toEqual(["/Users/demo", "/Applications", "/"]);
     expect([...facts.containerPaths]).toEqual(["/Users/demo/Folder", "/Applications/Tool.app"]);
   });

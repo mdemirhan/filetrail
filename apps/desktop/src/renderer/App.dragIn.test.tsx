@@ -244,6 +244,28 @@ describe("dropping files from other apps", () => {
     });
   });
 
+  // A disk's own folder is on that disk, not on the startup disk it is mounted in: Finder
+  // copies it, and a move would be refused.
+  it("copies a disk dragged in by its own folder", async () => {
+    const harness = createAppHarness({ diskIds: { "/": 1, "/Volumes/USB": 2 } });
+    draggedIn(harness, [{ path: "/Volumes/USB", kind: "directory" }]);
+    renderApp(harness);
+
+    const cursor = await dropFromOtherApp(harness, await screen.findByTestId("content-pane"));
+
+    expect(cursor).toBe("copy");
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toEqual([
+        expect.objectContaining({
+          mode: "copy",
+          action: "copy_to",
+          sourcePaths: ["/Volumes/USB"],
+          destinationDirectoryPath: home,
+        }),
+      ]);
+    });
+  });
+
   it("refuses items dropped into the folder they're in, and a folder dropped into itself", async () => {
     const harness = createAppHarness();
     draggedIn(harness, [{ path: folder, kind: "directory" }]);
@@ -439,6 +461,30 @@ describe("a drop waiting for the disks to say whether it moves", () => {
 
     // A disk that doesn't say whether the drop moves or copies: nothing is guessed.
     await waitMs(1400);
+    await vi.waitFor(() => {
+      expect(screen.getByText("Couldn’t Drop")).toBeInTheDocument();
+    });
+    expect(analyzeRequests(harness)).toEqual([]);
+  });
+});
+
+describe("a drop whose disk can't be read", () => {
+  // The paths suggest a move (both under /), but a share mounted through a link may be
+  // another disk: with no answer, nothing is guessed.
+  it("is refused rather than moved", async () => {
+    const harness = createAppHarness();
+    const invoke = harness.client.invoke.bind(harness.client);
+    harness.client.invoke = ((channel, payload) =>
+      channel === "system:getDiskIds"
+        ? Promise.resolve({
+            ids: (payload as { paths: string[] }).paths.map((path) => (path === folder ? null : 1)),
+          })
+        : invoke(channel, payload)) as typeof harness.client.invoke;
+    draggedIn(harness, elsewhere);
+    renderApp(harness);
+
+    await dropFromOtherApp(harness, await screen.findByTitle(folder));
+
     await vi.waitFor(() => {
       expect(screen.getByText("Couldn’t Drop")).toBeInTheDocument();
     });
