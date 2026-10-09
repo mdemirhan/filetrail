@@ -382,23 +382,18 @@ export function createWriteOperationCoordinator(
   // go of once deleted, and all of them when the window's page is loaded again: the page
   // that asked is gone. Each is the item that was there, by its id (or, on a disk without
   // usable ids, how it looked): another item put at its path while the question was open
-  // was never asked about. A window may hold the records of several operations: its own
-  // Trash's, and those of a Trash handed to it while its own question was still open.
-  const itemsWithoutTrash = new WeakMap<WriteOperationSender, Set<Map<string, AskedItem>>>();
+  // was never asked about.
+  const itemsWithoutTrash = new WeakMap<WriteOperationSender, Map<string, AskedItem>>();
   const sendersWatchedForReload = new WeakSet<WriteOperationSender>();
   // The same records by the Trash or Delete Immediately running with them: an operation
   // handed to another window takes them along (see handOver), as that window now asks.
-  const itemsWithoutTrashByOperation = new Map<string, readonly Map<string, AskedItem>[]>();
+  const itemsWithoutTrashByOperation = new Map<string, Map<string, AskedItem>>();
 
-  // A window's new Trash replaces the window's earlier records (only what it finds may be
-  // deleted next); an operation handed to the window adds its records to the window's own.
   function rememberItemsWithoutTrash(
     sender: WriteOperationSender,
-    records: readonly Map<string, AskedItem>[],
-    how: "replacing" | "adding",
+    paths: Map<string, AskedItem>,
   ): void {
-    const held = how === "adding" ? itemsWithoutTrash.get(sender) : undefined;
-    itemsWithoutTrash.set(sender, new Set([...(held ?? []), ...records]));
+    itemsWithoutTrash.set(sender, paths);
     const events = sender as SenderLifecycleEvents;
     if (sendersWatchedForReload.has(sender) || typeof events.on !== "function") {
       return;
@@ -417,9 +412,9 @@ export function createWriteOperationCoordinator(
     const realHomePath = await readRealHomePath();
     for (const path of paths) {
       const resolved = resolve(path);
-      const asked = askedItemsAt(itemsWithoutTrash.get(sender) ?? [], resolved);
-      if (asked.length > 0) {
-        await assertStillOneAskedItem(resolved, asked);
+      const asked = itemsWithoutTrash.get(sender)?.get(resolved);
+      if (asked !== undefined) {
+        await assertStillAskedItem(resolved, asked);
         continue;
       }
       const place = await placeInTrash(resolved, realHomePath);
@@ -432,15 +427,6 @@ export function createWriteOperationCoordinator(
         );
       }
     }
-  }
-
-  // What a window was asked about the item at `path`, in any of its operations' records:
-  // two Trashes (one handed over from a window that closed) may each have asked about one.
-  function askedItemsAt(records: Iterable<Map<string, AskedItem>>, path: string): AskedItem[] {
-    return [...records].flatMap((paths) => {
-      const asked = paths.get(path);
-      return asked === undefined ? [] : [asked];
-    });
   }
 
   // The home folder as it really is, to compare real paths with.
@@ -465,22 +451,6 @@ export function createWriteOperationCoordinator(
       isInsideTrash(realPath, realHomePath)
       ? "inside"
       : "outside";
-  }
-
-  // One of the items questions were about is still at their path (see assertStillAskedItem).
-  async function assertStillOneAskedItem(
-    path: string,
-    asked: readonly AskedItem[],
-  ): Promise<"missing" | "present"> {
-    let refusal: unknown = null;
-    for (const item of asked) {
-      try {
-        return await assertStillAskedItem(path, item);
-      } catch (error) {
-        refusal = error;
-      }
-    }
-    throw refusal;
   }
 
   // The item a no-Trash question was about is still at its path (or nothing is: there is
@@ -753,10 +723,9 @@ export function createWriteOperationCoordinator(
     senderDetachers.delete(operationId);
     attachSender(operationId, successor);
     // The same records, not a copy: what a Trash finds after this is the successor's too.
-    // Added to the successor's own: a question it has open about other items still stands.
     const withoutTrash = itemsWithoutTrashByOperation.get(operationId);
     if (withoutTrash !== undefined) {
-      rememberItemsWithoutTrash(successor, withoutTrash, "adding");
+      rememberItemsWithoutTrash(successor, withoutTrash);
     }
     const clearsCutClipboard = copyPasteRequests.get(operationId)?.clearsCutClipboard;
     pendingAdoptions.set(successor, {
@@ -1399,8 +1368,8 @@ export function createWriteOperationCoordinator(
     let cancelled = false;
     // Only what this Trash finds without a Trash may be deleted next.
     const withoutTrash = new Map<string, AskedItem>();
-    rememberItemsWithoutTrash(sender, [withoutTrash], "replacing");
-    itemsWithoutTrashByOperation.set(operationId, [withoutTrash]);
+    rememberItemsWithoutTrash(sender, withoutTrash);
+    itemsWithoutTrashByOperation.set(operationId, withoutTrash);
     const removedItems: RemovedItem[] = [];
     // One unit per item, so an item put back from the Trash doesn't depend on the others.
     const trashedUnits: UndoUnit[] = [];
@@ -1558,8 +1527,8 @@ export function createWriteOperationCoordinator(
     const realHomePath = await readRealHomePath();
     // What this window was asked about, kept for the whole operation: a reload of the
     // page lets go of its records, and a window this is handed to takes them along.
-    const askedItems = [...(itemsWithoutTrash.get(sender) ?? [])];
-    if (askedItems.length > 0) {
+    const askedItems = itemsWithoutTrash.get(sender);
+    if (askedItems !== undefined) {
       itemsWithoutTrashByOperation.set(operationId, askedItems);
     }
     for (const [index, path] of paths.entries()) {
@@ -1586,15 +1555,15 @@ export function createWriteOperationCoordinator(
         const before = fs.itemSize ? await readItemSize(fs.itemSize, path) : undefined;
         // Checked again just before deleting: the question may have been open a while. An
         // item gone already has nothing left to delete.
-        const asked = askedItemsAt(askedItems, path);
+        const asked = askedItems?.get(path);
         const gone =
-          asked.length > 0
-            ? (await assertStillOneAskedItem(path, asked)) === "missing"
+          asked !== undefined
+            ? (await assertStillAskedItem(path, asked)) === "missing"
             : (await lstatUnlessMissing(path, fs.lstat)) === "missing";
         // A folder in the Trash swapped for a link since it was checked would lead the
         // delete out of it, so the Trash is looked at again right before. (An item asked
         // about isn't in a Trash: it was checked by its id above instead.)
-        if (!gone && asked.length === 0 && (await placeInTrash(path, realHomePath)) !== "inside") {
+        if (!gone && asked === undefined && (await placeInTrash(path, realHomePath)) !== "inside") {
           throw new Error(`“${basename(path)}” is no longer in the Trash, so it wasn't deleted.`);
         }
         if (!gone) {
@@ -1609,9 +1578,7 @@ export function createWriteOperationCoordinator(
           }
           deletingBegan = true;
         }
-        for (const paths of askedItems) {
-          paths.delete(path);
-        }
+        askedItems?.delete(path);
         if (before !== undefined) {
           removedItems.push({
             path,
