@@ -294,3 +294,95 @@ describe("a large file's copy cut short by a crash", () => {
     expect(fileSystem.readNode(SOURCE)?.size).toBe(JOURNALED_FILE_BYTES);
   });
 });
+
+describe("a file that failed inside a folder being copied", () => {
+  // A folder on another disk with two files; copying "a.txt" writes part of it, then fails.
+  async function copyFolderWithFailingFile(options: { partRemovable: boolean }) {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source": { kind: "directory", dev: 2 },
+      "/source/dir": { kind: "directory", dev: 2 },
+      "/source/dir/a.txt": { kind: "file", size: 10, dev: 2 },
+      "/source/dir/b.txt": { kind: "file", size: 10, dev: 2 },
+      "/target": { kind: "directory" },
+    });
+    fileSystem.enableRename();
+    const written: string[] = [];
+    fileSystem.copyFileStreamImpl = async (source, destination) => {
+      written.push(destination);
+      const fails = source.endsWith("/a.txt");
+      fileSystem.addFile(destination, { size: fails ? 4 : 10 });
+      if (fails) {
+        throw fsError("EIO", destination);
+      }
+    };
+    if (!options.partRemovable) {
+      fileSystem.rmImpl = async (path, rmOptions) => {
+        if (path.endsWith("/a.txt")) {
+          throw fsError("EIO", path);
+        }
+        fileSystem.rmImpl = null;
+        try {
+          await fileSystem.rm(path, rmOptions);
+        } finally {
+          fileSystem.rmImpl = impl;
+        }
+      };
+    }
+    const impl = fileSystem.rmImpl;
+    const report = await buildCopyPasteAnalysisReport({
+      analysisId: "analysis-1",
+      request: { mode: "copy", sourcePaths: ["/source/dir"], destinationDirectoryPath: "/target" },
+      fileSystem,
+      thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 1e12 },
+    });
+    const events: CopyPasteProgressEvent[] = [];
+    await executeCopyPasteFromAnalysis({
+      operationId: "op-1",
+      report,
+      mode: "copy",
+      policy: SKIP,
+      fileSystem,
+      now: () => new Date("2026-10-09T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes: await resolveAnalysisWithPolicy({ report, policy: SKIP, fileSystem }),
+      emit: (event) => events.push(event),
+      requestResolution: async () => null,
+    });
+    const result = events.at(-1)?.result;
+    if (!result) {
+      throw new Error("The paste didn't finish.");
+    }
+    return { fileSystem, result, written };
+  }
+
+  it("is written straight into the hidden folder, which is put in place without it", async () => {
+    const { fileSystem, result, written } = await copyFolderWithFailingFile({
+      partRemovable: true,
+    });
+
+    // No hidden name of its own inside the folder's.
+    expect(written).toEqual([
+      expect.stringMatching(/^\/target\/\.dir\.filetrail-[0-9a-f]{8}\/a\.txt$/u),
+      expect.stringMatching(/^\/target\/\.dir\.filetrail-[0-9a-f]{8}\/b\.txt$/u),
+    ]);
+    expect(result.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourcePath: "/source/dir/a.txt", status: "failed" }),
+      ]),
+    );
+    expect(fileSystem.exists("/target/dir/a.txt")).toBe(false);
+    expect(fileSystem.readNode("/target/dir/b.txt")?.size).toBe(10);
+    expect(hiddenItems(fileSystem)).toEqual([]);
+  });
+
+  it("keeps the whole folder from being put in place when its part can't be removed", async () => {
+    const { fileSystem, result } = await copyFolderWithFailingFile({ partRemovable: false });
+
+    expect(result.status).toBe("failed");
+    expect(result.items).toEqual([
+      expect.objectContaining({ sourcePath: "/source/dir", status: "failed" }),
+    ]);
+    // The cut-short "a.txt" never shows under its name.
+    expect(fileSystem.exists("/target/dir")).toBe(false);
+  });
+});

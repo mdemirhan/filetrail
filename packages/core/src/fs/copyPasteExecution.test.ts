@@ -4441,12 +4441,10 @@ describe("copyPasteExecution", () => {
       const result = await run({ fileSystem, mode: "cut", sourcePaths: ["/source/dir"] });
 
       expect(result.status).toBe("completed");
-      // The folder is built under a hidden name, and its file under one of its own in it;
-      // the folder's own metadata goes on once it has its name.
+      // The folder is built under a hidden name, its file written straight in; the folder's
+      // own metadata goes on once it has its name.
       expect(order).toEqual([
-        expect.stringMatching(
-          /^file \/target\/\.dir\.filetrail-[0-9a-f]+\/\.a\.txt\.filetrail-[0-9a-f]+$/u,
-        ),
+        expect.stringMatching(/^file \/target\/\.dir\.filetrail-[0-9a-f]+\/a\.txt$/u),
         "metadata /source/dir -> /target/dir",
       ]);
       expect(expectNode(fileSystem, "/target/dir/a.txt").size).toBe(1);

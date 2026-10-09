@@ -2279,6 +2279,10 @@ async function copyFileContents(
   onProgress?: (copiedBytes: number) => void,
 ): Promise<void> {
   const { fileSystem } = context;
+  if (context.folderMadeAt !== null) {
+    await writeIntoHiddenFolder(context, sourcePath, targetPath);
+    return;
+  }
   if (!fileSystem.renameExclusive && !fileSystem.rename) {
     await writeFileContents(context, sourcePath, targetPath, onProgress);
     return;
@@ -2323,6 +2327,32 @@ async function copyFileContents(
     if (journal !== null && journalId !== null && (await isGone(fileSystem, partialPath))) {
       await journal.remove(journalId).catch(() => undefined);
     }
+  }
+}
+
+// Inside a folder built under a hidden name, a file is written straight under its name: the
+// folder is put in place only once complete, and a crash or Stop takes it away whole. A
+// file that failed is cleared away; should any of it stay (the disk refused, or can't say),
+// the folder isn't put in place either, or the cut-short file would pass for the whole one.
+async function writeIntoHiddenFolder(
+  context: ExecutionContext,
+  sourcePath: string,
+  targetPath: string,
+): Promise<void> {
+  try {
+    await writeFileContents(context, sourcePath, targetPath);
+  } catch (error) {
+    if (error instanceof DestinationTakenError || isAbortError(error) || context.signal.aborted) {
+      throw error;
+    }
+    const { fileSystem } = context;
+    if (!(await isGone(fileSystem, targetPath))) {
+      await removeStagedItem(fileSystem, targetPath).catch(() => undefined);
+      if (!(await isGone(fileSystem, targetPath))) {
+        throw new StagingCleanupError(error);
+      }
+    }
+    throw error;
   }
 }
 
