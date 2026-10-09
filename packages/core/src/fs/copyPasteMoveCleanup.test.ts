@@ -216,6 +216,45 @@ describe("a move to another disk removes an original only once its copy is check
     expect(fileSystem.exists("/source/dir")).toBe(false);
   });
 
+  it("removes a folder saved anew as a file once the person goes on with it", async () => {
+    const fileSystem = folderOnAnotherDisk();
+    fileSystem.addDirectory("/source/dir/sub", { dev: 2 });
+    fileSystem.addFile("/source/dir/sub/c.txt", { size: 1, dev: 2 });
+    const report = await analyze(fileSystem, ["/source/dir"]);
+    fileSystem.nodes.delete("/source/dir/sub/c.txt");
+    fileSystem.nodes.delete("/source/dir/sub");
+    fileSystem.addFile("/source/dir/sub", { size: 7, dev: 2 });
+
+    const result = await move(fileSystem, report, () => "overwrite");
+
+    expect(result.status).toBe("completed");
+    expect(result.items).toContainEqual(
+      expect.objectContaining({ sourcePath: "/source/dir/sub", sourceKind: "file" }),
+    );
+    expect(fileSystem.readNode("/target/dir/sub")?.size).toBe(7);
+    expect(fileSystem.exists("/source/dir")).toBe(false);
+  });
+
+  it("removes a file saved anew as a folder once the person goes on with it", async () => {
+    const fileSystem = folderOnAnotherDisk();
+    const report = await analyze(fileSystem, ["/source/dir"]);
+    fileSystem.nodes.delete("/source/dir/a.txt");
+    fileSystem.addDirectory("/source/dir/a.txt", { dev: 2 });
+    fileSystem.addFile("/source/dir/a.txt/inside.txt", { size: 2, dev: 2 });
+
+    const result = await move(fileSystem, report, () => "overwrite");
+
+    expect(result.status).toBe("completed");
+    expect(result.items).toContainEqual(
+      expect.objectContaining({ sourcePath: "/source/dir/a.txt/inside.txt", status: "completed" }),
+    );
+    expect(result.items).not.toContainEqual(
+      expect.objectContaining({ sourcePath: "/source/dir/a.txt", sourceKind: "file" }),
+    );
+    expect(fileSystem.readNode("/target/dir/a.txt/inside.txt")?.size).toBe(2);
+    expect(fileSystem.exists("/source/dir")).toBe(false);
+  });
+
   it("keeps an original folder whose own metadata its copy couldn't take", async () => {
     const fileSystem = folderOnAnotherDisk();
     fileSystem.addDirectory("/source/dir/sub", { dev: 2 });

@@ -285,7 +285,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     context.undo.unit = [];
     try {
       const outcome = await executeResolvedNode(context, node);
-      itemResults.push(outcomeItemResult(node, outcome));
+      itemResults.push(outcomeItemResult(asExecuted(context, node), outcome));
       // Surface children (files, and folders that failed) in the result.
       appendItems(itemResults, outcome.childItems);
     } catch (error) {
@@ -495,6 +495,12 @@ function itemResult(
     error,
     skipReason,
   };
+}
+
+// The item as it was copied: the one the person went on with when its original changed
+// after the review, otherwise the one the review saw.
+function asExecuted(context: ExecutionContext, node: ResolvedCopyPasteNode): ResolvedCopyPasteNode {
+  return context.acceptedNodes.get(node.node.sourcePath) ?? node;
 }
 
 function outcomeItemResult(
@@ -1316,6 +1322,8 @@ async function executeDirectoryNode(
         childItems: [],
       };
     }
+    // An item saved anew as another kind (a folder now a file) is reported as it was copied.
+    const executedChild = asExecuted(context, child);
     if (childResult.itemStatus === "failed") {
       hasChildFailure = true;
     }
@@ -1329,11 +1337,11 @@ async function executeDirectoryNode(
     // Bubble up file items, and folders that failed themselves or were skipped (a move
     // leaves those where they are), into the result.
     if (
-      child.node.sourceKind !== "directory" ||
+      executedChild.node.sourceKind !== "directory" ||
       childResult.error !== null ||
       childResult.itemStatus === "skipped"
     ) {
-      bubbledChildItems.push(outcomeItemResult(child, childResult));
+      bubbledChildItems.push(outcomeItemResult(executedChild, childResult));
     }
     if (childResult.childItems.length > 0) {
       bubbledChildItems.push(childResult.childItems);
@@ -1817,7 +1825,7 @@ async function removeMovedSources(
   const updatedItems = new Map<string, CopyPasteItemResult>();
   const nestedFolderFailures: CopyPasteItemResult[] = [];
   const removeTree = async (reviewed: ResolvedCopyPasteNode): Promise<string | null> => {
-    const current = context.acceptedNodes.get(reviewed.node.sourcePath) ?? reviewed;
+    const current = asExecuted(context, reviewed);
     if (current.node.sourceKind !== "directory") {
       if (itemsBySource.get(current.node.sourcePath)?.status !== "completed") {
         return null;
