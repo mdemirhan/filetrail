@@ -1116,3 +1116,46 @@ describe("deleting immediately what a disk without a Trash couldn't take", () =>
     await coordinator.shutdown();
   });
 });
+
+describe("looking at what an Undo would ask", () => {
+  // A share that stops answering: ⌘Z is refused in time, and pressing it again while it
+  // looks does nothing more.
+  it("refuses when a disk doesn't answer, and does nothing more for a press meanwhile", async () => {
+    await writeFile(join(root, "a.txt"), "a");
+    const history = createUndoHistory();
+    const fs = createOriginalWriteOperationFs(async (path) => path);
+    let hanging = false;
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub().writeService,
+      {
+        ...fs,
+        lstat: (path) =>
+          hanging && path.endsWith("b.txt") ? new Promise(() => undefined) : fs.lstat(path),
+      },
+      { homePath: root, recordUndo: history.record, undoHistory: history, undoCheckWithinMs: 20 },
+    );
+    const window = createWindow();
+    const rename = await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: join(root, "a.txt"), destinationName: "b.txt" },
+      { sender: window },
+    );
+    await waitForEnd(window, rename.operationId);
+    hanging = true;
+
+    const first = coordinator.handlers["undo:prepare"]({ direction: "undo" });
+    expect(await coordinator.handlers["undo:prepare"]({ direction: "undo" })).toMatchObject({
+      ticket: null,
+      refusal: "nothing",
+    });
+    await expect(first).rejects.toThrow(
+      "A disk didn't answer while Undo looked at its items. Choose Undo again once it does.",
+    );
+
+    hanging = false;
+    expect(await coordinator.handlers["undo:prepare"]({ direction: "undo" })).toMatchObject({
+      ticket: expect.any(String),
+      refusal: null,
+    });
+    await coordinator.shutdown();
+  });
+});

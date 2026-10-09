@@ -146,9 +146,10 @@ export const SHUTDOWN_WAIT_LIMIT_MS = 15_000;
 const TRASH_FOLDER_REFUSAL =
   "The Trash folder is a protected system directory and cannot be modified.";
 
-// How long the disks may take to answer when an Undo that is starting looks again at what
-// it would ask. It holds the write slot meanwhile, and a disk that doesn't answer (a
-// network share gone away) mustn't keep every other operation waiting.
+// How long the disks may take to answer when an Undo looks at what it would ask, when it is
+// chosen and again as it starts. As it starts it holds the write slot, and a disk that
+// doesn't answer (a network share gone away) mustn't keep every other operation waiting;
+// when chosen, ⌘Z mustn't seem to do nothing.
 export const UNDO_CHECK_WITHIN_MS = 10_000;
 
 // Answer returned to a request that isn't allowed to act on an operation (unknown id, or
@@ -219,7 +220,7 @@ export function createWriteOperationCoordinator(
     // The window an operation goes to when the one that started it closes or its page
     // goes away; null when there is none (the app is quitting), and it is cancelled.
     successorOf?: (sender: WriteOperationSender) => WriteOperationSender | null;
-    // How long an Undo's last look before it starts may take (tests use their own).
+    // How long an Undo's looks at its items may take (tests use their own).
     undoCheckWithinMs?: number;
     // Told after the Trash was emptied, or tried to be: every window forgets the sizes it
     // shows of the Trash and of what holds it.
@@ -280,6 +281,8 @@ export function createWriteOperationCoordinator(
     }
   >();
   let undoTicketCount = 0;
+  // An Undo (or Redo) being looked at: ⌘Z pressed again meanwhile does nothing more.
+  let undoPreparing = false;
 
   // ~/.Trash is a protected system directory — it must never be deleted, renamed,
   // moved, or trashed.  Items *inside* Trash are fine; this only guards the
@@ -2132,6 +2135,9 @@ export function createWriteOperationCoordinator(
         if (closing || activeWriteOperationId !== null) {
           return refused("busy");
         }
+        if (undoPreparing) {
+          return refused("nothing");
+        }
         const entry = history?.top(payload.direction) ?? null;
         if (!history || !entry) {
           return refused(
@@ -2141,7 +2147,16 @@ export function createWriteOperationCoordinator(
         const generation = history.generation();
         undoTicketCount += 1;
         const ticket = `${payload.direction}:${entry.id}:${generation}:${undoTicketCount}`;
-        const questions = await findQuestions(fs, entry.units);
+        undoPreparing = true;
+        const questions = await answerWithin(
+          findQuestions(fs, entry.units),
+          options.undoCheckWithinMs ?? UNDO_CHECK_WITHIN_MS,
+        ).finally(() => {
+          undoPreparing = false;
+        });
+        if (questions === null) {
+          throw new Error(undoNotAnswered(payload.direction));
+        }
         // Only tickets for the history as it is now can still be started.
         for (const [asked, look] of undoQuestionsAsked) {
           if (look.generation !== history.generation()) {
@@ -2200,10 +2215,7 @@ export function createWriteOperationCoordinator(
         );
         const started = entryAsked();
         if (now === null) {
-          const command = started.direction === "undo" ? "Undo" : "Redo";
-          throw new Error(
-            `A disk didn't answer while ${command} looked at its items. Choose ${command} again once it does.`,
-          );
+          throw new Error(undoNotAnswered(started.direction));
         }
         const unasked = describeUnaskedQuestion(asked, now, started.direction);
         if (unasked !== null) {
@@ -2508,6 +2520,12 @@ async function answerWithin<T>(promise: Promise<T>, ms: number): Promise<T | nul
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Why an Undo (or Redo) was refused when a disk didn't answer its look at the items.
+function undoNotAnswered(direction: UndoDirection): string {
+  const command = direction === "undo" ? "Undo" : "Redo";
+  return `A disk didn't answer while ${command} looked at its items. Choose ${command} again once it does.`;
 }
 
 // What an Undo (or Redo) would ask now that it didn't ask when it was chosen, as the
