@@ -149,6 +149,26 @@ describe("a move to another disk removes an original only once its copy is check
     ]);
   });
 
+  it("keeps the original of a single file whose copy was replaced by one as large", async () => {
+    const fileSystem = folderOnAnotherDisk();
+    const report = await analyze(fileSystem, ["/source/dir/a.txt"]);
+    // Another app puts an item as large in the copy's place as soon as it has its name.
+    fileSystem.renameImpl = async (from, to) => {
+      await fileSystem.renameDirectly(from, to);
+      if (to === "/target/a.txt") {
+        fileSystem.nodes.delete("/target/a.txt");
+        fileSystem.addFile("/target/a.txt", { size: 5 });
+      }
+    };
+
+    const result = await move(fileSystem, report);
+
+    expect(fileSystem.exists("/source/dir/a.txt")).toBe(true);
+    expect(result.items).toEqual([
+      expect.objectContaining({ status: "failed", error: COPY_NOT_WHOLE }),
+    ]);
+  });
+
   it("removes an original that changed after the review once the person goes on with it", async () => {
     const fileSystem = folderOnAnotherDisk();
     const report = await analyze(fileSystem, ["/source/dir"]);

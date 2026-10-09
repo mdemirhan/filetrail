@@ -1117,23 +1117,22 @@ async function executeLeafNode(
   context: ExecutionContext,
   currentNode: ResolvedCopyPasteNode,
 ): Promise<ExecuteNodeResult> {
-  await writeLeaf(context, currentNode, currentNode.destinationPath);
+  const written = await writeLeaf(context, currentNode, currentNode.destinationPath);
   noteChanged(context);
   if (context.mode === "copy") {
     await recordCreated(context, currentNode, currentNode.destinationPath);
   }
   countLeafProgress(context, currentNode);
   let deleteError: string | null = null;
-  if (context.stagingFor === "cut") {
-    context.copiedForMove.set(currentNode.node.sourcePath, {
-      path: currentNode.destinationPath,
-      written: await captureFingerprint(context.fileSystem, currentNode.destinationPath),
-      source: currentNode.node.sourceFingerprint,
-    });
+  const copied: CopiedItem | null =
+    written === null
+      ? null
+      : { path: currentNode.destinationPath, written, source: currentNode.node.sourceFingerprint };
+  if (context.stagingFor === "cut" && copied !== null) {
+    context.copiedForMove.set(currentNode.node.sourcePath, copied);
   }
-  if (context.mode === "cut") {
-    const copy = await captureFingerprint(context.fileSystem, currentNode.destinationPath);
-    deleteError = copyMatchesSource(copy, currentNode.node.sourceFingerprint)
+  if (context.mode === "cut" && copied !== null) {
+    deleteError = (await copyStillWhole(context.fileSystem, copied.path, copied))
       ? await tryDeleteMovedSource(
           currentNode.node.sourcePath,
           currentNode.node.sourceFingerprint,
@@ -1158,11 +1157,15 @@ function countLeafProgress(context: ExecutionContext, node: ResolvedCopyPasteNod
   }
 }
 
+// Writes the file or link `node` at `targetPath`. For a move, returns the item written, as
+// it was before it had its name when it was written under another: what is checked to be
+// still there before the original is removed. Null for a copy, which needs no such look.
 async function writeLeaf(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
   targetPath: string,
-): Promise<void> {
+): Promise<NodeFingerprint | null> {
+  const moving = isMoving(context);
   if (node.node.sourceKind === "symlink") {
     if (context.fileSystem.copyFile) {
       // copyfile(3) makes the link itself (never what it points to), with its tags, flags
@@ -1174,7 +1177,7 @@ async function writeLeaf(
           ? new DestinationTakenError(error)
           : await explainMissingFolder(context.fileSystem, targetPath, error);
       }
-      return;
+      return moving ? captureFingerprint(context.fileSystem, targetPath) : null;
     }
     const linkTarget = await context.fileSystem.readlink(node.node.sourcePath);
     try {
@@ -1184,17 +1187,20 @@ async function writeLeaf(
         ? new DestinationTakenError(error)
         : await explainMissingFolder(context.fileSystem, targetPath, error);
     }
+    const link = moving ? await captureFingerprint(context.fileSystem, targetPath) : null;
     await preserveSymlinkTimestamps(
       context.fileSystem,
       targetPath,
       node.node.sourceFingerprint.mtimeMs,
     );
-    return;
+    return link;
   }
-  await copyFileContents(context, node.node.sourcePath, targetPath);
+  const written = await copyFileContents(context, node.node.sourcePath, targetPath);
+  const file =
+    written ?? (moving ? await captureFingerprint(context.fileSystem, targetPath) : null);
   if (context.fileSystem.copyFile) {
     await restoreDroppedFileMetadata(context.fileSystem, targetPath, node.node.sourceFingerprint);
-    return;
+    return file;
   }
   // A copy that worked isn't reported as failed over its mode or dates.
   await preserveModeIfSupported(
@@ -1207,6 +1213,7 @@ async function writeLeaf(
     targetPath,
     node.node.sourceFingerprint.mtimeMs,
   ).catch(() => undefined);
+  return file;
 }
 
 // Native copyFile (copyfile(3) COPYFILE_ALL) carries the mode, flags and dates, but some
@@ -1381,7 +1388,7 @@ async function applyDirectoryMetadata(
 ): Promise<void> {
   const { fileSystem } = context;
   const { sourcePath, sourceFingerprint } = node.node;
-  const moving = context.mode === "cut" || context.stagingFor === "cut";
+  const moving = isMoving(context);
   if (fileSystem.copyMetadata) {
     try {
       // Tags, the custom-icon flag, ACLs and flags along with the mode and dates.
@@ -2287,15 +2294,17 @@ const MISSING_FINGERPRINT: NodeFingerprint = {
 // A file is written under a hidden name next to its place, and takes its name only once it
 // is complete: quitting, a crash or a disk that stops answering part way never leaves a
 // cut-short file under the real name, where it would pass for the whole one.
+// Copies a file's contents under a hidden name, then gives it its name. For a move, returns
+// the copy as it was written (see writeLeaf).
 async function copyFileContents(
   context: ExecutionContext,
   sourcePath: string,
   targetPath: string,
-): Promise<void> {
+): Promise<NodeFingerprint | null> {
   const { fileSystem } = context;
   if (!fileSystem.renameExclusive && !fileSystem.rename) {
     await writeFileContents(context, sourcePath, targetPath);
-    return;
+    return null;
   }
   if ((await captureFingerprint(fileSystem, targetPath)).exists) {
     throw new DestinationTakenError(
@@ -2348,6 +2357,9 @@ async function copyFileContents(
   }
   try {
     await writeFileContents(context, sourcePath, partialPath);
+    // A move's copy as written, before it has its name: an item put there in its place
+    // after that is never taken for it.
+    const written = isMoving(context) ? await captureFingerprint(fileSystem, partialPath) : null;
     try {
       // A copy of a locked file is locked too, and a locked file can't be renamed.
       const flags = await unlockForMove(fileSystem, partialPath);
@@ -2355,6 +2367,7 @@ async function copyFileContents(
       if (flags !== null) {
         await fileSystem.setFlags?.(targetPath, flags).catch(() => undefined);
       }
+      return written;
     } catch (error) {
       await removeStagedItem(fileSystem, partialPath).catch(() => undefined);
       throw errorCode(error) === "EEXIST"
@@ -2863,6 +2876,12 @@ async function assertDestinationDoesNotContainSource(
   if (relation === "contains") {
     throw new Error(`Can't replace “${name}” because it contains the item being pasted.`);
   }
+}
+
+// Whether this paste moves its items, or builds a copy that a move then takes the originals'
+// place with.
+function isMoving(context: ExecutionContext): boolean {
+  return context.mode === "cut" || context.stagingFor === "cut";
 }
 
 const COPY_NOT_WHOLE_MESSAGE =
