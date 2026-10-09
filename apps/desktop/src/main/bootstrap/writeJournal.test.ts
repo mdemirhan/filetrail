@@ -655,6 +655,60 @@ describe("recoverWrites", () => {
     expect(reopened.entries()).toEqual([]);
   });
 
+  // Items renamed from search results, one on a network share that hangs: the start goes
+  // on, and nothing of the entry is put back until every folder answers.
+  it("leaves a rename of several for later when any of its folders doesn't answer", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const journal = await openWriteJournal(join(testDir, "replace-journal.json"));
+      const entry = {
+        kind: "batch_rename" as const,
+        id: "rename",
+        items: [
+          {
+            temporaryPath: "/Users/me/Photos/.filetrail-rename-aaaaaaaaaaaa",
+            originalPath: "/Users/me/Photos/a.jpg",
+            newPath: "/Users/me/Photos/b.jpg",
+          },
+          {
+            temporaryPath: "/Volumes/Share/Photos/.filetrail-rename-bbbbbbbbbbbb",
+            originalPath: "/Volumes/Share/Photos/c.jpg",
+            newPath: "/Volumes/Share/Photos/d.jpg",
+          },
+        ],
+      };
+      await journal.add(entry);
+      const renameExclusive = vi.fn(async () => undefined);
+      const fileSystem = {
+        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        lstat: (path: string) =>
+          path.startsWith("/Volumes/Share")
+            ? new Promise<never>(() => undefined)
+            : Promise.resolve(lstatSync(testDir)),
+        renameExclusive,
+      };
+
+      let settled = false;
+      const recovered = recoverWrites(
+        journal,
+        fileSystem,
+        { info: vi.fn(), error: vi.fn() },
+        { answerWithinMs: 1_000 },
+      ).then((report) => {
+        settled = true;
+        return report;
+      });
+      await vi.advanceTimersByTimeAsync(1_001);
+
+      expect(settled).toBe(true);
+      expect((await recovered).notices).toEqual([]);
+      expect(renameExclusive).not.toHaveBeenCalled();
+      expect(journal.entries()).toEqual([entry]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reads both kinds of entry back, and leaves out what it can't read", async () => {
     const filePath = join(testDir, "replace-journal.json");
     await writeFile(

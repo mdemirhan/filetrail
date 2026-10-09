@@ -13,7 +13,7 @@ import {
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
 import { createOriginalWriteOperationFs } from "../originalFileSystem";
-import { clearResponseCaches } from "./responseCache";
+import { clearResponseCaches, noteWriteEnded, noteWriteStarting } from "./responseCache";
 import { createUndoHistory } from "./undoHistory";
 import {
   type FinishedWrite,
@@ -22,9 +22,15 @@ import {
 } from "./writeOperations";
 
 // Forgetting cached listings tells the folder sizes, which can go wrong; the tests make it.
+// The folder sizes are also told when a write starts and ends, which the tests count.
 vi.mock("./responseCache", async (importOriginal) => {
   const original = await importOriginal<typeof import("./responseCache")>();
-  return { ...original, clearResponseCaches: vi.fn(original.clearResponseCaches) };
+  return {
+    ...original,
+    clearResponseCaches: vi.fn(original.clearResponseCaches),
+    noteWriteStarting: vi.fn(original.noteWriteStarting),
+    noteWriteEnded: vi.fn(original.noteWriteEnded),
+  };
 });
 
 // Operations and copy analyses with several windows open: each belongs to the window that
@@ -846,6 +852,31 @@ describe("an operation that stops unexpectedly", () => {
     await coordinator.shutdown();
   });
 
+  // A paste the write service refuses to start never ends: the folder sizes stop noting
+  // what is stored, as they would at its end.
+  it("tells the folder sizes a paste that couldn't start is over", async () => {
+    const { writeService } = createWriteServiceStub();
+    const coordinator = createWriteOperationCoordinator(
+      writeService,
+      createOriginalWriteOperationFs(async (path) => path),
+      { homePath: root },
+    );
+    const window = createWindow();
+    await analyze(coordinator, window);
+    writeService.startCopyPaste.mockImplementationOnce(() => {
+      throw new Error("The analysis broke.");
+    });
+    vi.mocked(noteWriteStarting).mockClear();
+    vi.mocked(noteWriteEnded).mockClear();
+
+    await expect(paste(coordinator, window)).rejects.toThrow("The analysis broke.");
+
+    expect(noteWriteStarting).toHaveBeenCalledTimes(1);
+    expect(noteWriteEnded).toHaveBeenCalledTimes(1);
+    expect(coordinator.getActiveOperation()).toBeNull();
+    await coordinator.shutdown();
+  });
+
   it("ends a paste, and frees the slot, when forgetting what it changed goes wrong", async () => {
     const { writeService, emit } = createWriteServiceStub();
     const finished: FinishedWrite[] = [];
@@ -985,6 +1016,59 @@ describe("deleting immediately what a disk without a Trash couldn't take", () =>
     await expect(deleteImmediately(first, "/Volumes/Share/a.txt")).rejects.toThrow(
       "isn't in the Trash",
     );
+    await coordinator.shutdown();
+  });
+
+  // The window that moved items to the Trash closes while it runs: the window it goes on in
+  // is told what couldn't go, and may delete it, found before the handover or after.
+  it("goes to the window a Trash is handed to", async () => {
+    const rm = vi.fn(async () => undefined);
+    let letBGo: () => void = () => undefined;
+    const bTried = new Promise<void>((resolveTried) => {
+      letBGo = resolveTried;
+    });
+    let bStarted: () => void = () => undefined;
+    const bStarting = new Promise<void>((resolveStarting) => {
+      bStarted = resolveStarting;
+    });
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub().writeService,
+      {
+        lstat: async (path) => ({ isDirectory: () => false, dev: 1, ino: path.length }),
+        stat: async () => ({ isDirectory: () => true }),
+        mkdir: async () => undefined,
+        rename: async () => undefined,
+        renameExclusive: async () => undefined,
+        rm,
+        trash: async (path) => {
+          if (path.endsWith("b.txt")) {
+            bStarted();
+            await bTried;
+          }
+          throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+        },
+      },
+      { homePath: "/Users/demo", successorOf: () => second },
+    );
+    const first = createWindow();
+    const second = createWindow();
+
+    const { operationId } = await coordinator.handlers["writeOperation:trash"](
+      { paths: ["/Volumes/Share/a.txt", "/Volumes/Share/b.txt"] },
+      { sender: first },
+    );
+    await bStarting;
+    close(first);
+    letBGo();
+    const end = await waitForEnd(second, operationId);
+    expect(end.result?.items.map((item) => item.noTrash)).toEqual([true, true]);
+
+    const deleting = await coordinator.handlers["writeOperation:deleteImmediately"](
+      { paths: ["/Volumes/Share/a.txt", "/Volumes/Share/b.txt"] },
+      { sender: second },
+    );
+    expect((await waitForEnd(second, deleting.operationId)).status).toBe("completed");
+    expect(rm).toHaveBeenCalledTimes(2);
     await coordinator.shutdown();
   });
 

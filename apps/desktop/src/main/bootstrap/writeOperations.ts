@@ -385,6 +385,9 @@ export function createWriteOperationCoordinator(
   // was never asked about.
   const itemsWithoutTrash = new WeakMap<WriteOperationSender, Map<string, AskedItem>>();
   const sendersWatchedForReload = new WeakSet<WriteOperationSender>();
+  // The same records by the Trash or Delete Immediately running with them: an operation
+  // handed to another window takes them along (see handOver), as that window now asks.
+  const itemsWithoutTrashByOperation = new Map<string, Map<string, AskedItem>>();
 
   function rememberItemsWithoutTrash(
     sender: WriteOperationSender,
@@ -406,8 +409,7 @@ export function createWriteOperationCoordinator(
     paths: readonly string[],
     sender: WriteOperationSender,
   ): Promise<void> {
-    // The home folder as it really is, to compare real paths with.
-    const realHomePath = fs.realpath ? await fs.realpath(homePath).catch(() => homePath) : homePath;
+    const realHomePath = await readRealHomePath();
     for (const path of paths) {
       const resolved = resolve(path);
       const asked = itemsWithoutTrash.get(sender)?.get(resolved);
@@ -415,24 +417,40 @@ export function createWriteOperationCoordinator(
         await assertStillAskedItem(resolved, asked);
         continue;
       }
-      const folder = fs.realpath
-        ? await fs.realpath(dirname(resolved)).catch(() => null)
-        : dirname(resolved);
-      const realPath = folder === null ? null : join(folder, basename(resolved));
-      // A link to a Trash folder leads to the folder itself.
-      if (realPath !== null && isTrashFolder(realPath, realHomePath)) {
+      const place = await placeInTrash(resolved, realHomePath);
+      if (place === "trash_folder") {
         throw new Error(TRASH_FOLDER_REFUSAL);
       }
-      if (
-        realPath === null ||
-        !isInsideTrash(resolved, homePath) ||
-        !isInsideTrash(realPath, realHomePath)
-      ) {
+      if (place === "outside") {
         throw new Error(
           `“${basename(resolved)}” isn't in the Trash, so it can't be deleted immediately.`,
         );
       }
     }
+  }
+
+  // The home folder as it really is, to compare real paths with.
+  async function readRealHomePath(): Promise<string> {
+    return fs.realpath ? await fs.realpath(homePath).catch(() => homePath) : homePath;
+  }
+
+  // Where `path` really is: inside a Trash, a Trash folder itself (a link to one leads to
+  // the folder), or outside, its folder looked up through any symlinks. A folder that
+  // can't be looked up counts as outside.
+  async function placeInTrash(
+    path: string,
+    realHomePath: string,
+  ): Promise<"inside" | "trash_folder" | "outside"> {
+    const folder = fs.realpath ? await fs.realpath(dirname(path)).catch(() => null) : dirname(path);
+    const realPath = folder === null ? null : join(folder, basename(path));
+    if (realPath !== null && isTrashFolder(realPath, realHomePath)) {
+      return "trash_folder";
+    }
+    return realPath !== null &&
+      isInsideTrash(path, homePath) &&
+      isInsideTrash(realPath, realHomePath)
+      ? "inside"
+      : "outside";
   }
 
   // The item a no-Trash question was about is still at its path (or nothing is: there is
@@ -704,6 +722,11 @@ export function createWriteOperationCoordinator(
     senderDetachers.get(operationId)?.();
     senderDetachers.delete(operationId);
     attachSender(operationId, successor);
+    // The same records, not a copy: what a Trash finds after this is the successor's too.
+    const withoutTrash = itemsWithoutTrashByOperation.get(operationId);
+    if (withoutTrash !== undefined) {
+      rememberItemsWithoutTrash(successor, withoutTrash);
+    }
     const clearsCutClipboard = copyPasteRequests.get(operationId)?.clearsCutClipboard;
     pendingAdoptions.set(successor, {
       operationId,
@@ -726,6 +749,7 @@ export function createWriteOperationCoordinator(
     senderDetachers.get(operationId)?.();
     senderDetachers.delete(operationId);
     latestProgress.delete(operationId);
+    itemsWithoutTrashByOperation.delete(operationId);
   }
 
   // Cancel and conflict answers are only taken from the window that started the
@@ -1345,6 +1369,7 @@ export function createWriteOperationCoordinator(
     // Only what this Trash finds without a Trash may be deleted next.
     const withoutTrash = new Map<string, AskedItem>();
     rememberItemsWithoutTrash(sender, withoutTrash);
+    itemsWithoutTrashByOperation.set(operationId, withoutTrash);
     const removedItems: RemovedItem[] = [];
     // One unit per item, so an item put back from the Trash doesn't depend on the others.
     const trashedUnits: UndoUnit[] = [];
@@ -1499,6 +1524,13 @@ export function createWriteOperationCoordinator(
     // failed part way. One refused before deleting (it changed after the question), or a
     // file still there after its delete failed, was never touched.
     let deletingBegan = false;
+    const realHomePath = await readRealHomePath();
+    // What this window was asked about, kept for the whole operation: a reload of the
+    // page lets go of its records, and a window this is handed to takes them along.
+    const askedItems = itemsWithoutTrash.get(sender);
+    if (askedItems !== undefined) {
+      itemsWithoutTrashByOperation.set(operationId, askedItems);
+    }
     for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
         cancelled = true;
@@ -1523,11 +1555,17 @@ export function createWriteOperationCoordinator(
         const before = fs.itemSize ? await readItemSize(fs.itemSize, path) : undefined;
         // Checked again just before deleting: the question may have been open a while. An
         // item gone already has nothing left to delete.
-        const asked = itemsWithoutTrash.get(sender)?.get(path);
+        const asked = askedItems?.get(path);
         const gone =
           asked !== undefined
             ? (await assertStillAskedItem(path, asked)) === "missing"
             : (await lstatUnlessMissing(path, fs.lstat)) === "missing";
+        // A folder in the Trash swapped for a link since it was checked would lead the
+        // delete out of it, so the Trash is looked at again right before. (An item asked
+        // about isn't in a Trash: it was checked by its id above instead.)
+        if (!gone && asked === undefined && (await placeInTrash(path, realHomePath)) !== "inside") {
+          throw new Error(`“${basename(path)}” is no longer in the Trash, so it wasn't deleted.`);
+        }
         if (!gone) {
           try {
             await fs.rm(path, { recursive: true, force: true });
@@ -1540,7 +1578,7 @@ export function createWriteOperationCoordinator(
           }
           deletingBegan = true;
         }
-        itemsWithoutTrash.get(sender)?.delete(path);
+        askedItems?.delete(path);
         if (before !== undefined) {
           removedItems.push({
             path,
@@ -1961,6 +1999,10 @@ export function createWriteOperationCoordinator(
             analysesOfOtherWindows(event.sender),
           );
           early = eventsBeforeStart.get(handle.operationId);
+        } catch (error) {
+          // Nothing started, so no end will come to stop noting the folder sizes stored.
+          noteWriteEnded();
+          throw error;
         } finally {
           eventsBeforeStart = null;
         }

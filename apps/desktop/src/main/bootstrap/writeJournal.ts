@@ -120,12 +120,18 @@ async function putBackRenamedItems(
     return;
   }
   const fs = { lstat: fileSystem.lstat, renameExclusive };
-  const folder = dirname(entry.items[0]?.temporaryPath ?? "/");
-  if (
-    options.answerWithinMs !== undefined &&
-    !(await answersWithin(fileSystem, folder, options.answerWithinMs))
-  ) {
-    return;
+  // Items renamed from search results can be in several folders, on several disks: each
+  // must answer, or the whole entry waits, so nothing is put back while a look at a later
+  // folder still hangs (and the start with it).
+  const { answerWithinMs } = options;
+  if (answerWithinMs !== undefined) {
+    const folders = [...new Set(entry.items.map((item) => dirname(item.temporaryPath)))];
+    const answered = await Promise.all(
+      folders.map((folder) => answersWithin(fileSystem, folder, answerWithinMs)),
+    );
+    if (answered.includes(false)) {
+      return;
+    }
   }
   let recovery: Awaited<ReturnType<typeof recoverBatchRename>>;
   try {

@@ -2983,6 +2983,52 @@ describe("the Trash", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  // Another process swaps a folder in the Trash for a link to a folder elsewhere after the
+  // Delete Immediately was checked: what has that name out there isn't deleted.
+  it("doesn't delete through a folder of the Trash swapped for a link after the check", async () => {
+    // The first look at the folder is the check; it is a link by the next one.
+    let looksAtSub = 0;
+    const fs: WriteOperationFs = {
+      ...createWriteOperationFs({
+        lstat: vi.fn(async () => ({ ...createStats(false), isSymbolicLink: () => false })),
+      }),
+      realpath: async (path) => {
+        if (path !== "/Users/demo/.Trash/sub") {
+          return path;
+        }
+        looksAtSub += 1;
+        return looksAtSub > 1 ? "/outside" : path;
+      },
+    };
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: home,
+    });
+    const sender = createSender();
+
+    await expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Users/demo/.Trash/sub/victim", "/Users/demo/.Trash/old.txt"] },
+        { sender },
+      ),
+    ).resolves.toEqual({ operationId: "write-op-1", status: "queued" });
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(fs.rm).toHaveBeenCalledTimes(1);
+    expect(fs.rm).toHaveBeenCalledWith("/Users/demo/.Trash/old.txt", {
+      recursive: true,
+      force: true,
+    });
+    expect(terminal.result?.items).toEqual([
+      expect.objectContaining({
+        sourcePath: "/Users/demo/.Trash/sub/victim",
+        status: "failed",
+        error: "“victim” is no longer in the Trash, so it wasn't deleted.",
+      }),
+      expect.objectContaining({ sourcePath: "/Users/demo/.Trash/old.txt", status: "completed" }),
+    ]);
+    coordinator.shutdown();
+  });
 });
 
 describe("New Folder and Trash, picked items and names", () => {
