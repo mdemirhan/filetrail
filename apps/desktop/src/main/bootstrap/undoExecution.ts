@@ -3,9 +3,7 @@ import { basename, dirname, join } from "node:path";
 import type { UndoDirection, WriteOperationResult } from "@filetrail/contracts";
 import {
   type ItemId,
-  LOCK_FLAGS,
   NO_TRASH_ERROR_CODE,
-  USER_LOCK_FLAGS,
   type UndoStep,
   type UndoUnit,
   type WriteJournal,
@@ -266,10 +264,10 @@ async function describeFailure(
 // - "outside_change": the item went away, or another item took the name just then. Like a
 //   change the disk check finds, the step is skipped, and dropped from the list.
 // - "permanent": it would fail the same way every time (a disk with no Trash, a read-only
-//   disk, another disk, a lock only the system can clear). Skipped and dropped too, and
-//   said, so older operations can still be undone.
-// - "retry": anything else (no permission, a lock the person can clear, the Trash refusing
-//   for a reason it didn't give). The step stays on the list, and the next Undo tries it.
+//   disk, another disk). Skipped and dropped too, and said, so older operations can still
+//   be undone.
+// - "retry": anything else (no permission, a lock, the Trash refusing for a reason it
+//   didn't give). The step stays on the list, and the next Undo tries it.
 export function classifyUndoWriteError(
   code: string | undefined,
 ): "outside_change" | "permanent" | "retry" {
@@ -279,7 +277,6 @@ export function classifyUndoWriteError(
     case "EEXIST":
       return "outside_change";
     case NO_TRASH_ERROR_CODE:
-    case SYSTEM_LOCKED_CODE:
     case "EROFS":
     case "EXDEV":
       return "permanent";
@@ -288,29 +285,19 @@ export function classifyUndoWriteError(
   }
 }
 
-// The code an item locked by the system (a flag only root can clear) fails with here.
-const SYSTEM_LOCKED_CODE = "ESYSLOCKED";
-
 // The code a failure of the write to the item at `path` counts as. "No Trash" only when the
 // disk is known to have none: macOS said the Trash isn't supported there, or the disk is a
 // network share; a Trash that failed without saying why may work next time.
-async function failureCode(
-  fs: WriteOperationFs,
+function failureCode(
   error: unknown,
   path: string,
   diskHasTrash: ((path: string) => boolean) | undefined,
-): Promise<string | undefined> {
+): string | undefined {
   const code = errorCode(error);
   if (code === NO_TRASH_ERROR_CODE) {
     const said = errorCode((error as { cause?: unknown }).cause);
     const noTrash = said === "ENOTSUP" || said === "EOPNOTSUPP" || diskHasTrash?.(path) === false;
     return noTrash ? code : undefined;
-  }
-  if (code === undefined || code === "EPERM" || code === "EACCES") {
-    const flags = fs.getFlags ? await fs.getFlags(path).catch(() => 0) : 0;
-    if ((flags & LOCK_FLAGS & ~USER_LOCK_FLAGS) !== 0) {
-      return SYSTEM_LOCKED_CODE;
-    }
   }
   return code;
 }
@@ -321,8 +308,6 @@ function permanentReason(code: string | undefined, path: string): string {
   switch (code) {
     case NO_TRASH_ERROR_CODE:
       return `${name} couldn't be moved to the Trash because its disk has no Trash.`;
-    case SYSTEM_LOCKED_CODE:
-      return `${name} is locked by the system, so it can't be moved.`;
     case "EROFS":
       return `${name} is on a disk that can only be read.`;
     default:
@@ -338,7 +323,7 @@ async function writeFailed(
   args: RunContext,
 ): Promise<StepOutcome> {
   const { fs } = args;
-  const code = await failureCode(fs, error, step.from, args.diskHasTrash);
+  const code = failureCode(error, step.from, args.diskHasTrash);
   const kind = classifyUndoWriteError(code);
   if (kind === "retry") {
     const reason = await describeFailure(fs, error, [step.from, ...step.around]);
@@ -817,7 +802,7 @@ async function renameBack(
       continue;
     }
     if (result.status === "failed") {
-      const code = await failureCode(fs, { code: errors.codeOf(from) }, at, args.diskHasTrash);
+      const code = failureCode({ code: errors.codeOf(from) }, at, args.diskHasTrash);
       const kind = classifyUndoWriteError(code);
       if (kind !== "retry") {
         const reason = kind === "permanent" ? permanentReason(code, from) : result.error;

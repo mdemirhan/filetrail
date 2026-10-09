@@ -12,7 +12,6 @@ import { paste, setUpUndo } from "./undoRealDisk.testkit";
 // it for the move, without asking, and locks it again in the Trash.
 
 const UF_IMMUTABLE = 0x2;
-const SF_IMMUTABLE = 0x20000;
 
 let root: string;
 let trashDir: string;
@@ -223,29 +222,6 @@ describe("undoing a copy of a locked item", () => {
 
     expect(undone.status).toBe("failed");
     expect(flags.get(join(root, "F"))).toBe(UF_IMMUTABLE);
-    await t.coordinator.shutdown();
-  });
-
-  it("lets go of a copy locked by the system, and says why", async () => {
-    const t = setUpUndo(root, trashDir, {
-      getFlags: async () => SF_IMMUTABLE,
-      setFlags: async () => {
-        throw new Error("setFlags shouldn't be called");
-      },
-    });
-    await t.newFolder(root, "F");
-
-    const undone = await t.undo();
-
-    expect(undone.result?.items).toEqual([
-      expect.objectContaining({
-        status: "skipped",
-        error: "“F” is locked by the system, so it can't be moved.",
-      }),
-    ]);
-    expect(existsSync(join(root, "F"))).toBe(true);
-    // It never can be: not kept to be tried again.
-    expect(t.history.menu().undo).toBeNull();
     await t.coordinator.shutdown();
   });
 });
