@@ -37,8 +37,6 @@ export type BatchRenameRun = {
 
 // A name taken during the rename gets the first free number up to this; past it, it fails.
 const MAX_ADDED_NUMBER = 10_000;
-// Attempts at a free temporary name before giving up on moving an item out of the way.
-const TEMPORARY_NAME_ATTEMPTS = 10;
 
 type PlannedItem = {
   index: number;
@@ -70,7 +68,7 @@ export async function runBatchRename(args: {
   /** Called as each item starts, with how many are done. */
   onItemStart?: (item: { sourcePath: string; destinationPath: string }, completed: number) => void;
   /** The hidden name an item waits under (tests give their own). */
-  temporaryName?: (attempt: number) => string;
+  temporaryName?: () => string;
   /** Where the items moved aside are written down first, so a crash can't leave them
    *  under hidden names (see BatchRenameJournalEntry). */
   journal?: WriteJournal | null;
@@ -172,13 +170,15 @@ export async function runBatchRename(args: {
         level.push(item);
       }
     }
-    const blockers = level.filter(isBlocker);
     // The hidden names the items in the way will wait under, written down before any moves.
+    const blockers = level
+      .filter(isBlocker)
+      .map((item) => ({ item, temporaryPath: join(item.folder, temporaryName()) }));
     const entry: BatchRenameJournalEntry = {
       kind: "batch_rename",
       id: randomBytes(8).toString("hex"),
-      items: blockers.map((item) => ({
-        temporaryPath: join(item.folder, temporaryName(0)),
+      items: blockers.map(({ item, temporaryPath }) => ({
+        temporaryPath,
         originalPath: item.sourcePath,
         newPath: item.destinationPath,
       })),
@@ -203,26 +203,16 @@ export async function runBatchRename(args: {
     // First, the items in the way move aside. Only when all of them have can the swaps go
     // on after a stop; stopped before, every item goes back as it was.
     let allMovedAside = true;
-    for (const [position, item] of blockers.entries()) {
+    for (const { item, temporaryPath } of blockers) {
       if (signal.aborted) {
         cancelled = true;
         allMovedAside = false;
         break;
       }
       try {
-        item.temporaryPath = await moveToTemporaryName(
-          fs,
-          item,
-          temporaryName,
-          entry.items[position]?.temporaryPath ?? null,
-          async (temporaryPath) => {
-            const written = entry.items[position];
-            if (journal !== null && written) {
-              written.temporaryPath = temporaryPath;
-              await journal.add(entry);
-            }
-          },
-        );
+        // Never onto anything: a hidden name found taken fails the item like any other error.
+        await fs.renameExclusive(item.sourcePath, temporaryPath);
+        item.temporaryPath = temporaryPath;
       } catch (error) {
         // Still under its name: an item waiting for it can't finish a swap after a stop.
         allMovedAside = false;
@@ -423,35 +413,6 @@ async function restoreFromTemporaryName(
       candidate = join(item.folder, numberedName(item.sourceName, item.isFolder, " ", number));
     }
   }
-}
-
-// `written` is the hidden name already written down for it; another (that one was taken)
-// is written down by `rewrite` before the item moves there.
-async function moveToTemporaryName(
-  fs: BatchRenameFs,
-  item: PlannedItem,
-  temporaryName: (attempt: number) => string,
-  written: string | null,
-  rewrite: (temporaryPath: string) => Promise<void>,
-): Promise<string> {
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < TEMPORARY_NAME_ATTEMPTS; attempt += 1) {
-    const temporaryPath =
-      attempt === 0 && written !== null ? written : join(item.folder, temporaryName(attempt));
-    if (temporaryPath !== written) {
-      await rewrite(temporaryPath);
-    }
-    try {
-      await fs.renameExclusive(item.sourcePath, temporaryPath);
-      return temporaryPath;
-    } catch (error) {
-      lastError = error;
-      if (errorCode(error) !== "EEXIST") {
-        throw error;
-      }
-    }
-  }
-  throw lastError;
 }
 
 // Whether the new name is the item's own name spelled differently: only its case (or how

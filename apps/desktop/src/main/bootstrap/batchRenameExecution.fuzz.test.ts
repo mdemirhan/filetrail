@@ -339,7 +339,7 @@ describe("where the results say items are, when a folder is renamed with items i
       },
       fs: disk,
       signal: new AbortController().signal,
-      temporaryName: (attempt) => `.tmp-${attempt}`,
+      temporaryName: () => ".tmp-0",
     });
     // "sub" moved aside for "a", couldn't become "c" (taken), and went back as "sub 2".
     expect(result.items[1]).toMatchObject({ status: "failed", destinationPath: "/trip/sub 2" });

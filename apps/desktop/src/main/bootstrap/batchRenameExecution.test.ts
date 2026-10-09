@@ -422,19 +422,6 @@ describe("renaming several items", () => {
     expect(disk.names()).toEqual(["b", "b 2"]);
   });
 
-  it("tries another temporary name when one is taken", async () => {
-    const disk = new MemoryDisk(["/trip/a", "/trip/b", "/trip/.tmp-0"]);
-    const result = await run(
-      disk,
-      request([
-        ["a", "b"],
-        ["b", "a"],
-      ]),
-    );
-    expect(result.completedItemCount).toBe(2);
-    expect(disk.names()).toEqual([".tmp-0", "a", "b"]);
-  });
-
   it("puts a waiting item back when its rename fails for another reason", async () => {
     const disk = new MemoryDisk(["/trip/a", "/trip/b"]);
     disk.failures.set("renameExclusive:/trip/.tmp-0->/trip/c", errno("EIO"));
@@ -547,21 +534,25 @@ describe("renaming several items", () => {
     expect(accent.names()).toEqual(["Café".normalize("NFD")]);
   });
 
-  it("gives up moving an item aside when every temporary name is taken", async () => {
-    const disk = new MemoryDisk(["/trip/a", "/trip/b", "/trip/.taken"]);
-    const result = await runBatchRename({
-      request: request([
-        ["a", "b"],
-        ["b", "a"],
-      ]),
-      fs: disk,
-      signal: new AbortController().signal,
-      temporaryName: () => ".taken",
-    });
-    // Neither could move aside, so each failed there, and both keep their names.
-    expect(result.items.map((item) => item.status)).toEqual(["failed", "failed"]);
-    expect(result.items[0]?.error).toBe("An item named “b” already exists.");
-    expect(disk.names()).toEqual([".taken", "a", "b"]);
+  it("fails an item whose hidden name is taken, without moving anything onto it", async () => {
+    const disk = new MemoryDisk(["/trip/a", "/trip/b", "/trip/.tmp-0"]);
+    const result = await run(
+      disk,
+      request(
+        [
+          ["a", "b"],
+          ["b", "a"],
+        ],
+        { onConflict: "skip" },
+      ),
+    );
+    // "a" couldn't move aside, so it failed there; "b" did, found "a" still taken, and went
+    // back under its own name.
+    expect(result.items).toMatchObject([
+      { status: "failed", error: "An item named “b” already exists." },
+      { status: "skipped", destinationPath: null },
+    ]);
+    expect(disk.names()).toEqual([".tmp-0", "a", "b"]);
   });
 
   it("describes an error without a code as a plain failure", async () => {
@@ -907,35 +898,6 @@ describe("writing down the items moved aside", () => {
     ]);
     expect(live.size).toBe(0);
     expect(disk.names()).toEqual(["a", "b", "d"]);
-  });
-
-  it("writes down another hidden name before moving there when the first is taken", async () => {
-    const disk = new MemoryDisk(["/trip/a", "/trip/b", "/trip/.tmp-0"]);
-    const added: WriteJournalEntry[] = [];
-    await runBatchRename({
-      request: request([
-        ["a", "b"],
-        ["b", "a"],
-      ]),
-      fs: disk,
-      signal: new AbortController().signal,
-      temporaryName: counter(),
-      journal: {
-        add: async (entry) => {
-          added.push(structuredClone(entry));
-        },
-        remove: async () => undefined,
-      },
-    });
-    expect(
-      added.map((entry) =>
-        entry.kind === "batch_rename" ? entry.items.map((item) => item.temporaryPath) : [],
-      ),
-    ).toEqual([
-      ["/trip/.tmp-0", "/trip/.tmp-1"],
-      ["/trip/.tmp-2", "/trip/.tmp-1"],
-    ]);
-    expect(disk.names()).toEqual([".tmp-0", "a", "b"]);
   });
 
   // An item that could go back nowhere stays under its hidden name: it stays written down.
