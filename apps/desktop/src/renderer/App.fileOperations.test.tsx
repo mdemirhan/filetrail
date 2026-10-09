@@ -1120,7 +1120,7 @@ describe("App file operations like Finder", () => {
     async function expectBusyDialog(title: string): Promise<void> {
       const dialog = await screen.findByRole("dialog", { name: title });
       expect(dialog).toHaveTextContent(
-        "Another file operation is running. Wait for it to finish, or stop it.",
+        "Another file operation is running. Try again when it has finished.",
       );
       await act(async () => {
         fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
@@ -2304,7 +2304,7 @@ describe("Empty Trash and Delete Immediately while another operation runs", () =
   async function expectBusyDialog(title: string): Promise<void> {
     const dialog = await screen.findByRole("dialog", { name: title });
     expect(dialog).toHaveTextContent(
-      "Another file operation is running. Wait for it to finish, or stop it.",
+      "Another file operation is running. Try again when it has finished.",
     );
     await act(async () => {
       fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));

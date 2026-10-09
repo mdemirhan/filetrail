@@ -732,7 +732,7 @@ describe("App copy/paste integration", () => {
       expect(sheet()).toBeNull();
       expect(
         await screen.findByText(
-          "Another file operation is running. Wait for it to finish, or stop it.",
+          "Another file operation is running. Try again when it has finished.",
         ),
       ).toBeInTheDocument();
     });

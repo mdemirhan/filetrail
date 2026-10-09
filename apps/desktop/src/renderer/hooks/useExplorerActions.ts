@@ -275,7 +275,7 @@ function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
 }
 
 const WRITE_OPERATION_BUSY_MESSAGE =
-  "Another file operation is running. Wait for it to finish, or stop it.";
+  "Another file operation is running. Try again when it has finished.";
 
 function getCopyLikePreparationFailureMessage(action: CopyLikeAction): string {
   return `File Trail couldn’t check the items to ${getCopyLikeActionLabel(action)}. Nothing was changed.`;

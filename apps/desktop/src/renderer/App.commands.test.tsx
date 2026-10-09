@@ -1552,9 +1552,7 @@ describe("App copy/paste integration", () => {
     });
 
     expect(
-      await screen.findByText(
-        "Another file operation is running. Wait for it to finish, or stop it.",
-      ),
+      await screen.findByText("Another file operation is running. Try again when it has finished."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Move To")).toBeInTheDocument();
     expect(screen.queryByText("Couldn’t Move")).not.toBeInTheDocument();
@@ -1892,9 +1890,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
     });
     expect(
-      await screen.findByText(
-        "Another file operation is running. Wait for it to finish, or stop it.",
-      ),
+      await screen.findByText("Another file operation is running. Try again when it has finished."),
     ).toBeInTheDocument();
     expect(
       harness.invocations.filter((call) => call.channel === "writeOperation:createFolder"),

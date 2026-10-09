@@ -45,7 +45,7 @@ import {
 
 afterEach(expectNoRefusedRequests);
 
-const BUSY_MESSAGE = "Another file operation is running. Wait for it to finish, or stop it.";
+const BUSY_MESSAGE = "Another file operation is running. Try again when it has finished.";
 const busyError = () => new Error("Another write operation is already running.");
 
 async function expectDialog(title: string, text: string) {

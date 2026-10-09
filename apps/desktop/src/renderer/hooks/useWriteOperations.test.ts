@@ -13,12 +13,12 @@ describe("writeOperationsReducer", () => {
       key: "actionNotice",
       value: {
         title: "Blocked",
-        message: "Another file operation is running. Wait for it to finish, or stop it.",
+        message: "Another file operation is running. Try again when it has finished.",
       },
     });
     expect(next.actionNotice).toEqual({
       title: "Blocked",
-      message: "Another file operation is running. Wait for it to finish, or stop it.",
+      message: "Another file operation is running. Try again when it has finished.",
     });
     expect(next.toasts).toBe(INITIAL_WRITE_OPERATIONS_STATE.toasts);
     expect(INITIAL_WRITE_OPERATIONS_STATE.actionNotice).toBeNull();

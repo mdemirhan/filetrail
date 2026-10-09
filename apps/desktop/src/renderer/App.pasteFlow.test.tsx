@@ -779,7 +779,7 @@ describe("App copy/paste integration", () => {
 
     expect(await screen.findByText("Couldn’t Paste")).toBeInTheDocument();
     expect(
-      screen.getByText("Another file operation is running. Wait for it to finish, or stop it."),
+      screen.getByText("Another file operation is running. Try again when it has finished."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Pasting…" })).not.toBeInTheDocument();
   });
