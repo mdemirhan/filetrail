@@ -580,7 +580,9 @@ async function executeResolvedNode(
       assertNotWrittenByThisPaste(context, currentNode, runtimeConflict);
       const resolution = await answerRuntimeConflict(context, currentNode, runtimeConflict);
       // An answer about the item being pasted changing says nothing about the destination:
-      // if that changed too, it is asked about on its own, never replaced unseen.
+      // if that changed too, it is asked about on its own, never replaced unseen. An answer
+      // about the destination is about the item the question showed: one that changed
+      // again while it was open is asked about again.
       const aboutSource = isSourceSideConflict(runtimeConflict);
       currentNode = await resolveWithRuntimeAnswer(
         context,
@@ -592,9 +594,11 @@ async function executeResolvedNode(
       if (currentNode.action === "skip") {
         return skippedOutcome("runtime_conflict_resolution", currentNode.destinationPath);
       }
-      check = aboutSource
-        ? await detectRuntimeConflict(currentNode, context.report.analysisId, context.fileSystem)
-        : { ...check, conflict: null };
+      check = await detectRuntimeConflict(
+        currentNode,
+        context.report.analysisId,
+        context.fileSystem,
+      );
     }
     try {
       const outcome = await performNode(context, currentNode, check.source);
@@ -704,6 +708,11 @@ async function resolveWithRuntimeAnswer(
   const currentDestination = keepPlannedDestination
     ? node.node.destinationFingerprint
     : conflict.currentDestinationFingerprint;
+  // A folder shown in the question is replaced only while it holds what it held then.
+  const destinationTotalNodeCount =
+    !keepPlannedDestination && shownFolderItemCounts.has(conflict)
+      ? (shownFolderItemCounts.get(conflict) ?? null)
+      : node.node.destinationTotalNodeCount;
   const source =
     resolution !== "skip" && keepPlannedDestination && conflict.currentSourceFingerprint.exists
       ? await readChangedSourceAgain(context, node, conflict.currentSourceFingerprint)
@@ -731,6 +740,7 @@ async function resolveWithRuntimeAnswer(
       destinationPath: node.destinationPath,
       destinationFingerprint: currentDestination,
       destinationKind: currentDestination.kind,
+      destinationTotalNodeCount,
       conflictClass,
     },
     action: resolution,
@@ -2634,6 +2644,10 @@ async function conflictClassFor(
   return (await classifyConflict(fileSystem, source, destination)) ?? "type_mismatch";
 }
 
+// How many items a destination folder held when a question showed it (countItemsInside), by
+// the question: an answer to replace it holds only while it still holds that many.
+const shownFolderItemCounts = new WeakMap<CopyPasteRuntimeConflict, number | null>();
+
 // What changed since the review, if anything, along with the item being pasted as it is now.
 async function detectRuntimeConflict(
   resolvedNode: ResolvedCopyPasteNode,
@@ -2694,59 +2708,70 @@ async function findRuntimeConflict(
 
   const destinationExists =
     currentDestinationFingerprint.exists && currentDestinationFingerprint.kind !== "missing";
-  switch (resolvedNode.action) {
-    case "create":
-    case "keep_both":
-      return destinationExists
-        ? conflict(
-            "destination_created",
-            await conflictClassFor(
-              fileSystem,
-              { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
-              { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
-            ),
-            "destination",
-          )
-        : null;
-    case "overwrite": {
-      // Gone already: nothing is left to replace, so this simply becomes a copy.
-      if (!destinationExists) {
+  const found = await findDestinationConflict();
+  if (found !== null && found.destinationKind === "directory" && found.conflictClass !== null) {
+    shownFolderItemCounts.set(
+      found,
+      await countItemsInside(fileSystem, resolvedNode.destinationPath),
+    );
+  }
+  return found;
+
+  async function findDestinationConflict(): Promise<CopyPasteRuntimeConflict | null> {
+    switch (resolvedNode.action) {
+      case "create":
+      case "keep_both":
+        return destinationExists
+          ? conflict(
+              "destination_created",
+              await conflictClassFor(
+                fileSystem,
+                { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
+                { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
+              ),
+              "destination",
+            )
+          : null;
+      case "overwrite": {
+        // Gone already: nothing is left to replace, so this simply becomes a copy.
+        if (!destinationExists) {
+          return null;
+        }
+        const planned = resolvedNode.node.destinationFingerprint;
+        // A folder's timestamps change whenever anything inside it does (Finder writes
+        // .DS_Store just by showing it), so for folders their identity counts, and what is
+        // inside them: an item added after the review would go to the Trash unseen.
+        const unchanged =
+          planned.kind === "directory" && currentDestinationFingerprint.kind === "directory"
+            ? sameItemIdentity(planned, currentDestinationFingerprint) &&
+              (resolvedNode.node.destinationTotalNodeCount === null ||
+                (await countItemsInside(fileSystem, resolvedNode.destinationPath)) ===
+                  resolvedNode.node.destinationTotalNodeCount)
+            : fingerprintsEqual(planned, currentDestinationFingerprint);
+        return unchanged
+          ? null
+          : conflict(
+              planned.exists ? "destination_changed" : "destination_created",
+              await conflictClassFor(
+                fileSystem,
+                { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
+                { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
+              ),
+              "destination",
+            );
+      }
+      case "merge":
+        if (!destinationExists) {
+          // The folder to merge into was removed: recreating it silently would bring back
+          // a folder someone just deleted.
+          return conflict("destination_deleted", "directory_conflict", "destination");
+        }
+        return currentDestinationFingerprint.kind !== "directory"
+          ? conflict("destination_changed", "type_mismatch", "destination")
+          : null;
+      default:
         return null;
-      }
-      const planned = resolvedNode.node.destinationFingerprint;
-      // A folder's timestamps change whenever anything inside it does (Finder writes
-      // .DS_Store just by showing it), so for folders their identity counts, and what is
-      // inside them: an item added after the review would go to the Trash unseen.
-      const unchanged =
-        planned.kind === "directory" && currentDestinationFingerprint.kind === "directory"
-          ? sameItemIdentity(planned, currentDestinationFingerprint) &&
-            (resolvedNode.node.destinationTotalNodeCount === null ||
-              (await countItemsInside(fileSystem, resolvedNode.destinationPath)) ===
-                resolvedNode.node.destinationTotalNodeCount)
-          : fingerprintsEqual(planned, currentDestinationFingerprint);
-      return unchanged
-        ? null
-        : conflict(
-            planned.exists ? "destination_changed" : "destination_created",
-            await conflictClassFor(
-              fileSystem,
-              { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
-              { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
-            ),
-            "destination",
-          );
     }
-    case "merge":
-      if (!destinationExists) {
-        // The folder to merge into was removed: recreating it silently would bring back
-        // a folder someone just deleted.
-        return conflict("destination_deleted", "directory_conflict", "destination");
-      }
-      return currentDestinationFingerprint.kind !== "directory"
-        ? conflict("destination_changed", "type_mismatch", "destination")
-        : null;
-    default:
-      return null;
   }
 }
 
