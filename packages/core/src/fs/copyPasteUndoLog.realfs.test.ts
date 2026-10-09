@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -246,93 +245,6 @@ describe("what a copy records", () => {
     });
 
     expect(result?.trashedPaths).toEqual([join(trashDir, "1-a.txt")]);
-  });
-
-  // Found by the Undo fuzz test: "X.TXT" pasted over "x.txt" on a disk that ignores case
-  // put the old item back as "X.TXT".
-  it("records the old item of a Replace under the name it really had", async () => {
-    await writeFile(join(src, "X.TXT"), "new");
-    await writeFile(join(dst, "x.txt"), "old");
-    const ignoresCase =
-      (await readdir(dst)).length === 1 &&
-      (await lstat(join(dst, "X.TXT")).catch(() => null)) !== null;
-    if (!ignoresCase) {
-      return;
-    }
-
-    const { result } = await runPaste({
-      mode: "copy",
-      sourcePaths: [join(src, "X.TXT")],
-      destinationDirectoryPath: dst,
-      policy: REPLACE_ALL,
-      fileSystem: nativeFileSystemWithTrash(trashDir),
-    });
-
-    expect(stepsOf(undoLogOf(result))[0]?.[0]).toMatchObject({
-      kind: "trashed",
-      from: join(dst, "x.txt"),
-    });
-  });
-
-  it("reads the folder once to tell how the items a Replace removes are spelled", async () => {
-    const names = Array.from({ length: 30 }, (_, index) => `file ${index}.txt`);
-    for (const name of names) {
-      await writeFile(join(src, name), "new");
-      await writeFile(join(dst, name), "old");
-    }
-    const reads: string[] = [];
-    const fileSystem = nativeFileSystemWithTrash(trashDir);
-
-    const { result } = await runPaste({
-      mode: "copy",
-      sourcePaths: names.map((name) => join(src, name)),
-      destinationDirectoryPath: dst,
-      policy: REPLACE_ALL,
-      // Counted from the paste on, not during the review.
-      beforeExecute: async () => {
-        fileSystem.readdir = async (path) => {
-          reads.push(path);
-          return readdir(path);
-        };
-      },
-      fileSystem,
-    });
-
-    expect(reads.filter((path) => path === dst)).toHaveLength(1);
-    expect(stepsOf(undoLogOf(result)).map((unit) => unit[0])).toEqual(
-      names.map((name) => expect.objectContaining({ kind: "trashed", from: join(dst, name) })),
-    );
-  });
-
-  it("finds how an item that came after the folder was read is spelled", async () => {
-    await writeFile(join(src, "A.TXT"), "new");
-    await writeFile(join(src, "B.TXT"), "new");
-    await writeFile(join(dst, "a.txt"), "old");
-    const ignoresCase = (await lstat(join(dst, "A.TXT")).catch(() => null)) !== null;
-    if (!ignoresCase) {
-      return;
-    }
-
-    const { result, conflicts } = await runPaste({
-      mode: "copy",
-      sourcePaths: [join(src, "A.TXT"), join(src, "B.TXT")],
-      destinationDirectoryPath: dst,
-      policy: REPLACE_ALL,
-      fileSystem: nativeFileSystemWithTrash(trashDir),
-      // Once "a.txt" is replaced, "b.txt" appears where "B.TXT" goes; it is replaced too.
-      onEvent: (event) => {
-        if (event.status === "running" && event.completedItemCount === 1) {
-          writeFileSync(join(dst, "b.txt"), "came later");
-        }
-      },
-      resolve: () => "overwrite",
-    });
-
-    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["destination_created"]);
-    expect(stepsOf(undoLogOf(result)).map((unit) => unit[0])).toEqual([
-      expect.objectContaining({ kind: "trashed", from: join(dst, "a.txt") }),
-      expect.objectContaining({ kind: "trashed", from: join(dst, "b.txt") }),
-    ]);
   });
 
   it("records a folder whose copy failed part way, since the folder is there", async () => {

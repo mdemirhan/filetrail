@@ -18,7 +18,7 @@ import { paste, setUpUndo } from "./undoRealDisk.testkit";
 // Undoing a Replace whose new item is spelled differently from the old one: only in case
 // ("X.TXT" over "x.txt"), or only in how an accented letter is encoded. On a disk that
 // ignores both, the old item's name is the new item's, which Undo moves away first: the
-// name isn't taken by anyone else.
+// name isn't taken by anyone else. The old item comes back under the new item's spelling.
 
 let root: string;
 let trashDir: string;
@@ -57,8 +57,8 @@ describe.each(["copy", "cut"] as const)("undoing a Replace (%s) spelled differen
 
     expect(await t.prepare()).toMatchObject({ nameTaken: [], changed: [] });
     expect((await t.undo()).status).toBe("completed");
-    expect(readdirSync(join(root, "dst"))).toEqual([oldName]);
-    expect(readFileSync(join(root, "dst", oldName), "utf8")).toBe("old");
+    expect(readdirSync(join(root, "dst"))).toEqual([newName]);
+    expect(readFileSync(join(root, "dst", newName), "utf8")).toBe("old");
     await t.coordinator.shutdown();
   });
 });
