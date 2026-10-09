@@ -379,6 +379,62 @@ describe("copyPasteClipboard", () => {
       expect(clipboardPathsMovedBy(copied, result)).toEqual(["/dst/F/x"]);
     });
 
+    // "F" is cut and merged into "/dst/F", which already has an "a": "a" is skipped and
+    // stays in "/src/F", so does "F", and "/dst/F/a" is another file.
+    it("leaves items where a merge left them, with the folders holding them", () => {
+      const copied = setCopyPasteClipboard(
+        "copy",
+        ["/src/F/a", "/src/F/b", "/src/F/sub", "/src/F/sub/c/d", "/src/F/other/e", "/src/G"],
+        NOW,
+      );
+      const result = {
+        ...writeResult("paste", [
+          { sourcePath: "/src/F", destinationPath: "/dst/F" },
+          { sourcePath: "/src/F/a", destinationPath: "/dst/F/a", status: "skipped" },
+          { sourcePath: "/src/F/b", destinationPath: "/dst/F/b" },
+          { sourcePath: "/src/F/sub/c", destinationPath: "/dst/F/sub/c", status: "failed" },
+          { sourcePath: "/src/G", destinationPath: "/dst/G" },
+        ]),
+        mode: "cut" as const,
+      };
+      expect(followClipboardThroughWrite(copied, result)).toMatchObject({
+        sourcePaths: [
+          "/src/F/a",
+          "/dst/F/b",
+          "/src/F/sub",
+          "/src/F/sub/c/d",
+          // Inside a folder that moved whole into the merged one.
+          "/dst/F/other/e",
+          "/dst/G",
+        ],
+      });
+      expect(clipboardPathsMovedBy(copied, result)).toEqual([
+        "/dst/F/b",
+        "/dst/F/other/e",
+        "/dst/G",
+      ]);
+      // The merged folder itself is still at its old path while anything is left in it...
+      const folder = setCopyPasteClipboard("copy", ["/src/F"], NOW);
+      expect(followClipboardThroughWrite(folder, result)).toBe(folder);
+      // ...and is followed once everything in it went.
+      expect(
+        followClipboardThroughWrite(folder, {
+          ...result,
+          items: result.items.filter((item) => item.status === "completed"),
+        }),
+      ).toMatchObject({ sourcePaths: ["/dst/F"] });
+      // An item that failed outside the folder that moved doesn't keep what moved.
+      expect(
+        followClipboardThroughWrite(setCopyPasteClipboard("copy", ["/src/F/b"], NOW), {
+          ...result,
+          items: [
+            ...result.items.filter((item) => item.sourcePath !== "/src/F"),
+            { sourcePath: "/src/F", destinationPath: "/dst/F", status: "failed", error: null },
+          ],
+        }),
+      ).toMatchObject({ sourcePaths: ["/dst/F/b"] });
+    });
+
     it("cancels a cut when a Replace removes an item in it", () => {
       const cut = setCopyPasteClipboard("cut", ["/Users/demo/report.pdf"], NOW);
       expect(

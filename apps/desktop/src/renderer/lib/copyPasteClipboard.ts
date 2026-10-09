@@ -1,4 +1,4 @@
-import type { IpcRequest } from "@filetrail/contracts";
+import { type IpcRequest, isFollowedMove } from "@filetrail/contracts";
 
 import {
   collectFollowedMoves,
@@ -104,15 +104,17 @@ export function dropClipboardPaths(
 
 // Follows items the app itself renamed or moved: an item on the clipboard, or the folder it
 // is in, now has a new path, and a paste should still find it. `capturedAt` stays, so the
-// clipboard is still the one that was copied.
+// clipboard is still the one that was copied. Items the write left where they were (`left`)
+// stay, even inside a folder that moved.
 export function remapClipboardPaths(
   clipboard: CopyPasteClipboardState,
   moves: ReadonlyArray<{ from: string; to: string }>,
+  left: LeftInPlace = NOTHING_LEFT_IN_PLACE,
 ): CopyPasteClipboardState {
   if (clipboard.type !== "ready" || moves.length === 0) {
     return clipboard;
   }
-  const remap = (path: string) => remappedPath(path, moves) ?? path;
+  const remap = (path: string) => remappedPath(path, moves, left) ?? path;
   let changed = false;
   const sourcePaths: string[] = [];
   const keptPaths = new Set<string>();
@@ -138,11 +140,63 @@ export function remapClipboardPaths(
 function remappedPath(
   path: string,
   moves: ReadonlyArray<{ from: string; to: string }>,
+  left: LeftInPlace,
 ): string | null {
   const move = moves
     .filter(({ from }) => path === from || path.startsWith(`${from}/`))
-    .sort((left, right) => right.from.length - left.from.length)[0];
-  return move ? replacePathPrefix(path, move.from, move.to) : null;
+    .sort((one, other) => other.from.length - one.from.length)[0];
+  return move && !staysInPlace(path, move.from, left)
+    ? replacePathPrefix(path, move.from, move.to)
+    : null;
+}
+
+// What a write that moved items left where they were: the items it skipped, or that failed
+// or were stopped, and every folder holding one. A folder merged into one already at the
+// destination is reported done, yet it is still at its old path while anything in it is,
+// and the folder of that name at the destination is another.
+export type LeftInPlace = {
+  items: ReadonlySet<string>;
+  itemsAndHolders: ReadonlySet<string>;
+};
+
+const NOTHING_LEFT_IN_PLACE: LeftInPlace = { items: new Set(), itemsAndHolders: new Set() };
+
+function leftInPlaceBy(result: WriteOperationResult): LeftInPlace {
+  const items = new Set<string>();
+  const itemsAndHolders = new Set<string>();
+  for (const item of result.items) {
+    if (!item.sourcePath || item.status === "completed" || isFollowedMove(item, result.action)) {
+      continue;
+    }
+    items.add(item.sourcePath);
+    let path = item.sourcePath;
+    while (path.length > 0 && !itemsAndHolders.has(path)) {
+      itemsAndHolders.add(path);
+      path = path.slice(0, Math.max(0, path.lastIndexOf("/")));
+    }
+  }
+  return items.size === 0 ? NOTHING_LEFT_IN_PLACE : { items, itemsAndHolders };
+}
+
+// Whether `path`, inside (or at) `movedFrom`, is still where it was: it is, or holds, an
+// item the write left in place, or one left in place inside what moved holds it.
+function staysInPlace(path: string, movedFrom: string, left: LeftInPlace): boolean {
+  if (left.items.size === 0) {
+    return false;
+  }
+  if (left.itemsAndHolders.has(path)) {
+    return true;
+  }
+  for (
+    let holder = path.slice(0, path.lastIndexOf("/"));
+    holder.length >= movedFrom.length;
+    holder = holder.slice(0, holder.lastIndexOf("/"))
+  ) {
+    if (left.items.has(holder)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // What a finished write did to the items on the clipboard. Copied items that were renamed
@@ -157,7 +211,8 @@ export function followClipboardThroughWrite(
   result: WriteOperationResult,
 ): CopyPasteClipboardState {
   const moves = movedItems(result) ? collectFollowedMoves(result) : [];
-  return followClipboard(clipboard, moves, removedByWrite(result));
+  const left = moves.length > 0 ? leftInPlaceBy(result) : NOTHING_LEFT_IN_PLACE;
+  return followClipboard(clipboard, moves, removedByWrite(result), left);
 }
 
 // The paths `followClipboardThroughWrite` takes items on `clipboard` to: where the write
@@ -171,10 +226,11 @@ export function clipboardPathsMovedBy(
     return [];
   }
   const moves = collectFollowedMoves(result);
+  const left = leftInPlaceBy(result);
   const kept = dropClipboardPaths(clipboard, removedByWrite(result));
   return kept.type === "ready"
     ? kept.sourcePaths.flatMap((path) => {
-        const moved = remappedPath(path, moves);
+        const moved = remappedPath(path, moves, left);
         return moved === null ? [] : [moved];
       })
     : [];
@@ -193,6 +249,7 @@ function followClipboard(
   clipboard: CopyPasteClipboardState,
   moves: ReturnType<typeof collectFollowedMoves>,
   removedPaths: readonly string[],
+  left: LeftInPlace = NOTHING_LEFT_IN_PLACE,
 ): CopyPasteClipboardState {
   if (clipboard.type !== "ready") {
     return clipboard;
@@ -206,7 +263,7 @@ function followClipboard(
   }
   // What was removed first: an item moved onto a removed item's path (a Replace) is
   // followed there, and isn't taken for the item it replaced.
-  return remapClipboardPaths(dropClipboardPaths(clipboard, removedPaths), moves);
+  return remapClipboardPaths(dropClipboardPaths(clipboard, removedPaths), moves, left);
 }
 
 export function clearCopyPasteClipboard(): CopyPasteClipboardState {
