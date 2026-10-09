@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 // A move copies, as to another disk.
-const fromAnotherDisk = asOnAnotherDisk();
+const fromAnotherDisk = asOnAnotherDisk(() => join(testDir, "src"));
 
 function linkAttribute(path: string): string {
   return execFileSync("xattr", ["-s", "-p", "com.example.tag", path], { encoding: "utf8" }).trim();

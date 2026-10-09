@@ -437,6 +437,8 @@ type CopyPasteAnalysisNodeContract = {
   keepBothDestinationPath: string | null;
   destinationOnly: z.infer<typeof copyPasteDestinationOnlySummarySchema> | null;
   replaceBlockedReason: string | null;
+  // A folder renamed whole: what is in it wasn't read.
+  renameOnly: boolean;
 };
 export const copyPasteDestinationOnlySummarySchema = z.object({
   count: z.number().int().nonnegative(),
@@ -462,6 +464,7 @@ export const copyPasteAnalysisNodeSchema: z.ZodType<CopyPasteAnalysisNodeContrac
     keepBothDestinationPath: z.string().min(1).nullable(),
     destinationOnly: copyPasteDestinationOnlySummarySchema.nullable(),
     replaceBlockedReason: z.string().min(1).nullable(),
+    renameOnly: z.boolean(),
   }),
 );
 export const copyPasteAnalysisSummarySchema = z.object({

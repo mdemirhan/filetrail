@@ -125,7 +125,7 @@ describe("copyPasteExecution real filesystem", () => {
       let copyCount = 0;
       // As to another disk, so the copy+delete path is exercised
       const fileSystem: WriteServiceFileSystem = {
-        ...asOnAnotherDisk(),
+        ...asOnAnotherDisk(() => srcDir),
         copyFile: async (sourcePath, destinationPath, signal) => {
           signal?.throwIfAborted();
           copyCount++;
@@ -177,7 +177,7 @@ describe("copyPasteExecution real filesystem", () => {
 
       // As to another disk, so the copy+delete path is exercised
       const fileSystem: WriteServiceFileSystem = {
-        ...asOnAnotherDisk(),
+        ...asOnAnotherDisk(() => srcDir),
         copyFile: async (sourcePath, destinationPath, signal) => {
           await nativeFileSystem.copyFile(sourcePath, destinationPath, signal);
           // Mutate source after copy completes

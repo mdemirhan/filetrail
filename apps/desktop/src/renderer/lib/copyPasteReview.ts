@@ -353,9 +353,12 @@ function describeChoice(
   const isFolder = node.sourceKind === "directory";
   if (choice === null) {
     return {
-      text: isFolder
-        ? `New folder · ${pluralize(node.totalNodeCount - 1, "item")}`
-        : `New · ${describeSizeAndDate(node.sourceFingerprint, now)}`,
+      // A folder renamed whole wasn't read inside: what it holds isn't known.
+      text: node.renameOnly
+        ? "New folder"
+        : isFolder
+          ? `New folder · ${pluralize(node.totalNodeCount - 1, "item")}`
+          : `New · ${describeSizeAndDate(node.sourceFingerprint, now)}`,
       tone: "normal",
     };
   }

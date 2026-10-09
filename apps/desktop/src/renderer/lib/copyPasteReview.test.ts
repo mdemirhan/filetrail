@@ -53,6 +53,7 @@ function node(
     keepBothDestinationPath: conflictClass === null ? null : `/dest/${name} copy`,
     destinationOnly: null,
     replaceBlockedReason: null,
+    renameOnly: false,
     ...overrides,
     conflictClass,
   };
@@ -215,6 +216,25 @@ describe("copy/paste review model", () => {
     // Half a second apart is the same time for people.
     expect(rows[2]?.detail).toBe("Same size and date · 90 KB, today, 1:59 PM");
     expect(rows[3]?.detail).toBe("Yours is a file · the existing “config” is a folder with 1 item");
+  });
+
+  it("doesn't count what is in a folder moved by renaming it, which wasn't read", () => {
+    const project = node({
+      id: "item-project",
+      sourcePath: "/src/Project",
+      sourceKind: "directory",
+      renameOnly: true,
+    });
+
+    const rows = buildReviewRows({
+      report: report([project], "cut"),
+      policy: KEEP_ALL,
+      overrides: {},
+      showNewItems: true,
+      now: NOW,
+    });
+
+    expect(rows.map((row) => row.detail)).toEqual(["New folder"]);
   });
 
   it("spells out what Replace deletes", () => {

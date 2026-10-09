@@ -378,9 +378,70 @@ describe("copyPasteAnalysis", () => {
     ]);
   });
 
+  describe("a folder moved on its own disk", () => {
+    function folderToMove(extra: ConstructorParameters<typeof MockWriteServiceFileSystem>[0] = {}) {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/Project": { kind: "directory" },
+        "/source/Project/a.txt": { kind: "file", size: 5 },
+        "/source/Project/lib/b.txt": { kind: "file", size: 7 },
+        "/target": { kind: "directory" },
+        ...extra,
+      });
+      const read: string[] = [];
+      fileSystem.readdirImpl = async (path) => {
+        read.push(path);
+        fileSystem.readdirImpl = null;
+        try {
+          return await fileSystem.readdir(path);
+        } finally {
+          fileSystem.readdirImpl = hook;
+        }
+      };
+      const hook = fileSystem.readdirImpl;
+      return { fileSystem, read };
+    }
+
+    async function analyze(fileSystem: MockWriteServiceFileSystem, mode: "copy" | "cut") {
+      return buildCopyPasteAnalysisReport({
+        analysisId: "analysis-1",
+        request: { mode, sourcePaths: ["/source/Project"], destinationDirectoryPath: "/target" },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 1000 },
+      });
+    }
+
+    it("is renamed whole to a free name, without reading what is in it", async () => {
+      const { fileSystem, read } = folderToMove();
+
+      const report = await analyze(fileSystem, "cut");
+
+      expect(report.nodes).toEqual([
+        expect.objectContaining({ renameOnly: true, children: [], totalNodeCount: 1 }),
+      ]);
+      expect(report.summary.totalNodeCount).toBe(1);
+      expect(report.summary.totalBytes).toBeNull();
+      expect(read.filter((path) => path.startsWith("/source/Project"))).toEqual([]);
+    });
+
+    it.each([
+      ["to a name that is taken", "cut", { "/target/Project": { kind: "directory" } }],
+      ["to another disk", "cut", { "/target": { kind: "directory", dev: 2 } }],
+      ["when copied", "copy", {}],
+    ] as const)("is read through %s", async (_label, mode, extra) => {
+      const { fileSystem, read } = folderToMove(extra);
+
+      const report = await analyze(fileSystem, mode);
+
+      expect(report.nodes[0]).toMatchObject({ renameOnly: false, totalNodeCount: 4 });
+      expect(read).toContain("/source/Project/lib");
+    });
+  });
+
   it("includes large-batch and cut warnings", async () => {
+    // On another disk, so the folder is read through rather than renamed whole.
     const fileSystem = new MockWriteServiceFileSystem({
-      "/workspace": { kind: "directory" },
+      "/workspace": { kind: "directory", dev: 2 },
       "/workspace/folder": { kind: "directory" },
       "/workspace/folder/a.txt": { kind: "file", size: 5 },
       "/workspace/folder/b.txt": { kind: "file", size: 7 },

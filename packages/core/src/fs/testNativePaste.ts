@@ -74,16 +74,27 @@ export const nativeFileSystem: WriteServiceFileSystem = {
   copyMetadata: native.nativeCopyMetadata,
 };
 
-// As on a move to another disk: an item being pasted can't be renamed into place (EXDEV),
-// so it is copied and the original removed; what is built under a hidden name still takes
-// its name.
+// As on a move from another disk: what is in the folder `sourceFolder()` names seems to be
+// on a disk of its own, and can't be renamed out of it (EXDEV), so a move copies it and
+// removes the originals. A function, so it can name a folder each test makes anew.
 export function asOnAnotherDisk(
+  sourceFolder: () => string,
   fileSystem: WriteServiceFileSystem = nativeFileSystem,
 ): WriteServiceFileSystem {
+  const isOnIt = (path: string) => {
+    const folder = sourceFolder();
+    return path === folder || path.startsWith(`${folder}/`);
+  };
+  const onItsDisk = (path: string, stats: WriteServiceStats): WriteServiceStats =>
+    isOnIt(path) && stats.dev !== undefined
+      ? Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, { dev: stats.dev + 1 })
+      : stats;
   return {
     ...fileSystem,
+    lstat: async (path) => onItsDisk(path, await fileSystem.lstat(path)),
+    stat: async (path) => onItsDisk(path, await fileSystem.stat(path)),
     renameExclusive: async (from, to) => {
-      if (!basename(from).includes(".filetrail-")) {
+      if (isOnIt(from) !== isOnIt(to)) {
         throw Object.assign(new Error(`EXDEV: ${from}`), { code: "EXDEV", path: from });
       }
       await fileSystem.renameExclusive(from, to);

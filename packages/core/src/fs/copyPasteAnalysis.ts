@@ -249,6 +249,12 @@ export async function buildCopyPasteAnalysisReport(args: {
       destinationPath,
       fileSystem,
       destinationScanCache,
+      // A folder moved on its own disk is renamed whole when its name is free: reading
+      // all that is inside it (a project with its node_modules) would only take time.
+      renameIfFree:
+        request.mode === "cut" &&
+        sourceFingerprint.dev !== null &&
+        sourceFingerprint.dev === destinationFingerprint.dev,
       ...(args.signal ? { signal: args.signal } : {}),
     });
     // A disk mounted inside a folder being moved: a move that copies the folder would copy
@@ -369,6 +375,8 @@ async function analyzeNode(args: {
   // Inside a package that replaces or sits beside another: everything in it is written
   // anew, so nothing at the destination is looked at.
   insideWholePackage?: boolean;
+  // A folder that, with nothing at its destination, is renamed there: not read inside.
+  renameIfFree?: boolean;
   signal?: AbortSignal;
 }): Promise<CopyPasteAnalysisNode> {
   args.signal?.throwIfAborted();
@@ -390,12 +398,14 @@ async function analyzeNode(args: {
       conflictClass !== null &&
       conflictClass !== "directory_conflict");
 
+  const renameOnly =
+    args.renameIfFree === true && sourceKind === "directory" && conflictClass === null;
   const children: CopyPasteAnalysisNode[] = [];
   let totalNodeCount = 1;
   let conflictNodeCount = conflictClass === null ? 0 : 1;
   let unreadableReason: string | null = null;
 
-  if (sourceKind === "directory") {
+  if (sourceKind === "directory" && !renameOnly) {
     let sourceChildren: string[] = [];
     try {
       sourceChildren = await withoutAppleDoubleFiles(
@@ -496,6 +506,7 @@ async function analyzeNode(args: {
     keepBothDestinationPath: null,
     destinationOnly,
     replaceBlockedReason: null,
+    renameOnly,
   };
 }
 
@@ -868,6 +879,8 @@ function summarizeAnalysis(nodes: CopyPasteAnalysisNode[]): CopyPasteAnalysisSum
     mismatchConflictCount: 0,
     blockedCount: 0,
   };
+  // What a folder renamed whole holds wasn't read: the size of the whole isn't known.
+  let bytesKnown = true;
   const stack = [...nodes];
   while (stack.length > 0) {
     const node = stack.pop();
@@ -875,6 +888,7 @@ function summarizeAnalysis(nodes: CopyPasteAnalysisNode[]): CopyPasteAnalysisSum
       continue;
     }
     summary.totalNodeCount += 1;
+    bytesKnown &&= !node.renameOnly;
     if (node.sourceFingerprint.size !== null) {
       summary.totalBytes = (summary.totalBytes ?? 0) + node.sourceFingerprint.size;
     }
@@ -891,5 +905,5 @@ function summarizeAnalysis(nodes: CopyPasteAnalysisNode[]): CopyPasteAnalysisSum
       stack.push(child);
     }
   }
-  return summary;
+  return bytesKnown ? summary : { ...summary, totalBytes: null };
 }

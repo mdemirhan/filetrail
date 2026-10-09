@@ -277,6 +277,7 @@ describe("ipc contracts", () => {
               keepBothDestinationPath: null,
               destinationOnly: null,
               replaceBlockedReason: null,
+              renameOnly: false,
             },
           ],
           issues: [],

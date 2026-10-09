@@ -1419,6 +1419,7 @@ export function toAnalysisReport(plan: TestPastePlan): AnalysisReport {
       keepBothDestinationPath: null,
       destinationOnly: null,
       replaceBlockedReason: null,
+      renameOnly: false,
     })),
     issues: plan.issues,
     warnings: plan.warnings,

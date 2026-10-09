@@ -47,6 +47,7 @@ function node(
     keepBothDestinationPath: conflictClass === null ? null : `/dest/${name} copy`,
     destinationOnly: null,
     replaceBlockedReason: null,
+    renameOnly: false,
     ...overrides,
     conflictClass,
   };

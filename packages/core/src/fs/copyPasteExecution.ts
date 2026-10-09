@@ -240,7 +240,10 @@ export async function executeCopyPasteFromAnalysis(args: {
     writtenByFolder: new Map(),
     totalItemCount: countExecutableSteps(args.resolvedNodes),
     // What will be written: items skipped (an Add Missing merge's existing ones) don't count.
-    totalBytes: sumSubtreeBytes(args.resolvedNodes),
+    // Unknown when a folder is renamed whole: what it holds wasn't read.
+    totalBytes: args.resolvedNodes.some((node) => node.node.renameOnly)
+      ? null
+      : sumSubtreeBytes(args.resolvedNodes),
     progress: { completedItemCount: 0, completedByteCount: 0 },
     writeJournal: args.writeJournal ?? null,
     stagingFor: null,
@@ -592,6 +595,10 @@ async function executeResolvedNode(
         );
       }
       await assertNotWrittenByThisPaste(context, currentNode, runtimeConflict);
+      // Whatever the answer, it would copy or merge a folder whose items weren't read.
+      if (currentNode.node.renameOnly && !isSourceSideConflict(runtimeConflict)) {
+        throw new Error(renameOnlyMessage(currentNode));
+      }
       const resolution = await answerRuntimeConflict(context, currentNode, runtimeConflict);
       // An answer about the item being pasted changing says nothing about the destination:
       // if that changed too, it is asked about on its own, never replaced unseen. An answer
@@ -857,6 +864,18 @@ async function performNode(
   resolvedNode: ResolvedCopyPasteNode,
   source: NodeFingerprint,
 ): Promise<ExecuteNodeResult> {
+  // A folder whose items weren't read can only be renamed into place: on another disk now
+  // (EXDEV), or with anything to replace, it is left where it is.
+  if (resolvedNode.node.renameOnly) {
+    const renamed =
+      resolvedNode.action !== "overwrite" && canRenameForCut(context, resolvedNode)
+        ? await tryRenameForCut(context, resolvedNode, source)
+        : null;
+    if (renamed === null) {
+      throw new Error(renameOnlyMessage(resolvedNode));
+    }
+    return renamed;
+  }
   let currentNode = resolvedNode;
   if (currentNode.action === "overwrite") {
     const destination = await captureFingerprint(context.fileSystem, currentNode.destinationPath);
@@ -1116,6 +1135,10 @@ async function assertCanRemoveFrom(
     }
     // Anything else (the folder just went away) is left for the move itself to report.
   }
+}
+
+function renameOnlyMessage(node: ResolvedCopyPasteNode): string {
+  return `“${basename(node.node.sourcePath)}” wasn't moved because its destination changed after the move began. Try moving it again.`;
 }
 
 function unreadableFolderMessage(mode: CopyPasteMode, reason: string | null): string {

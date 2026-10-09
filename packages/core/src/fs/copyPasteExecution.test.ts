@@ -3145,7 +3145,7 @@ describe("copyPasteExecution", () => {
       },
     );
 
-    it("directory rename reports correct byte progress for subtree", async () => {
+    it("counts a folder renamed whole as one item, of a size not known", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
         "/source/dir": { kind: "directory" },
@@ -3177,8 +3177,10 @@ describe("copyPasteExecution", () => {
       });
 
       const result = events.at(-1)?.result;
-      // completedByteCount must sum all file sizes in the subtree (100 + 200 + 300 = 600)
-      expect(result?.summary.completedByteCount).toBe(600);
+      // What is inside it wasn't read.
+      expect(result?.summary.completedItemCount).toBe(1);
+      expect(result?.summary.totalBytes).toBeNull();
+      expect(fileSystem.exists("/target/dir/sub/c.txt")).toBe(true);
     });
   });
 
@@ -4320,5 +4322,82 @@ describe("names the destination can't tell apart", () => {
     });
     expect(expectNode(fileSystem, "/target/Straße.txt").size).toBe(5);
     expect(fileSystem.trashed).toEqual([]);
+  });
+});
+
+// A folder moved on its own disk to a free name is renamed whole, what is in it unread: it
+// is never copied or merged, and is left where it was when a rename no longer does it.
+describe("a folder renamed whole", () => {
+  async function moveFolder(
+    fileSystem: MockWriteServiceFileSystem,
+    beforeExecute: () => void = () => undefined,
+  ) {
+    const { report, resolvedNodes } = await createResolvedOperation({
+      fileSystem,
+      mode: "cut",
+      sourcePaths: ["/source/Project"],
+      destinationDirectoryPath: "/target",
+    });
+    expect(report.nodes[0]?.renameOnly).toBe(true);
+    beforeExecute();
+    const events: CopyPasteProgressEvent[] = [];
+    const requestResolution = vi.fn(async () => "merge" as const);
+    await executeCopyPasteFromAnalysis({
+      operationId: "rename-only",
+      report,
+      mode: "cut",
+      policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      fileSystem,
+      now: () => new Date("2026-10-09T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes,
+      emit: (event) => events.push(event),
+      requestResolution,
+    });
+    return { result: expectDefined(expectLastEvent(events).result), requestResolution };
+  }
+
+  function projectFolder() {
+    return new MockWriteServiceFileSystem({
+      "/source": { kind: "directory" },
+      "/source/Project": { kind: "directory" },
+      "/source/Project/a.txt": { kind: "file", size: 5 },
+      "/source/Project/lib/b.txt": { kind: "file", size: 7 },
+      "/target": { kind: "directory" },
+    });
+  }
+
+  const RETRY =
+    "“Project” wasn't moved because its destination changed after the move began. Try moving it again.";
+
+  it("is left untouched when the rename finds another disk (EXDEV)", async () => {
+    const fileSystem = projectFolder();
+    fileSystem.renameImpl = async (from) => {
+      throw Object.assign(new Error(`EXDEV: ${from}`), { code: "EXDEV" });
+    };
+
+    const { result } = await moveFolder(fileSystem);
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ sourcePath: "/source/Project", status: "failed", error: RETRY }),
+    ]);
+    expect(expectNode(fileSystem, "/source/Project/a.txt").size).toBe(5);
+    expect(expectNode(fileSystem, "/source/Project/lib/b.txt").size).toBe(7);
+    expect(await fileSystem.readdir("/target")).toEqual([]);
+  });
+
+  it("is left untouched, without a question, when its name was taken meanwhile", async () => {
+    const fileSystem = projectFolder();
+
+    const { result, requestResolution } = await moveFolder(fileSystem, () =>
+      fileSystem.addFile("/target/Project/other.txt", { size: 1 }),
+    );
+
+    expect(requestResolution).not.toHaveBeenCalled();
+    expect(result.items).toEqual([
+      expect.objectContaining({ sourcePath: "/source/Project", status: "failed", error: RETRY }),
+    ]);
+    expect(await fileSystem.readdir("/target/Project")).toEqual(["other.txt"]);
+    expect(expectNode(fileSystem, "/source/Project/lib/b.txt").size).toBe(7);
   });
 });

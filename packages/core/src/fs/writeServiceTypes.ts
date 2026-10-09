@@ -191,6 +191,9 @@ export type CopyPasteAnalysisNode = {
   destinationOnly: CopyPasteDestinationOnlySummary | null;
   /** Why this item can't be replaced, when Replace would destroy the item being pasted. */
   replaceBlockedReason: string | null;
+  /** A folder moved on its own disk to a name nothing has: renamed whole, so what is in it
+   *  wasn't read (`children` is empty whatever it holds). It is never copied or merged. */
+  renameOnly: boolean;
 };
 
 export type CopyPasteDestinationOnlySummary = {

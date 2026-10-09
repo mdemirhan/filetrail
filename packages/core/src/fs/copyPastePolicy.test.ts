@@ -47,6 +47,7 @@ function createNode(
     keepBothDestinationPath: input.keepBothDestinationPath ?? null,
     destinationOnly: input.destinationOnly ?? null,
     replaceBlockedReason: input.replaceBlockedReason ?? null,
+    renameOnly: input.renameOnly ?? false,
   };
 }
 
