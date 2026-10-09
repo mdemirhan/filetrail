@@ -254,33 +254,40 @@ describe("a write that fails", () => {
 
     const failed = await t.undo();
     expect(failed.status).toBe("failed");
-    // The other one took a number rather than wait, and was renamed straight back: nothing
-    // is undone, and both are tried again.
-    expect(snapshot()).toEqual(after);
+    // The other one took a number rather than wait: both are tried again from where they are.
+    expect(existsSync(join(root, "a 2.txt"))).toBe(true);
+    expect(existsSync(join(root, "b.txt"))).toBe(false);
     expect(failed.result?.items.map((item) => [item.status, item.error])).toEqual([
-      ["failed", "“b.txt” was left as it is, because “a.txt” couldn't be renamed out of its way."],
+      [
+        "failed",
+        "“b.txt” is named “a 2.txt” for now, because “a.txt” couldn't be renamed out of its way.",
+      ],
       ["failed", "You don't have permission to access this item."],
     ]);
-    expect(t.history.menu()).toEqual({ undo: "Rename of 2 Items", redo: null, cantUndo: false });
+    expect(t.history.menu()).toEqual({
+      undo: "Rename of 2 Items",
+      redo: "Rename",
+      cantUndo: false,
+    });
 
     expect((await t.undo()).status).toBe("completed");
     expect(snapshot()).toEqual(before);
     expect(t.history.menu()).toEqual({ undo: null, redo: "Rename of 2 Items", cantUndo: false });
 
-    expect((await t.undo("redo")).status).toBe("completed");
+    await t.undo("redo");
+    await t.undo("redo");
     expect(snapshot()).toEqual(after);
     await t.coordinator.shutdown();
   });
 
-  it("records where an item that waits under a number went, when it can't be renamed straight back", async () => {
+  it("records where an item that waits under a number went, for Redo and Undo", async () => {
     writeFileSync(join(root, "a.txt"), "a");
     writeFileSync(join(root, "b.txt"), "b");
     let failing = false;
     const t = setUpUndo(root, trashDir, {
       renameExclusive: async (from, to) => {
-        // The item now named "a.txt" can't be moved aside, nor the other one renamed back
-        // from the number it took.
-        if (failing && (from === join(root, "a.txt") || from === join(root, "a 2.txt"))) {
+        // The item now named "a.txt" can't be moved aside.
+        if (failing && from === join(root, "a.txt")) {
           throw permissionDenied();
         }
         await originalRenameExclusive(from, to);
@@ -322,7 +329,7 @@ describe("a write that fails", () => {
     await t.coordinator.shutdown();
   });
 
-  it("renames a folder that waits straight back with the items inside it", async () => {
+  it("says where the items inside a folder that waits under a number are", async () => {
     mkdirSync(join(root, "A"));
     writeFileSync(join(root, "A", "in.txt"), "in");
     mkdirSync(join(root, "B"));
@@ -345,10 +352,9 @@ describe("a write that fails", () => {
     failing = true;
 
     expect((await t.undo()).status).toBe("partial");
-    // Only the item inside, which nothing held, is renamed back.
+    // The item inside, which nothing held, is renamed back, in the folder that waits.
     expect(readdirSync(join(root, "A"))).toEqual([]);
-    expect(readdirSync(join(root, "B"))).toEqual(["in.txt"]);
-    expect(snapshot()).not.toEqual(after);
+    expect(readdirSync(join(root, "A 2"))).toEqual(["in.txt"]);
 
     failing = false;
     await t.undo();

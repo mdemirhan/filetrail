@@ -675,10 +675,10 @@ async function moveToTrash(
 //
 // What is recorded says exactly where each item went, so either list can always put it
 // back: an item that moved is done from where it was to where it is now, and an item not
-// yet back under its name is left to do from where it is now. An item that took a number
-// only because the name it goes back to is still held by an item of the batch that wasn't
-// renamed (two that swap names, one of them locked) is renamed straight back: both are
-// then left to do where they were, and are tried again together.
+// yet back under its name is left to do from where it is now. That is so for an item that
+// took a number only because the name it goes back to is still held by an item of the
+// batch that wasn't renamed (two that swap names, one of them locked): it waits under the
+// number, and is tried again with the other.
 async function renameBack(
   planned: Extract<PlannedStep, { kind: "batch" }>,
   args: RunContext,
@@ -761,21 +761,13 @@ async function renameBack(
     ) {
       continue;
     }
-    // Where it was is free: it left it, and the item that holds its new name didn't move.
-    const back = join(dirname(outcome.at), basename(from));
-    try {
-      await fs.renameExclusive(outcome.at, back);
-      followRename(outcomes, outcome.at, back);
-    } catch {
-      // It stays under the number for now: done from where it was to there, and left to
-      // do from there.
-      outcome.waits = true;
-    }
+    // Under the number for now: done from where it was to there, and left to do from there.
+    outcome.waits = true;
     items.push(
       failedItem(
         from,
-        outcome.waits ? outcome.at : null,
-        `“${basename(from)}” was left as it is, because “${basename(wanted)}” couldn't be renamed out of its way.`,
+        outcome.at,
+        `“${basename(from)}” is named “${basename(outcome.at)}” for now, because “${basename(wanted)}” couldn't be renamed out of its way.`,
       ),
     );
   }
@@ -791,8 +783,8 @@ async function renameBack(
       items.push(result);
       continue;
     }
-    if (outcome.waits || (result.status === "completed" && !moved)) {
-      // Renamed straight back, or still under the number: said so above.
+    if (outcome.waits) {
+      // Still under the number: said so above.
       leftover.push({ ...item, from: at });
       continue;
     }
@@ -866,17 +858,6 @@ function recordingErrors(fs: WriteOperationFs): {
     fs: { ...fs, rename: recording(fs.rename), renameExclusive: recording(fs.renameExclusive) },
     codeOf: (path) => codes.get(path),
   };
-}
-
-// A folder of the batch renamed straight back takes along the items inside it.
-function followRename(outcomes: Array<{ at: string }>, from: string, to: string): void {
-  for (const outcome of outcomes) {
-    if (outcome.at === from) {
-      outcome.at = to;
-    } else if (outcome.at.startsWith(`${from}/`)) {
-      outcome.at = `${to}/${outcome.at.slice(from.length + 1)}`;
-    }
-  }
 }
 
 // A step not run because the one before it in the same unit couldn't be.
