@@ -39,8 +39,8 @@ export const nativeFileSystem: WriteServiceFileSystem = {
   getFlags: native.nativeGetFlags,
   setFlags: native.nativeSetFlags,
   setAcl: native.nativeSetAcl,
-  copyFile: async (sourcePath, destinationPath, signal) => {
-    await nativeCopy(sourcePath, destinationPath, signal);
+  copyFile: async (sourcePath, destinationPath, signal, onProgress) => {
+    await nativeCopy(sourcePath, destinationPath, signal, onProgress);
   },
   copyMetadata: native.nativeCopyMetadata,
 };

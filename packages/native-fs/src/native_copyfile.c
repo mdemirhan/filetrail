@@ -8,7 +8,9 @@
  * `stopFlag` is an Int32Array whose first element the caller sets to 1 to stop a copy
  * part way through a file: copyfile's progress callback checks it between chunks and
  * the copy fails with ECANCELED. Without it a large file can only be stopped once it
- * has been copied in full.
+ * has been copied in full. Given four elements or more, elements 2-3 (one 64-bit count,
+ * read with a BigInt64Array over the same memory) hold the bytes of data copied so far,
+ * so the caller can show progress inside a large file.
  *
  * Uses COPYFILE_ALL (preserve stat, xattrs, ACLs) | COPYFILE_CLONE (attempt
  * CoW clone on APFS, fall back to full copy) | COPYFILE_EXCL (never replace an
@@ -42,6 +44,8 @@ typedef struct {
      NULL when the copy can't be stopped part way. */
   int32_t *stop;
   napi_ref stop_ref;
+  /* Where the bytes copied so far are written (inside the stop flag's array), or NULL. */
+  int64_t *copied;
 } copy_work_t;
 
 /* Whether the extended attribute copyfile is at is the resource fork. */
@@ -73,6 +77,12 @@ static int copy_status(int what, int stage, copyfile_state_t state, const char *
   copy_work_t *w = (copy_work_t *)ctx;
   if (what == COPYFILE_COPY_DATA && __atomic_load_n(w->stop, __ATOMIC_RELAXED) != 0) {
     return COPYFILE_QUIT;
+  }
+  if (what == COPYFILE_COPY_DATA && stage == COPYFILE_PROGRESS && w->copied != NULL) {
+    off_t copied = 0;
+    if (copyfile_state_get(state, COPYFILE_STATE_COPIED, &copied) == 0) {
+      __atomic_store_n(w->copied, (int64_t)copied, __ATOMIC_RELAXED);
+    }
   }
   if (stage == COPYFILE_ERR) {
     if (what == COPYFILE_COPY_XATTR && !at_resource_fork(state)) {
@@ -262,6 +272,10 @@ static napi_value queue_copy_work(napi_env env, napi_callback_info info,
         return NULL;
       }
       w->stop = (int32_t *)data;
+      /* The count is written whole in one store, so it needs its own aligned 8 bytes. */
+      if (length >= 4 && ((uintptr_t)(w->stop + 2) % sizeof(int64_t)) == 0) {
+        w->copied = (int64_t *)(void *)(w->stop + 2);
+      }
       napi_create_reference(env, argv[2], 1, &w->stop_ref);
     }
   }

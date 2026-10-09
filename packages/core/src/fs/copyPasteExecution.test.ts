@@ -3342,6 +3342,47 @@ describe("copyPasteExecution", () => {
       expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
+    // A large file shows its progress as it is copied, counted once when it is done.
+    it("reports the bytes of the file being copied as they are written", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 100 },
+        "/source/b.bin": { kind: "file", size: 1000 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableCopyFile();
+      fileSystem.copyFileImpl = async (src, dst, _signal, onProgress) => {
+        if (src === "/source/b.bin") {
+          onProgress?.(400);
+        }
+        fileSystem.addFile(dst, { size: expectNode(fileSystem, src).size });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt", "/source/b.bin"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-copy-progress",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      const copying = events.find((event) => event.completedByteCount === 500);
+      expect(copying?.currentSourcePath).toBe("/source/b.bin");
+      expect(copying?.completedItemCount).toBe(1);
+      expect(events.map((event) => event.completedByteCount)).toEqual([0, 100, 500, 1100, 1100]);
+    });
+
     it("falls back to copyFileStream when copyFile absent", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },

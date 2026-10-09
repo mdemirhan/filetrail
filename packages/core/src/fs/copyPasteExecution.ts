@@ -546,6 +546,8 @@ function emitProgress(
   status: "running" | "awaiting_resolution",
   node: ResolvedCopyPasteNode | null,
   runtimeConflict: CopyPasteRuntimeConflict | null,
+  // Bytes of the file being copied that are written so far, not yet counted as done.
+  copyingBytes = 0,
 ): void {
   context.emit({
     operationId: context.operationId,
@@ -554,7 +556,7 @@ function emitProgress(
     status,
     completedItemCount: context.progress.completedItemCount,
     totalItemCount: context.totalItemCount,
-    completedByteCount: context.progress.completedByteCount,
+    completedByteCount: context.progress.completedByteCount + copyingBytes,
     totalBytes: context.totalBytes,
     currentSourcePath: node?.node.sourcePath ?? null,
     currentDestinationPath: node ? displayPath(node.destinationPath) : null,
@@ -1214,7 +1216,10 @@ async function writeLeaf(
     );
     return;
   }
-  await copyFileContents(context, node.node.sourcePath, targetPath);
+  // A large file shows its progress as it is copied, not only once it is done.
+  await copyFileContents(context, node.node.sourcePath, targetPath, (copiedBytes) =>
+    emitProgress(context, "running", node, null, copiedBytes),
+  );
   if (context.fileSystem.copyFile) {
     await restoreDroppedFileMetadata(context.fileSystem, targetPath, node.node.sourceFingerprint);
     return;
@@ -2271,10 +2276,11 @@ async function copyFileContents(
   context: ExecutionContext,
   sourcePath: string,
   targetPath: string,
+  onProgress?: (copiedBytes: number) => void,
 ): Promise<void> {
   const { fileSystem } = context;
   if (!fileSystem.renameExclusive && !fileSystem.rename) {
-    await writeFileContents(context, sourcePath, targetPath);
+    await writeFileContents(context, sourcePath, targetPath, onProgress);
     return;
   }
   if ((await captureFingerprint(fileSystem, targetPath)).exists) {
@@ -2297,7 +2303,7 @@ async function copyFileContents(
     await journal.add({ kind: "partial_file", id: journalId, partialPath, finalPath: targetPath });
   }
   try {
-    await writeFileContents(context, sourcePath, partialPath);
+    await writeFileContents(context, sourcePath, partialPath, onProgress);
     try {
       // A copy of a locked file is locked too, and a locked file can't be renamed.
       const flags = await unlockForMove(fileSystem, partialPath);
@@ -2416,11 +2422,12 @@ async function writeFileContents(
   context: ExecutionContext,
   sourcePath: string,
   targetPath: string,
+  onProgress?: (copiedBytes: number) => void,
 ): Promise<void> {
   const before = await captureFingerprint(context.fileSystem, targetPath);
   try {
     if (context.fileSystem.copyFile) {
-      await context.fileSystem.copyFile(sourcePath, targetPath, context.signal);
+      await context.fileSystem.copyFile(sourcePath, targetPath, context.signal, onProgress);
     } else {
       await context.fileSystem.copyFileStream(sourcePath, targetPath, context.signal);
     }

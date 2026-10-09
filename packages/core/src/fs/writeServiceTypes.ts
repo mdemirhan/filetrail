@@ -91,8 +91,14 @@ export type WriteServiceFileSystem = {
   /** Copies a file preserving metadata (mode, flags, timestamps, xattrs). When provided,
    *  used instead of `copyFileStream`, and the copy's metadata is left as it made it.
    *  `signal` stops it part way through the file (rejecting with an AbortError), leaving
-   *  no partial file. */
-  copyFile?: (sourcePath: string, destinationPath: string, signal?: AbortSignal) => Promise<void>;
+   *  no partial file. `onProgress` is told the bytes of the file copied so far, every
+   *  quarter second or so while a large file is being copied. */
+  copyFile?: (
+    sourcePath: string,
+    destinationPath: string,
+    signal?: AbortSignal,
+    onProgress?: (copiedBytes: number) => void,
+  ) => Promise<void>;
   /** The item's BSD flags (`st_flags`, a symlink not followed); `UF_IMMUTABLE` is
    *  Finder's "Locked". Without it no item is seen as locked. */
   getFlags?: (path: string) => Promise<number>;

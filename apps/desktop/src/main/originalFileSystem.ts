@@ -138,8 +138,8 @@ export const originalFileSystem: WriteServiceFileSystem = {
   symlink: async (target, path) => {
     await symlink(target, path);
   },
-  copyFile: async (sourcePath, destinationPath, signal) => {
-    await copyFileStoppable(sourcePath, destinationPath, signal);
+  copyFile: async (sourcePath, destinationPath, signal, onProgress) => {
+    await copyFileStoppable(sourcePath, destinationPath, signal, onProgress);
   },
   getFlags: (path) => nativeGetFlags(path),
   setFlags: (path, flags) => nativeSetFlags(path, flags),

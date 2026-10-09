@@ -828,6 +828,25 @@ describe("nativeCopyFile stop flag", () => {
     30_000,
   );
 
+  // A copy that isn't a clone writes the bytes copied so far after the flag, as one 64-bit
+  // count, so a large file can show its progress.
+  it.runIf(canMountDiskImages)(
+    "counts the bytes copied after the flag",
+    async () => {
+      const volume = mountTestDiskImage({ sizeMb: 64 });
+      try {
+        const source = join(root, "big.bin");
+        execFileSync("/usr/sbin/mkfile", ["20m", source]);
+        const shared = new Int32Array(4);
+        await addon.nativeCopyFile(source, join(volume.mountPath, "big.bin"), shared);
+        expect(new BigInt64Array(shared.buffer, 8, 1)[0]).toBe(20n * 1024n * 1024n);
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
   // copyfile asks the progress callback what to do when a write fails; answering
   // "continue" there retried the write forever, so a full disk hung the copy.
   it.runIf(canRunLargeFileTests)(

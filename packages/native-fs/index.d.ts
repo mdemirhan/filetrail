@@ -14,6 +14,8 @@
  *   Extended attributes the destination won't take are skipped, except the resource fork:
  *   a copy that can't write it fails with the write's errno (as without a stop flag) and
  *   may leave the file it made behind, which the caller removes.
+ *   Given four elements or more, elements 2-3 hold one 64-bit count (read it with a
+ *   `BigInt64Array` over the same memory) of the bytes of data copied so far.
  * @returns A promise that resolves when the copy completes.
  * @throws An error with a `code` property (the errno name, e.g. `"ENOENT"`, `"ENOTSUP"`)
  *   plus `errno`, `syscall`, `path` and `dest` on failure.

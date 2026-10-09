@@ -313,9 +313,14 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
 
   /** Enables the `copyFile` method, opting this mock into native file copy support. */
   enableCopyFile(): void {
-    const copyFileFn = async (sourcePath: string, destinationPath: string): Promise<void> => {
+    const copyFileFn = async (
+      sourcePath: string,
+      destinationPath: string,
+      signal?: AbortSignal,
+      onProgress?: (copiedBytes: number) => void,
+    ): Promise<void> => {
       if (this.copyFileImpl) {
-        return this.copyFileImpl(sourcePath, destinationPath);
+        return this.copyFileImpl(sourcePath, destinationPath, signal, onProgress);
       }
       const source = this.getNodeOrThrow(sourcePath);
       if (source.kind !== "file") {
