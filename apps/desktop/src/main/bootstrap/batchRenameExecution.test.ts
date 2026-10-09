@@ -494,6 +494,59 @@ describe("renaming several items", () => {
     expect(unreadable.names()).toEqual(["Notes.txt"]);
   });
 
+  it("changes the case of names without reading the folder on a disk known to ignore case", async () => {
+    const disk = new MemoryDisk(["/trip/a.txt", "/trip/b.txt", "/home/c.txt"]);
+    const readdir = vi.fn(disk.readdir);
+    const isCaseSensitive = vi.fn(async () => false);
+    Object.assign(disk, { readdir, isCaseSensitive });
+    const result = await runBatchRename({
+      request: {
+        items: ["/trip/a.txt", "/trip/b.txt", "/home/c.txt"].map((sourcePath) => ({
+          sourcePath,
+          destinationName: sourcePath.slice(sourcePath.lastIndexOf("/") + 1).toUpperCase(),
+          isFolder: false,
+        })),
+        onConflict: "number",
+        numberSeparator: " ",
+      },
+      fs: disk,
+      signal: new AbortController().signal,
+    });
+    expect(result.completedItemCount).toBe(3);
+    expect(disk.names()).toEqual(["A.TXT", "B.TXT"]);
+    expect(disk.names("/home")).toEqual(["C.TXT"]);
+    expect(readdir).not.toHaveBeenCalled();
+    // Asked once for each folder.
+    expect(isCaseSensitive.mock.calls).toEqual([["/trip"], ["/home"]]);
+  });
+
+  it("reads the folder when the disk minds case, doesn't say, or an accent's encoding changes", async () => {
+    for (const answer of [true, null]) {
+      const disk = new MemoryDisk(["/trip/notes.txt"]);
+      const readdir = vi.fn(disk.readdir);
+      Object.assign(disk, { readdir, isCaseSensitive: async () => answer });
+      await run(disk, request([["notes.txt", "Notes.txt"]]));
+      expect(readdir).toHaveBeenCalledWith("/trip");
+      expect(disk.names()).toEqual(["Notes.txt"]);
+    }
+    const failing = new MemoryDisk(["/trip/notes.txt"]);
+    const readdir = vi.fn(failing.readdir);
+    Object.assign(failing, {
+      readdir,
+      isCaseSensitive: async () => Promise.reject(errno("EIO")),
+    });
+    await run(failing, request([["notes.txt", "NOTES.txt"]]));
+    expect(readdir).toHaveBeenCalledTimes(1);
+    expect(failing.names()).toEqual(["NOTES.txt"]);
+    // "café" written with a separate accent: the same name to the disk, but not only its case.
+    const accent = new MemoryDisk(["/trip/café"]);
+    const accentReaddir = vi.fn(accent.readdir);
+    Object.assign(accent, { readdir: accentReaddir, isCaseSensitive: async () => false });
+    await run(accent, request([["café", "Café".normalize("NFD")]]));
+    expect(accentReaddir).toHaveBeenCalledWith("/trip");
+    expect(accent.names()).toEqual(["Café".normalize("NFD")]);
+  });
+
   it("gives up moving an item aside when every temporary name is taken", async () => {
     const disk = new MemoryDisk(["/trip/a", "/trip/b", "/trip/.taken"]);
     const result = await runBatchRename({
@@ -574,6 +627,24 @@ describe("renaming several items", () => {
         ["/trip/sub/deeper/z.jpg", "/trip/Day 1/deeper/w.jpg"],
       ]);
       expect(result.completedItemCount).toBe(3);
+    });
+
+    it("says where the items inside a renamed package are, though it isn't numbered as a folder", async () => {
+      const disk = new MemoryDisk(["/trip/Tool.app", "/trip/Tool.app/x.jpg", "/trip/y.jpg"]);
+      const result = await run(
+        disk,
+        request([
+          ["Tool.app", "Kit.app"],
+          ["Tool.app/x.jpg", "z.jpg"],
+          ["y.jpg", "w.jpg"],
+        ]),
+      );
+      expect(result.items.map((item) => [item.sourcePath, item.destinationPath])).toEqual([
+        ["/trip/Tool.app", "/trip/Kit.app"],
+        ["/trip/Tool.app/x.jpg", "/trip/Kit.app/z.jpg"],
+        ["/trip/y.jpg", "/trip/w.jpg"],
+      ]);
+      expect(disk.names("/trip/Kit.app")).toEqual(["z.jpg"]);
     });
 
     it("still renames the folder when an item inside it fails, and says where that item is", async () => {

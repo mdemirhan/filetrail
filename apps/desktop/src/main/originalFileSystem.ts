@@ -197,6 +197,7 @@ export function createOriginalWriteOperationFs(
     stat: originalFileSystem.stat,
     mkdir: (path) => originalFileSystem.mkdir(path),
     readdir: originalFileSystem.readdir,
+    isCaseSensitive: (path) => nativeIsCaseSensitive(path),
     realpath: originalFileSystem.realpath,
     rename: originalRename,
     renameExclusive: originalRenameExclusive,

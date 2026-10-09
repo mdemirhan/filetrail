@@ -24,6 +24,7 @@ export type BatchRenameFs = {
   renameExclusive: (oldPath: string, newPath: string) => Promise<void>;
   rename: (oldPath: string, newPath: string) => Promise<void>;
   getFlags?: (path: string) => Promise<number>;
+  isCaseSensitive?: (path: string) => Promise<boolean | null>;
 };
 
 type ResultItem = WriteOperationResult["items"][number];
@@ -94,6 +95,30 @@ export async function runBatchRename(args: {
   });
   const results: Array<ResultItem | null> = planned.map(() => null);
   let completedItemCount = 0;
+  // Whether each folder's disk tells names apart by case, asked once per folder.
+  const caseSensitivity = new Map<string, Promise<boolean | null>>();
+  const isCaseSensitive = (folder: string) => {
+    let answer = caseSensitivity.get(folder);
+    if (answer === undefined) {
+      answer = fs.isCaseSensitive
+        ? fs.isCaseSensitive(folder).catch(() => null)
+        : Promise.resolve(null);
+      caseSensitivity.set(folder, answer);
+    }
+    return answer;
+  };
+  // The folders that hold other items of the batch: only their renames take paths along.
+  const holdsItems = new Set<string>();
+  for (const item of planned) {
+    for (let folder = item.folder; !holdsItems.has(folder); folder = dirname(folder)) {
+      holdsItems.add(folder);
+    }
+  }
+  const followRenamed = (item: PlannedItem) => {
+    if (holdsItems.has(item.sourcePath)) {
+      followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
+    }
+  };
   let cancelled = false;
 
   // Items another item wants the name of. Names are compared as a disk that ignores case
@@ -225,7 +250,7 @@ export async function runBatchRename(args: {
           error: "Not started because the operation was stopped.",
           skipReason: null,
         });
-        followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
+        followRenamed(item);
         continue;
       }
       // Saying how far it got must never stop it halfway, with items under hidden names.
@@ -235,13 +260,13 @@ export async function runBatchRename(args: {
           completedItemCount,
         );
       } catch {}
-      results[item.index] = await renameItem(fs, item, request);
+      results[item.index] = await renameItem(fs, item, request, isCaseSensitive);
       if (results[item.index]?.status === "completed") {
         completedItemCount += 1;
         levelRenamed = true;
       }
       // Renamed, or put back under another name ("sub 2"): what is inside goes along.
-      followFolderRename(results, item.sourcePath, results[item.index]?.destinationPath);
+      followRenamed(item);
       if (signal.aborted) {
         cancelled = true;
       }
@@ -302,9 +327,10 @@ async function renameItem(
   fs: BatchRenameFs,
   item: PlannedItem,
   request: IpcRequest<"writeOperation:batchRename">,
+  isCaseSensitive: (folder: string) => Promise<boolean | null>,
 ): Promise<ResultItem> {
   const from = item.temporaryPath ?? item.sourcePath;
-  if (item.temporaryPath === null && (await renamesItself(fs, item))) {
+  if (item.temporaryPath === null && (await renamesItself(fs, item, isCaseSensitive))) {
     // "notes" to "Notes" on a disk that ignores case: the new name is the item's own.
     try {
       await fs.rename(item.sourcePath, item.destinationPath);
@@ -431,7 +457,11 @@ async function moveToTemporaryName(
 // Whether the new name is the item's own name spelled differently: only its case (or how
 // an accented letter is encoded) changes, and the disk finds the item itself under it, not
 // another item spelled exactly so.
-async function renamesItself(fs: BatchRenameFs, item: PlannedItem): Promise<boolean> {
+async function renamesItself(
+  fs: BatchRenameFs,
+  item: PlannedItem,
+  isCaseSensitive: (folder: string) => Promise<boolean | null>,
+): Promise<boolean> {
   if (looseKey(item.sourceName) !== looseKey(item.destinationName)) {
     return false;
   }
@@ -450,6 +480,14 @@ async function renamesItself(fs: BatchRenameFs, item: PlannedItem): Promise<bool
   const idsUnusable = fileIdOf(source.ino) === null || fileIdOf(destination.ino) === null;
   if (!sameItem && !idsUnusable) {
     return false;
+  }
+  // Only the case changes, on a disk that ignores case: no other item can be spelled so.
+  // Elsewhere, or when how an accent is encoded changes too, the folder says.
+  const onlyCaseChanges =
+    item.sourceName !== item.destinationName &&
+    item.sourceName.toLowerCase() === item.destinationName.toLowerCase();
+  if (onlyCaseChanges && (await isCaseSensitive(item.folder)) === false) {
+    return true;
   }
   const entries = fs.readdir ? await fs.readdir(item.folder).catch(() => null) : null;
   return !(entries?.includes(item.destinationName) ?? false);

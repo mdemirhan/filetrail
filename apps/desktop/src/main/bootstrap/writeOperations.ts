@@ -59,6 +59,9 @@ export type WriteOperationFs = {
   // A folder's entry names as stored, to tell one item found under two spellings of a name
   // from two items whose names differ only in case.
   readdir?: (path: string) => Promise<string[]>;
+  // Whether the disk holding `path` tells names apart by case, null when it doesn't say: a
+  // rename of several that only changes case needn't read the folder on one that doesn't.
+  isCaseSensitive?: (path: string) => Promise<boolean | null>;
   // Where a folder really is, symlinks followed: Delete Immediately checks that what it
   // deletes is really in the Trash.
   realpath?: (path: string) => Promise<string>;
