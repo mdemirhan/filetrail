@@ -191,6 +191,31 @@ describe("a move to another disk removes an original only once its copy is check
     expect(fileSystem.exists("/source/dir")).toBe(false);
   });
 
+  it("removes the originals a folder saved anew holds once the person goes on with it", async () => {
+    const fileSystem = folderOnAnotherDisk();
+    fileSystem.addDirectory("/source/dir/sub", { dev: 2 });
+    fileSystem.addFile("/source/dir/sub/c.txt", { size: 1, dev: 2 });
+    const report = await analyze(fileSystem, ["/source/dir"]);
+    // Saved anew after the review: another folder, with c.txt changed and an item added.
+    fileSystem.nodes.delete("/source/dir/sub/c.txt");
+    fileSystem.nodes.delete("/source/dir/sub");
+    fileSystem.addDirectory("/source/dir/sub", { dev: 2 });
+    fileSystem.addFile("/source/dir/sub/c.txt", { size: 3, dev: 2 });
+    fileSystem.addFile("/source/dir/sub/added.txt", { size: 4, dev: 2 });
+    const asked: string[] = [];
+
+    const result = await move(fileSystem, report, (conflict) => {
+      asked.push(`${conflict.reason} ${conflict.sourcePath}`);
+      return "overwrite";
+    });
+
+    expect(asked).toEqual(["source_changed /source/dir/sub"]);
+    expect(result.status).toBe("completed");
+    expect(fileSystem.readNode("/target/dir/sub/c.txt")?.size).toBe(3);
+    expect(fileSystem.readNode("/target/dir/sub/added.txt")?.size).toBe(4);
+    expect(fileSystem.exists("/source/dir")).toBe(false);
+  });
+
   it("keeps an original folder whose own metadata its copy couldn't take", async () => {
     const fileSystem = folderOnAnotherDisk();
     fileSystem.addDirectory("/source/dir/sub", { dev: 2 });

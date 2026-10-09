@@ -135,6 +135,10 @@ type ExecutionContext = {
   // The folders a move copied whose own metadata (tags, flags, ACLs) the copy couldn't take,
   // by the path of their original: the original keeps it, so it isn't removed.
   metadataNotCopied: Set<string>;
+  // Items whose original changed after the review and that the person went on with, as
+  // they were copied then, by path: a move removes the originals it copied (a folder saved
+  // anew holds other items), not the ones the review saw.
+  acceptedNodes: Map<string, ResolvedCopyPasteNode>;
 };
 
 // An item a move to another disk copied: where (`path`), and the copy as it was written. The
@@ -254,6 +258,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     replacedPaths: [],
     copiedForMove: new Map(),
     metadataNotCopied: new Set(),
+    acceptedNodes: new Map(),
   };
   const itemResults: CopyPasteItemResult[] = [];
   let encounteredError: Error | null = null;
@@ -593,6 +598,9 @@ async function executeResolvedNode(
       );
       if (currentNode.action === "skip") {
         return skippedOutcome("runtime_conflict_resolution", currentNode.destinationPath);
+      }
+      if (aboutSource) {
+        context.acceptedNodes.set(currentNode.node.sourcePath, currentNode);
       }
       check = await detectRuntimeConflict(
         currentNode,
@@ -1808,7 +1816,8 @@ async function removeMovedSources(
   const itemsBySource = new Map(childItems.map((item) => [item.sourcePath, item]));
   const updatedItems = new Map<string, CopyPasteItemResult>();
   const nestedFolderFailures: CopyPasteItemResult[] = [];
-  const removeTree = async (current: ResolvedCopyPasteNode): Promise<string | null> => {
+  const removeTree = async (reviewed: ResolvedCopyPasteNode): Promise<string | null> => {
+    const current = context.acceptedNodes.get(reviewed.node.sourcePath) ?? reviewed;
     if (current.node.sourceKind !== "directory") {
       if (itemsBySource.get(current.node.sourcePath)?.status !== "completed") {
         return null;
