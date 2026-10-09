@@ -696,27 +696,18 @@ describe("a disk that can't be read", () => {
   });
 
   it("keeps a step whose item in the Trash can't be looked at again", async () => {
-    // Found, then not read for how it looks: looked for again.
-    const lookedAgain = (third: string | null) =>
-      troubled(inTrash, (look, path, count) =>
-        look === "lstat" && path === "/T/a.txt" && count >= 2
-          ? count === 2
-            ? "EIO"
-            : third
-          : null,
+    // Found, then not read for how it looks (gone or not): kept, to be looked at next time.
+    for (const second of ["EIO", "ENOENT"]) {
+      const unread = troubled(inTrash, (look, path, count) =>
+        look === "lstat" && path === "/T/a.txt" && count === 2 ? second : null,
       );
-
-    expect(await checkMove(lookedAgain("ENOENT"), putBackFile)).toMatchObject({
-      ok: false,
-      missing: true,
-    });
-    expect(await checkMove(lookedAgain("EIO"), putBackFile)).toEqual(cantCheck("a.txt"));
-    expect(await checkMove(lookedAgain(null), putBackFile)).toEqual({
-      ok: false,
-      reason: "“a.txt” couldn't be checked.",
-      missing: false,
-      retry: true,
-    });
+      expect(await checkMove(unread, putBackFile)).toEqual({
+        ok: false,
+        reason: "“a.txt” couldn't be checked.",
+        missing: false,
+        retry: true,
+      });
+    }
   });
 
   it("keeps a step whose folder in the Trash can't be listed", async () => {

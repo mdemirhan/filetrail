@@ -302,25 +302,12 @@ export async function checkMove(
   // In the Trash without an id to go by: only an item that looks as it did is taken.
   if (step.stamp && (step.id === null || itemIdOf(item) === null)) {
     const now = await readItemStamp(fs, step.from);
-    if (now === null) {
-      // Found a moment ago: it couldn't be read just now, which says nothing about it.
-      const again = await lookUp(fs, step.from);
-      if ("missing" in again) {
-        return { ok: false, reason: await missingReason(fs, step.from, original), missing: true };
-      }
-      return {
-        ok: false,
-        ...("unreadable" in again
-          ? again.unreadable
-          : {
-              reason: `“${basename(step.from)}” couldn't be checked.`,
-              missing: false,
-              retry: true as const,
-            }),
-      };
-    }
-    // A folder that couldn't be listed just then says nothing about what it holds.
-    if (now.kind === "directory" && now.entryCount === null && step.stamp.entryCount !== null) {
+    // Found a moment ago, it couldn't be read just now; or a folder couldn't be listed just
+    // then. Either says nothing about it: the step is kept, to be looked at again.
+    if (
+      now === null ||
+      (now.kind === "directory" && now.entryCount === null && step.stamp.entryCount !== null)
+    ) {
       return {
         ok: false,
         reason: `“${basename(step.from)}” couldn't be checked.`,
