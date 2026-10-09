@@ -18,7 +18,8 @@ Every finding states its scenario, how likely it is and what it costs the person
 - A change made by another app between File Trail's last check and the system call that acts on it isn't caught.
 - The hidden names File Trail works under (`.name.filetrail-xxxxxxxx`) are taken to be its own: an item another app puts or swaps there may be removed or put in place as if it were the copy.
 - On a volume that can't refuse to replace a name when renaming (no `RENAME_EXCL`), a check is made first, which leaves a tiny window.
-- Replacing a folder on a disk with a Trash checks that it is the same folder, not what is inside it: items added to it meanwhile go to the Trash with it. Only a folder about to be deleted for good is checked for items added since.
+- Replacing a folder on a disk with a Trash checks that it is the same folder, not what is inside it: items added to it meanwhile go to the Trash with it. Only a folder a Replace is about to delete for good is checked for items added since.
+- Moving a folder to the Trash on a disk with no Trash deletes it as confirmed, with any items added inside it while the question was open: the person asked for the folder to go.
 - An edit made to a moved item's new copy while the originals are being removed isn't told apart from the copy itself.
 - A destination folder replaced by another of the same name while the review is open receives the paste.
 - A rare read error while checking a moved original can leave the original in place with the move reported done.
@@ -29,8 +30,12 @@ Every finding states its scenario, how likely it is and what it costs the person
 - The Trash reached through another spelling of its path (`/System/Volumes/Data/...`, an alias) may let a paste or New Folder land inside it.
 - A Favorite that is a folder alias may show a drop it then refuses.
 - Move To and ⌘V started at the same instant may both cancel, writing nothing.
+- An item is checked as being in the Trash once before Delete Immediately, not again right before it is deleted: a folder above it swapped for a link in that moment could lead the delete elsewhere.
+- Undo of a Replace made through a name that differs only in letter case (or in how an accented letter is encoded) may bring the old item back under the new item's spelling.
+- A folder moved within its disk is renamed whole, without reading what is inside it. If its destination changes between the review and the move (its name taken, or the folder now on another disk), it isn't moved or asked about; the person is told to try again.
+- Batch Change Case on a disk that says it ignores case trusts that answer and each item's identity instead of reading the folder; the app's case folding may differ from the disk's for rare letters.
+- Undo of a copy locked by the system (a flag only an administrator can clear) fails as locked each time and stays on the Undo list.
 - Recovery after a crash goes by path: an item whose folder was renamed or moved before File Trail opened again has to be put back by hand. A folder recovery puts in place goes without its own tags and dates.
 - A crash in the moment after a folder moved to another disk took its name leaves its originals in place too, without a notice.
-- A large file that failed inside a folder being copied, and whose partial copy then couldn't be removed either, is put in place with the folder under its hidden name.
 - A recovery that finishes on a later retry may not say so.
-- A power cut, or a journal that can't be read, may leave hidden items for the person to put back by hand: crash recovery is not a transaction across disks.
+- The crash journal isn't flushed to the drive (that cost milliseconds for each step of a Replace or folder copy), so a power cut or kernel panic may lose its latest changes. That, or a journal that can't be read, may leave hidden items for the person to put back by hand: crash recovery is not a transaction across disks.
