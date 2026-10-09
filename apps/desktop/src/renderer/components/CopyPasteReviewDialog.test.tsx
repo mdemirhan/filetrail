@@ -485,6 +485,38 @@ describe("CopyPasteReviewDialog", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps a choice made for a row Replace can't take, though 'For all' shows the same", () => {
+    const blocked = node({
+      ...notes,
+      id: "item-9",
+      sourcePath: "/x/notes.txt",
+      replaceBlockedReason: "It is another item being pasted.",
+    });
+    const onChoicesChange = vi.fn();
+    render(
+      <CopyPasteReviewDialog
+        action="paste"
+        report={createReport([blocked, memo])}
+        policy={policyForAllConflicts("overwrite")}
+        overrides={{}}
+        onChoicesChange={onChoicesChange}
+        onClose={vi.fn()}
+        onStart={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Choice for notes.txt")).toHaveValue("keep_both");
+
+    fireEvent.change(screen.getByLabelText("Choice for notes.txt"), {
+      target: { value: "keep_both" },
+    });
+
+    // Sent as the item's own choice, so the paste keeps both whatever "For all" says.
+    expect(onChoicesChange).toHaveBeenCalledWith({
+      policy: policyForAllConflicts("overwrite"),
+      overrides: { "item-9": "keep_both" },
+    });
+  });
+
   it("uses singular and plural wording and local number formats", () => {
     const many = Array.from({ length: 1_200 }, (_, index) =>
       node({

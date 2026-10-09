@@ -1,6 +1,6 @@
 import { basename, dirname } from "node:path";
 
-import { isChoiceAllowedForConflict } from "@filetrail/contracts";
+import { choiceForConflict, isChoiceAllowedForConflict } from "@filetrail/contracts";
 
 import { destinationPathKey, isPackageFolder, resolveDuplicateName } from "./copyPasteNames";
 import type {
@@ -11,6 +11,12 @@ import type {
   CopyPasteRuntimeResolutionAction,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
+
+const CONFLICT_KIND_NAMES = {
+  file_conflict: "file",
+  directory_conflict: "directory",
+  type_mismatch: "mismatch",
+} as const;
 
 type OverrideMap = ReadonlyMap<string, CopyPasteRuntimeResolutionAction>;
 
@@ -139,33 +145,30 @@ async function resolveNode(
 ): Promise<ResolvedCopyPasteNode> {
   const { policy, overrides } = context;
   const baseDestinationPath = destinationPathOverride ?? node.destinationPath;
-  const override = node.conflictClass === null ? undefined : overrides.get(node.id);
   let action: ResolvedCopyPasteNode["action"];
   if (explicitAction) {
     action = explicitAction;
-  } else if (
-    override !== undefined &&
-    node.conflictClass !== null &&
-    isChoiceAllowedForConflict(node.conflictClass, override)
-  ) {
-    action = override;
   } else if (node.conflictClass === null) {
     action = "create";
-  } else if (node.conflictClass === "directory_conflict") {
-    if (!policy?.directory) {
-      throw new Error("Missing directory conflict policy.");
-    }
-    action = policy.directory;
-  } else if (node.conflictClass === "type_mismatch") {
-    if (!policy?.mismatch) {
-      throw new Error("Missing mismatch conflict policy.");
-    }
-    action = policy.mismatch;
   } else {
-    if (!policy?.file) {
-      throw new Error("Missing file conflict policy.");
+    const override = overrides.get(node.id);
+    const kindPolicy =
+      node.conflictClass === "directory_conflict"
+        ? policy?.directory
+        : node.conflictClass === "type_mismatch"
+          ? policy?.mismatch
+          : policy?.file;
+    const usesOverride =
+      override !== undefined && isChoiceAllowedForConflict(node.conflictClass, override);
+    if (!usesOverride && !kindPolicy) {
+      throw new Error(`Missing ${CONFLICT_KIND_NAMES[node.conflictClass]} conflict policy.`);
     }
-    action = policy.file;
+    // As the review sheet decides it (an item Replace can't take gets the safe choice).
+    action = choiceForConflict(
+      { conflictClass: node.conflictClass, replaceBlockedReason: node.replaceBlockedReason },
+      policy ?? { file: "skip", directory: "skip", mismatch: "skip" },
+      override,
+    );
   }
   let destinationPath = baseDestinationPath;
   if (action === "keep_both") {

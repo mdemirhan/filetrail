@@ -17,7 +17,7 @@ import { basename, join } from "node:path";
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { NO_TRASH_ERROR_CODE } from "./copyPasteErrors";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
-import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
+import { resolveAnalysisWithPolicy, resolveSingleNodeWithAction } from "./copyPastePolicy";
 import { native } from "./testNativePaste";
 import {
   type CopyPastePolicy,
@@ -66,6 +66,10 @@ async function paste(args: {
   sourcePaths: string[];
   destinationDirectoryPath: string;
   policy: CopyPastePolicy;
+  // Replace every item picked, as a Replace answered while the paste runs does: the review
+  // gives an item Replace can't take another choice, so this is how the paste's own refusal
+  // is reached.
+  replaceEach?: boolean;
   fileSystem?: WriteServiceFileSystem;
   beforeExecute?: () => Promise<void>;
   resolve?: (conflict: CopyPasteRuntimeConflict) => CopyPasteRuntimeResolutionAction | null;
@@ -82,11 +86,18 @@ async function paste(args: {
     fileSystem,
     thresholds: { largeBatchItemThreshold: 1000, largeBatchByteThreshold: 1e9 },
   });
-  const resolvedNodes = await resolveAnalysisWithPolicy({
-    report,
-    policy: args.policy,
-    fileSystem,
-  });
+  const resolvedNodes = args.replaceEach
+    ? await Promise.all(
+        report.nodes.map((node) =>
+          resolveSingleNodeWithAction({
+            node,
+            action: "overwrite",
+            policy: args.policy,
+            fileSystem,
+          }),
+        ),
+      )
+    : await resolveAnalysisWithPolicy({ report, policy: args.policy, fileSystem });
   await args.beforeExecute?.();
   const events: CopyPasteProgressEvent[] = [];
   const conflicts: CopyPasteRuntimeConflict[] = [];
@@ -136,6 +147,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
         sourcePaths: [join(outer, "foo")],
         destinationDirectoryPath: testDir,
         policy: REPLACE_ALL,
+        replaceEach: true,
       });
 
       expect(result?.items[0]).toMatchObject({
@@ -163,6 +175,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
         sourcePaths: [join(testDir, "L", "X")],
         destinationDirectoryPath: testDir,
         policy: REPLACE_ALL,
+        replaceEach: true,
       });
 
       expect(report.nodes[0]?.replaceBlockedReason).toBe("It contains the item being pasted.");
@@ -187,6 +200,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       sourcePaths: [join(outer, "foo")],
       destinationDirectoryPath: testDir,
       policy: REPLACE_ALL,
+      replaceEach: true,
     });
 
     expect(result?.items[0]?.status).toBe("failed");

@@ -515,6 +515,13 @@ export type PartialFileJournalEntry = {
   id: string;
   partialPath: string;
   finalPath: string;
+  // The id of the hidden folder the part is copied in (`partialPath`'s folder), made for it
+  // before anything was copied: only that folder is removed. Entries without one (written
+  // before, or on a disk that gives no ids) have the part itself under a hidden name.
+  folderId?: ItemId;
+  // When that folder was made: an external disk connected again gets another device
+  // number, and the folder is known there by its file id and this.
+  folderBornMs?: number;
 };
 
 /**

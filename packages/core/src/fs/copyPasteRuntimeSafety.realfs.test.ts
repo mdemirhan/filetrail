@@ -92,7 +92,8 @@ describe("Replace never destroys another item of the same paste", () => {
     expect(report.nodes[0]?.replaceBlockedReason).toBe("It contains another item being pasted.");
   });
 
-  it("refuses the Replace at paste time and keeps every item", async () => {
+  // As the review shows it: Replace for all merges a folder it can't replace.
+  it("merges the folder instead when Replace is chosen for all, and keeps every item", async () => {
     await mkdir(join(src, "a"));
     await writeFile(join(src, "a", "new.txt"), "new");
     await mkdir(join(dst, "a"));
@@ -106,16 +107,16 @@ describe("Replace never destroys another item of the same paste", () => {
       fileSystem: nativeFileSystemWithTrash(trash),
     });
 
-    expect(result?.items.find((item) => item.sourcePath === join(src, "a"))).toMatchObject({
-      status: "failed",
-      error: "Can't replace “a” because it contains another item being pasted.",
-    });
+    expect(result?.status).toBe("completed");
     expect(await readdir(trash)).toEqual([]);
     expect(await readFile(join(dst, "keep.txt"), "utf8")).toBe("keep");
-    expect(await readFile(join(src, "a", "new.txt"), "utf8")).toBe("new");
+    expect(await readFile(join(dst, "a", "new.txt"), "utf8")).toBe("new");
+    expect(result?.replacedPaths).toBeUndefined();
   });
 
-  it("replaces the folder once the other item has been moved out of it first", async () => {
+  // Planned as a merge (the review saw the other item in it), so nothing goes to the Trash
+  // even though the other item has left it by then.
+  it("merges the folder once the other item has been moved out of it first", async () => {
     await mkdir(join(src, "a"));
     await writeFile(join(src, "a", "new.txt"), "new");
     await mkdir(join(dst, "a"));
@@ -134,8 +135,7 @@ describe("Replace never destroys another item of the same paste", () => {
     expect(result?.status).toBe("completed");
     expect(await readFile(join(dst, "keep.txt"), "utf8")).toBe("keep");
     expect(await readdir(join(dst, "a"))).toEqual(["new.txt"]);
-    // The old "a" is gone from there: whatever pointed at it no longer does.
-    expect(result?.replacedPaths).toEqual([join(dst, "a")]);
+    expect(await readdir(trash)).toEqual([]);
   });
 });
 
@@ -1167,8 +1167,11 @@ describe("a large file being copied", () => {
       {
         kind: "partial_file",
         id: expect.any(String),
-        partialPath: expect.stringMatching(/\/\.movie\.mov\.filetrail-[0-9a-f]{8}$/u),
+        // In a hidden folder made for it, known by its id.
+        partialPath: expect.stringMatching(/\/\.movie\.mov\.filetrail-[0-9a-f]{8}\/part$/u),
         finalPath: join(dst, "movie.mov"),
+        folderId: { dev: expect.any(Number), ino: expect.any(Number) },
+        folderBornMs: expect.any(Number),
       },
     ]);
     expect(live.size).toBe(0);

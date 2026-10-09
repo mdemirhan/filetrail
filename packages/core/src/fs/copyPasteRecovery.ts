@@ -4,10 +4,12 @@ import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
 import { moveExclusive, removeStagedItem, unlockForMove } from "./copyPasteExecution";
 import { captureFingerprint } from "./copyPasteFingerprint";
 import { isPackageFolder, resolveDuplicateName } from "./copyPasteNames";
+import type { ItemId } from "./undoLog";
 import type {
   PartialFileJournalEntry,
   ReplaceJournalEntry,
   WriteServiceFileSystem,
+  WriteServiceStats,
 } from "./writeServiceTypes";
 
 export type ReplaceRecoveryOutcome =
@@ -51,7 +53,7 @@ export async function recoverInterruptedReplaces(
     try {
       if (
         options.answerWithinMs !== undefined &&
-        !(await answersWithin(fileSystem, dirname(entry.stagingPath), options.answerWithinMs))
+        !(await allAnswerWithin(fileSystem, foldersReadFor(entry), options.answerWithinMs))
       ) {
         outcomes.push({ entry, outcome: "unreachable", error: "The disk didn't answer." });
         continue;
@@ -111,6 +113,9 @@ async function removePartialFile(
   entry: PartialFileJournalEntry,
   fileSystem: WriteServiceFileSystem,
 ): Promise<PartialFileRecoveryOutcome> {
+  if (entry.folderId !== undefined) {
+    return removePartialFolder(entry, entry.folderId, fileSystem);
+  }
   let isFile: boolean;
   try {
     isFile = (await fileSystem.lstat(entry.partialPath)).isFile();
@@ -134,6 +139,48 @@ async function removePartialFile(
   return { entry, outcome: "removed_copy" };
 }
 
+// The hidden folder a large file was being copied in, known by its id: removed with the
+// part in it only while it is that folder. Anything else at its name is left alone.
+async function removePartialFolder(
+  entry: PartialFileJournalEntry,
+  id: ItemId,
+  fileSystem: WriteServiceFileSystem,
+): Promise<PartialFileRecoveryOutcome> {
+  const folder = dirname(entry.partialPath);
+  let stats: WriteServiceStats;
+  try {
+    stats = await fileSystem.lstat(folder);
+  } catch (error) {
+    if (
+      errorCode(error) === "ENOENT" &&
+      ((await folderIsThere(fileSystem, folder)) ||
+        (await hiddenFolderAroundIsGone(fileSystem, folder)))
+    ) {
+      return { entry, outcome: "nothing_left" };
+    }
+    return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
+  }
+  if (
+    !stats.isDirectory() ||
+    !STAGING_NAME.test(basename(folder)) ||
+    !isItemMadeAs(stats, id, entry.folderBornMs)
+  ) {
+    return { entry, outcome: "nothing_left" };
+  }
+  await removeStagedItem(fileSystem, folder);
+  return { entry, outcome: "removed_copy" };
+}
+
+// Whether `stats` are of the item made with id `id` (at `bornMs`): an external disk
+// connected again has another device number, and the item is known there by its file id
+// and when it was made, which the disk keeps; another disk at the same place has neither.
+function isItemMadeAs(stats: WriteServiceStats, id: ItemId, bornMs: number | undefined): boolean {
+  return (
+    stats.ino === id.ino &&
+    (stats.dev === id.dev || (bornMs !== undefined && stats.birthtimeMs === bornMs))
+  );
+}
+
 // A large file copied inside a folder a paste was building under a hidden name: that folder
 // may have gone since (removed by recovery after this part couldn't be), taking the part
 // with it. Told from a disk that isn't connected by the folder that held it being there.
@@ -155,6 +202,24 @@ async function hiddenFolderAroundIsGone(
 
 // The hidden name this app builds an item under: "."+name+".filetrail-" and 8 hex digits.
 const STAGING_NAME = /^\..*\.filetrail-[0-9a-f]{8}$/su;
+
+// Every folder recovering `entry` looks in: the hidden item's, its final place's, and its
+// original's (on another disk, for a move), which may not answer either.
+function foldersReadFor(entry: ReplaceJournalEntry): string[] {
+  return [
+    ...new Set([dirname(entry.stagingPath), dirname(entry.finalPath), dirname(entry.sourcePath)]),
+  ];
+}
+
+// Whether looking up each of `paths` comes back within `ms`, all looked up at once.
+async function allAnswerWithin(
+  fileSystem: WriteServiceFileSystem,
+  paths: readonly string[],
+  ms: number,
+): Promise<boolean> {
+  const answered = await Promise.all(paths.map((path) => answersWithin(fileSystem, path, ms)));
+  return !answered.includes(false);
+}
 
 // Whether looking up `path` comes back (found or not) within `ms`.
 export async function answersWithin(
@@ -284,7 +349,7 @@ async function isOwnStaging(
   if (id === undefined) {
     return false;
   }
-  let stats: Awaited<ReturnType<WriteServiceFileSystem["lstat"]>>;
+  let stats: WriteServiceStats;
   try {
     stats = await fileSystem.lstat(path);
   } catch (error) {
@@ -295,13 +360,7 @@ async function isOwnStaging(
     // someone else's, so the entry is kept for later.
     throw new StagingUnreadableError(error);
   }
-  if (stats.ino !== id.ino) {
-    return false;
-  }
-  return (
-    stats.dev === id.dev ||
-    (entry.stagingBornMs !== undefined && stats.birthtimeMs === entry.stagingBornMs)
-  );
+  return isItemMadeAs(stats, id, entry.stagingBornMs);
 }
 
 async function folderIsThere(fileSystem: WriteServiceFileSystem, path: string): Promise<boolean> {

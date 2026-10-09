@@ -162,7 +162,10 @@ export async function realItemPaths(
 }
 
 // Whether the folder at `destinationPath` is or holds any of the items (given by their
-// real paths): replacing it would destroy them along with it.
+// real paths): replacing it would destroy them along with it. Told by identity: a real path
+// can still name a folder another way (the firmlinked "/System/Volumes/Data/Users/…" for
+// "/Users/…"), so the folder is looked for among each item's own folders. Paths are
+// compared too, ignoring case, for a disk that gives no identities.
 export async function holdsAnyOf(
   fileSystem: WriteServiceFileSystem,
   destinationPath: string,
@@ -170,17 +173,97 @@ export async function holdsAnyOf(
 ): Promise<boolean> {
   const realDestination = await fileSystem.realpath(destinationPath).catch(() => destinationPath);
   const prefix = realDestination.endsWith("/") ? realDestination : `${realDestination}/`;
-  const key = (path: string) => path.normalize("NFD").toLowerCase();
+  const destinationId = idKey(await captureFingerprint(fileSystem, destinationPath));
+  const holders = await holderIdsOf(fileSystem, realPaths);
   for (const path of realPaths) {
+    const held =
+      key(path) === key(realDestination) ||
+      key(path).startsWith(key(prefix)) ||
+      (destinationId !== null && (holders.get(path)?.has(destinationId) ?? false));
     // One already moved out (earlier in the same move) is no longer at risk.
-    if (
-      (key(path) === key(realDestination) || key(path).startsWith(key(prefix))) &&
-      (await captureFingerprint(fileSystem, path)).exists
-    ) {
+    if (held && (await captureFingerprint(fileSystem, path)).exists) {
       return true;
     }
   }
   return false;
+}
+
+// Whether the item at `path` is one of the items (given by their real paths), as the review
+// tells "another item being pasted": replacing it would destroy that item. Told by identity
+// too, as for holdsAnyOf. One already moved away (earlier in the same move) no longer is.
+export async function isAnyOf(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  realPaths: readonly string[],
+): Promise<boolean> {
+  const candidates = new Set([
+    key(await realItemPath(fileSystem, path)),
+    key(await fileSystem.realpath(path).catch(() => path)),
+  ]);
+  const id = idKey(await captureFingerprint(fileSystem, path));
+  for (const realPath of realPaths) {
+    const item = await captureFingerprint(fileSystem, realPath);
+    if (item.exists && (candidates.has(key(realPath)) || (id !== null && idKey(item) === id))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function key(path: string): string {
+  return path.normalize("NFD").toLowerCase();
+}
+
+function idKey(fingerprint: NodeFingerprint): string | null {
+  return fingerprint.exists && fingerprint.dev !== null && fingerprint.ino !== null
+    ? `${fingerprint.dev}:${fingerprint.ino}`
+    : null;
+}
+
+// For each item (by its real path), the identities of the item and of every folder holding
+// it: its real path's folders are the ones that really hold it. Read once for each list of
+// items, which a review or a paste keeps for its whole run.
+const holderIdCache = new WeakMap<readonly string[], Promise<Map<string, Set<string>>>>();
+
+function holderIdsOf(
+  fileSystem: WriteServiceFileSystem,
+  realPaths: readonly string[],
+): Promise<Map<string, Set<string>>> {
+  let cached = holderIdCache.get(realPaths);
+  if (cached === undefined) {
+    cached = readHolderIds(fileSystem, realPaths);
+    holderIdCache.set(realPaths, cached);
+  }
+  return cached;
+}
+
+async function readHolderIds(
+  fileSystem: WriteServiceFileSystem,
+  realPaths: readonly string[],
+): Promise<Map<string, Set<string>>> {
+  // Items side by side share their folders: each folder is read once.
+  const folderIds = new Map<string, string | null>();
+  const idOf = async (path: string) => {
+    if (!folderIds.has(path)) {
+      folderIds.set(path, idKey(await captureFingerprint(fileSystem, path)));
+    }
+    return folderIds.get(path) ?? null;
+  };
+  const holders = new Map<string, Set<string>>();
+  for (const realPath of realPaths) {
+    const ids = new Set<string>();
+    for (let path = realPath; ; path = dirname(path)) {
+      const id = await idOf(path);
+      if (id !== null) {
+        ids.add(id);
+      }
+      if (dirname(path) === path) {
+        break;
+      }
+    }
+    holders.set(realPath, ids);
+  }
+  return holders;
 }
 
 // Where an item really is: its folder resolved, but not the item itself (a pasted

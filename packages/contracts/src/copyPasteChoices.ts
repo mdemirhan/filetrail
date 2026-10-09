@@ -16,6 +16,30 @@ export function isChoiceAllowedForConflict(
   return choice !== "merge" || conflictClass === "directory_conflict";
 }
 
+// What the paste does with a conflict: the item's own choice from the review, when it made
+// one that fits, or else the choice for all conflicts of its kind. Replace can't take an item
+// that isn't replaceable (the folder holding what is pasted, or another item being pasted):
+// that item gets the safe choice instead, Merge for a folder and Keep Both otherwise. The
+// review sheet and the paste both decide here, so the sheet says what the paste will do.
+export function choiceForConflict(
+  node: { conflictClass: ConflictClass; replaceBlockedReason: string | null },
+  policy: { file: CopyPasteChoice; directory: CopyPasteChoice; mismatch: CopyPasteChoice },
+  override: CopyPasteChoice | undefined,
+): CopyPasteChoice {
+  const choice =
+    override !== undefined && isChoiceAllowedForConflict(node.conflictClass, override)
+      ? override
+      : node.conflictClass === "directory_conflict"
+        ? policy.directory
+        : node.conflictClass === "type_mismatch"
+          ? policy.mismatch
+          : policy.file;
+  if (choice === "overwrite" && node.replaceBlockedReason !== null) {
+    return node.conflictClass === "directory_conflict" ? "merge" : "keep_both";
+  }
+  return choice;
+}
+
 // The answers offered when something changed during an operation.
 // - A missing source can only be skipped.
 // - With nothing at the destination any more, there is nothing to keep or merge with:

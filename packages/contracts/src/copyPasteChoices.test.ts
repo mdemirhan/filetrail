@@ -1,4 +1,5 @@
 import {
+  choiceForConflict,
   getRuntimeConflictChoices,
   getRuntimeConflictScope,
   isChoiceAllowedForConflict,
@@ -64,5 +65,26 @@ describe("runtime conflict choices", () => {
         conflictClass: "directory_conflict",
       }),
     ).not.toBe(destinationCreated);
+  });
+
+  it("gives an item Replace can't take the safe choice, whether it was chosen for all or for it", () => {
+    const replaceAll = {
+      file: "overwrite",
+      directory: "overwrite",
+      mismatch: "overwrite",
+    } as const;
+    const blocked = (conflictClass: "file_conflict" | "directory_conflict" | "type_mismatch") => ({
+      conflictClass,
+      replaceBlockedReason: "It is another item being pasted.",
+    });
+    expect(choiceForConflict(blocked("file_conflict"), replaceAll, undefined)).toBe("keep_both");
+    expect(choiceForConflict(blocked("type_mismatch"), replaceAll, undefined)).toBe("keep_both");
+    expect(choiceForConflict(blocked("directory_conflict"), replaceAll, undefined)).toBe("merge");
+    expect(choiceForConflict(blocked("file_conflict"), replaceAll, "overwrite")).toBe("keep_both");
+    expect(choiceForConflict(blocked("file_conflict"), replaceAll, "skip")).toBe("skip");
+    // Replace for an item it can take, and a choice that doesn't fit falls back to the policy.
+    const free = { conflictClass: "file_conflict" as const, replaceBlockedReason: null };
+    expect(choiceForConflict(free, replaceAll, undefined)).toBe("overwrite");
+    expect(choiceForConflict(free, replaceAll, "merge")).toBe("overwrite");
   });
 });

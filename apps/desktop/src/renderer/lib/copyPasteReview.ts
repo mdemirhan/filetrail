@@ -2,7 +2,7 @@ import {
   type CopyPasteChoice,
   type IpcRequest,
   type IpcResponse,
-  isChoiceAllowedForConflict,
+  choiceForConflict,
 } from "@filetrail/contracts";
 
 import { formatSize } from "./formatting";
@@ -83,21 +83,13 @@ export function effectiveChoice(
   if (node.conflictClass === null) {
     return null;
   }
-  const override = overrides[node.id];
-  const choice =
-    override && isChoiceAllowedForConflict(node.conflictClass, override)
-      ? override
-      : node.conflictClass === "directory_conflict"
-        ? policy.directory
-        : node.conflictClass === "type_mismatch"
-          ? policy.mismatch
-          : policy.file;
-  // "For all conflicts: Replace" can't replace an item that isn't replaceable (for example
-  // the folder that contains what is being pasted); that item gets the safe choice instead.
-  if (choice === "overwrite" && node.replaceBlockedReason !== null) {
-    return node.conflictClass === "directory_conflict" ? "merge" : "keep_both";
-  }
-  return choice;
+  // Decided as the paste decides it: "For all conflicts: Replace" gives an item that can't
+  // be replaced (the folder that contains what is being pasted) the safe choice instead.
+  return choiceForConflict(
+    { conflictClass: node.conflictClass, replaceBlockedReason: node.replaceBlockedReason },
+    policy,
+    overrides[node.id],
+  );
 }
 
 export type AllConflictsChoice = "skip" | "add_missing" | "keep_all" | "overwrite";

@@ -142,8 +142,13 @@ export function CopyPasteReviewDialog({
   const setChoice = useCallback((row: ReviewRow, choice: CopyPasteChoice) => {
     const latest = latestChoicesRef.current;
     const next = { ...latest.overrides };
-    // A choice that matches "For all conflicts" isn't a separate choice for this item.
-    if (effectiveChoice(row.node, latest.policy, {}) === choice) {
+    // A choice that matches "For all conflicts" isn't a separate choice for this item. One
+    // made for an item Replace can't take is always kept: "For all" may only match it
+    // because the safe choice stands in for Replace there.
+    if (
+      row.replaceBlockedReason === null &&
+      effectiveChoice(row.node, latest.policy, {}) === choice
+    ) {
       delete next[row.id];
     } else {
       next[row.id] = choice;

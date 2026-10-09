@@ -283,6 +283,33 @@ describe("copyPasteAnalysis", () => {
     expect(intoHolder.nodes.map((node) => node.sourcePath)).toEqual(["/Users/me/B"]);
   });
 
+  it("can't replace an item pasted too under another spelling of its path", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/x": { kind: "directory" },
+      "/x/a.txt": { kind: "file", size: 1 },
+      "/d": { kind: "directory", ino: 910, dev: 1 },
+      "/d/a.txt": { kind: "file", size: 2, ino: 911, dev: 1 },
+      "/System/Volumes/Data/d": { kind: "directory", ino: 910, dev: 1 },
+      "/System/Volumes/Data/d/a.txt": { kind: "file", size: 2, ino: 911, dev: 1 },
+    });
+
+    const report = await buildCopyPasteAnalysisReport({
+      analysisId: "analysis-1",
+      request: {
+        mode: "copy",
+        sourcePaths: ["/x/a.txt", "/System/Volumes/Data/d/a.txt"],
+        destinationDirectoryPath: "/d",
+      },
+      fileSystem,
+      thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 1000 },
+    });
+
+    expect(report.nodes.find((node) => node.sourcePath === "/x/a.txt")).toMatchObject({
+      conflictClass: "file_conflict",
+      replaceBlockedReason: "It is another item being pasted.",
+    });
+  });
+
   it("blocks sources from different folders that would land on the same destination name", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/a": { kind: "directory" },

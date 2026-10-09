@@ -20,6 +20,7 @@ import {
   findSourceRelation,
   fingerprintsEqual,
   holdsAnyOf,
+  isAnyOf,
   realItemPaths,
 } from "./copyPasteFingerprint";
 import {
@@ -127,7 +128,19 @@ type ExecutionContext = {
   // Shared by every step, like `progress`.
   trashedPaths: string[];
   replacedPaths: string[];
+  // The files and links a move to another disk copied under a hidden name, by the path of
+  // their original: each original is removed only once its copy is checked (see
+  // removeMovedSources). Shared by every step, like `progress`.
+  copiedForMove: Map<string, CopiedItem>;
+  // The folders a move copied whose own metadata (tags, flags, ACLs) the copy couldn't take,
+  // by the path of their original: the original keeps it, so it isn't removed.
+  metadataNotCopied: Set<string>;
 };
+
+// An item a move to another disk copied: where (`path`), and the copy as it was written. The
+// copy must still be that item, as large, before its original goes. `source` is the original
+// as it was copied, a change the person agreed to go on with included.
+type CopiedItem = { path: string; written: NodeFingerprint; source: NodeFingerprint };
 
 // Steps are kept only for the items the person picked: undoing one undoes everything
 // inside it. A merge, a move to another disk or a permanent delete anywhere makes the
@@ -239,6 +252,8 @@ export async function executeCopyPasteFromAnalysis(args: {
     recordsUndo: true,
     trashedPaths: [],
     replacedPaths: [],
+    copiedForMove: new Map(),
+    metadataNotCopied: new Set(),
   };
   const itemResults: CopyPasteItemResult[] = [];
   let encounteredError: Error | null = null;
@@ -640,9 +655,14 @@ async function answerRuntimeConflict(
   return resolution;
 }
 
-// Where the paste's items really are, looked up once per paste.
+// Where the paste's items really are, looked up once per paste. The items the review
+// planned, as it decided which items Replace can't take: one left out of the paste (moved
+// into the folder it is in already) isn't pasted.
 function pastedItemRealPaths(context: ExecutionContext): Promise<string[]> {
-  context.pastedItemRealPaths ??= realItemPaths(context.fileSystem, context.report.sourcePaths);
+  context.pastedItemRealPaths ??= realItemPaths(
+    context.fileSystem,
+    context.report.nodes.map((node) => node.sourcePath),
+  );
   return context.pastedItemRealPaths;
 }
 
@@ -883,9 +903,15 @@ async function executeStagedDirectory(
     await removeOwnStaging(fileSystem, temporaryPath, reserved.id).catch(() => undefined);
     throw error;
   }
+  // Whether the record says the hidden copy is complete, which the next start puts in place.
+  let recordedComplete = false;
   // Its record goes only once it is gone: one that can't be removed now (its disk went
   // away) is removed at the next start.
   const discard = async () => {
+    if (!(await recordIncomplete(journal, journalEntry, recordedComplete))) {
+      return;
+    }
+    recordedComplete = false;
     try {
       await removeOwnStaging(fileSystem, temporaryPath, reserved.id);
     } catch {
@@ -954,7 +980,9 @@ async function executeStagedDirectory(
     return copyChangedOutcome(name, finalPath, context.mode);
   }
   try {
-    // Complete now: a crash from here on puts it in place at the next start.
+    // Complete now: a crash from here on puts it in place at the next start. Counted as
+    // written before it is: a write that failed may still have reached the disk.
+    recordedComplete = true;
     await journal?.add({ ...journalEntry, staged: true });
     // A copy of a locked or read-only folder is locked or read-only too, and can't always
     // be renamed: it is opened for the move and closed again after.
@@ -981,7 +1009,13 @@ async function executeStagedDirectory(
   if (context.mode === "cut" && !(await isStillOurs(fileSystem, finalPath, reserved.id))) {
     error = hiddenCopyChangedMessage(name, context.mode);
   } else if (context.mode === "cut") {
-    const cleanup = await removeMovedSources(context, currentNode, childItems);
+    const cleanup = await removeMovedSources(
+      context,
+      currentNode,
+      childItems,
+      temporaryPath,
+      finalPath,
+    );
     error = cleanup.error;
     items = cleanup.childItems;
   }
@@ -1080,12 +1114,22 @@ async function executeLeafNode(
   }
   countLeafProgress(context, currentNode);
   let deleteError: string | null = null;
+  if (context.stagingFor === "cut") {
+    context.copiedForMove.set(currentNode.node.sourcePath, {
+      path: currentNode.destinationPath,
+      written: await captureFingerprint(context.fileSystem, currentNode.destinationPath),
+      source: currentNode.node.sourceFingerprint,
+    });
+  }
   if (context.mode === "cut") {
-    deleteError = await tryDeleteMovedSource(
-      currentNode.node.sourcePath,
-      currentNode.node.sourceFingerprint,
-      context.fileSystem,
-    );
+    const copy = await captureFingerprint(context.fileSystem, currentNode.destinationPath);
+    deleteError = copyMatchesSource(copy, currentNode.node.sourceFingerprint)
+      ? await tryDeleteMovedSource(
+          currentNode.node.sourcePath,
+          currentNode.node.sourceFingerprint,
+          context.fileSystem,
+        )
+      : COPY_NOT_WHOLE_MESSAGE;
   }
   emitProgress(context, "running", currentNode, null);
   return {
@@ -1110,6 +1154,18 @@ async function writeLeaf(
   targetPath: string,
 ): Promise<void> {
   if (node.node.sourceKind === "symlink") {
+    if (context.fileSystem.copyFile) {
+      // copyfile(3) makes the link itself (never what it points to), with its tags, flags
+      // and dates: a link made anew would have none of them, and a move would lose them.
+      try {
+        await context.fileSystem.copyFile(node.node.sourcePath, targetPath, context.signal);
+      } catch (error) {
+        throw errorCode(error) === "EEXIST"
+          ? new DestinationTakenError(error)
+          : await explainMissingFolder(context.fileSystem, targetPath, error);
+      }
+      return;
+    }
     const linkTarget = await context.fileSystem.readlink(node.node.sourcePath);
     try {
       await context.fileSystem.symlink(linkTarget, targetPath);
@@ -1291,12 +1347,11 @@ async function executeDirectoryNode(
   }
   let dirDeleteError: string | null = null;
   if (context.mode === "cut") {
-    dirDeleteError = await tryRemoveEmptySourceDirectory(
-      currentNode,
-      context.fileSystem,
-      keptNames,
-      () => noteChanged(context),
-    );
+    dirDeleteError =
+      metadataKeptMessage(context, currentNode) ??
+      (await tryRemoveEmptySourceDirectory(currentNode, context.fileSystem, keptNames, () =>
+        noteChanged(context),
+      ));
   } else if (context.stagingFor !== "cut") {
     // (Built aside for a move, what was added meanwhile is named once the originals go.)
     dirDeleteError = await describeAddedDuringCopy(currentNode, context.fileSystem);
@@ -1316,6 +1371,7 @@ async function applyDirectoryMetadata(
 ): Promise<void> {
   const { fileSystem } = context;
   const { sourcePath, sourceFingerprint } = node.node;
+  const moving = context.mode === "cut" || context.stagingFor === "cut";
   if (fileSystem.copyMetadata) {
     try {
       // Tags, the custom-icon flag, ACLs and flags along with the mode and dates.
@@ -1332,7 +1388,11 @@ async function applyDirectoryMetadata(
       }
       return;
     } catch {
-      // For example a volume that refuses some attribute: carry over what can be.
+      // For example a volume that refuses some attribute: carry over what can be. A move
+      // keeps the original folder then, with what its copy couldn't take.
+      if (moving) {
+        context.metadataNotCopied.add(sourcePath);
+      }
     }
   }
   await preserveModeIfSupported(fileSystem, node.destinationPath, sourceFingerprint.mode);
@@ -1358,6 +1418,13 @@ async function executeReplace(
   ) {
     throw new Error(
       `Can't replace “${basename(finalPath)}” because it contains another item being pasted.`,
+    );
+  }
+  // Pasting "/x/a.txt" over "/d/a.txt" while "/d/a.txt" is pasted too (search results):
+  // replacing it would take away an item this paste still has to paste, or just pasted.
+  if (await isAnyOf(fileSystem, finalPath, await pastedItemRealPaths(context))) {
+    throw new Error(
+      `Can't replace “${basename(finalPath)}” because it is another item being pasted.`,
     );
   }
   // A locked item can't go to the Trash; found out now, before anything is written.
@@ -1451,12 +1518,18 @@ async function executeReplace(
   // mode), put back wherever it ends up.
   let stagedFlags: number | null = null;
   let stagedMode: number | null = null;
+  // Whether the record says the hidden copy is complete (see executeStagedDirectory).
+  let recordedComplete = false;
   // Puts things back the way they were before this item started.
   const undoStaging = async () => {
     if (movedByRename) {
       await moveExclusive(fileSystem, temporaryPath, currentNode.node.sourcePath);
       await restoreAfterMove(fileSystem, currentNode.node.sourcePath, stagedMode, stagedFlags);
     } else if (stagingIsOurs) {
+      if (!(await recordIncomplete(journal, journalEntry, recordedComplete))) {
+        throw new Error(`The copy of “${basename(finalPath)}” couldn't be cleared away yet.`);
+      }
+      recordedComplete = false;
       await removeOwnStaging(fileSystem, temporaryPath, stagingId);
     }
     await journal?.remove(journalEntry.id);
@@ -1523,6 +1596,7 @@ async function executeReplace(
     if (stagedOutcome.itemStatus !== "failed") {
       // Complete now: once the old item is in the Trash, this copy is the one to keep.
       try {
+        recordedComplete = true;
         await journal?.add({ ...journalEntry, staged: true });
       } catch (error) {
         await undoStaging().catch(() => undefined);
@@ -1625,7 +1699,13 @@ async function executeReplace(
   ) {
     ownError = hiddenCopyChangedMessage(basename(finalPath), context.mode);
   } else if (context.mode === "cut" && !movedByRename) {
-    const cleanup = await removeMovedSources(context, currentNode, stagedChildItems);
+    const cleanup = await removeMovedSources(
+      context,
+      currentNode,
+      stagedChildItems,
+      temporaryPath,
+      finalPath,
+    );
     ownError = cleanup.error;
     childItems = cleanup.childItems;
   }
@@ -1672,22 +1752,34 @@ async function recordReplacement(
   }
 }
 
-// After a replacing move was copied into place, removes the sources that were copied.
-// Anything changed in the meantime stays, as in the per-file move flow.
+// After a move to another disk was copied into place (built under `stagingPath`, now at
+// `finalPath`), removes the sources that were copied. Anything changed in the meantime
+// stays, as in the per-file move flow, and so does an original whose copy went away,
+// changed or was cut short since it was written.
 async function removeMovedSources(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
   childItems: CopyPasteItemResult[],
+  stagingPath: string,
+  finalPath: string,
 ): Promise<{ error: string | null; childItems: CopyPasteItemResult[] }> {
-  if (node.node.sourceKind !== "directory") {
-    return {
-      error: await tryDeleteMovedSource(
-        node.node.sourcePath,
-        node.node.sourceFingerprint,
+  const removeCopied = async (current: ResolvedCopyPasteNode): Promise<string | null> => {
+    const copied = context.copiedForMove.get(current.node.sourcePath);
+    context.copiedForMove.delete(current.node.sourcePath);
+    if (
+      copied === undefined ||
+      !(await copyStillWhole(
         context.fileSystem,
-      ),
-      childItems,
-    };
+        rebasePath(copied.path, stagingPath, finalPath),
+        copied,
+      ))
+    ) {
+      return COPY_NOT_WHOLE_MESSAGE;
+    }
+    return tryDeleteMovedSource(current.node.sourcePath, copied.source, context.fileSystem);
+  };
+  if (node.node.sourceKind !== "directory") {
+    return { error: await removeCopied(node), childItems };
   }
   const itemsBySource = new Map(childItems.map((item) => [item.sourcePath, item]));
   const updatedItems = new Map<string, CopyPasteItemResult>();
@@ -1697,11 +1789,7 @@ async function removeMovedSources(
       if (itemsBySource.get(current.node.sourcePath)?.status !== "completed") {
         return null;
       }
-      const error = await tryDeleteMovedSource(
-        current.node.sourcePath,
-        current.node.sourceFingerprint,
-        context.fileSystem,
-      );
+      const error = await removeCopied(current);
       if (error !== null) {
         const item = itemsBySource.get(current.node.sourcePath);
         if (item) {
@@ -1729,7 +1817,10 @@ async function removeMovedSources(
         }
       }
     }
-    return tryRemoveEmptySourceDirectory(current, context.fileSystem, keptNames);
+    return (
+      metadataKeptMessage(context, current) ??
+      tryRemoveEmptySourceDirectory(current, context.fileSystem, keptNames)
+    );
   };
   const error = await removeTree(node);
   return {
@@ -2194,18 +2285,49 @@ async function copyFileContents(
       Object.assign(new Error(`EEXIST: ${targetPath}`), { code: "EEXIST", path: targetPath }),
     );
   }
-  const partialPath = await temporarySiblingPath(fileSystem, targetPath);
   // A large file is written down first: cut short by a crash, the part copied would take
   // up space under a hidden name, unseen, until the next start removes it. Small ones
   // aren't, for speed (two writes to the journal for each file).
   const journal = context.writeJournal;
-  const journalId =
+  const journaled =
     journal !== null &&
-    ((await fileSystem.lstat(sourcePath).catch(() => null))?.size ?? 0) >= JOURNALED_FILE_BYTES
-      ? randomBytes(8).toString("hex")
-      : null;
+    ((await fileSystem.lstat(sourcePath).catch(() => null))?.size ?? 0) >= JOURNALED_FILE_BYTES;
+  // Written down, the part is copied into a folder made for it under a hidden name, known
+  // by its id from before anything is copied: the next start removes only that folder,
+  // never another item that came to have the name. A disk that gives no ids gets the part
+  // next to its place, as small files do.
+  let partialFolder = journaled ? await reserveStagingFolder(fileSystem, targetPath) : null;
+  if (partialFolder !== null && partialFolder.id === null) {
+    await removeOwnStaging(fileSystem, partialFolder.path, null).catch(() => undefined);
+    partialFolder = null;
+  }
+  const partialPath =
+    partialFolder !== null
+      ? join(partialFolder.path, PARTIAL_FILE_NAME)
+      : await temporarySiblingPath(fileSystem, targetPath);
+  // What is left behind should the copy be cut short: the folder, or the part itself.
+  const leftoverPath = partialFolder?.path ?? partialPath;
+  const journalId = journaled ? randomBytes(8).toString("hex") : null;
   if (journal !== null && journalId !== null) {
-    await journal.add({ kind: "partial_file", id: journalId, partialPath, finalPath: targetPath });
+    try {
+      await journal.add({
+        kind: "partial_file",
+        id: journalId,
+        partialPath,
+        finalPath: targetPath,
+        ...(partialFolder?.id ? { folderId: partialFolder.id } : {}),
+        ...(partialFolder !== null && partialFolder.bornMs !== null
+          ? { folderBornMs: partialFolder.bornMs }
+          : {}),
+      });
+    } catch (error) {
+      if (partialFolder !== null) {
+        await removeOwnStaging(fileSystem, partialFolder.path, partialFolder.id).catch(
+          () => undefined,
+        );
+      }
+      throw error;
+    }
   }
   try {
     await writeFileContents(context, sourcePath, partialPath);
@@ -2223,13 +2345,21 @@ async function copyFileContents(
         : await explainMissingFolder(fileSystem, targetPath, error);
     }
   } finally {
+    if (partialFolder !== null) {
+      await removeOwnStaging(fileSystem, partialFolder.path, partialFolder.id).catch(
+        () => undefined,
+      );
+    }
     // Complete under its name, or cleared away: nothing is left to recover. A part that
     // couldn't be cleared away (its disk went away) stays written down for the next start.
-    if (journal !== null && journalId !== null && (await isGone(fileSystem, partialPath))) {
+    if (journal !== null && journalId !== null && (await isGone(fileSystem, leftoverPath))) {
       await journal.remove(journalId).catch(() => undefined);
     }
   }
 }
+
+// The name a large file is copied under inside the hidden folder made for it.
+const PARTIAL_FILE_NAME = "part";
 
 // Whether nothing is at `path` for certain: not merely unreadable, and not on a disk gone
 // away (its folder is still there).
@@ -2337,6 +2467,26 @@ function hiddenCopyChangedMessage(name: string, mode: CopyPasteMode): string {
   return mode === "cut"
     ? `“${name}” wasn't moved because another app changed its copy while it was being made. The original is where it was.`
     : `“${name}” wasn't copied because another app changed the copy while it was being made.`;
+}
+
+// A hidden copy written down as complete is put in place at the next start: before any of
+// it is removed, its record says it isn't, or a removal stopped part way (a disk error)
+// would have what is left of it put in place as if whole. False when that can't be written
+// down: the copy is then left whole, for the next start to put in place.
+async function recordIncomplete(
+  journal: WriteJournal | null,
+  entry: ReplaceJournalEntry,
+  recordedComplete: boolean,
+): Promise<boolean> {
+  if (!recordedComplete || journal === null) {
+    return true;
+  }
+  try {
+    await journal.add({ ...entry, staged: false });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Removes what a paste built under a hidden name, only when the item there is still the one
@@ -2665,6 +2815,35 @@ async function assertDestinationDoesNotContainSource(
   }
 }
 
+const COPY_NOT_WHOLE_MESSAGE =
+  "Its copy went away or changed before the original was removed, so the original was kept.";
+
+// Whether a move's copy is what it copied: the same kind, as large, and for a link the same
+// target. Sizes don't prove the contents, but a copy cut short or replaced is caught.
+function copyMatchesSource(copy: NodeFingerprint, source: NodeFingerprint): boolean {
+  return (
+    copy.exists &&
+    copy.kind === source.kind &&
+    (source.size === null || copy.size === source.size) &&
+    copy.symlinkTarget === source.symlinkTarget
+  );
+}
+
+// Whether the copy at `path` is still the one written (`copied`), as it was written, and
+// still matches its original.
+async function copyStillWhole(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  copied: CopiedItem,
+): Promise<boolean> {
+  const now = await captureFingerprint(fileSystem, path);
+  return (
+    sameItemIdentity(copied.written, now) &&
+    now.size === copied.written.size &&
+    copyMatchesSource(now, copied.source)
+  );
+}
+
 /** Attempts to delete the source after a successful copy in cut mode.
  *  Returns null on success, or an error message if deletion failed. */
 async function tryDeleteMovedSource(
@@ -2687,6 +2866,18 @@ async function tryDeleteMovedSource(
   } catch (error) {
     return `It was copied, but the original couldn't be removed. ${describeCopyPasteError(error)}`;
   }
+}
+
+// A moved folder whose copy couldn't take all of its own metadata (its tags, say) is kept
+// where it was, so nothing of it is lost: the message saying so, or null.
+function metadataKeptMessage(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+): string | null {
+  if (!context.metadataNotCopied.has(node.node.sourcePath)) {
+    return null;
+  }
+  return `Its items were moved, but the folder's own information (such as its tags) couldn't all be copied, so the original “${basename(node.node.sourcePath)}” was kept.`;
 }
 
 /** Attempts to remove an empty source directory after its children were moved.

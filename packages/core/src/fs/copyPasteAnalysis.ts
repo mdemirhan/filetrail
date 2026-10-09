@@ -9,6 +9,7 @@ import {
   detectKind,
   findSourceRelation,
   holdsAnyOf,
+  isAnyOf,
   isSameExistingItem,
   realItemPaths,
 } from "./copyPasteFingerprint";
@@ -697,9 +698,9 @@ async function findReplaceBlockedReason(
   ) {
     return "It contains another item being pasted.";
   }
-  // Pasting "/x/a.txt" over "/d/a.txt" while "/d/a.txt" is pasted too (search results).
-  const destinationRealPath = await fileSystem.realpath(node.destinationPath).catch(() => null);
-  if (destinationRealPath !== null && sourceRealPaths.includes(destinationRealPath)) {
+  // Pasting "/x/a.txt" over "/d/a.txt" while "/d/a.txt" is pasted too (search results),
+  // told by identity as the paste itself tells it, so another spelling of its path counts.
+  if (await isAnyOf(fileSystem, node.destinationPath, sourceRealPaths)) {
     return "It is another item being pasted.";
   }
   return null;
