@@ -31,6 +31,7 @@ import {
 import { CONTENT_SCROLL_SELECTOR, TREE_SCROLL_SELECTOR } from "../lib/folderViewMemory";
 import type { StartupTab } from "../lib/startupNavigation";
 import { createToastEntry, enqueueToast } from "../lib/toasts";
+import { getVolumeRootPath } from "../lib/volumes";
 import type {
   ExplorerServices,
   NavigationStore,
@@ -955,6 +956,39 @@ export function useExplorerTabs(args: {
     }
   }
 
+  // A disk unmounted takes its folders with it: the tabs showing one close, as Finder's do,
+  // and Reopen Closed Tab doesn't offer them. When they are all the window's tabs, the
+  // window closes. False when the tabs can't change now (a sheet or an alert is open), for
+  // the caller to take them elsewhere instead.
+  function closeTabsOnUnmountedDisks(unmountedDiskPaths: ReadonlySet<string>): boolean {
+    const current = stateRef.current;
+    const isGone = (path: string) =>
+      path.length > 0 && unmountedDiskPaths.has(getVolumeRootPath(path));
+    const gone = current.tabs.filter((tab) => {
+      const snapshot = tab.id === current.activeTabId ? captureLiveTab() : tab.snapshot;
+      return snapshot !== null && (isGone(snapshot.currentPath) || isGone(snapshot.treeRootPath));
+    });
+    if (gone.length === 0) {
+      return true;
+    }
+    if (!canChangeTabs()) {
+      return false;
+    }
+    if (gone.length === current.tabs.length) {
+      void client.invoke("app:closeWindow", {}).catch(() => undefined);
+      return true;
+    }
+    for (const tab of gone) {
+      if (tab.id !== current.activeTabId) {
+        closeTab(tab.id, { remember: false });
+      }
+    }
+    if (gone.some((tab) => tab.id === current.activeTabId)) {
+      closeTab(current.activeTabId, { remember: false });
+    }
+    return true;
+  }
+
   // A tab in the background goes back to `place`, history and all: a drag sprang it into
   // folders and ended without a drop. Its folder is read when it is shown, and comes back
   // as it was left there. Answers false for the tab on screen, which the caller takes back
@@ -1118,6 +1152,7 @@ export function useExplorerTabs(args: {
     reopenClosedTab,
     moveTab,
     leaveUnmountedDisksInBackgroundTabs,
+    closeTabsOnUnmountedDisks,
     putBackgroundTabBack,
   };
 }

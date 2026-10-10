@@ -492,6 +492,7 @@ describe("ipc contracts", () => {
             },
           ],
           fileActivationAction: "open",
+          diskImageOpensIn: "window",
           openItemLimit: 5,
           includeHidden: false,
           searchPatternMode: "regex",
@@ -598,6 +599,7 @@ describe("ipc contracts", () => {
           },
         ],
         fileActivationAction: "open",
+        diskImageOpensIn: "window",
         openItemLimit: 5,
         includeHidden: false,
         searchPatternMode: "regex",
@@ -699,6 +701,7 @@ describe("ipc contracts", () => {
             },
           ],
           fileActivationAction: "edit",
+          diskImageOpensIn: "tab",
           openItemLimit: 12,
           favorites: [
             { path: "/Users/demo/Documents", icon: "documents" },
@@ -786,6 +789,7 @@ describe("ipc contracts", () => {
           },
         ],
         fileActivationAction: "edit",
+        diskImageOpensIn: "tab",
         openItemLimit: 12,
         favorites: [
           { path: "/Users/demo/Documents", icon: "documents" },

@@ -11,6 +11,7 @@ import {
   type DetailColumnOrder,
   type DetailColumnVisibility,
   type DetailColumnWidths,
+  type DiskImageOpensIn,
   type ExplorerViewMode,
   type FavoritePreference,
   type FavoritesPlacement,
@@ -106,6 +107,9 @@ export function useAppPreferences() {
   const [fileActivationAction, setFileActivationAction] = useState<FileActivationAction>(
     DEFAULT_APP_PREFERENCES.fileActivationAction,
   );
+  const [diskImageOpensIn, setDiskImageOpensIn] = useState<DiskImageOpensIn>(
+    DEFAULT_APP_PREFERENCES.diskImageOpensIn,
+  );
   const [openItemLimit, setOpenItemLimit] = useState(DEFAULT_APP_PREFERENCES.openItemLimit);
   const [returnKeyAction, setReturnKeyAction] = useState<ReturnKeyAction>(
     DEFAULT_APP_PREFERENCES.returnKeyAction,
@@ -192,6 +196,8 @@ export function useAppPreferences() {
     setOpenWithApplications,
     fileActivationAction,
     setFileActivationAction,
+    diskImageOpensIn,
+    setDiskImageOpensIn,
     openItemLimit,
     setOpenItemLimit,
     returnKeyAction,
@@ -266,6 +272,7 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("defaultTextEditor", store.setDefaultTextEditor);
   set("openWithApplications", store.setOpenWithApplications);
   set("fileActivationAction", store.setFileActivationAction);
+  set("diskImageOpensIn", store.setDiskImageOpensIn);
   set("returnKeyAction", store.setReturnKeyAction);
   set("shortcutOverrides", store.setShortcutOverrides);
   set("openItemLimit", store.setOpenItemLimit);

@@ -117,6 +117,7 @@ export function SettingsWindowApp() {
     defaultTextEditor: preferences.defaultTextEditor,
     openWithApplications: preferences.openWithApplications,
     fileActivationAction: preferences.fileActivationAction,
+    diskImageOpensIn: preferences.diskImageOpensIn,
     returnKeyAction: preferences.returnKeyAction,
     shortcutOverrides: preferences.shortcutOverrides,
     openItemLimit: preferences.openItemLimit,
@@ -354,6 +355,7 @@ export function SettingsWindowApp() {
               favoritesPlacement={preferences.favoritesPlacement}
               openWithApplications={preferences.openWithApplications}
               fileActivationAction={preferences.fileActivationAction}
+              diskImageOpensIn={preferences.diskImageOpensIn}
               returnKeyAction={preferences.returnKeyAction}
               onReturnKeyActionChange={preferences.setReturnKeyAction}
               shortcutOverrides={preferences.shortcutOverrides}
@@ -435,6 +437,7 @@ export function SettingsWindowApp() {
                 )
               }
               onFileActivationActionChange={preferences.setFileActivationAction}
+              onDiskImageOpensInChange={preferences.setDiskImageOpensIn}
               onOpenItemLimitChange={preferences.setOpenItemLimit}
             />
           ) : null}

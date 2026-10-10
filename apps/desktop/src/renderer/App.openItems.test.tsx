@@ -3,7 +3,7 @@
 // Opening items (aliases, apps, files), the item menu's commands that hand items to other
 // apps, and what is said when they fail.
 
-import type { IpcRequestInput } from "@filetrail/contracts";
+import type { IpcRequestInput, Volume } from "@filetrail/contracts";
 import { act, fireEvent, screen, within } from "@testing-library/react";
 
 vi.mock("./components/ContentPane", async () =>
@@ -405,6 +405,187 @@ describe("the Info panel's buttons", () => {
       expect(payloads(harness, "system:openPathsWithApplication")).toEqual([
         { applicationPath: "/Applications/Zed.app", paths: ["/Users/demo/source.txt"] },
       ]),
+    );
+  });
+});
+
+describe("opening a disk image", () => {
+  const IMAGE = "/Users/demo/Install.dmg";
+
+  function createImageHarness(args: HarnessArgs = {}): Harness {
+    const harness = createHarness({
+      ...args,
+      directorySnapshots: {
+        "/Volumes/Install": { path: "/Volumes/Install", parentPath: "/Volumes", entries: [] },
+        ...args.directorySnapshots,
+      },
+    });
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+      createDirectoryEntry(IMAGE, "file"),
+    ]);
+    return harness;
+  }
+
+  function imageRequests(harness: Harness) {
+    return harness.invocations.filter((call) => call.channel === "system:openDiskImage");
+  }
+
+  function openedWindows(harness: Harness) {
+    return harness.invocations
+      .filter((call) => call.channel === "app:openWindow")
+      .map((call) =>
+        (call.payload as IpcRequestInput<"app:openWindow">).tabs.map((tab) => tab.path),
+      );
+  }
+
+  it("mounts it and opens its disk in a new window, as Finder does", async () => {
+    const harness = createImageHarness();
+    renderApp(harness);
+
+    await doubleClick(IMAGE);
+
+    await vi.waitFor(() => expect(openedWindows(harness)).toEqual([["/Volumes/Install"]]));
+    expect(imageRequests(harness).map((call) => call.payload)).toEqual([{ path: IMAGE }]);
+    expect(payloads(harness, "system:openPath")).toEqual([]);
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+  });
+
+  it("opens its disk in a new tab when Settings says so", async () => {
+    const harness = createImageHarness({ preferences: { diskImageOpensIn: "tab" } });
+    renderApp(harness);
+
+    await doubleClick(IMAGE);
+
+    await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    expect(shownFolder()).toBe("/Volumes/Install");
+    expect(openedWindows(harness)).toEqual([]);
+  });
+
+  it("says why it couldn't be opened", async () => {
+    const harness = createImageHarness({
+      diskImageResponses: {
+        [IMAGE]: { status: "failed", volumePath: null, reason: "no mountable file systems" },
+      },
+    });
+    renderApp(harness);
+
+    await doubleClick(IMAGE);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "The disk image “Install.dmg” couldn’t be opened.",
+    });
+    expect(dialog).toHaveTextContent("No mountable file systems.");
+    // One tab shows no tab bar.
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+  });
+
+  it("opens nothing for one DiskImageMounter opened, to ask for its password", async () => {
+    const harness = createImageHarness({
+      diskImageResponses: { [IMAGE]: { status: "handedOff", volumePath: null, reason: null } },
+    });
+    renderApp(harness);
+
+    await doubleClick(IMAGE);
+
+    await vi.waitFor(() => expect(imageRequests(harness)).toHaveLength(1));
+    expect(openedWindows(harness)).toEqual([]);
+    // One tab shows no tab bar.
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens one opened with File Trail from Finder, waiting since before the window opened", async () => {
+    const harness = createImageHarness({ preferences: { diskImageOpensIn: "tab" } });
+    harness.emitOpenRequests([IMAGE]);
+    renderApp(harness);
+
+    await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    expect(shownFolder()).toBe("/Volumes/Install");
+
+    harness.emitOpenRequests([IMAGE]);
+    await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(3));
+    expect(imageRequests(harness)).toHaveLength(2);
+  });
+});
+
+describe("ejecting a disk", () => {
+  const IMAGE = "/Users/demo/Install.dmg";
+  const DISK: Volume = {
+    path: "/Volumes/Install",
+    name: "Install",
+    isLocal: true,
+    isReadOnly: true,
+    fileSystem: "apfs",
+    canEject: true,
+    disk: "disk6",
+  };
+
+  function createDiskHarness(args: HarnessArgs = {}): Harness {
+    const harness = createHarness({
+      volumes: [DISK],
+      preferences: { diskImageOpensIn: "tab" },
+      ...args,
+      directorySnapshots: {
+        "/Volumes/Install": { path: "/Volumes/Install", parentPath: "/Volumes", entries: [] },
+        ...args.directorySnapshots,
+      },
+    });
+    harness.setDirectoryEntries("/Users/demo", [createDirectoryEntry(IMAGE, "file")]);
+    return harness;
+  }
+
+  async function ejectDisk(harness: Harness) {
+    await act(async () => {
+      harness.emitVolumesChanged([]);
+    });
+  }
+
+  it("closes the tabs showing it, as Finder does, and doesn't offer them again", async () => {
+    const harness = createDiskHarness();
+    renderApp(harness);
+    await doubleClick(IMAGE);
+    await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+
+    await ejectDisk(harness);
+
+    await vi.waitFor(() => expect(screen.queryAllByRole("tab")).toHaveLength(0));
+    expect(shownFolder()).toBe("/Users/demo");
+    await act(async () => {
+      harness.emitCommand({ type: "reopenClosedTab" });
+    });
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+  });
+
+  it("closes a tab showing it in the background too", async () => {
+    const harness = createDiskHarness();
+    renderApp(harness);
+    await doubleClick(IMAGE);
+    await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    const [homeTab] = screen.getAllByRole("tab");
+    await act(async () => {
+      if (homeTab) {
+        fireEvent.click(homeTab);
+      }
+    });
+
+    await ejectDisk(harness);
+
+    await vi.waitFor(() => expect(screen.queryAllByRole("tab")).toHaveLength(0));
+    expect(shownFolder()).toBe("/Users/demo");
+  });
+
+  it("closes the window when the disk was all it showed", async () => {
+    const harness = createDiskHarness({
+      launchContext: { startupFolderPath: "/Volumes/Install", restoreTabs: false },
+    });
+    renderApp(harness);
+    await vi.waitFor(() => expect(shownFolder()).toBe("/Volumes/Install"));
+
+    await ejectDisk(harness);
+
+    await vi.waitFor(() =>
+      expect(harness.invocations.some((call) => call.channel === "app:closeWindow")).toBe(true),
     );
   });
 });

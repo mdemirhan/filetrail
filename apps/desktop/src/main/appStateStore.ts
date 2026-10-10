@@ -722,6 +722,10 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       record.fileActivationAction === "edit" || record.fileActivationAction === "open"
         ? record.fileActivationAction
         : currentDefaults.fileActivationAction,
+    diskImageOpensIn:
+      record.diskImageOpensIn === "window" || record.diskImageOpensIn === "tab"
+        ? record.diskImageOpensIn
+        : currentDefaults.diskImageOpensIn,
     returnKeyAction:
       record.returnKeyAction === "rename" || record.returnKeyAction === "open"
         ? record.returnKeyAction

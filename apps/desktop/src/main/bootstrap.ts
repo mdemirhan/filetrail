@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { BrowserWindow, type WebContents, app, clipboard, ipcMain, shell } from "electron";
 
-import type { AppLogEntry, HelpTopic, SettingsTab } from "@filetrail/contracts";
+import type { AppLogEntry, HelpTopic, IpcResponse, SettingsTab } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
 import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
@@ -67,6 +67,7 @@ import {
   createWriteOperationCoordinator,
   sendToEachWindow,
 } from "./bootstrap/writeOperations";
+import { type DiskImageOpener, createDiskImageOpener } from "./diskImages";
 import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
 import { type FolderWatches, createFolderWatches } from "./folderWatch";
 import { registerIpcHandlers } from "./ipc";
@@ -80,6 +81,7 @@ import {
 let activeWorkerClient: ExplorerWorkerClient | null = null;
 let activeWriteCoordinator: ReturnType<typeof createWriteOperationCoordinator> | null = null;
 let activeVolumeWatcher: VolumeWatcher | null = null;
+let activeDiskImageOpener: DiskImageOpener | null = null;
 let activeFolderWatches: FolderWatches | null = null;
 let activeFolderSizeHandlers: ReturnType<typeof createFolderSizeHandlers> | null = null;
 
@@ -155,6 +157,13 @@ export async function bootstrapMainProcess(
   });
   activeVolumeWatcher?.stop();
   activeVolumeWatcher = volumeWatcher;
+  // A disk image opened in a window is mounted here, and its disk shows under Locations at
+  // once rather than when the folder watch settles.
+  const diskImageOpener = createDiskImageOpener({
+    onMounted: () => volumeWatcher.refresh(),
+    logger,
+  });
+  activeDiskImageOpener = diskImageOpener;
   // A disk mounted while the watch was not looking (it can miss one while the Mac sleeps)
   // shows up when the window comes back to the front.
   app.on("browser-window-focus", () => volumeWatcher.refresh());
@@ -454,6 +463,7 @@ export async function bootstrapMainProcess(
       "folderSize:cancel": (payload) => folderSizeHandlers.cancel(payload),
       "folderSize:probeMany": (payload) => folderSizeHandlers.probeMany(payload),
       "system:openPath": (payload) => openPath(payload),
+      "system:openDiskImage": (payload) => diskImageOpener.open(payload.path),
       "system:quickLook": (payload, event) => quickLookPath(payload, event),
       "system:getVolumeInfo": (payload) => getVolumeInfo(payload),
       "system:getDiskIds": (payload) => getDiskIds(payload),
@@ -508,6 +518,7 @@ export async function bootstrapMainProcess(
 }
 
 export async function shutdownMainProcess(): Promise<void> {
+  activeDiskImageOpener = null;
   activeVolumeWatcher?.stop();
   activeVolumeWatcher = null;
   activeFolderWatches?.stopAll();
@@ -535,6 +546,14 @@ export function getMainProcessStatus(): {
     workerActive: activeWorkerClient !== null,
     writeCoordinatorActive: activeWriteCoordinator !== null,
   };
+}
+
+/** Opens a disk image as a window asking does (see system:openDiskImage). */
+export function openDiskImage(path: string): Promise<IpcResponse<"system:openDiskImage">> {
+  return (
+    activeDiskImageOpener?.open(path) ??
+    Promise.resolve({ status: "failed", volumePath: null, reason: null })
+  );
 }
 
 /** The copy, move, rename, or delete that is running now, if any. */

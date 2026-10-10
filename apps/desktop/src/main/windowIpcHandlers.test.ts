@@ -48,6 +48,7 @@ function setUp() {
       startupFolderPath: senderId === 1 ? "/Users/demo" : null,
       restoreTabs: false,
     })),
+    takeOpenRequests: vi.fn((_senderId: number | null): string[] => []),
     openExplorerWindow: vi.fn(() => true),
     mergeExplorerWindows: vi.fn(async () => [tab("/Users/demo/merged")]),
     answerMergeRequest: vi.fn(),
@@ -101,6 +102,11 @@ describe("createWindowIpcHandlers", () => {
       startupFolderPath: "/Users/demo",
       restoreTabs: false,
     });
+    windows.takeOpenRequests.mockReturnValueOnce(["/Users/demo/Install.dmg"]);
+    expect(await handlers["app:takeOpenRequests"]({}, from(1))).toEqual({
+      paths: ["/Users/demo/Install.dmg"],
+    });
+    expect(windows.takeOpenRequests).toHaveBeenCalledWith(1);
     expect(
       await handlers["app:openWindow"](
         { tabs: [tab("/Users/demo/x")], activeTabIndex: 0 },

@@ -180,6 +180,8 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   // Windows whose page has been given its launch folder and command: they are for that
   // page only, not for it loaded again.
   private readonly launchContextGiven = new WeakSet<ExplorerWindowEntry<W>>();
+  // Files opened with File Trail from another app, waiting for the window to open them.
+  private readonly openRequests = new WeakMap<ExplorerWindowEntry<W>, string[]>();
 
   constructor(private readonly host: ExplorerWindowHost<W>) {}
 
@@ -389,6 +391,58 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       restoreTabs: entry?.restoreTabs ?? false,
       ...(entry?.initialCommand ? { initialCommand: entry.initialCommand } : {}),
     };
+  }
+
+  // A file opened with File Trail from another app (a disk image from Finder's Open With):
+  // the window in front opens it. The window is told so; a window still opening asks for
+  // its files once it has opened. False when no window is open to take it.
+  openFromOtherApp(path: string): boolean {
+    if (this.shuttingDown) {
+      return true;
+    }
+    const entry = this.openWindows()[0];
+    if (!entry) {
+      return false;
+    }
+    const waiting = this.openRequests.get(entry) ?? [];
+    waiting.push(path);
+    this.openRequests.set(entry, waiting);
+    entry.window.webContents.send("filetrail:openRequestsWaiting");
+    // A window not shown yet (opening, or at startup) is shown when it is ready.
+    if (entry.window.isMinimized()) {
+      entry.window.restore();
+    }
+    if (entry.window.isVisible()) {
+      entry.window.focus();
+    }
+    return true;
+  }
+
+  // A window on one folder (a disk image's disk, opened with no window open), where the
+  // window closed last was and with its panels, but none of its tabs.
+  openWindowOnFolder(path: string): void {
+    if (this.shuttingDown) {
+      return;
+    }
+    const lastClosed = this.host.store.getLastClosedWindow();
+    const record = this.createRecord(lastClosed?.bounds ?? DEFAULT_WINDOW_STATE, {
+      ...lastClosed?.session,
+      openTabs: [],
+      activeTabIndex: 0,
+    });
+    this.host.store.addExplorerWindow(record);
+    this.open(record, { launchFolderPath: path, restoreTabs: false, place: "front" });
+  }
+
+  // The files waiting for this window to open them; each is handed out once.
+  takeOpenRequests(senderId: number | null): string[] {
+    const entry = this.list.byWebContentsId(senderId);
+    if (!entry) {
+      return [];
+    }
+    const waiting = this.openRequests.get(entry) ?? [];
+    this.openRequests.delete(entry);
+    return waiting;
   }
 
   // The window a running operation goes to when the one that started it closes: the one in

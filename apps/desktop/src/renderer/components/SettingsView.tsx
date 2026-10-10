@@ -16,6 +16,7 @@ import type {
   ApplicationSelection,
   DetailColumnOrder,
   DetailColumnVisibility,
+  DiskImageOpensIn,
   FavoriteIconId,
   FavoritePreference,
   FavoritesPlacement,
@@ -1253,6 +1254,7 @@ export function SettingsView({
   favoritesPlacement,
   openWithApplications,
   fileActivationAction,
+  diskImageOpensIn = "window",
   returnKeyAction = "rename",
   onReturnKeyActionChange = () => undefined,
   shortcutOverrides = DEFAULT_APP_PREFERENCES.shortcutOverrides,
@@ -1292,6 +1294,7 @@ export function SettingsView({
   onMoveOpenWithApplication,
   onRemoveOpenWithApplication,
   onFileActivationActionChange,
+  onDiskImageOpensInChange = () => undefined,
   onOpenItemLimitChange,
 }: {
   // In the Settings window each toolbar tab shows one group of sections; without a tab
@@ -1327,6 +1330,7 @@ export function SettingsView({
   favoritesPlacement: FavoritesPlacement;
   openWithApplications: ReadonlyArray<OpenWithApplication>;
   fileActivationAction: FileActivationAction;
+  diskImageOpensIn?: DiskImageOpensIn;
   returnKeyAction?: ReturnKeyAction;
   onReturnKeyActionChange?: (value: ReturnKeyAction) => void;
   // The keyboard shortcuts that differ from their defaults (the Shortcuts tab).
@@ -1367,6 +1371,7 @@ export function SettingsView({
   onMoveOpenWithApplication: (entryId: string, toIndex: number) => void;
   onRemoveOpenWithApplication: (entryId: string) => void;
   onFileActivationActionChange: (value: FileActivationAction) => void;
+  onDiskImageOpensInChange?: (value: DiskImageOpensIn) => void;
   onOpenItemLimitChange: (value: number) => void;
 }) {
   const showSection = (tab: SettingsTab) => activeTab === undefined || activeTab === tab;
@@ -1739,6 +1744,19 @@ export function SettingsView({
                   ariaLabel="Return key"
                   onChange={(value) => onReturnKeyActionChange(value as ReturnKeyAction)}
                   formatOption={(value) => (value === "open" ? "Opens" : "Renames")}
+                />
+              }
+            />
+            <SettingRow
+              title="Open disk images in"
+              desc="Where a disk opens when you open its disk image."
+              right={
+                <SelectControl
+                  value={diskImageOpensIn}
+                  options={["window", "tab"] satisfies DiskImageOpensIn[]}
+                  ariaLabel="Open disk images in"
+                  onChange={(value) => onDiskImageOpensInChange(value as DiskImageOpensIn)}
+                  formatOption={(value) => (value === "tab" ? "New Tab" : "New Window")}
                 />
               }
             />

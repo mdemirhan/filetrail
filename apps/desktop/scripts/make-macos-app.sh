@@ -187,6 +187,19 @@ if [[ -f "${PLIST}" ]]; then
   # to allow that; without it, a signed app is refused without being asked.
   /usr/libexec/PlistBuddy -c "Add :NSAppleEventsUsageDescription string File Trail asks Finder to empty the Trash." "${PLIST}" >/dev/null 2>&1 || \
     /usr/libexec/PlistBuddy -c "Set :NSAppleEventsUsageDescription File Trail asks Finder to empty the Trash." "${PLIST}"
+  # File Trail can open disk images (Open With in Finder): it mounts one and opens its disk
+  # in a tab. Every kind of disk image is a com.apple.disk-image. "Alternate" leaves macOS's
+  # own DiskImageMounter the app that opens them unless the person chooses File Trail.
+  /usr/libexec/PlistBuddy -c "Delete :CFBundleDocumentTypes" "${PLIST}" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy \
+    -c "Add :CFBundleDocumentTypes array" \
+    -c "Add :CFBundleDocumentTypes:0 dict" \
+    -c "Add :CFBundleDocumentTypes:0:CFBundleTypeName string Disk Image" \
+    -c "Add :CFBundleDocumentTypes:0:CFBundleTypeRole string Viewer" \
+    -c "Add :CFBundleDocumentTypes:0:LSHandlerRank string Alternate" \
+    -c "Add :CFBundleDocumentTypes:0:LSItemContentTypes array" \
+    -c "Add :CFBundleDocumentTypes:0:LSItemContentTypes:0 string com.apple.disk-image" \
+    "${PLIST}"
 fi
 
 # Electron takes an app whose executable is still named "Electron" for a development run:

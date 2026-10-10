@@ -292,7 +292,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Disks",
             description:
-              "Disks you connect, disk images and servers appear under Locations. Click ⏏ beside one, right-click it and choose Eject, or select it and press {ejectVolume}, before you disconnect it. When a program is still using the disk, File Trail asks whether to try again or force it.",
+              "Disks you connect, disk images and servers appear under Locations. Opening a disk image opens its disk in a new window, or a new tab if you choose that in Settings; one that asks for a password or a license opens as in Finder. Click ⏏ beside one, right-click it and choose Eject, or select it and press {ejectVolume}, before you disconnect it. When a program is still using the disk, File Trail asks whether to try again or force it.",
           },
           {
             label: "Tree root",

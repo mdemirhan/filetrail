@@ -17,6 +17,7 @@ import {
 import { type HelpTopic, type SettingsTab, helpTopicSchema } from "@filetrail/contracts";
 
 import type { AppPreferences } from "../shared/appPreferences";
+import { describeDiskImageFailure, isDiskImagePath } from "../shared/diskImages";
 import { resolveShortcuts } from "../shared/shortcuts";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
 import { APP_MENU_NAME, createApplicationMenuTemplate } from "./appMenu";
@@ -31,6 +32,7 @@ import {
   bootstrapMainProcess,
   getActiveWriteOperation,
   getMainProcessStatus,
+  openDiskImage,
   shutdownMainProcess,
 } from "./bootstrap";
 import { ExplorerWindowController } from "./explorerWindowController";
@@ -59,6 +61,9 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let processLoggingHandlersInstalled = false;
 // Found while starting, before the window opened; shown once it has.
 const pendingStartupNotices: string[] = [];
+// Disk images macOS asked File Trail to open before its windows were open.
+const pendingOpenFiles: string[] = [];
+let startupWindowsOpened = false;
 const PRELOAD_PATH = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
 
 if (!hasSingleInstanceLock) {
@@ -176,6 +181,7 @@ if (hasSingleInstanceLock) {
           onUndoHistoryChanged: (menu) => menuSyncRef?.setUndoHistory(menu),
           explorerWindowIdOf: (senderId) => explorerWindows.windowIdOf(senderId),
           launchContextFor: (senderId) => explorerWindows.launchContextFor(senderId),
+          takeOpenRequests: (senderId) => explorerWindows.takeOpenRequests(senderId),
           openExplorerWindow: (senderId, tabs, activeTabIndex) =>
             explorerWindows.openWindowFrom(senderId, tabs, activeTabIndex),
           mergeExplorerWindows: (senderId, tabCount) =>
@@ -233,6 +239,11 @@ if (hasSingleInstanceLock) {
         ]),
       );
       explorerWindows.openStartupWindows(startupFolderPath);
+      // Disk images File Trail was launched to open go to the window in front.
+      startupWindowsOpened = true;
+      for (const path of pendingOpenFiles.splice(0)) {
+        openDiskImageFromOtherApp(path);
+      }
       const frontWindow = explorerWindows.frontWindow();
       if (frontWindow) {
         showPendingStartupNotices(frontWindow);
@@ -271,11 +282,51 @@ if (hasSingleInstanceLock) {
   // Electron would quit.)
   app.on("window-all-closed", () => undefined);
 
+  // A disk image opened with File Trail from Finder (Open With) or another app opens in a
+  // tab, as one opened in File Trail does. macOS sends it before the app is ready when it
+  // launches File Trail to open it: it waits for the windows. Other files aren't File
+  // Trail's to open.
+  app.on("open-file", (event, path) => {
+    if (!isDiskImagePath(path)) {
+      return;
+    }
+    event.preventDefault();
+    appLoggerRef?.info("[filetrail] open file", { path });
+    if (startupWindowsOpened) {
+      openDiskImageFromOtherApp(path);
+    } else {
+      pendingOpenFiles.push(path);
+    }
+  });
+
   app.on("second-instance", () => {
     appLoggerRef?.info("[filetrail] second instance activation", {
       hasWindow: BrowserWindow.getAllWindows().length > 0,
     });
     explorerWindowsRef?.bringToFront();
+  });
+}
+
+// A disk image opened from another app goes to the window in front, which opens it as one
+// opened there. With no window open it is mounted here and its disk opens in a window of
+// its own; an error is shown on its own, with no window to show it in.
+function openDiskImageFromOtherApp(path: string): void {
+  const explorerWindows = explorerWindowsRef;
+  if (!explorerWindows || explorerWindows.openFromOtherApp(path)) {
+    return;
+  }
+  void openDiskImage(path).then((response) => {
+    if (response.status === "opened" && response.volumePath !== null) {
+      explorerWindows.openWindowOnFolder(response.volumePath);
+    } else if (response.status === "failed") {
+      const notice = describeDiskImageFailure(path, response.reason);
+      void dialog.showMessageBox({
+        type: "warning",
+        message: notice.title,
+        detail: notice.message,
+        buttons: ["OK"],
+      });
+    }
   });
 }
 

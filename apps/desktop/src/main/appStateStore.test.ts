@@ -432,6 +432,7 @@ describe("appStateStore", () => {
         },
       ],
       fileActivationAction: "open",
+      diskImageOpensIn: "window",
       openItemLimit: 5,
       includeHidden: false,
       searchPatternMode: "text",
@@ -541,6 +542,7 @@ describe("appStateStore", () => {
         },
       ],
       fileActivationAction: "edit",
+      diskImageOpensIn: "tab",
       openItemLimit: 9,
       includeHidden: true,
       searchPatternMode: "glob",
@@ -684,6 +686,7 @@ describe("appStateStore", () => {
         },
       ],
       fileActivationAction: "edit",
+      diskImageOpensIn: "tab",
       openItemLimit: 9,
       includeHidden: true,
       searchPatternMode: "glob",
@@ -875,6 +878,7 @@ describe("appStateStore", () => {
         created: 168,
       } as never,
       fileActivationAction: "launch" as never,
+      diskImageOpensIn: "sideways" as never,
       openItemLimit: 999,
       treeWidth: 1,
       inspectorWidth: 9999,
@@ -976,6 +980,7 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences().searchResultsSortBy).toBe("kind");
     expect(reloaded.getPreferences().fileActivationAction).toBe("open");
+    expect(reloaded.getPreferences().diskImageOpensIn).toBe("window");
     expect(reloaded.getPreferences().openItemLimit).toBe(50);
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();

@@ -8,6 +8,7 @@ import {
   type IpcChannel,
   type IpcRequestInput,
   type IpcResponse,
+  type Volume,
   type WriteOperationAdoption,
   type WriteOperationProgressEvent,
   ipcContractSchemas,
@@ -310,6 +311,11 @@ export function createAppHarness(
     // An operation handed to the window while its page was loading, which main keeps until
     // the window asks for it.
     adoption?: WriteOperationAdoption;
+    // How opening each disk image goes, by its path (left out: its disk is mounted at
+    // /Volumes/<name without extension>).
+    diskImageResponses?: Record<string, IpcResponse<"system:openDiskImage">>;
+    // The disks mounted besides the startup disk when the window opens.
+    volumes?: Volume[];
   } = {},
 ): {
   client: FiletrailClient;
@@ -327,6 +333,10 @@ export function createAppHarness(
   holdAdoption: (adoption: WriteOperationAdoption) => void;
   // Merge All Windows in another window asks for this window's tabs.
   emitMergeRequest: (requestId: string) => void;
+  // Files opened with File Trail from another app wait for the window, which is told so.
+  emitOpenRequests: (paths: string[]) => void;
+  // A disk mounted or unmounted: the disks mounted now, as the main process sends them.
+  emitVolumesChanged: (volumes: Volume[]) => void;
   // Preferences changed in another window (Settings), as main passes them on.
   emitPreferencesChanged: (patch: IpcRequestInput<"app:updatePreferences">["preferences"]) => void;
   // The folder the window last asked to have watched (null: none).
@@ -414,6 +424,10 @@ export function createAppHarness(
   // System file drags still going, oldest first; each ends when the test says.
   const fileDragEnds: Array<(response: IpcResponse<"system:startFileDrag">) => void> = [];
   const goneFromDisk = new Set<string>();
+  // Files opened with File Trail from another app, waiting for the window to ask for them.
+  const openRequests: string[] = [];
+  let openRequestsListener: (() => void) | null = null;
+  let volumesListener: ((volumes: Volume[]) => void) | null = null;
   let draggedIn: IpcResponse<"system:readDraggedIn"> = {
     changeCount: 0,
     items: [],
@@ -501,6 +515,21 @@ export function createAppHarness(
       }
       if (channel === "app:getClipboard") {
         return { clipboard: args.clipboard ?? { type: "empty" } } as IpcResponse<C>;
+      }
+      if (channel === "system:listVolumes") {
+        return { volumes: args.volumes ?? [] } as IpcResponse<C>;
+      }
+      if (channel === "app:takeOpenRequests") {
+        return { paths: openRequests.splice(0) } as IpcResponse<C>;
+      }
+      if (channel === "system:openDiskImage") {
+        const imagePath = (payload as IpcRequestInput<"system:openDiskImage">).path;
+        const name = imagePath.slice(imagePath.lastIndexOf("/") + 1).replace(/\.[^.]+$/u, "");
+        return (args.diskImageResponses?.[imagePath] ?? {
+          status: "opened",
+          volumePath: `/Volumes/${name}`,
+          reason: null,
+        }) as IpcResponse<C>;
       }
       if (
         channel === "app:setClipboard" ||
@@ -985,6 +1014,22 @@ export function createAppHarness(
         }
       };
     },
+    onVolumesChanged(listener) {
+      volumesListener = listener;
+      return () => {
+        if (volumesListener === listener) {
+          volumesListener = null;
+        }
+      };
+    },
+    onOpenRequestsWaiting(listener) {
+      openRequestsListener = listener;
+      return () => {
+        if (openRequestsListener === listener) {
+          openRequestsListener = null;
+        }
+      };
+    },
     onMergeRequest(listener) {
       mergeRequestListener = listener;
       return () => {
@@ -1028,6 +1073,13 @@ export function createAppHarness(
     },
     emitMergeRequest(requestId) {
       mergeRequestListener?.({ requestId });
+    },
+    emitVolumesChanged(volumes) {
+      volumesListener?.(volumes);
+    },
+    emitOpenRequests(paths) {
+      openRequests.push(...paths);
+      openRequestsListener?.();
     },
     emitPreferencesChanged(patch) {
       preferencesChangedListener?.(patch);

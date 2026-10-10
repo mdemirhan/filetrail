@@ -98,6 +98,9 @@ export const OPEN_TABS_LIMIT = 100;
 
 export type FavoritesPlacement = "integrated" | "separate";
 export type FileActivationAction = "open" | "edit";
+// Where a disk image's disk opens once it is mounted: a window of its own, as Finder opens
+// one, or a tab of the window it was opened from.
+export type DiskImageOpensIn = "window" | "tab";
 // Finder renames with Return; "open" keeps the older behavior of opening the selection.
 export type ReturnKeyAction = "rename" | "open";
 export type {
@@ -325,6 +328,7 @@ export type AppPreferences = {
   defaultTextEditor: ApplicationSelection;
   openWithApplications: OpenWithApplication[];
   fileActivationAction: FileActivationAction;
+  diskImageOpensIn: DiskImageOpensIn;
   returnKeyAction: ReturnKeyAction;
   // The keyboard shortcuts that differ from their defaults, by command.
   shortcutOverrides: ShortcutOverrides;
@@ -428,6 +432,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   defaultTextEditor: { ...DEFAULT_TEXT_EDITOR },
   openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),
   fileActivationAction: "open",
+  diskImageOpensIn: "window",
   returnKeyAction: "rename",
   shortcutOverrides: {},
   openItemLimit: 5,

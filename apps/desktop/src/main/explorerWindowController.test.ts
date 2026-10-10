@@ -560,6 +560,70 @@ describe("ExplorerWindowController opening windows", () => {
   });
 });
 
+describe("ExplorerWindowController files opened from another app", () => {
+  it("gives them to the window in front, once, and tells it they are waiting", () => {
+    const { controller, windows } = setUpWithWindows(2);
+    const [back, front] = windows;
+    front?.webContents.send.mockClear();
+
+    controller.openFromOtherApp("/Users/demo/Install.dmg");
+    controller.openFromOtherApp("/Users/demo/Other.dmg");
+
+    expect(front?.webContents.send).toHaveBeenCalledWith("filetrail:openRequestsWaiting");
+    expect(back?.webContents.send).not.toHaveBeenCalledWith("filetrail:openRequestsWaiting");
+    expect(controller.takeOpenRequests(back?.webContents.id ?? null)).toEqual([]);
+    expect(controller.takeOpenRequests(front?.webContents.id ?? null)).toEqual([
+      "/Users/demo/Install.dmg",
+      "/Users/demo/Other.dmg",
+    ]);
+    expect(controller.takeOpenRequests(front?.webContents.id ?? null)).toEqual([]);
+  });
+
+  it("says so with no window open to take them, and brings back a minimized one", () => {
+    const { controller, windows } = setUp();
+
+    expect(controller.openFromOtherApp("/Users/demo/Install.dmg")).toBe(false);
+    expect(windows).toHaveLength(0);
+
+    controller.openStartupWindows(null);
+    const window = windows[0];
+    if (window) {
+      window.visible = true;
+      window.minimized = true;
+    }
+    expect(controller.openFromOtherApp("/Users/demo/Install.dmg")).toBe(true);
+    expect(windows).toHaveLength(1);
+    expect(window?.minimized).toBe(false);
+  });
+
+  it("opens a window on a disk alone, where the window closed last was", async () => {
+    const { controller, store, windows } = setUpWithWindows(1);
+    windows[0]?.close();
+    await settle();
+
+    controller.openWindowOnFolder("/Volumes/Install");
+
+    const opened = windows[1];
+    expect(controller.launchContextFor(opened?.webContents.id ?? null)).toEqual({
+      startupFolderPath: "/Volumes/Install",
+      restoreTabs: false,
+    });
+    expect(store.getWindowPreferences(opened?.recordId ?? "").openTabs).toEqual([]);
+  });
+
+  it("opens nothing while quitting", async () => {
+    const { controller, windows } = setUpWithWindows(1);
+    void controller.quit();
+    await settle();
+
+    expect(controller.openFromOtherApp("/Users/demo/Install.dmg")).toBe(true);
+    controller.openWindowOnFolder("/Volumes/Install");
+
+    expect(windows).toHaveLength(1);
+    expect(controller.takeOpenRequests(windows[0]?.webContents.id ?? null)).toEqual([]);
+  });
+});
+
 describe("ExplorerWindowController order and bounds", () => {
   it("keeps the window focused last in front, in the store too", () => {
     const { controller, store, windows } = setUpWithWindows(3);

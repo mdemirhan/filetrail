@@ -100,6 +100,9 @@ export function toPreferencePatch(
   if (value.fileActivationAction !== undefined) {
     patch.fileActivationAction = value.fileActivationAction;
   }
+  if (value.diskImageOpensIn !== undefined) {
+    patch.diskImageOpensIn = value.diskImageOpensIn;
+  }
   if (value.openItemLimit !== undefined) {
     patch.openItemLimit = value.openItemLimit;
   }

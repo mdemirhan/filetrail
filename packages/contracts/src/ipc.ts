@@ -747,6 +747,7 @@ export const appPreferencesSchema = z.object({
   defaultTextEditor: applicationSelectionSchema,
   openWithApplications: z.array(openWithApplicationSchema),
   fileActivationAction: z.enum(["open", "edit"]),
+  diskImageOpensIn: z.enum(["window", "tab"]),
   returnKeyAction: z.enum(["rename", "open"]),
   // Command names and shortcuts are the app's own; unknown ones are dropped when saved.
   shortcutOverrides: z.record(z.string().min(1).max(64), z.array(z.string().min(1).max(64)).max(2)),
@@ -892,6 +893,13 @@ export const ipcContractSchemas = {
   "app:getLaunchContext": {
     request: emptyRequestSchema,
     response: launchContextSchema,
+  },
+  // Files opened with File Trail from another app (a disk image from Finder's Open With),
+  // given to the window in front for it to open; each is handed out once. The window is
+  // told there are some with `filetrail:openRequestsWaiting`, and asks once it has opened.
+  "app:takeOpenRequests": {
+    request: emptyRequestSchema,
+    response: z.object({ paths: z.array(z.string()) }),
   },
   // A new explorer window with these tabs (New Window, Open in New Window, Move Tab to New
   // Window), with the panels of the window asking.
@@ -1389,6 +1397,20 @@ export const ipcContractSchemas = {
     response: z.object({
       ok: z.boolean(),
       error: z.string().nullable(),
+    }),
+  },
+  // Opens a disk image: mounts it without a Finder window and says where its disk is
+  // ("opened"), for the window to open in a new window or tab. "handedOff": it asks for a
+  // password or a licence to be agreed to, and DiskImageMounter opened it. "busy": it is
+  // being opened already. "failed" carries hdiutil's reason when it gave one.
+  "system:openDiskImage": {
+    request: z.object({
+      path: z.string().min(1),
+    }),
+    response: z.object({
+      status: z.enum(["opened", "handedOff", "busy", "failed"]),
+      volumePath: z.string().nullable(),
+      reason: z.string().nullable(),
     }),
   },
   // The size of the volume holding `path` and the space left on it.

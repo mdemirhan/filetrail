@@ -244,6 +244,8 @@ export function App() {
     setOpenWithApplications,
     fileActivationAction,
     setFileActivationAction,
+    diskImageOpensIn,
+    setDiskImageOpensIn,
     openItemLimit,
     setOpenItemLimit,
     returnKeyAction,
@@ -934,6 +936,7 @@ export function App() {
     openTreeItemContextMenu,
     openNewFolderDialog,
     openPathExternally,
+    openDiskImage,
     openPathInTerminal,
     showPathsInFinder,
     editPathInTextEditor,
@@ -1109,6 +1112,7 @@ export function App() {
     reopenClosedTab,
     moveTab,
     leaveUnmountedDisksInBackgroundTabs,
+    closeTabsOnUnmountedDisks,
     putBackgroundTabBack,
   } = useExplorerTabs({
     services,
@@ -1200,7 +1204,8 @@ export function App() {
         mergingRef.current = false;
       });
   };
-  // A disk unmounted takes its folders with it: tabs showing one go Home.
+  // A disk unmounted takes its folders with it: tabs showing one close, as Finder's do. When
+  // they can't close now (a sheet is open), they go Home.
   const mountedDiskPathsRef = useRef<ReadonlySet<string>>(new Set());
   useEffect(() => {
     const mounted = new Set(volumes.map((volume) => volume.path));
@@ -1211,11 +1216,21 @@ export function App() {
     if (unmounted.size === 0) {
       return;
     }
+    if (closeTabsOnUnmountedDisks(unmounted)) {
+      return;
+    }
     leaveUnmountedDisksInBackgroundTabs(unmounted);
     if (unmounted.has(getVolumeRootPath(currentPath)) && homePath.length > 0) {
       void navigateTo(homePath, "push");
     }
-  }, [volumes, leaveUnmountedDisksInBackgroundTabs, navigateTo, homePath, currentPath]);
+  }, [
+    volumes,
+    closeTabsOnUnmountedDisks,
+    leaveUnmountedDisksInBackgroundTabs,
+    navigateTo,
+    homePath,
+    currentPath,
+  ]);
   // A drop from another app is made while that app is in front. A question or an error about
   // it brings the window forward, until its work is done or the window is in front anyway.
   const externalDropInFlightRef = useRef(false);
@@ -1623,6 +1638,28 @@ export function App() {
     }
   }, [preferencesReady, runRendererCommand]);
 
+  // Disk images opened with File Trail from Finder (Open With) or another app: this window
+  // opens them once it has opened, and again whenever it is told more are waiting.
+  const openDiskImageRef = useLatest(openDiskImage);
+  useEffect(() => {
+    if (!preferencesReady) {
+      return;
+    }
+    const takeOpenRequests = () => {
+      void client
+        .invoke("app:takeOpenRequests", {})
+        .then(({ paths }) => {
+          for (const path of paths) {
+            void openDiskImageRef.current(path);
+          }
+        })
+        .catch(() => undefined);
+    };
+    const unsubscribe = client.onOpenRequestsWaiting?.(takeOpenRequests);
+    takeOpenRequests();
+    return () => unsubscribe?.();
+  }, [client, preferencesReady, openDiskImageRef]);
+
   useEffect(
     () => () => {
       if (typeaheadTimeoutRef.current) {
@@ -1666,6 +1703,7 @@ export function App() {
     defaultTextEditor,
     openWithApplications,
     fileActivationAction,
+    diskImageOpensIn,
     returnKeyAction,
     openItemLimit,
     includeHidden,
@@ -1845,6 +1883,7 @@ export function App() {
         setDefaultTextEditor(preferences.defaultTextEditor);
         setOpenWithApplications(preferences.openWithApplications);
         setFileActivationAction(preferences.fileActivationAction);
+        setDiskImageOpensIn(preferences.diskImageOpensIn);
         setOpenItemLimit(preferences.openItemLimit);
         setReturnKeyAction(preferences.returnKeyAction);
         setShortcutOverrides(preferences.shortcutOverrides);

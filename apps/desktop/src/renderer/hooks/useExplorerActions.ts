@@ -24,6 +24,7 @@ import type {
   FileActivationAction,
   OpenWithApplication,
 } from "../../shared/appPreferences";
+import { describeDiskImageFailure, isDiskImagePath } from "../../shared/diskImages";
 import { FINDER_APP_PATH } from "../../shared/finder";
 import {
   type ContentSelectionState,
@@ -420,6 +421,7 @@ export function useExplorerActions(args: {
     openItemLimit,
     notificationsEnabled,
     fileActivationAction,
+    diskImageOpensIn,
     defaultTextEditor,
     setDefaultTextEditor,
     setTerminalApp,
@@ -3174,6 +3176,10 @@ export function useExplorerActions(args: {
 
   async function openPathExternally(path: string) {
     noteFolderUsed();
+    if (isDiskImagePath(path)) {
+      await openDiskImage(path);
+      return;
+    }
     try {
       const response = await client.invoke("system:openPath", { path });
       if (!response.ok) {
@@ -3181,6 +3187,29 @@ export function useExplorerActions(args: {
       }
     } catch (error) {
       logger.error("open in macOS failed", error);
+    }
+  }
+
+  // A disk image opens as in Finder: the main process mounts it, and its disk opens in a new
+  // window, or a new tab as Settings says. One that asks for a password or a licence to be
+  // agreed to opens with DiskImageMounter, which asks.
+  async function openDiskImage(path: string) {
+    try {
+      const response = await client.invoke("system:openDiskImage", { path });
+      if (response.status === "opened" && response.volumePath !== null) {
+        if (diskImageOpensIn === "tab") {
+          callbacks.openPathInNewTab(response.volumePath);
+        } else {
+          callbacks.openPathInNewWindow(response.volumePath);
+        }
+      } else if (response.status === "failed") {
+        const notice = describeDiskImageFailure(path, response.reason);
+        showModalNotice(notice.title, notice.message);
+      }
+    } catch (error) {
+      logger.error("open disk image failed", error);
+      const notice = describeDiskImageFailure(path, null);
+      showModalNotice(notice.title, notice.message);
     }
   }
 
@@ -4254,6 +4283,7 @@ export function useExplorerActions(args: {
     openMoveDialog,
     openNewFolderDialog,
     openPathExternally,
+    openDiskImage,
     openPathInTerminal,
     showPathsInFinder,
     editPathInTextEditor,
