@@ -237,7 +237,8 @@ export const SHORTCUT_COMMANDS = [
     id: "editSelection",
     label: "Edit in Text Editor",
     group: "files",
-    defaults: ["Cmd+E"],
+    // ⌘E is Finder's Eject.
+    defaults: ["Cmd+Shift+E"],
     menuPath: "File > Edit in Text Editor",
   },
   {
@@ -289,6 +290,13 @@ export const SHORTCUT_COMMANDS = [
     group: "files",
     defaults: ["Cmd+Backspace"],
     menuPath: "File > Move to Trash",
+  },
+  {
+    id: "ejectVolume",
+    label: "Eject",
+    group: "files",
+    defaults: ["Cmd+E"],
+    menuPath: "File > Eject",
   },
   {
     id: "emptyTrash",

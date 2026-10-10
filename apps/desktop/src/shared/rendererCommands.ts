@@ -20,6 +20,7 @@ export const RENDERER_COMMAND_TYPES = [
   "newFolder",
   "trashSelection",
   "emptyTrash",
+  "ejectVolume",
   "copySelection",
   "cutSelection",
   "pasteSelection",

@@ -164,6 +164,8 @@ type ExplorerShortcutActions = {
   startDuplicateOfSelection: (paths: string[]) => void;
   startTrashPaths: (paths: string[]) => Promise<void>;
   requestEmptyTrash: () => void;
+  /** Ejects the disk selected in the sidebar, if any (File ▸ Eject). */
+  ejectSelectedVolume: () => void;
   openMoveDialog: (paths: string[]) => void;
   openRenameDialog: (paths: string[]) => void;
   openNewFolderDialog: (targetPath: string) => void;
@@ -218,6 +220,7 @@ const WRITE_STARTING_SHORTCUTS = new Set<string>([
   "moveSelection",
   "newFolder",
   "emptyTrash",
+  "ejectVolume",
 ]);
 
 type UseExplorerShortcutsArgs = {
@@ -1190,6 +1193,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       if (commandType === "emptyTrash") {
         current.requestEmptyTrash();
+        return;
+      }
+      if (commandType === "ejectVolume") {
+        current.ejectSelectedVolume();
         return;
       }
       if (commandType === "copySelection") {

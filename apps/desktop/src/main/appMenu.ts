@@ -245,6 +245,8 @@ export function createApplicationMenuTemplate(
         command("showInFinder", "Show in Finder"),
         separator,
         command("trashSelection", "Move to Trash"),
+        // The disk selected in the sidebar, as Finder's File ▸ Eject.
+        command("ejectVolume", "Eject"),
         separator,
         command("reopenClosedTab", "Reopen Closed Tab"),
         // Closes the window when it has a single view.

@@ -1,6 +1,6 @@
 import type { Volume } from "@filetrail/contracts";
 
-import { createVolumeWatcher, sortVolumes } from "./volumes";
+import { createVolumeWatcher, ejectVolume, sortVolumes } from "./volumes";
 
 function volume(name: string, overrides: Partial<Volume> = {}): Volume {
   return {
@@ -9,6 +9,8 @@ function volume(name: string, overrides: Partial<Volume> = {}): Volume {
     isLocal: true,
     isReadOnly: false,
     fileSystem: "apfs",
+    canEject: true,
+    disk: "disk4",
     ...overrides,
   };
 }
@@ -94,5 +96,53 @@ describe("volumes", () => {
     settle();
     expect(stopWatching).toHaveBeenCalled();
     expect(onVolumesChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe("ejectVolume", () => {
+  const request = { path: "/Volumes/Backup", wholeDisk: true, force: false };
+  const failure = (fields: Record<string, unknown>) =>
+    Object.assign(new Error("eject failed"), fields);
+
+  it("passes the choices on and says the disk is ejected", async () => {
+    const eject = vi.fn(async () => undefined);
+    await expect(ejectVolume(eject, request)).resolves.toEqual({
+      status: "ejected",
+      failedPath: null,
+      code: null,
+      reason: null,
+    });
+    expect(eject).toHaveBeenCalledWith("/Volumes/Backup", { force: false, wholeDisk: true });
+  });
+
+  it("names the volume in use, which may be another on the same disk", async () => {
+    const eject = vi.fn(async () => {
+      throw failure({ code: "EBUSY", path: "/Volumes/Backup 2" });
+    });
+    await expect(ejectVolume(eject, request)).resolves.toEqual({
+      status: "busy",
+      failedPath: "/Volumes/Backup 2",
+      code: "EBUSY",
+      reason: null,
+    });
+  });
+
+  it("counts a volume already gone as ejected", async () => {
+    const eject = vi.fn(async () => {
+      throw failure({ code: "ENOENT", path: "/Volumes/Backup" });
+    });
+    await expect(ejectVolume(eject, request)).resolves.toMatchObject({ status: "ejected" });
+  });
+
+  it("gives any other failure with Disk Arbitration's sentence", async () => {
+    const eject = vi.fn(async () => {
+      throw failure({ code: "EPERM", path: "/dev/disk4", reason: "Not permitted by a claim." });
+    });
+    await expect(ejectVolume(eject, request)).resolves.toEqual({
+      status: "failed",
+      failedPath: "/dev/disk4",
+      code: "EPERM",
+      reason: "Not permitted by a claim.",
+    });
   });
 });

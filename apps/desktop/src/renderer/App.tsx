@@ -36,6 +36,7 @@ import { ToolbarIcon } from "./components/ToolbarIcon";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
 import { getAutoFolderSizePath, useAutoFolderSize } from "./hooks/useAutoFolderSize";
 import { useBatchRename } from "./hooks/useBatchRename";
+import { useEjectVolume } from "./hooks/useEjectVolume";
 import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerActions } from "./hooks/useExplorerActions";
 import { useExplorerDragAndDrop } from "./hooks/useExplorerDragAndDrop";
@@ -67,6 +68,7 @@ import {
 } from "./lib/contentSelection";
 import type { ContextMenuSubmenus } from "./lib/contextMenu";
 import { describeClipboard } from "./lib/copyPasteClipboard";
+import { isEjectablePath, resolveEjectTargetPath } from "./lib/eject";
 import { findEntryAtPath, resolveEntriesAtPaths } from "./lib/entriesAtPaths";
 import {
   createOpenItemLimitMessage,
@@ -914,6 +916,7 @@ export function App() {
     contextMenuDisabledActionIds,
     contextMenuOptions,
     contextMenuHiddenActionIds,
+    showModalNotice,
     openWithMenuItems,
     copyGetInfoPath,
     copyGetInfoName,
@@ -1015,6 +1018,40 @@ export function App() {
       },
     },
   });
+  // Eject: a disk's button in Locations, its right-click menu, and File ▸ Eject (⌘E) for the
+  // disk selected in the sidebar.
+  const { ejectingPaths, requestEject, answerWhichVolumes, answerBusy } = useEjectVolume({
+    client,
+    volumes,
+    setCopyPasteDialogState,
+    showNotice: showModalNotice,
+  });
+  const ejectTargetPath = useMemo(
+    () => resolveEjectTargetPath({ focusedPane, selectedTreeItemId, volumes }),
+    [focusedPane, selectedTreeItemId, volumes],
+  );
+  const contextMenuEjectPath =
+    contextMenuState?.surface === "favorite" &&
+    isEjectablePath(volumes, contextMenuState.targetPath ?? null)
+      ? (contextMenuState.targetPath ?? null)
+      : null;
+  const contextMenuOptionsWithEject = useMemo(
+    () => ({
+      ...contextMenuOptions,
+      ejectLabel:
+        contextMenuEjectPath === null
+          ? null
+          : `Eject “${volumes.find((volume) => volume.path === contextMenuEjectPath)?.name ?? ""}”`,
+    }),
+    [contextMenuOptions, contextMenuEjectPath, volumes],
+  );
+  const contextMenuHiddenActionIdsWithEject = useMemo(
+    () =>
+      contextMenuEjectPath === null
+        ? [...contextMenuHiddenActionIds, "eject" as const]
+        : contextMenuHiddenActionIds,
+    [contextMenuHiddenActionIds, contextMenuEjectPath],
+  );
   // The background menu's View As and Sort By tick the current choice; Open With lists the
   // apps chosen in Settings.
   const contextMenuSubmenus = useMemo<ContextMenuSubmenus>(
@@ -1382,6 +1419,7 @@ export function App() {
         trashPath,
         homePath,
         trashIsEmpty,
+        ejectTargetPath,
       }),
     [
       shortcutContext,
@@ -1402,6 +1440,7 @@ export function App() {
       trashPath,
       homePath,
       trashIsEmpty,
+      ejectTargetPath,
     ],
   );
   const openFullDiskAccessSettings = useCallback(() => {
@@ -1528,6 +1567,11 @@ export function App() {
       startDuplicateOfSelection,
       startTrashPaths,
       requestEmptyTrash,
+      ejectSelectedVolume: () => {
+        if (ejectTargetPath !== null) {
+          requestEject(ejectTargetPath);
+        }
+      },
       openMoveDialog,
       openRenameDialog,
       openNewFolderDialog,
@@ -2182,6 +2226,8 @@ export function App() {
               onOpenInNewTab: openPathInNewTab,
               onClearSelection: clearTreeSelection,
               locations: sidebarLocations,
+              onEjectItem: requestEject,
+              ejectingPaths,
               locationsExpanded,
               onToggleLocationsExpanded: () => setLocationsExpanded((value) => !value),
               // A disk under Locations, or the Locations row itself.
@@ -2705,11 +2751,18 @@ export function App() {
           onBrowseForDirectoryPath={browseForDirectoryPath}
           onSubmitMoveDialog={(path) => void submitMoveDialog(path)}
           contextMenuDisabledActionIds={contextMenuDisabledActionIds}
-          contextMenuOptions={contextMenuOptions}
-          contextMenuHiddenActionIds={contextMenuHiddenActionIds}
+          contextMenuOptions={contextMenuOptionsWithEject}
+          contextMenuHiddenActionIds={contextMenuHiddenActionIdsWithEject}
           contextMenuSubmenus={contextMenuSubmenus}
           shortcutContext={shortcutContext}
           onRunContextMenuAction={(actionId, paths) => {
+            if (actionId === "eject") {
+              closeContextMenu();
+              if (contextMenuEjectPath !== null) {
+                requestEject(contextMenuEjectPath);
+              }
+              return;
+            }
             void runContextMenuAction(actionId, paths);
           }}
           onRunContextSubmenuAction={(action, paths) => {
@@ -2748,6 +2801,9 @@ export function App() {
             void confirmDotNameDialog();
           }}
           onAnswerUndoQuestion={answerUndoQuestion}
+          volumes={volumes}
+          onAnswerEjectWhichVolumes={answerWhichVolumes}
+          onAnswerEjectBusy={answerBusy}
           showCopyPasteProgressCard={showCopyPasteProgressCard}
           onCancelWriteOperation={() => {
             void cancelWriteOperation();

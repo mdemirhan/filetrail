@@ -95,6 +95,8 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   newFolder: "contentOnly",
   trashSelection: "contentOnly",
   emptyTrash: "globalExplorer",
+  // The sidebar's selected disk; with the file list in front there is none.
+  ejectVolume: "globalExplorer",
   copySelection: "contentOnly",
   cutSelection: "contentOnly",
   pasteSelection: "contentOnly",

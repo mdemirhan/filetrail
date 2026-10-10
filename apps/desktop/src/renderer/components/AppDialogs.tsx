@@ -1,6 +1,7 @@
 import type {
   CopyPasteChoice,
   IpcResponse,
+  Volume,
   WriteOperationAction,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
@@ -29,6 +30,7 @@ import { CopyPasteProgressCard } from "./CopyPasteProgressCard";
 import { CopyPasteResultDialog } from "./CopyPasteResultDialog";
 import { CopyPasteReviewDialog } from "./CopyPasteReviewDialog";
 import { CopyPasteRuntimeConflictDialog } from "./CopyPasteRuntimeConflictDialog";
+import { EjectBusyAlert, EjectWhichVolumesAlert } from "./EjectVolumeAlert";
 import { GoToFolderDialog } from "./GoToFolderDialog";
 import {
   type ContextMenuActionId,
@@ -91,6 +93,9 @@ export function AppDialogs({
   onConfirmEmptyTrashDialog,
   onConfirmDotNameDialog,
   onAnswerUndoQuestion,
+  volumes,
+  onAnswerEjectWhichVolumes,
+  onAnswerEjectBusy,
   showCopyPasteProgressCard,
   onCancelWriteOperation,
   showCopyPasteResultDialog,
@@ -139,6 +144,13 @@ export function AppDialogs({
   onConfirmEmptyTrashDialog: () => void;
   onConfirmDotNameDialog: () => void;
   onAnswerUndoQuestion: (goAhead: boolean) => void;
+  volumes: readonly Volume[];
+  onAnswerEjectWhichVolumes: (path: string, answer: "all" | "one" | "cancel") => void;
+  onAnswerEjectBusy: (
+    busyPath: string,
+    wholeDisk: boolean,
+    answer: "retry" | "force" | "cancel",
+  ) => void;
   showCopyPasteProgressCard: boolean;
   onCancelWriteOperation: () => void;
   showCopyPasteResultDialog: boolean;
@@ -398,6 +410,22 @@ export function AppDialogs({
             label: "Cancel",
             onClick: onCloseConfirmationDialog,
           }}
+        />
+      ) : null}
+      {copyPasteDialogState?.type === "ejectWhichVolumes" ? (
+        <EjectWhichVolumesAlert
+          name={copyPasteDialogState.name}
+          otherNames={copyPasteDialogState.otherNames}
+          onAnswer={(answer) => onAnswerEjectWhichVolumes(copyPasteDialogState.path, answer)}
+        />
+      ) : null}
+      {copyPasteDialogState?.type === "ejectBusy" ? (
+        <EjectBusyAlert
+          volumes={volumes}
+          busyPath={copyPasteDialogState.busyPath}
+          onAnswer={(answer) =>
+            onAnswerEjectBusy(copyPasteDialogState.busyPath, copyPasteDialogState.wholeDisk, answer)
+          }
         />
       ) : null}
       {copyPasteDialogState?.type === "confirmDotName" ? (

@@ -58,6 +58,10 @@ const addon = require("@filetrail/native-fs") as {
   nativeDatesTaken: (paths: string[]) => Promise<Array<string | null>>;
   nativeListVolumes: () => Volume[];
   nativeListMounts: () => Array<{ path: string; isLocal: boolean }>;
+  nativeEjectVolume: (
+    path: string,
+    options: { force: boolean; wholeDisk: boolean },
+  ) => Promise<void>;
   nativeTrashItem: (path: string) => Promise<string | null>;
   nativeGetAcl: (path: string) => Promise<string | null>;
   nativeSetAcl: (path: string, acl: string | null) => Promise<void>;
@@ -79,6 +83,7 @@ const {
   nativeDatesTaken,
   nativeListVolumes,
   nativeListMounts,
+  nativeEjectVolume,
   nativeTrashItem,
   nativeGetAcl,
   nativeSetAcl,
@@ -231,6 +236,9 @@ export const cancelFolderSize = nativeFolderSizeCancel;
 
 /** The disks mounted under /Volumes, from the mount table (getmntinfo). */
 export const listVolumes = nativeListVolumes;
+
+/** Ejects a disk, or unmounts one volume of it, through Disk Arbitration. */
+export const ejectVolumeNow = nativeEjectVolume;
 
 /** Every mount, wherever it is, and whether it is a local disk (getmntinfo). */
 export const listMounts = nativeListMounts;

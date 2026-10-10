@@ -87,6 +87,19 @@ type CopyPasteDialogState =
       request: DotNameRequest;
     }
   | {
+      // Eject on one volume of a disk that holds others: eject them all, or this one only.
+      type: "ejectWhichVolumes";
+      path: string;
+      name: string;
+      otherNames: string[];
+    }
+  | {
+      // Eject refused because a file on `busyPath` is open: Force Eject, Try Again or Cancel.
+      type: "ejectBusy";
+      busyPath: string;
+      wholeDisk: boolean;
+    }
+  | {
       // Asked before an Undo (or Redo): items whose old names are taken now, or items that
       // would go to the Trash though they changed since.
       type: "undoQuestion";

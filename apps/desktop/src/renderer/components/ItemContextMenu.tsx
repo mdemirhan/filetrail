@@ -24,6 +24,7 @@ import {
 import { placeSubmenu } from "../lib/menuPlacement";
 import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
+import { EjectIcon } from "./EjectIcon";
 import { MenuCheck } from "./MenuCheck";
 import { WindowDragRelease } from "./WindowDragRelease";
 
@@ -350,6 +351,9 @@ export function ItemContextMenu({
 }
 
 function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
+  if (name === "eject") {
+    return <EjectIcon className="context-menu-icon-svg" />;
+  }
   if (name === "revealInFolder") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">

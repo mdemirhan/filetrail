@@ -42,7 +42,8 @@ export type ContextMenuActionId =
   | "rootTreeHere"
   | "trash"
   | "deleteImmediately"
-  | "emptyTrash";
+  | "emptyTrash"
+  | "eject";
 
 // The items that open a submenu rather than act.
 export type ContextMenuSubmenuId = "openWith" | "viewAs" | "sortBy";
@@ -117,6 +118,7 @@ export type ContextMenuIconName =
   | "trash"
   | "deleteImmediately"
   | "emptyTrash"
+  | "eject"
   | "favorite";
 
 export type ContextMenuItem =
@@ -142,6 +144,8 @@ export type ContextMenuOptions = {
   targetsFolder?: boolean;
   /** Rename's label when it isn't plain "Rename": "Rename 3 Items…" for several. */
   renameLabel?: string | null;
+  /** Eject's label, naming the disk as Finder does: Eject “Backup”. */
+  ejectLabel?: string | null;
 };
 
 export function getContextMenuItems(
@@ -239,6 +243,9 @@ export function getContextMenuItems(
       { id: "openInNewWindow", label: "Open in New Window", icon: "openInNewWindow" },
       { id: "revealInTree", label: "Reveal in Tree", icon: "revealInTree" },
       { id: "rootTreeHere", label: "Use as Tree Root", icon: "rootTreeHere" },
+      // Only for a disk that can be ejected (hidden by the caller for the others).
+      { type: "separator", key: "separator-favorite-eject" },
+      { id: "eject", label: input.ejectLabel ?? "Eject", icon: "eject" },
       { type: "separator", key: "separator-favorite-open" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
       { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },

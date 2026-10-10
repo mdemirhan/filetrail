@@ -29,6 +29,7 @@ import {
   getFavoriteLabel,
 } from "../lib/favorites";
 import { FavoriteItemIcon, TreeFolderIcon } from "../lib/fileIcons";
+import { EjectIcon } from "./EjectIcon";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 export type TreeNodeState = {
@@ -78,6 +79,7 @@ const HAND_TOGGLE_SETTLE_MS = 1500;
 
 // The same empty list every time, so the rows built from it stay the same too.
 const NO_LOCATIONS: SidebarLocation[] = [];
+const NO_PATHS: ReadonlySet<string> = new Set();
 
 export function TreePane({
   paneRef,
@@ -104,6 +106,8 @@ export function TreePane({
   onOpenInNewTab,
   onItemContextMenu,
   contextMenuTarget = null,
+  onEjectItem,
+  ejectingPaths = NO_PATHS,
   onItemDragEnter,
   onItemDragOver,
   onItemDrop,
@@ -149,6 +153,10 @@ export function TreePane({
       ) => void)
     | undefined;
   contextMenuTarget?: TreeContextMenuTarget | null;
+  /** The Eject button of a disk in Locations. */
+  onEjectItem?: ((path: string) => void) | undefined;
+  /** Disks being ejected: their Eject buttons wait. */
+  ejectingPaths?: ReadonlySet<string>;
   onItemDragEnter?:
     | ((
         item: TreePresentationItem,
@@ -274,6 +282,7 @@ export function TreePane({
         isSymlink: false,
         childIds: [],
         icon: favorite.icon,
+        canEject: false,
       })),
     [favorites, homePath],
   );
@@ -330,6 +339,7 @@ export function TreePane({
     onNavigateFavorite,
     onOpenInNewTab,
     onItemContextMenu,
+    onEjectItem,
     onLeftPaneSubviewChange,
   });
   const currentItemId = optimisticSelectedItemId ?? selectedTreeItemId;
@@ -539,6 +549,7 @@ export function TreePane({
         isPaneFocused={isFocused}
         isCurrent={currentItemId === item.id}
         isMenuTarget={isTreeMenuTarget(contextMenuTarget, item, "favorites")}
+        isEjecting={item.path !== null && ejectingPaths.has(item.path)}
         dropIndicator={getItemDropIndicator?.(item, "favorites") ?? null}
         singleClickExpandTreeItems={singleClickExpandTreeItems}
         canOpenInNewTab={Boolean(onOpenInNewTab)}
@@ -567,6 +578,7 @@ export function TreePane({
           isPaneFocused={isFocused}
           currentItemId={currentItemId}
           contextMenuTarget={contextMenuTarget}
+          ejectingPaths={ejectingPaths}
           getItemDropIndicator={getItemDropIndicator}
           singleClickExpandTreeItems={singleClickExpandTreeItems}
           canOpenInNewTab={Boolean(onOpenInNewTab)}
@@ -711,6 +723,7 @@ export function TreePane({
                   isPaneFocused={isFocused}
                   currentItemId={currentItemId}
                   contextMenuTarget={contextMenuTarget}
+                  ejectingPaths={ejectingPaths}
                   getItemDropIndicator={getItemDropIndicator}
                   singleClickExpandTreeItems={singleClickExpandTreeItems}
                   canOpenInNewTab={Boolean(onOpenInNewTab)}
@@ -755,6 +768,7 @@ function TreeList({
   isPaneFocused,
   currentItemId,
   contextMenuTarget = null,
+  ejectingPaths,
   getItemDropIndicator,
   singleClickExpandTreeItems,
   canOpenInNewTab,
@@ -768,6 +782,7 @@ function TreeList({
   /** The row shown as selected: the one just clicked, or the tree's selection. */
   currentItemId: TreeItemId | null;
   contextMenuTarget?: TreeContextMenuTarget | null;
+  ejectingPaths: ReadonlySet<string>;
   getItemDropIndicator?:
     | ((item: TreePresentationItem, subview: "favorites" | "tree") => "valid" | "invalid" | null)
     | undefined;
@@ -792,6 +807,7 @@ function TreeList({
               isPaneFocused={isPaneFocused}
               isCurrent={currentItemId === item.id}
               isMenuTarget={isTreeMenuTarget(contextMenuTarget, item, subview)}
+              isEjecting={item.path !== null && ejectingPaths.has(item.path)}
               dropIndicator={getItemDropIndicator?.(item, subview) ?? null}
               singleClickExpandTreeItems={singleClickExpandTreeItems}
               canOpenInNewTab={canOpenInNewTab}
@@ -839,6 +855,7 @@ type TreeRowCallbacks = {
         position: { x: number; y: number },
       ) => void)
     | undefined;
+  onEjectItem?: ((path: string) => void) | undefined;
   onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
 };
 
@@ -872,6 +889,7 @@ function createTreeRowActions(latest: { readonly current: TreeRowCallbacks }) {
       subview: "favorites" | "tree",
       position: { x: number; y: number },
     ) => latest.current.onItemContextMenu?.(item, subview, position),
+    eject: (path: string) => latest.current.onEjectItem?.(path),
     focusSubview: (subview: "favorites" | "tree") =>
       latest.current.onLeftPaneSubviewChange(subview),
   };
@@ -887,6 +905,7 @@ const TreeItemRow = memo(function TreeItemRow({
   isPaneFocused,
   isCurrent,
   isMenuTarget,
+  isEjecting,
   dropIndicator,
   singleClickExpandTreeItems,
   canOpenInNewTab,
@@ -900,6 +919,8 @@ const TreeItemRow = memo(function TreeItemRow({
   isCurrent: boolean;
   /** What the open context menu acts on. */
   isMenuTarget: boolean;
+  /** The row's disk is being ejected. */
+  isEjecting: boolean;
   dropIndicator: "valid" | "invalid" | null;
   singleClickExpandTreeItems: boolean;
   /** ⌘-click opens the row's folder in a new tab. */
@@ -1120,7 +1141,10 @@ const TreeItemRow = memo(function TreeItemRow({
         tabIndex={-1}
         onPointerDown={(event) => {
           const target = event.target;
-          if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
+          if (
+            target instanceof Element &&
+            target.closest(".tree-label, .tree-expand, .tree-eject")
+          ) {
             return;
           }
           handleActivatePointerDown(event.metaKey, event.button, event.ctrlKey);
@@ -1130,7 +1154,7 @@ const TreeItemRow = memo(function TreeItemRow({
           if (
             event.defaultPrevented ||
             !(target instanceof Element) ||
-            target.closest(".tree-label, .tree-expand") ||
+            target.closest(".tree-label, .tree-expand, .tree-eject") ||
             (event.key !== "Enter" && event.key !== " ")
           ) {
             return;
@@ -1140,21 +1164,30 @@ const TreeItemRow = memo(function TreeItemRow({
         }}
         onClick={(event) => {
           const target = event.target;
-          if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
+          if (
+            target instanceof Element &&
+            target.closest(".tree-label, .tree-expand, .tree-eject")
+          ) {
             return;
           }
           handleActivateClick(event.metaKey, event.detail);
         }}
         onDoubleClick={(event) => {
           const target = event.target;
-          if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
+          if (
+            target instanceof Element &&
+            target.closest(".tree-label, .tree-expand, .tree-eject")
+          ) {
             return;
           }
           handleActivateDoubleClick();
         }}
         onContextMenu={(event) => {
           const target = event.target;
-          if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
+          if (
+            target instanceof Element &&
+            target.closest(".tree-label, .tree-expand, .tree-eject")
+          ) {
             return;
           }
           event.preventDefault();
@@ -1226,6 +1259,29 @@ const TreeItemRow = memo(function TreeItemRow({
           <ClipboardMarkIcon marks={clipboardMarks} path={clipboardPath} />
           {item.isSymlink ? <span className="tree-label-badge">Alias</span> : null}
         </button>
+        {isLocation && item.canEject && itemPath && dropIndicator !== "valid" ? (
+          // Finder's Eject button: always there for a disk that can be ejected, and out of
+          // the keyboard's way (⌘E and the right-click menu eject from the keyboard).
+          <button
+            type="button"
+            className="tree-eject"
+            tabIndex={-1}
+            disabled={isEjecting}
+            aria-label={`Eject “${item.label}”`}
+            title={`Eject “${item.label}”`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.eject(itemPath);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              handleActivateContextMenu(event.clientX, event.clientY);
+            }}
+          >
+            <EjectIcon className="tree-eject-icon" />
+          </button>
+        ) : null}
         {favoriteDropPosition ? (
           <span
             className="favorite-drop-line"

@@ -205,6 +205,8 @@ function isConfirmationDialog(state: { type: string } | null): boolean {
     state?.type === "confirmEmptyTrash" ||
     state?.type === "confirmDeleteWithoutTrash" ||
     state?.type === "confirmDotName" ||
+    state?.type === "ejectWhichVolumes" ||
+    state?.type === "ejectBusy" ||
     state?.type === "undoQuestion"
   );
 }
@@ -4233,6 +4235,7 @@ export function useExplorerActions(args: {
     copyGetInfoPath,
     copyGetInfoName,
     dismissActionNotice,
+    showModalNotice,
     dismissCopyPasteDialog,
     dismissToast,
     noticeDragRefusedWhileBusy,

@@ -153,6 +153,12 @@ export const volumeSchema = z.object({
   isReadOnly: z.boolean(),
   // apfs, hfs, exfat, smbfs…; empty when not known.
   fileSystem: z.string(),
+  // Whether Finder offers to eject it: a network share, or a disk that can be ejected or
+  // removed or isn't inside the Mac (an external drive, a disk image).
+  canEject: z.boolean(),
+  // The physical disk it is on ("disk5"), shared by every volume of a partitioned drive;
+  // null for a network share.
+  disk: z.string().nullable(),
 });
 // A change made to the folder a window watches (see `folder:watch`).
 export const folderChangeSchema = z.object({
@@ -1544,6 +1550,24 @@ export const ipcContractSchemas = {
     request: emptyRequestSchema,
     response: z.object({
       volumes: z.array(volumeSchema),
+    }),
+  },
+  // Ejects a disk as Finder does. With `wholeDisk`, every volume on its physical disk is
+  // unmounted and the disk ejected; without, only this volume is unmounted. `force` unmounts
+  // even while files on it are open (Finder's Force Eject). "busy" names the volume in use
+  // (with `wholeDisk`, it may be another on the same disk); "failed" carries the errno name
+  // and Disk Arbitration's own sentence when there was one.
+  "system:ejectVolume": {
+    request: z.object({
+      path: z.string().min(1),
+      wholeDisk: z.boolean(),
+      force: z.boolean(),
+    }),
+    response: z.object({
+      status: z.enum(["ejected", "busy", "failed"]),
+      failedPath: z.string().nullable(),
+      code: z.string().nullable(),
+      reason: z.string().nullable(),
     }),
   },
   // Whether there is anything to empty: the home folder's Trash and other disks' Trashes.

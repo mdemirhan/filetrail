@@ -53,6 +53,8 @@ export type RendererCommandAvailabilityContext = {
   homePath?: string;
   /** The Trash has nothing to empty (null or left out: it can't be told). */
   trashIsEmpty?: boolean | null;
+  /** The disk File ▸ Eject ejects (see resolveEjectTargetPath); none when left out. */
+  ejectTargetPath?: string | null;
 };
 
 type CommandTargetContext = Pick<
@@ -189,6 +191,8 @@ export function canRunToolbarRendererCommand(
       return selectedCount > 0;
     case "emptyTrash":
       return context.trashIsEmpty !== true;
+    case "ejectVolume":
+      return (context.ejectTargetPath ?? null) !== null;
     case "newFolder":
       return (
         resolveNewFolderTargetPath({

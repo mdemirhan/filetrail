@@ -301,7 +301,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="favorite"
         options={{ favoriteToggleLabel: "Remove from Favorites" }}
-        hiddenActionIds={["emptyTrash"]}
+        hiddenActionIds={["emptyTrash", "eject"]}
         submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
@@ -374,7 +374,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="favorite"
         options={{ favoriteToggleLabel: "Remove from Favorites" }}
-        hiddenActionIds={["emptyTrash"]}
+        hiddenActionIds={["emptyTrash", "eject"]}
         submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
@@ -406,13 +406,37 @@ describe("ItemContextMenu", () => {
     expect(separatorAfterFavorite?.nextElementSibling).toBe(terminalButton);
   });
 
+  it("offers a disk's Eject, named as Finder names it, after the ways to open it", () => {
+    const onAction = vi.fn();
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="favorite"
+        options={{ ejectLabel: "Eject “Backup”" }}
+        hiddenActionIds={["toggleFavorite", "emptyTrash"]}
+        submenus={{ openWith: submenuItems }}
+        shortcutContext={{ ...shortcutContext, focusedPane: "tree" }}
+        open
+        onAction={onAction}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    const eject = screen.getByRole("button", { name: "Eject “Backup”" });
+    expect(eject.previousElementSibling).toHaveClass("context-menu-separator");
+    expect(eject.nextElementSibling).toHaveClass("context-menu-separator");
+    fireEvent.click(eject);
+    expect(onAction).toHaveBeenCalledWith("eject");
+  });
+
   it("offers Empty Trash at the end of the Trash favorite's menu", () => {
     render(
       <ItemContextMenu
         anchorX={0}
         anchorY={0}
         surface="favorite"
-        hiddenActionIds={["toggleFavorite"]}
+        hiddenActionIds={["toggleFavorite", "eject"]}
         submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
@@ -454,7 +478,14 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="favorite"
         options={{ favoriteToggleLabel: "Remove from Favorites" }}
-        hiddenActionIds={["toggleFavorite", "rootTreeHere", "paste", "newFolder", "emptyTrash"]}
+        hiddenActionIds={[
+          "toggleFavorite",
+          "rootTreeHere",
+          "paste",
+          "newFolder",
+          "emptyTrash",
+          "eject",
+        ]}
         submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,

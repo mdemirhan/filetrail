@@ -2525,6 +2525,49 @@ body.resizing-panels * {
   letter-spacing: 0.06em;
 }
 
+/* A disk's Eject button, at the end of its row as in Finder's sidebar: a gray symbol that
+   darkens under the pointer, and waits (dimmed) while the disk is being ejected. */
+.tree-eject {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.tree-eject:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.tree-eject:active:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.tree-eject:disabled {
+  opacity: 0.4;
+}
+
+.tree-eject-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-main-native .tree-row.active:not(.inactive) .tree-eject {
+  color: var(--ft-accent-on-selection);
+}
+
 .tree-loading,
 .tree-error {
   padding: 4px 12px 8px;

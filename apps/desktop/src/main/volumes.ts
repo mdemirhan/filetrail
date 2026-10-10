@@ -1,4 +1,4 @@
-import type { Volume } from "@filetrail/contracts";
+import type { IpcRequest, IpcResponse, Volume } from "@filetrail/contracts";
 
 // The disks mounted besides the startup disk, and word of each change to them. macOS mounts
 // every disk at /Volumes/<name>, so a change to that folder is a disk mounted or unmounted;
@@ -41,7 +41,9 @@ function sameVolumes(first: Volume[], second: Volume[]): boolean {
         volume.name === other.name &&
         volume.isLocal === other.isLocal &&
         volume.isReadOnly === other.isReadOnly &&
-        volume.fileSystem === other.fileSystem
+        volume.fileSystem === other.fileSystem &&
+        volume.canEject === other.canEject &&
+        volume.disk === other.disk
       );
     })
   );
@@ -91,4 +93,34 @@ export function createVolumeWatcher(deps: VolumeWatcherDeps): VolumeWatcher {
       stopWatching();
     },
   };
+}
+
+type EjectRequest = IpcRequest<"system:ejectVolume">;
+type EjectResponse = IpcResponse<"system:ejectVolume">;
+
+// Ejects a disk (see nativeEjectVolume) and says how it went. A volume already gone counts
+// as ejected: it may have been ejected elsewhere while the button was pressed.
+export async function ejectVolume(
+  eject: (path: string, options: { force: boolean; wholeDisk: boolean }) => Promise<void>,
+  request: EjectRequest,
+): Promise<EjectResponse> {
+  try {
+    await eject(request.path, { force: request.force, wholeDisk: request.wholeDisk });
+  } catch (error) {
+    const failure = error as {
+      code?: unknown;
+      path?: unknown;
+      reason?: unknown;
+      message?: unknown;
+    };
+    const code = typeof failure.code === "string" ? failure.code : null;
+    const failedPath = typeof failure.path === "string" ? failure.path : request.path;
+    if (code === "ENOENT" && failedPath === request.path) {
+      return { status: "ejected", failedPath: null, code: null, reason: null };
+    }
+    const reason =
+      typeof failure.reason === "string" && failure.reason.length > 0 ? failure.reason : null;
+    return { status: code === "EBUSY" ? "busy" : "failed", failedPath, code, reason };
+  }
+  return { status: "ejected", failedPath: null, code: null, reason: null };
 }

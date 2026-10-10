@@ -164,6 +164,7 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "files", command: "newFolder", description: "New folder" },
   { group: "files", command: "trashSelection", description: "Move to Trash" },
   { group: "files", command: "emptyTrash", description: "Empty the Trash (asks first)" },
+  { group: "files", command: "ejectVolume", description: "Eject the disk selected in the sidebar" },
   { group: "files", command: "selectAll", description: "Select all" },
   { group: "files", command: "copyPath", description: "Copy the path" },
   { group: "files", command: "showClipboard", description: "See what is waiting to be pasted" },
@@ -287,6 +288,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             label: "Favorites",
             description:
               "Right-click a folder and choose Add to Favorites to pin it in the folder tree. File > Add to Favorites does the same for the selected folder, or for the folder you are in when nothing is selected.",
+          },
+          {
+            label: "Disks",
+            description:
+              "Disks you connect, disk images and servers appear under Locations. Click ⏏ beside one, right-click it and choose Eject, or select it and press {ejectVolume}, before you disconnect it. When a program is still using the disk, File Trail asks whether to try again or force it.",
           },
           {
             label: "Tree root",

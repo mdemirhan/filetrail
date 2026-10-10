@@ -1155,4 +1155,48 @@ describe("TreePane", () => {
     scrollIntoViewSpy.mockRestore();
     vi.useRealTimers();
   });
+
+  it.each(["integrated", "separate"] as const)(
+    "puts Finder's Eject button on a disk that can be ejected, and ejects without opening it (%s layout)",
+    (favoritesPlacement) => {
+      const onEjectItem = vi.fn();
+      const onSelectItem = vi.fn();
+      const onItemContextMenu = vi.fn();
+      const locations = [
+        { path: "/", label: "Macintosh HD", icon: "drive" as const },
+        { path: "/Volumes/USB", label: "USB", icon: "drive" as const, canEject: true },
+        { path: "/Volumes/Data", label: "Data", icon: "drive" as const, canEject: false },
+      ];
+      const { rerender } = renderTreePane({
+        favoritesPlacement,
+        locations,
+        onEjectItem,
+        onSelectItem,
+        onItemContextMenu,
+      });
+
+      // Only the disk that can be ejected has the button.
+      expect(screen.getAllByRole("button", { name: /^Eject/ })).toHaveLength(1);
+      const eject = screen.getByRole("button", { name: "Eject “USB”" });
+      fireEvent.pointerDown(eject, { button: 0 });
+      fireEvent.click(eject);
+      expect(onEjectItem).toHaveBeenCalledWith("/Volumes/USB");
+      expect(onSelectItem).not.toHaveBeenCalled();
+      // Right-clicking it opens the disk's menu, as anywhere else on its row.
+      fireEvent.contextMenu(eject);
+      expect(onItemContextMenu).toHaveBeenCalledTimes(1);
+
+      // It waits while the disk is being ejected.
+      rerender(
+        <TreePane
+          {...treePaneDefaults()}
+          favoritesPlacement={favoritesPlacement}
+          locations={locations}
+          onEjectItem={onEjectItem}
+          ejectingPaths={new Set(["/Volumes/USB"])}
+        />,
+      );
+      expect(screen.getByRole("button", { name: "Eject “USB”" })).toBeDisabled();
+    },
+  );
 });

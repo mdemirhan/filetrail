@@ -105,6 +105,7 @@ module.exports = {
   nativeSetFlags: binding.nativeSetFlags,
   nativeListVolumes: binding.nativeListVolumes,
   nativeListMounts: binding.nativeListMounts,
+  nativeEjectVolume: binding.nativeEjectVolume,
   nativeTrashItem: binding.nativeTrashItem,
   nativeGetAcl: binding.nativeGetAcl,
   nativeSetAcl: binding.nativeSetAcl,

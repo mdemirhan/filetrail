@@ -6,6 +6,7 @@
         "src/native_acl.c",
         "src/native_copyfile.c",
         "src/native_datestaken.m",
+        "src/native_eject.c",
         "src/native_errors.c",
         "src/native_flags.c",
         "src/native_filedrag.m",
@@ -26,9 +27,13 @@
           "-framework",
           "CoreServices",
           "-framework",
+          "DiskArbitration",
+          "-framework",
           "Foundation",
           "-framework",
           "ImageIO",
+          "-framework",
+          "IOKit",
           "-framework",
           "QuickLookThumbnailing",
           "-framework",
@@ -40,8 +45,10 @@
         "libraries": [
           "-framework AppKit",
           "-framework CoreServices",
+          "-framework DiskArbitration",
           "-framework Foundation",
           "-framework ImageIO",
+          "-framework IOKit",
           "-framework QuickLookThumbnailing",
           "-framework UniformTypeIdentifiers"
         ]

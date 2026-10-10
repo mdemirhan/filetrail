@@ -248,6 +248,16 @@ export type NativeVolume = {
   isReadOnly: boolean;
   /** The file system's name, such as `apfs`, `smbfs` or `exfat`. */
   fileSystem: string;
+  /**
+   * Whether Finder shows an Eject button for it: a network share, or a disk that can be
+   * ejected or removed or isn't inside the Mac (an external drive, a disk image).
+   */
+  canEject: boolean;
+  /**
+   * The physical disk it is on ("disk5"): past an APFS container to the disk holding it,
+   * and the same for every volume of a partitioned drive. Null for a network share.
+   */
+  disk: string | null;
 };
 
 /**
@@ -263,6 +273,23 @@ export function nativeListVolumes(): NativeVolume[];
  * `nativeListVolumes` reads it: at once, without asking the disks.
  */
 export function nativeListMounts(): Array<{ path: string; isLocal: boolean }>;
+
+/**
+ * Ejects as Finder does. With `wholeDisk`, every volume mounted from the same physical disk
+ * is unmounted, then the disk is ejected (a disk image detached); without it only the
+ * volume at `path` is unmounted. A network share is unmounted either way. Unmounting goes
+ * through Disk Arbitration, which refuses while a file on the volume is open; `force`
+ * unmounts anyway (Finder's Force Eject).
+ *
+ * @throws A Node-style errno error: `code` "EBUSY" while a volume is in use, "ENOENT" when
+ *   nothing is mounted at `path`, "ETIMEDOUT" when Disk Arbitration didn't answer in two
+ *   minutes, or another errno name. `path` is the volume (or `/dev/diskN`) that failed,
+ *   and `reason` Disk Arbitration's own sentence when it gave one.
+ */
+export function nativeEjectVolume(
+  path: string,
+  options?: { force?: boolean; wholeDisk?: boolean },
+): Promise<void>;
 
 /** What a file drag's drop did; "delete" is the Trash in the Dock, "none" a cancel. */
 export type FileDragOperation = "copy" | "move" | "link" | "delete" | "none";

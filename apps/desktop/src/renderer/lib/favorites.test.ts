@@ -22,8 +22,8 @@ describe("favorites", () => {
     expect(
       buildSidebarLocations(
         [
-          { path: "/Volumes/Backup", name: "Backup", isLocal: true },
-          { path: "/Volumes/Shared", name: "Shared", isLocal: false },
+          { path: "/Volumes/Backup", name: "Backup", isLocal: true, canEject: true },
+          { path: "/Volumes/Shared", name: "Shared", isLocal: false, canEject: true },
         ],
         "/Users/demo",
       ),
@@ -31,8 +31,8 @@ describe("favorites", () => {
       { path: "/Users/demo", label: "demo", icon: "home" },
       { path: "/", label: "Macintosh HD", icon: "drive" },
       { path: "/Users/demo/.Trash", label: "Trash", icon: "trash" },
-      { path: "/Volumes/Backup", label: "Backup", icon: "drive" },
-      { path: "/Volumes/Shared", label: "Shared", icon: "server" },
+      { path: "/Volumes/Backup", label: "Backup", icon: "drive", canEject: true },
+      { path: "/Volumes/Shared", label: "Shared", icon: "server", canEject: true },
     ]);
     // Without a home folder there is no Home or Trash to list.
     expect(buildSidebarLocations([], "")).toEqual([
@@ -48,7 +48,7 @@ describe("favorites", () => {
       rootPath: "/Users/demo",
       nodes: {},
       locations: buildSidebarLocations(
-        [{ path: "/Volumes/Backup", name: "Backup", isLocal: true }],
+        [{ path: "/Volumes/Backup", name: "Backup", isLocal: true, canEject: true }],
         "/Users/demo",
       ),
       locationsExpanded: true,

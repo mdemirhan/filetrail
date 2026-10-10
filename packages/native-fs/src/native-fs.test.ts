@@ -17,7 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import {
   canMountDiskImages,
@@ -1323,5 +1323,90 @@ describe("nativeReadDragPasteboard", () => {
 
     expect(addon.nativeReadDragChangeCount()).toBe(changeCount);
     expect(addon.nativeReadDragPasteboard().changeCount).toBe(changeCount);
+  });
+});
+
+describe("nativeEjectVolume", () => {
+  const isMounted = (path: string) => addon.nativeListMounts().some((mount) => mount.path === path);
+  // The image's folder (see mountTestDiskImage) is in hdiutil's list while it is attached.
+  const isAttached = (mountPath: string) =>
+    execFileSync("/usr/bin/hdiutil", ["info"], { encoding: "utf8" }).includes(
+      basename(dirname(mountPath)),
+    );
+  // Once ejected the disk is gone: what is left to remove is the image's folder. A test that
+  // failed before ejecting detaches it as usual.
+  async function withTestDisk(run: (mountPath: string) => Promise<void>) {
+    const volume = mountTestDiskImage({ sizeMb: 20 });
+    try {
+      await run(volume.mountPath);
+    } finally {
+      if (isAttached(volume.mountPath)) {
+        volume.detach();
+      } else {
+        rmSync(dirname(volume.mountPath), { recursive: true, force: true });
+      }
+    }
+  }
+
+  it.runIf(canMountDiskImages)(
+    "unmounts the volume and ejects its disk, detaching a disk image",
+    async () => {
+      await withTestDisk(async (mountPath) => {
+        expect(isMounted(mountPath)).toBe(true);
+        await addon.nativeEjectVolume(mountPath, { wholeDisk: true });
+        expect(isMounted(mountPath)).toBe(false);
+        expect(isAttached(mountPath)).toBe(false);
+      });
+    },
+  );
+
+  it.runIf(canMountDiskImages)(
+    "unmounts only the volume without wholeDisk, leaving its disk attached",
+    async () => {
+      await withTestDisk(async (mountPath) => {
+        await addon.nativeEjectVolume(mountPath);
+        expect(isMounted(mountPath)).toBe(false);
+        expect(isAttached(mountPath)).toBe(true);
+        // hdiutil can't detach by a mount point that is gone: by its device, then.
+        const device = execFileSync("/usr/bin/hdiutil", ["info"], { encoding: "utf8" })
+          .split("================================================")
+          .find((entry) => entry.includes(basename(dirname(mountPath))))
+          ?.match(/^\/dev\/disk\d+\b/m)?.[0];
+        execFileSync("/usr/bin/hdiutil", ["detach", "-quiet", "-force", expectDefined(device)]);
+      });
+    },
+  );
+
+  it.runIf(canMountDiskImages)(
+    "refuses with EBUSY while a file is open on the volume, and forces when asked",
+    async () => {
+      await withTestDisk(async (mountPath) => {
+        const file = join(mountPath, "open.txt");
+        writeFileSync(file, "held");
+        const handle = await import("node:fs/promises").then((fs) => fs.open(file, "r"));
+        try {
+          await expect(
+            addon.nativeEjectVolume(mountPath, { wholeDisk: true }),
+          ).rejects.toMatchObject({ code: "EBUSY", path: mountPath });
+          expect(isMounted(mountPath)).toBe(true);
+          await addon.nativeEjectVolume(mountPath, { wholeDisk: true, force: true });
+          expect(isMounted(mountPath)).toBe(false);
+        } finally {
+          await handle.close().catch(() => undefined);
+        }
+      });
+    },
+  );
+
+  it("fails with ENOENT where nothing is mounted", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "native-eject-"));
+    try {
+      await expect(addon.nativeEjectVolume(folder)).rejects.toMatchObject({
+        code: "ENOENT",
+        path: folder,
+      });
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 });

@@ -18,11 +18,17 @@ export type TreeItemId =
 
 // A place in the sidebar's Locations, as in Finder's: the home folder (under the account's
 // name), Macintosh HD, the other disks mounted, and the Trash. Like a favorite, it is a
-// place to go to, not a folder to expand; its icon is drawn as an outline in gray.
-export type SidebarLocation = { path: string; label: string; icon: FavoriteIconId };
+// place to go to, not a folder to expand; its icon is drawn as an outline in gray. A disk
+// Finder would eject has an Eject button after its name.
+export type SidebarLocation = {
+  path: string;
+  label: string;
+  icon: FavoriteIconId;
+  canEject?: boolean;
+};
 
 export function buildSidebarLocations(
-  volumes: ReadonlyArray<{ path: string; name: string; isLocal: boolean }>,
+  volumes: ReadonlyArray<{ path: string; name: string; isLocal: boolean; canEject: boolean }>,
   homePath: string,
 ): SidebarLocation[] {
   const home: SidebarLocation[] =
@@ -47,6 +53,7 @@ export function buildSidebarLocations(
       label: volume.name,
       // A network share is drawn as one; a drive or a disk image as a drive.
       icon: volume.isLocal ? ("drive" as const) : ("server" as const),
+      canEject: volume.canEject,
     })),
   ];
 }
@@ -86,6 +93,8 @@ export type TreePresentationItem = {
   isSymlink: boolean;
   childIds: TreeItemId[];
   icon: FavoriteIconId | null;
+  /** A disk's row in Locations that has an Eject button. */
+  canEject: boolean;
 };
 
 export function getTrashPath(homePath: string): string {
@@ -271,6 +280,7 @@ export function buildLocationItems(
     isSymlink: false,
     childIds: [],
     icon: location.icon,
+    canEject: location.canEject === true,
   }));
 }
 
@@ -318,6 +328,7 @@ export function buildTreePresentation(args: {
       isSymlink: false,
       childIds: favoriteChildIds,
       icon: "star",
+      canEject: false,
     };
     visibleItemIds.push(favoritesRootId);
 
@@ -338,6 +349,7 @@ export function buildTreePresentation(args: {
           isSymlink: false,
           childIds: [],
           icon: favorite.icon,
+          canEject: false,
         };
         visibleItemIds.push(itemId);
       }
@@ -360,6 +372,7 @@ export function buildTreePresentation(args: {
       isSymlink: false,
       childIds: locations.map((location) => createLocationItemId(location.path)),
       icon: "drive",
+      canEject: false,
     };
     visibleItemIds.push(locationsRootId);
     if (locationsExpanded) {
@@ -390,6 +403,7 @@ export function buildTreePresentation(args: {
       isSymlink: node.isSymlink,
       childIds: node.childPaths.map((childPath) => createFileSystemItemId(childPath)),
       icon: null,
+      canEject: false,
     };
     visibleItemIds.push(itemId);
     if (!node.expanded) {

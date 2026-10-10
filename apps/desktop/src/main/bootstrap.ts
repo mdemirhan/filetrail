@@ -70,7 +70,7 @@ import {
 import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
 import { type FolderWatches, createFolderWatches } from "./folderWatch";
 import { registerIpcHandlers } from "./ipc";
-import { type VolumeWatcher, createVolumeWatcher } from "./volumes";
+import { type VolumeWatcher, createVolumeWatcher, ejectVolume } from "./volumes";
 import {
   type PreferencesChange,
   type WindowHost,
@@ -130,6 +130,7 @@ export async function bootstrapMainProcess(
     cancelFolderSize,
     listVolumes,
     listMounts,
+    ejectVolumeNow,
     realpathNow,
   } = await import("./originalFileSystem");
   // The disks mounted besides the startup disk; every window hears of each change.
@@ -487,6 +488,16 @@ export async function bootstrapMainProcess(
       "system:performEditAction": (payload, event) => performEditAction(payload, event.sender),
       "system:emptyTrash": () => writeCoordinator.emptyTrash(emptyTrash),
       "system:listVolumes": () => ({ volumes: volumeWatcher.getVolumes() }),
+      "system:ejectVolume": async (payload) => {
+        const response = await ejectVolume(ejectVolumeNow, payload);
+        if (response.status === "failed") {
+          logger.error("eject failed", { ...payload, ...response });
+        }
+        // Volumes unmounted show as gone at once, not after the folder watch settles; a
+        // refusal part way through a disk leaves some of them gone too.
+        volumeWatcher.refresh();
+        return response;
+      },
       "system:getTrashState": () => getTrashState(app.getPath("home"), process.getuid?.() ?? 0),
       "system:openFullDiskAccessSettings": () => openFullDiskAccessSettings(),
       "system:getFileIcon": (payload) => getFileIconHandler(payload),

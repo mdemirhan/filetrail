@@ -109,6 +109,9 @@ describe("AppDialogs", () => {
           onConfirmEmptyTrashDialog={() => undefined}
           onConfirmDotNameDialog={() => undefined}
           onAnswerUndoQuestion={() => undefined}
+          volumes={[]}
+          onAnswerEjectWhichVolumes={() => undefined}
+          onAnswerEjectBusy={() => undefined}
           showCopyPasteProgressCard={false}
           onCancelWriteOperation={() => undefined}
           showCopyPasteResultDialog={false}
