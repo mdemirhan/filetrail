@@ -1,32 +1,25 @@
 # File Trail
 
-A file browser for macOS, built to fix the places where Finder falls short.
+A Mac file browser with fast search, a real folder tree and true cut and paste. Everything else works the way it does in Finder.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/folder-sizes-dark.png">
-    <img src="docs/screenshots/folder-sizes-light.png" alt="File Trail showing a project folder in List view, sorted by size, with the Info panel open" width="900">
-  </picture>
+  <img src="docs/screenshots/search.png" alt="Search results for the word trip under a project folder, with the folder tree beside them" width="900">
 </p>
 
-Finder covers the basics. File Trail is for the things it gets wrong or leaves out:
+## Why switch from Finder
 
-- **Search that keeps up with your typing.** By name or full path, in plain text, glob or regex, with nothing to index first.
-- **Rename a batch and see every new name first.** Replace, add, number, date or change case, with a preview of each name and presets for the renames you repeat.
-- **A folder tree, not just a sidebar.** You see where you are and what is around it.
-- **Tabs and windows that keep their place, and a clipboard you can see.** What you copied stays marked until you paste it.
-- **Folder sizes when you want them.** Select a folder with the Info panel open and it is measured; one click measures any other, and everything in it.
-- **Yours to arrange.** The toolbar, the keyboard shortcuts and the accent color are up to you.
+- **Search that works, and is fast.** Results appear as you type, from the folder you are in, by name or full path, in plain text, glob or regex. There is no index to wait for, and nothing left out for not being indexed.
+- **A folder tree beside your files.** See where you are and what is around it, and open any folder's arrow to look inside without leaving.
+- **Cut and paste files.** ⌘X and ⌘V move files, as they move text. What you cut or copied stays marked until you paste it, and a paste never destroys anything: what it replaces goes to the Trash.
+- **Any folder in a few keystrokes.** ⌘K lists the folders you use most and finds any of them from a few letters. In a folder, start typing and the list narrows to the names that match.
+- **Your keys.** Every command has a keyboard shortcut, and you can change any of them, two keys per command.
+- **See what's taking the space.** Sort by size and every folder gets a bar, so the big ones stand out at a glance.
 
-Everything else works the way you expect a Mac app to.
+Switching costs nothing. File Trail keeps most of Finder's shortcuts, Quick Look on Space, drag and drop with other apps, tabs, and the sidebar's Locations.
 
 ## Search that keeps up with your typing
 
-Type in the search field and results appear as you type: everything under the folder you are in, each with the folder it lives in.
-
-<p align="center">
-  <img src="docs/screenshots/search.png" alt="Search results for the word trip, with the matching part of each name highlighted" width="900">
-</p>
+Finder hands search to Spotlight: by default it searches the whole Mac, it leaves out hidden and system files and anything excluded in Spotlight's settings, and matching a pattern means writing a raw Spotlight query. In File Trail, type in the search field and results appear as you type: everything under the folder you are in, each with the folder it lives in.
 
 - **Plain text by default.** Switch to glob (`*.test.ts`) or regex when you need a pattern, and match against the name or the full path.
 - **Widen or narrow without starting over.** One click moves the search from this folder to Home or the whole disk. The filter field trims what was found, by name or by folder, without searching again.
@@ -34,39 +27,67 @@ Type in the search field and results appear as you type: everything under the fo
 - **It knows about Git.** Inside a repository, search can leave out `.git` and whatever `.gitignore` excludes, so build output stays out of the results.
 - **Nothing to set up.** Search runs on a bundled copy of [`fd`](https://github.com/sharkdp/fd). There is no index to build and nothing to install.
 
-Each tab keeps its own search, and a search keeps running while you look at another tab.
+Each tab keeps its own search, and a search keeps running while you look at another tab. To narrow just the folder on screen, start typing in the file list: it filters as you type, with no field to click first.
+
+## A folder tree, not just a sidebar
+
+Finder's sidebar holds shortcuts, not a tree. File Trail keeps a folder tree beside the files, as every screenshot on this page shows: the folder you are in, the folders around it, and the way back up.
+
+- Open a folder's arrow to look inside without leaving where you are.
+- Make one folder the top of the tree while you work inside a project, and go back to Home with ⇧⌘H.
+- Your favorites and Locations sit above the tree: Home, Macintosh HD, other disks with an Eject button, and the Trash.
+- Hide the tree when you want the room.
+
+## Cut, copy and paste, with a clipboard you can see
+
+<p align="center">
+  <img src="docs/screenshots/cut-paste.png" alt="Four files cut with Command-X, dimmed and marked with scissors, and the toolbar's clipboard list open" width="900">
+</p>
+
+In Finder, moving files with the keyboard means ⌘C and then ⌥⌘V, and nothing marks the items waiting to be pasted. In File Trail, ⌘X cuts and ⌘V moves, in the same window or another. Cut and copied items stay marked until they are pasted, and a button in the toolbar counts them and lists them, so you can jump to one, take one off or clear the lot.
+
+**Pasting is built not to lose your files.** When a paste would overwrite something, you choose: Skip, Keep Both, Replace, or for folders, Add Missing, which copies only what the folder there lacks. Anything replaced goes to the Trash. A move to another disk checks each copy before it removes the original, and if File Trail stops in the middle of a Replace, it picks up where it stopped the next time it opens and tells you where everything is. Undo (⌘Z) takes back renames, moves, copies and Move to Trash, one at a time.
+
+## Any folder in a few keystrokes
+
+<p align="center">
+  <img src="docs/screenshots/go-to.png" alt="The Go To box listing the folders used most lately, components first" width="900">
+</p>
+
+- **Go To (⌘K)** lists the folders you use most lately, with your favorites, and finds any folder you have opened from a few letters of its name. The folders you go to often come first, the way a browser's address bar ranks the sites you visit. Start with `/` or `~` to type a path, and Tab completes it.
+- **Type in the file list** to narrow it to the names containing what you typed. There is no field to click first: the best match is selected, Backspace edits what you typed, and Esc brings the rest back. Press ⌘F and the same text becomes a search of the subfolders.
+- **The path bar** is more than a label: click a folder to jump to it, click a `›` to see the folders at that level, or double-click the bar to edit the path as text.
+- **Back and Forward** remember more than one step. Hold either button to pick from the folders it leads to.
+- **The Go menu** has Home, Documents, Desktop, Downloads, Library, Macintosh HD, Applications and the Trash, like Finder's, each on a shortcut you choose.
+
+## Your keys, your toolbar
+
+Every command is on a keyboard shortcut, shown in the menus and listed in the built-in Help. In Finder, changing one means System Settings, App Shortcuts and the menu item's exact name; in File Trail, it is a list in Settings.
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/screenshots/settings-shortcuts.png" alt="The Shortcuts section of Settings" width="420"><br><b>The keyboard.</b> Two keys per command, with a warning before one is taken from another command.</td>
+    <td align="center" width="50%"><img src="docs/screenshots/customize-toolbar.png" alt="Customizing the toolbar, with New Folder being dragged into it from the panel below" width="420"><br><b>The toolbar.</b> Arranged where it is, as in Finder: drag buttons in, along or out.</td>
+  </tr>
+</table>
+
+## See what's taking the space
+
+<p align="center">
+  <img src="docs/screenshots/folder-sizes.png" alt="A project folder in List view sorted by size, each folder with a bar, and the Info panel open" width="900">
+</p>
+
+Ask for a folder's size and File Trail measures it, and every folder inside it, in one pass. Sort the List view by Size and each row gets a bar, so the heavy folders stand out before you read a number.
+
+Sizes are worked out for the folder you select or ask about, never for everything you pass while browsing, so opening a large folder stays instant. With the Info panel open, a folder you select in your home folder is measured by itself; Settings can turn that off.
 
 ## Rename many files at once
-
-Select several items and choose Rename. The Rename sheet replaces or adds text, numbers items or adds their date, or changes their case, and shows every new name before anything is renamed.
 
 <p align="center">
   <img src="docs/screenshots/batch-rename.png" alt="The Rename sheet numbering 21 photos as Road trip 1, Road trip 2 and so on, with a preview of each new name" width="900">
 </p>
 
-Find and replace can use regular expressions. Photos can be named by the date they were taken. Renames you repeat can be saved as presets. When a new name is already taken, you choose what happens: add a number, skip those items, or rename nothing.
-
-## See what is taking the space
-
-Ask for a folder's size and File Trail measures it, and every folder inside it, in one pass. Sort the List view by Size and each row gets a bar, so the heavy folders stand out before you read a number. The first screenshot on this page shows it.
-
-Sizes are worked out for the folder you select or ask about, never for everything you pass while browsing, so opening a large folder stays instant. With the Info panel open, a folder you select in your home folder is measured by itself; Settings can turn that off.
-
-## Tabs, windows, and a clipboard you can see
-
-<p align="center">
-  <img src="docs/screenshots/clipboard.png" alt="Four files copied in one tab, with the toolbar's clipboard list open" width="900">
-</p>
-
-Every tab has its own folder, history, folder tree, view, sort order and search. Copy in one tab and paste in another, or drag items onto a tab to move them there.
-
-Open as many windows as you like (⌘N), each with its own tabs, folder tree and Info panel. Move a tab into a window of its own, or merge every window back into one. Copy in one window and paste in another, or drag items between them. Close the last window and File Trail stays open, as Finder does, and the windows you had open come back at the next launch.
-
-Copying a folder by mistake is easy to do and annoying to discover later, so File Trail makes the clipboard visible. Copied and cut items stay marked until they are pasted. A button in the toolbar counts them, and opens a list where you can jump to an item, take one off, or clear the lot.
-
-When a paste would overwrite something, you decide what happens: Skip, Keep Both, Replace, or for folders, Add Missing, which copies only what the folder there lacks. Anything replaced goes to the Trash.
-
-Changed your mind? Edit › Undo (⌘Z) takes back renames, moves, Move to Trash, New Folder, copies, duplicates and Replace, one at a time, and Redo (⇧⌘Z) does them again. Each item is checked before anything moves, and Undo asks first if you have changed something since. Nothing is overwritten or deleted: what Undo takes away goes to the Trash. Merging folders, moving to another disk, copying onto a network share and deleting for good can't be undone, and File Trail tells you before you merge.
+Select several items and choose Rename. The Rename sheet replaces or adds text, numbers items or adds their date, or changes their case, and shows every new name before anything is renamed. Find and replace can use regular expressions, photos can be named by the date they were taken, and renames you repeat can be saved as presets. When a new name is already taken, you choose what happens: add a number, skip those items, or rename nothing.
 
 ## Three views, with real previews
 
@@ -76,43 +97,15 @@ Changed your mind? Edit › Undo (⌘Z) takes back renames, moves, Move to Trash
 
 Icons view shows Quick Look previews of photos, PDFs and other documents. List view has columns for date, size and kind, and optionally date created and permissions. Compact List packs a folder into columns of names. Space opens Quick Look on whatever is selected.
 
-Dates read the way you would say them ("24 min ago", "Yesterday, 6:03 PM"), and files have the icons macOS itself draws for them.
-
-## Get around without hunting
-
-<p align="center">
-  <img src="docs/screenshots/go-to.png" alt="The Go To box finding two folders from the letters sc" width="900">
-</p>
-
-- **The sidebar** has your favorites, and Locations as in Finder: Home, Macintosh HD, any other disks, and the Trash.
-- **The Go menu** takes you to Home, Documents, Desktop, Downloads, Library, Macintosh HD, Applications or the Trash, as Finder's does. Each place can have a shortcut of its own.
-- **The folder tree** shows the folder you are in and the ones around it. Open a folder's arrow to look inside without leaving where you are, or make one folder the top of the tree while you work inside a project. Hide the tree when you want the room.
-- **Go To (⌘K)** finds any folder you have opened before, or a favorite, from a few letters of its name. The folders you use most come first. Start with `/` or `~` to type a path, and Tab completes it.
-- **Type in the file list** to narrow it to the names containing what you typed. There is no field to click first: the best match is selected, Backspace edits what you typed, and Esc brings the rest back. Press ⌘F and the same text becomes a search of the subfolders.
-- **The path bar** is more than a label: click a folder to jump to it, click a `›` to see the folders at that level, or double-click the bar to edit the path as text.
-- **Back and Forward** remember more than one step. Hold either button to pick from the folders it leads to.
+Every tab has its own folder, history, folder tree, view and search, and every window its own tabs. Move a tab into a window of its own, or merge every window back into one.
 
 ## Make it yours
 
-File Trail follows the macOS Light and Dark setting, or stays in the one you pick.
+<p align="center">
+  <img src="docs/screenshots/dark-mode.png" alt="File Trail in Dark, showing a project folder sorted by size" width="900">
+</p>
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/screenshots/theme-light.png" alt="File Trail in Light" width="420"><br>Light</td>
-    <td align="center"><img src="docs/screenshots/theme-dark.png" alt="File Trail in Dark" width="420"><br>Dark</td>
-  </tr>
-</table>
-
-Beyond that, you choose the accent color and the zoom level, and the parts you touch most are yours to arrange:
-
-<table>
-  <tr>
-    <td align="center" width="50%"><img src="docs/screenshots/customize-toolbar.png" alt="Customizing the toolbar, with New Folder being dragged into it from the panel below" width="420"><br><b>The toolbar.</b> Arranged where it is, as in Finder: drag buttons in, along or out.</td>
-    <td align="center" width="50%"><img src="docs/screenshots/settings-shortcuts.png" alt="The Shortcuts section of Settings" width="420"><br><b>The keyboard.</b> Two keys per command, with a warning before one is taken from another command.</td>
-  </tr>
-</table>
-
-Settings also covers the everyday choices: which app edits text files and which terminal opens, what double-click and Return do, which columns List view and search results show, what search starts with, and whether your tabs and last folder come back at launch.
+File Trail follows the macOS Light and Dark setting, or stays in the one you pick. You choose the accent color and the zoom level, and Settings covers the everyday choices: which app edits text files and which terminal opens, what double-click and Return do, whether disk images open in a new window or a new tab, which columns List view and search results show, what search starts with, and whether your tabs and last folder come back at launch.
 
 ## Also in the box
 
@@ -120,19 +113,20 @@ Settings also covers the everyday choices: which app edits text files and which 
 - Open in Terminal and Copy Path on a key, and Open With for the apps you choose
 - Duplicate, Move To, New Folder and Move to Trash, with the Info panel and Quick Look a key away
 - Drag items in from Finder or other apps, and out to Finder, the desktop or any app, as from Finder
+- Eject disks from the sidebar, and open disk images in File Trail instead of a Finder window
 - The folder on screen stays current: what other apps add, rename or remove there shows up as it happens
 - Hidden files on a key (⇧⌘.), and folders kept first when you want them
-- Every command on a keyboard shortcut, shown in the menus and listed in the built-in Help
+- Dates that read the way you would say them ("24 min ago", "Yesterday, 6:03 PM"), and the icons macOS itself draws for each file
 
 ## Install
 
-File Trail is released periodically as a signed and notarized app. Get the latest from the [releases page](https://github.com/mdemirhan/filetrail/releases):
+File Trail is a signed and notarized app. Get the latest from the [releases page](https://github.com/mdemirhan/filetrail/releases):
 
 1. Download `FileTrail-arm64.dmg` (or the `.zip`).
 2. Move `File Trail.app` into your Applications folder.
 3. Open it.
 
-File Trail runs on Apple Silicon Macs. Releases are beta builds.
+File Trail runs on Apple Silicon Macs with macOS 14 Sonoma or later.
 
 ## Build from source
 
