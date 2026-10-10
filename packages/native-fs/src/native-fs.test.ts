@@ -900,12 +900,14 @@ describe("nativeCopyFile stop flag", () => {
   // On a FAT disk the fork goes in the "._" file beside the copy, in the disk's clusters:
   // once they are full the copy can still be made (an empty file takes none) but its fork
   // can't. An APFS disk keeps space back that a fork this small still fits in.
+  // Older macOS (14, on CI) says a full FAT disk is EIO rather than ENOSPC, to the fork's
+  // write as to any other: the copy fails with whichever the disk says.
   it.runIf(canMountDiskImages)(
     "fails with the write's errno when a small resource fork can't be written",
     async () => {
       const volume = mountTestDiskImage({ format: "MS-DOS FAT32", name: "FTFORK" });
       try {
-        fillDisk(volume.mountPath);
+        const fullCode = fillDisk(volume.mountPath, ["ENOSPC", "EIO"]);
         const source = join(root, "small.rsrc");
         writeFileSync(source, "");
         const fork = Buffer.alloc(512 * 1024, 7);
@@ -914,7 +916,7 @@ describe("nativeCopyFile stop flag", () => {
 
         await expect(
           addon.nativeCopyFile(source, destination, new Int32Array(1)),
-        ).rejects.toMatchObject({ code: "ENOSPC", syscall: "copyfile" });
+        ).rejects.toMatchObject({ code: fullCode, syscall: "copyfile" });
         // The copy got as far as the fork: it left the file it made, for the caller to
         // remove, without the fork.
         expect(existsSync(destination)).toBe(true);
@@ -946,9 +948,11 @@ describe("nativeCopyFile stop flag", () => {
   );
 });
 
-// Fills a (small) disk until a write of even 64 KB no longer fits.
-function fillDisk(mountPath: string): void {
+// Fills a (small) disk until a write of even 64 KB no longer fits, and says how the disk
+// told it was full: ENOSPC, or another of `fullCodes` for a disk that says it otherwise.
+function fillDisk(mountPath: string, fullCodes: readonly string[] = ["ENOSPC"]): string {
   let count = 0;
+  let fullCode = "ENOSPC";
   for (const chunkSize of [1024 * 1024, 64 * 1024]) {
     const chunk = Buffer.alloc(chunkSize, 1);
     for (;;) {
@@ -958,13 +962,16 @@ function fillDisk(mountPath: string): void {
         writeFileSync(path, chunk);
       } catch (error) {
         rmSync(path, { force: true });
-        if ((error as NodeJS.ErrnoException).code !== "ENOSPC") {
+        const code = (error as NodeJS.ErrnoException).code ?? "";
+        if (!fullCodes.includes(code)) {
           throw error;
         }
+        fullCode = code;
         break;
       }
     }
   }
+  return fullCode;
 }
 
 function waitForSync(condition: () => boolean, timeoutMs = 10_000): void {
