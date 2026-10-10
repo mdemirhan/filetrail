@@ -37,7 +37,7 @@ describe("tooltips", () => {
       newTab: "New Tab (⌘T)",
       openSelection: "Open (⌘O)",
       quickLook: "Quick Look (Space)",
-      editSelection: "Edit in Text Editor (⌘E)",
+      editSelection: "Edit in Text Editor (⇧⌘E)",
       moveSelection: "Move To (⇧⌘M)",
       renameSelection: "Rename (↩)",
       duplicateSelection: "Duplicate (⌘D)",

@@ -918,9 +918,16 @@ describe("nativeCopyFile stop flag", () => {
           addon.nativeCopyFile(source, destination, new Int32Array(1)),
         ).rejects.toMatchObject({ code: fullCode, syscall: "copyfile" });
         // The copy got as far as the fork: it left the file it made, for the caller to
-        // remove, without the fork.
+        // remove, without the whole fork. (macOS 27 leaves no fork to read; macOS 14 leaves
+        // one that reads, but not as the source's.)
         expect(existsSync(destination)).toBe(true);
-        expect(() => readFileSync(join(destination, "..namedfork", "rsrc"))).toThrow();
+        let copiedFork: Buffer | null = null;
+        try {
+          copiedFork = readFileSync(join(destination, "..namedfork", "rsrc"));
+        } catch {
+          // No fork at all.
+        }
+        expect(copiedFork?.equals(fork) ?? false).toBe(false);
       } finally {
         volume.detach();
       }
