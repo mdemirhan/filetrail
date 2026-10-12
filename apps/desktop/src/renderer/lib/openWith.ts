@@ -19,20 +19,33 @@ export function canAlwaysOpenWith(lookup: OpenWithLookup | null): boolean {
   return kinds.length === 1 && kinds[0]?.isFolder === false;
 }
 
+// An app as Open With tells apps apart: two copies of one version (an app in /Applications
+// and the same build elsewhere) are one app; another version of it is another.
+function appIdentity(app: ApplicationInfo): string {
+  return app.bundleId ? `id:${app.bundleId}\n${app.version ?? ""}` : `path:${appKey(app.path)}`;
+}
+
 // The apps Open With lists, in order, as Finder's menu does: the default app, then the pinned
-// apps (Settings → Files), then every other app macOS offers, A to Z. An app is listed once,
-// in its first place. Pinned apps that are gone are left out. Until macOS has answered
-// (`lookup` null) only the pinned apps are known.
+// apps (Settings → Files) that can open the items, then every other app macOS offers, A to Z.
+// An app is listed once, in its first place, and of two copies of one version the one macOS
+// puts first. Pinned apps that are gone are left out. Until macOS has answered (`lookup`
+// null) only the pinned apps are known, and they are all listed.
 export function getOpenWithSections(
   lookup: OpenWithLookup | null,
   pinned: readonly OpenWithApplication[],
 ): { defaultApp: ApplicationInfo | null; pinned: ApplicationInfo[]; others: ApplicationInfo[] } {
   const listed = new Set<string>();
   const take = (app: ApplicationInfo | null): app is ApplicationInfo => {
-    if (!app || listed.has(appKey(app.path))) {
+    if (!app) {
       return false;
     }
-    listed.add(appKey(app.path));
+    const keys = [`path:${appKey(app.path)}`, appIdentity(app)];
+    if (keys.some((key) => listed.has(key))) {
+      return false;
+    }
+    for (const key of keys) {
+      listed.add(key);
+    }
     return true;
   };
   const defaultApp = lookup?.defaultApp ?? null;
@@ -48,11 +61,25 @@ export function getOpenWithSections(
           bundleId: null,
           version: null,
         }));
-  const pinnedApps = pinnedInfo.filter(take);
+  // A pinned app is listed only for items macOS says it can open: by its path, or by its
+  // bundle id when macOS offers another copy of it. An answer with no kinds is one macOS
+  // couldn't give, which says nothing either way.
+  const offered = lookup?.apps ?? [];
+  const canOpen = (app: ApplicationInfo) =>
+    !lookup ||
+    lookup.kinds.length === 0 ||
+    offered.some(
+      (candidate) =>
+        appKey(candidate.path) === appKey(app.path) ||
+        (app.bundleId !== null && candidate.bundleId === app.bundleId),
+    );
+  const pinnedApps = pinnedInfo.filter(
+    (app): app is ApplicationInfo => app !== null && canOpen(app) && take(app),
+  );
   const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
-  const others = [...(lookup?.apps ?? [])]
-    .sort((left, right) => collator.compare(left.name, right.name))
-    .filter(take);
+  const others = offered
+    .filter(take)
+    .sort((left, right) => collator.compare(left.name, right.name));
   return { defaultApp, pinned: pinnedApps, others };
 }
 

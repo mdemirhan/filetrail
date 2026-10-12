@@ -81,6 +81,7 @@ export function AppDialogs({
   contextMenuSubmenus,
   contextMenuSubmenuAlternates,
   onContextSubmenuOpen,
+  onContextMenuOptionHeld,
   shortcutContext,
   onRunContextMenuAction,
   onRunContextSubmenuAction,
@@ -121,6 +122,7 @@ export function AppDialogs({
   contextMenuSubmenus: ContextMenuSubmenus;
   contextMenuSubmenuAlternates?: ContextMenuSubmenuAlternates;
   onContextSubmenuOpen?: (submenuId: ContextMenuSubmenuId) => void;
+  onContextMenuOptionHeld?: () => void;
   shortcutContext: ShortcutContext;
   onRunContextMenuAction: (actionId: ContextMenuActionId, paths: string[]) => void;
   onRunContextSubmenuAction: (action: ContextMenuSubmenuAction, paths: string[]) => void;
@@ -240,6 +242,7 @@ export function AppDialogs({
           submenus={contextMenuSubmenus}
           submenuAlternates={contextMenuSubmenuAlternates}
           onSubmenuOpen={onContextSubmenuOpen}
+          onOptionHeld={onContextMenuOptionHeld}
           shortcutContext={contextMenuShortcutContext}
           open
           onAction={(actionId) => {

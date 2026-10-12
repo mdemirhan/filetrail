@@ -729,21 +729,28 @@ export function useExplorerActions(args: {
   );
 
   // Open With asks macOS which apps can open the items once its submenu first opens in a
-  // menu, not when the menu opens; the submenu shows when the answer comes.
-  const [openWithMenuPaths, setOpenWithMenuPaths] = useState<string[] | null>(null);
+  // menu, not when the menu opens; the submenu shows when the answer comes. What was asked
+  // for belongs to the menu it was asked in: a new menu starts with nothing asked.
+  const [openWithAskedPaths, setOpenWithAskedPaths] = useState<string[] | null>(null);
   const contextMenuPaths = contextMenuState?.paths ?? null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new menu asks again.
-  useEffect(() => {
-    setOpenWithMenuPaths(null);
-  }, [contextMenuPaths]);
+  const openWithMenuPaths =
+    openWithAskedPaths !== null && openWithAskedPaths === contextMenuPaths
+      ? openWithAskedPaths
+      : null;
   const contextMenuOpenWith = useOpenWithLookup(client, openWithMenuPaths, openWithApplications);
   const noteContextSubmenuOpen = useCallback(
     (submenuId: ContextMenuSubmenuId) => {
       if (submenuId === "openWith" && contextMenuPaths && contextMenuPaths.length > 0) {
-        setOpenWithMenuPaths((current) => current ?? contextMenuPaths);
+        setOpenWithAskedPaths(contextMenuPaths);
       }
     },
     [contextMenuPaths],
+  );
+  // Option held asks too: Always Open With replaces Open With only once macOS has said the
+  // items are of one kind.
+  const noteContextMenuOptionHeld = useCallback(
+    () => noteContextSubmenuOpen("openWith"),
+    [noteContextSubmenuOpen],
   );
   const openWithMenuItems = useMemo<ContextMenuSubmenuItem[] | undefined>(
     () =>
@@ -4341,6 +4348,7 @@ export function useExplorerActions(args: {
     openWithMenuItems,
     openWithMenuAlternates,
     noteContextSubmenuOpen,
+    noteContextMenuOptionHeld,
     askAlwaysOpenWith,
     confirmAlwaysOpenWithDialog,
     pickApplicationForOpenWith,

@@ -924,6 +924,7 @@ export function App() {
     openWithMenuItems,
     openWithMenuAlternates,
     noteContextSubmenuOpen,
+    noteContextMenuOptionHeld,
     askAlwaysOpenWith,
     confirmAlwaysOpenWithDialog,
     pickApplicationForOpenWith,
@@ -2838,6 +2839,7 @@ export function App() {
           contextMenuSubmenus={contextMenuSubmenus}
           contextMenuSubmenuAlternates={openWithMenuAlternates}
           onContextSubmenuOpen={noteContextSubmenuOpen}
+          onContextMenuOptionHeld={noteContextMenuOptionHeld}
           shortcutContext={shortcutContext}
           onRunContextMenuAction={(actionId, paths) => {
             if (actionId === "eject") {

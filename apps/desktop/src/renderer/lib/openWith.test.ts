@@ -32,7 +32,14 @@ describe("buildOpenWithMenuItems", () => {
     const items = buildOpenWithMenuItems({
       lookup: lookup({
         defaultApp: app("Typora"),
-        apps: [app("Xcode"), app("Typora"), app("obsidian"), app("TextEdit")],
+        apps: [
+          app("Xcode"),
+          app("Typora"),
+          app("Zed"),
+          app("obsidian"),
+          app("Visual Studio Code"),
+          app("TextEdit"),
+        ],
         pinnedApps: [app("Zed"), app("Visual Studio Code")],
       }),
       pinned: [pin("Zed"), pin("Visual Studio Code")],
@@ -71,7 +78,7 @@ describe("buildOpenWithMenuItems", () => {
 
   it("leaves out pinned apps that aren't there any more", () => {
     const items = buildOpenWithMenuItems({
-      lookup: lookup({ pinnedApps: [null, app("Zed")] }),
+      lookup: lookup({ apps: [app("Zed")], pinnedApps: [null, app("Zed")] }),
       pinned: [pin("Gone"), pin("Zed")],
     });
 
@@ -87,11 +94,68 @@ describe("buildOpenWithMenuItems", () => {
   // An answer asked for an older pinned list can't say which of today's pins are there.
   it("ignores pinned answers asked with a different list", () => {
     const items = buildOpenWithMenuItems({
-      lookup: lookup({ pinnedApps: [null] }),
+      lookup: lookup({ apps: [app("Zed"), app("Nova")], pinnedApps: [null] }),
       pinned: [pin("Zed"), pin("Nova")],
     });
 
     expect(rows(items)).toEqual(["Zed", "Nova", "---", "Other…"]);
+  });
+
+  it("leaves out pinned apps that can't open the items", () => {
+    const items = buildOpenWithMenuItems({
+      lookup: lookup({
+        defaultApp: app("DiskImageMounter"),
+        apps: [app("DiskImageMounter"), app("Zed")],
+        pinnedApps: [app("Visual Studio Code"), app("Zed")],
+      }),
+      pinned: [pin("Visual Studio Code"), pin("Zed")],
+    });
+
+    expect(rows(items)).toEqual(["DiskImageMounter (default)", "---", "Zed", "---", "Other…"]);
+  });
+
+  it("lists a pinned app where it is when macOS offers another copy of it", () => {
+    const zed = { ...app("Zed"), bundleId: "dev.zed.Zed" };
+    const pinnedZed = { ...zed, path: "/Users/demo/Applications/Zed.app" };
+    const items = buildOpenWithMenuItems({
+      lookup: lookup({ apps: [zed], pinnedApps: [pinnedZed] }),
+      pinned: [pin("Zed", pinnedZed.path)],
+    });
+
+    expect(rows(items)).toEqual(["Zed", "---", "Other…"]);
+    expect(items[0]).toMatchObject({ action: { appPath: "/Users/demo/Applications/Zed.app" } });
+  });
+
+  // An answer with no kinds is one macOS couldn't give.
+  it("lists every pinned app when macOS couldn't say what opens the items", () => {
+    const items = buildOpenWithMenuItems({
+      lookup: lookup({ kinds: [], pinnedApps: [app("Zed")] }),
+      pinned: [pin("Zed")],
+    });
+
+    expect(rows(items)).toEqual(["Zed", "---", "Other…"]);
+  });
+
+  it("lists two copies of one version of an app once, the one macOS puts first", () => {
+    const fileTrail = (path: string, version: string) => ({
+      path,
+      name: "File Trail",
+      bundleId: "com.filetrail.app",
+      version,
+    });
+    const items = buildOpenWithMenuItems({
+      lookup: lookup({
+        apps: [
+          fileTrail("/Applications/File Trail.app", "0.6.1"),
+          fileTrail("/Users/demo/src/filetrail/out/File Trail.app", "0.6.1"),
+          fileTrail("/Users/demo/Downloads/File Trail.app", "0.5.0"),
+        ],
+      }),
+      pinned: [],
+    });
+
+    expect(rows(items)).toEqual(["File Trail (0.6.1)", "File Trail (0.5.0)", "---", "Other…"]);
+    expect(items[0]).toMatchObject({ action: { appPath: "/Applications/File Trail.app" } });
   });
 
   it("offers only Other… when there is nothing else", () => {

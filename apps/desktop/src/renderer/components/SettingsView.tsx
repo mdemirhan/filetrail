@@ -1815,7 +1815,7 @@ export function SettingsView({
         {showSection("files") ? (
           <SectionCard
             title="Always in Open With"
-            note="Listed for every file and folder, after the app it opens in, above the other apps macOS offers."
+            note="Listed first in Open With, after the app an item opens in, for the items each app can open."
           >
             <div className="settings-row settings-row-list">
               <SettingsList

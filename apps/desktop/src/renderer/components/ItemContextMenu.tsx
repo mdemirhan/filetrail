@@ -24,6 +24,7 @@ import {
 } from "../lib/contextMenu";
 import { AppIcon } from "../lib/fileIcons";
 import { placeSubmenu } from "../lib/menuPlacement";
+import { useOptionKeyHeld } from "../lib/optionKey";
 import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { EjectIcon } from "./EjectIcon";
@@ -56,6 +57,7 @@ export function ItemContextMenu({
   onAction,
   onSubmenuAction,
   onSubmenuOpen,
+  onOptionHeld,
 }: {
   anchorX: number;
   anchorY: number;
@@ -73,6 +75,8 @@ export function ItemContextMenu({
   onSubmenuAction: (action: ContextMenuSubmenuAction) => void;
   /** Told when the pointer or the keyboard reaches an item with a submenu. */
   onSubmenuOpen?: ((submenuId: ContextMenuSubmenuId) => void) | undefined;
+  /** Told when Option is held with the menu open, so alternates can be got ready. */
+  onOptionHeld?: (() => void) | undefined;
 }) {
   const shortcutDisplay = useShortcutDisplay();
   const [activeItemId, setActiveItemId] = useState<ContextMenuActionId | null>(null);
@@ -113,24 +117,15 @@ export function ItemContextMenu({
     setActiveItemId(null);
   }, [open]);
 
-  // Option held swaps an item for its alternate while the menu is open.
-  const [optionHeld, setOptionHeld] = useState(false);
+  // Option held swaps an item for its alternate, whether it went down before the menu
+  // opened or while it is open. Alternates may need asking for (Open With's apps): the
+  // menu says when Option is held.
+  const optionHeld = useOptionKeyHeld() && open;
   useEffect(() => {
-    if (!open) {
-      setOptionHeld(false);
-      return;
+    if (optionHeld) {
+      onOptionHeld?.();
     }
-    const onKey = (event: KeyboardEvent) => setOptionHeld(event.altKey);
-    const onBlur = () => setOptionHeld(false);
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("keyup", onKey, true);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("keyup", onKey, true);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, [open]);
+  }, [onOptionHeld, optionHeld]);
 
   // The submenu of the item under the pointer or the arrow keys, if it has one.
   const openSubmenuId: ContextMenuSubmenuId | null =

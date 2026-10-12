@@ -611,6 +611,29 @@ describe("ItemContextMenu", () => {
     expect(onSubmenuAction).toHaveBeenLastCalledWith(expect.not.objectContaining({ always: true }));
   });
 
+  it("shows the alternate at once when Option was down before the menu opened", () => {
+    const onOptionHeld = vi.fn();
+    fireEvent.mouseDown(window, { altKey: true });
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="content"
+        submenus={{ openWith: submenuItems }}
+        submenuAlternates={{ openWith: { label: "Always Open With", items: submenuItems } }}
+        shortcutContext={shortcutContext}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+        onOptionHeld={onOptionHeld}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Always Open With" })).toBeInTheDocument();
+    expect(onOptionHeld).toHaveBeenCalled();
+    fireEvent.keyUp(window, { key: "Alt", altKey: false });
+  });
+
   it("leaves Open With as it is under Option when it has no alternate", () => {
     render(
       <ItemContextMenu
@@ -629,6 +652,7 @@ describe("ItemContextMenu", () => {
 
     expect(screen.getByRole("button", { name: "Open With" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Always Open With" })).toBeNull();
+    fireEvent.keyUp(window, { key: "Alt", altKey: false });
   });
 
   // Open With asks macOS for its apps only when its submenu is reached, and opens once

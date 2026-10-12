@@ -260,7 +260,11 @@ describe("Open With", () => {
       },
       openWithApplications: (request) => ({
         defaultApp: HARNESS_TEXT_EDIT,
-        apps: [HARNESS_VISUAL_STUDIO_CODE, HARNESS_TEXT_EDIT],
+        apps: [
+          HARNESS_VISUAL_STUDIO_CODE,
+          HARNESS_TEXT_EDIT,
+          { path: "/Applications/Zed.app", name: "Zed", bundleId: null, version: null },
+        ],
         kinds: [{ contentType: "public.plain-text", name: "Plain Text Document", isFolder: false }],
         pinnedApps: request.pinnedAppPaths.map((path) =>
           path === "/Applications/Zed.app"
@@ -330,6 +334,25 @@ describe("Open With", () => {
       applicationPath: "/Applications/Visual Studio Code.app",
       contentType: "public.plain-text",
     });
+  });
+
+  // As in Finder: Option already down when the menu opens shows Always Open With at once,
+  // and macOS is asked about the items then, not when the submenu is reached.
+  it("opens the menu on Always Open With when Option is held for the right-click", async () => {
+    const harness = createHarness();
+    renderApp(harness);
+
+    const button = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.contextMenu(button, { altKey: true });
+    });
+
+    expect(await screen.findByRole("button", { name: "Always Open With" })).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Always Open With" }));
+    await chooseInMenu("Visual Studio Code");
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "change all similar documents to open with the application “Visual Studio Code”",
+    );
   });
 
   it("changes nothing and opens nothing when Always Open With is cancelled", async () => {
