@@ -110,6 +110,7 @@ module.exports = {
   nativeOpenWithApplications: (paths, appPaths) =>
     binding.nativeOpenWithApplications(paths, appPaths).then((json) => JSON.parse(json)),
   nativeSetDefaultApplication: binding.nativeSetDefaultApplication,
+  nativeForgetOpenWithCache: binding.nativeForgetOpenWithCache,
   nativeGetAcl: binding.nativeGetAcl,
   nativeSetAcl: binding.nativeSetAcl,
 };

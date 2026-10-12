@@ -4617,42 +4617,49 @@ body.window-inactive {
   font-variant-numeric: tabular-nums;
 }
 
-.get-info-buttons {
+/* Open and the Open With menu: one split button across the panel, the accent filling
+   both halves, a hairline between them, as a macOS split button draws it. */
+.get-info-open {
   display: flex;
-  gap: 8px;
   margin-bottom: 18px;
 }
 
-.get-info-buttons > * {
-  flex: 1 1 0;
+.get-info-open-main {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
-/* Open and Open With are push buttons that share the panel's width. */
-.get-info-button {
-  width: 100%;
-  min-width: 0;
+.get-info-open-main.split {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
-/* A pull-down button: the label on the left, the chevron in an accent cap on the right. */
-.get-info-button.pull-down {
-  justify-content: space-between;
-  padding: 0 4px 0 10px;
-}
-
-.get-info-button-chevron {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
+.get-info-open-main .file-icon {
   width: 16px;
   height: 16px;
-  border-radius: var(--radius-xs);
-  background: var(--ft-accent-solid-button);
-  color: var(--ft-accent-on-solid);
 }
 
-.get-info-button-chevron svg {
+.get-info-open-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.get-info-open-with {
+  position: relative;
+  display: flex;
+}
+
+.get-info-open-with-button.push-button {
+  min-width: 0;
+  width: 26px;
+  padding: 0;
+  border-left: 1px solid color-mix(in srgb, var(--ft-accent-on-solid) 35%, transparent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.get-info-open-with-button svg {
   width: 8px;
   height: 8px;
   fill: none;
@@ -4662,18 +4669,82 @@ body.window-inactive {
   stroke-linejoin: round;
 }
 
-.get-info-open-with {
+/* A pull-down menu opens under its button, lined up with the button's right edge. It is
+   placed against the window (PullDownMenu), so a row that cuts off long text, as the Info
+   panel's do, doesn't cut it off. */
+.pull-down {
   position: relative;
 }
 
-.get-info-open-with-menu.context-submenu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: auto;
-  right: 0;
+.pull-down-menu.context-submenu {
   /* Over everything, as the other menus are: a notification never covers it. */
   z-index: var(--z-menu);
   min-width: 200px;
+}
+
+/* Under Option the menu's apps are for Always Open With, which this line says. */
+.pull-down-menu-heading {
+  padding: 2px 10px 4px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+
+/* "Opens with" in Information: the app as a small pop-up button that keeps the row's text
+   size, its chevron showing it can be changed. */
+.get-info-opens-with {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.get-info-opens-with-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  /* The hover background reaches past the text; the margins keep the row as tall as the
+     others. */
+  margin: -4px 0;
+  padding: 2px 4px 2px 6px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-callout);
+  cursor: default;
+}
+
+.get-info-opens-with-button:hover,
+.get-info-opens-with-button[aria-expanded="true"] {
+  background: var(--bg-hover);
+}
+
+.get-info-opens-with-button .file-icon {
+  width: 14px;
+  height: 14px;
+  /* Taller than the text by a little: without this the row grows by 2 px. */
+  margin: -2px 0;
+}
+
+/* The name gives the button its baseline, so the row lines up with the others by its text,
+   not by the icon. */
+.get-info-opens-with-name {
+  align-self: baseline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.get-info-opens-with-chevron {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .get-info-section {
@@ -4685,34 +4756,6 @@ body.window-inactive {
   color: var(--text-secondary);
   font-size: var(--font-size-small);
   font-weight: 600;
-}
-
-/* Open With: the pop-up of apps takes the room Change All… leaves. */
-.get-info-open-with-default {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.get-info-open-with-popup {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.get-info-open-with-popup select {
-  width: 100%;
-  min-width: 0;
-  text-overflow: ellipsis;
-}
-
-.get-info-change-all {
-  flex: none;
-}
-
-.get-info-open-with-note {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-small);
 }
 
 .get-info-meta {

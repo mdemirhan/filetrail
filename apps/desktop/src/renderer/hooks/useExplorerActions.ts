@@ -3132,9 +3132,15 @@ export function useExplorerActions(args: {
     return false;
   }
 
-  async function runContextSubmenuAction(action: ContextMenuSubmenuAction, paths: string[]) {
+  // `openWithKind` is the kind Always Open With changes, for a menu other than the right-click
+  // one (Get Info's); the right-click menu's own answer names it otherwise.
+  async function runContextSubmenuAction(
+    action: ContextMenuSubmenuAction,
+    paths: string[],
+    openWithKind?: OpenWithLookup["kinds"][number] | null,
+  ) {
     // Always Open With is offered only for items of one kind, which the menu's answer names.
-    const kind = contextMenuOpenWith.lookup?.kinds[0] ?? null;
+    const kind = openWithKind ?? contextMenuOpenWith.lookup?.kinds[0] ?? null;
     closeContextMenu();
     // View As and Sort By set the window's view, which the app does (App.tsx).
     if (paths.length === 0 || action.kind === "viewMode" || action.kind === "sortBy") {
@@ -3154,7 +3160,25 @@ export function useExplorerActions(args: {
     await openPathsWithApplication(paths, selection.appPath, selection.appName);
   }
 
-  // Always Open With, and Change All… in Get Info: asked first, as Finder asks, since every
+  // Get Info's "Opens with": the app chosen (Other… asks which) becomes the kind's app, once
+  // asked; nothing is opened.
+  async function changeDefaultApp(
+    action: ContextMenuSubmenuAction,
+    kind: OpenWithLookup["kinds"][number],
+  ) {
+    if (kind.isFolder || (action.kind !== "application" && action.kind !== "other")) {
+      return;
+    }
+    const selection =
+      action.kind === "other"
+        ? await pickApplicationForOpenWith("Couldn’t Choose an App")
+        : { appPath: action.appPath, appName: action.appName };
+    if (selection) {
+      askAlwaysOpenWith({ ...selection, kind, paths: [] });
+    }
+  }
+
+  // Always Open With, and Get Info's "Opens with": asked first, as Finder asks, since every
   // file of the kind then opens in the app, in Finder too. The items it was chosen for open
   // in it once it is set.
   function askAlwaysOpenWith(request: {
@@ -4350,6 +4374,7 @@ export function useExplorerActions(args: {
     noteContextSubmenuOpen,
     noteContextMenuOptionHeld,
     askAlwaysOpenWith,
+    changeDefaultApp,
     confirmAlwaysOpenWithDialog,
     pickApplicationForOpenWith,
     copyGetInfoPath,

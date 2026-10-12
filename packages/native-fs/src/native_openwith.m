@@ -16,11 +16,21 @@
  *     setDefaultApplicationAtURL:toOpenContentType:), for Finder and every other app.
  *     Refused for folders, packages and apps.
  *
- * Both run on a libuv thread pool thread: Launch Services can be slow on a cold start.
+ *   nativeForgetOpenWithCache() → undefined
+ *     Drops what is remembered (see below), as when apps may have been installed or removed.
+ *
+ * Both async calls run on a libuv thread pool thread: Launch Services can be slow on a cold
+ * start.
+ *
+ * Remembered between calls, until nativeForgetOpenWithCache (or a default app is changed
+ * here): for each type, the apps that can open it and its kind name; for each app path, its
+ * name, version and bundle id (or that there is no app there). Asked every time: each file's
+ * type, and the app it opens in, which Finder's Get Info can set for one file alone.
  */
 
 #include <node_api.h>
 #include <dispatch/dispatch.h>
+#include <os/lock.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -121,6 +131,42 @@ static NSDictionary *app_info(NSURL *url) {
   };
 }
 
+/* ── What is remembered between calls ────────────────────────────── */
+
+/* The caches are read and written from pool threads; the lock guards only the dictionaries,
+   never Launch Services: two threads may work out the same answer, and the last one stays.
+   Past this many entries a cache starts again empty rather than growing. */
+#define OPEN_WITH_CACHE_MAX 1024
+
+static os_unfair_lock cache_lock = OS_UNFAIR_LOCK_INIT;
+static NSMutableDictionary *type_cache = nil; /* type id → {"kind": {…}, "apps": [NSURL]} */
+static NSMutableDictionary *app_cache = nil;  /* app path → app info, or NSNull for none */
+
+static id cache_read(NSMutableDictionary *cache, NSString *key) {
+  os_unfair_lock_lock(&cache_lock);
+  id value = [[cache objectForKey:key] retain];
+  os_unfair_lock_unlock(&cache_lock);
+  return [value autorelease];
+}
+
+static void cache_write(NSMutableDictionary **cache, NSString *key, id value) {
+  os_unfair_lock_lock(&cache_lock);
+  if (!*cache) {
+    *cache = [[NSMutableDictionary alloc] init];
+  } else if ((*cache).count >= OPEN_WITH_CACHE_MAX) {
+    [*cache removeAllObjects];
+  }
+  [*cache setObject:value forKey:key];
+  os_unfair_lock_unlock(&cache_lock);
+}
+
+static void forget_open_with_cache(void) {
+  os_unfair_lock_lock(&cache_lock);
+  [type_cache removeAllObjects];
+  [app_cache removeAllObjects];
+  os_unfair_lock_unlock(&cache_lock);
+}
+
 /* What Finder's Kind column says for the file ("Markdown Document", "Plain Text Document"):
    Spotlight's kind, else the type's own description ("Markdown", "text"). */
 static NSString *kind_name(NSString *path, UTType *type) {
@@ -140,6 +186,51 @@ static NSString *kind_name(NSString *path, UTType *type) {
     }
   }
   return type.localizedDescription.length > 0 ? type.localizedDescription : nil;
+}
+
+/* app_info, remembered by the app's path. */
+static NSDictionary *cached_app_info(NSURL *url) {
+  NSString *key = app_key(url);
+  if (!key) {
+    return nil;
+  }
+  id cached = cache_read(app_cache, key);
+  if (cached) {
+    return cached == [NSNull null] ? nil : cached;
+  }
+  NSDictionary *info = app_info(url);
+  cache_write(&app_cache, key, info ?: [NSNull null]);
+  return info;
+}
+
+/* The kind of a type and the apps that can open it, in Launch Services' order, worked out
+   from one file of the type and remembered by the type. */
+static NSDictionary *type_entry(NSWorkspace *workspace, NSURL *url, NSString *path,
+                                UTType *type) {
+  NSDictionary *entry = cache_read(type_cache, type.identifier);
+  if (entry) {
+    return entry;
+  }
+  NSString *name = kind_name(path, type);
+  NSMutableArray<NSURL *> *apps = [NSMutableArray array];
+  NSMutableSet<NSString *> *seen = [NSMutableSet set];
+  for (NSURL *appURL in [workspace URLsForApplicationsToOpenURL:url]) {
+    NSString *key = app_key(appURL);
+    if (key && ![seen containsObject:key]) {
+      [seen addObject:key];
+      [apps addObject:appURL];
+    }
+  }
+  entry = @{
+    @"kind" : @{
+      @"contentType" : type.identifier,
+      @"name" : name ?: [NSNull null],
+      @"isFolder" : @([type conformsToType:UTTypeDirectory]),
+    },
+    @"apps" : apps,
+  };
+  cache_write(&type_cache, type.identifier, entry);
+  return entry;
 }
 
 /* ── nativeOpenWithApplications ──────────────────────────────────── */
@@ -196,19 +287,19 @@ static void execute_open_with(napi_env env, void *data) {
         continue;
       }
       [seenTypes addObject:typeId];
+      NSArray<NSURL *> *appURLs = nil;
       if (type) {
-        NSString *name = kind_name(path, type);
-        [kinds addObject:@{
-          @"contentType" : type.identifier,
-          @"name" : name ?: [NSNull null],
-          @"isFolder" : @([type conformsToType:UTTypeDirectory]),
-        }];
+        NSDictionary *entry = type_entry(workspace, url, path, type);
+        [kinds addObject:entry[@"kind"]];
+        appURLs = entry[@"apps"];
+      } else {
+        /* A file macOS gives no type is asked about alone, and not remembered. */
+        appURLs = [workspace URLsForApplicationsToOpenURL:url];
       }
-      NSArray<NSURL *> *appURLs = [workspace URLsForApplicationsToOpenURL:url];
       NSMutableArray<NSString *> *keys = [NSMutableArray arrayWithCapacity:appURLs.count];
       for (NSURL *appURL in appURLs) {
         NSString *key = app_key(appURL);
-        if (![keys containsObject:key]) {
+        if (key && ![keys containsObject:key]) {
           [keys addObject:key];
           urlsByKey[key] = appURL;
         }
@@ -227,18 +318,19 @@ static void execute_open_with(napi_env env, void *data) {
 
     NSMutableArray *apps = [NSMutableArray array];
     for (NSString *key in commonKeys ?: @[]) {
-      NSDictionary *info = app_info(urlsByKey[key]);
+      NSDictionary *info = cached_app_info(urlsByKey[key]);
       if (info) {
         [apps addObject:info];
       }
     }
-    NSDictionary *defaultApp = defaultKey ? app_info(urlsByKey[defaultKey]) : nil;
+    NSDictionary *defaultApp = defaultKey ? cached_app_info(urlsByKey[defaultKey]) : nil;
 
     NSMutableArray *appInfo = [NSMutableArray arrayWithCapacity:w->app_path_count];
     for (uint32_t index = 0; index < w->app_path_count; index += 1) {
       NSString *path =
           w->app_paths[index] ? [NSString stringWithUTF8String:w->app_paths[index]] : nil;
-      NSDictionary *info = path.length > 0 ? app_info([NSURL fileURLWithPath:path]) : nil;
+      NSDictionary *info =
+          path.length > 0 ? cached_app_info([NSURL fileURLWithPath:path]) : nil;
       [appInfo addObject:info ?: [NSNull null]];
     }
 
@@ -358,6 +450,8 @@ static void execute_set_default(napi_env env, void *data) {
     } else if (failure) {
       w->error = strdup(failure.UTF8String ?: "macOS refused the change.");
     }
+    /* What the type opens in has changed, or may have: what is remembered is asked again. */
+    forget_open_with_cache();
     [failure release];
   }
 }
@@ -417,6 +511,16 @@ static napi_value native_set_default_application(napi_env env, napi_callback_inf
   return promise;
 }
 
+/* ── nativeForgetOpenWithCache ───────────────────────────────────── */
+
+static napi_value native_forget_open_with_cache(napi_env env, napi_callback_info info) {
+  (void)info;
+  forget_open_with_cache();
+  napi_value undefined;
+  napi_get_undefined(env, &undefined);
+  return undefined;
+}
+
 /* Called from the main module init in native_copyfile.c. */
 napi_value register_open_with(napi_env env, napi_value exports) {
   napi_value fn;
@@ -426,5 +530,8 @@ napi_value register_open_with(napi_env env, napi_value exports) {
   napi_create_function(env, "nativeSetDefaultApplication", NAPI_AUTO_LENGTH,
                        native_set_default_application, NULL, &fn);
   napi_set_named_property(env, exports, "nativeSetDefaultApplication", fn);
+  napi_create_function(env, "nativeForgetOpenWithCache", NAPI_AUTO_LENGTH,
+                       native_forget_open_with_cache, NULL, &fn);
+  napi_set_named_property(env, exports, "nativeForgetOpenWithCache", fn);
   return exports;
 }

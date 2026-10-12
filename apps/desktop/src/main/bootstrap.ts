@@ -136,6 +136,7 @@ export async function bootstrapMainProcess(
     listMounts,
     ejectVolumeNow,
     realpathNow,
+    forgetOpenWithCache,
   } = await import("./originalFileSystem");
   // The disks mounted besides the startup disk; every window hears of each change.
   const volumeWatcher = createVolumeWatcher({
@@ -169,6 +170,9 @@ export async function bootstrapMainProcess(
   // A disk mounted while the watch was not looking (it can miss one while the Mac sleeps)
   // shows up when the window comes back to the front.
   app.on("browser-window-focus", () => volumeWatcher.refresh());
+  // Apps installed, removed or updated while File Trail was in the background show in Open
+  // With the next time it comes forward.
+  app.on("browser-window-focus", () => forgetOpenWithCache());
   // The folder each window has on screen: a change made to it outside the app is sent to
   // the window, which reads the folder again.
   const folderWatches = createFolderWatches({

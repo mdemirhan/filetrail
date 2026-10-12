@@ -598,86 +598,154 @@ describe("InfoPanel", () => {
     expect(describeOwnerAccess("---------")).toBe("No access");
   });
 
-  it("chooses an app in Open With without changing anything until Change All…", async () => {
-    const onChangeAll = vi.fn();
-    const onPickOtherApp = vi.fn(async () => ({
-      appPath: "/Applications/Nova.app",
-      appName: "Nova",
-    }));
-    const app = (name: string, label = name) => ({
+  describe("Open and Open With", () => {
+    const app = (name: string, always = false, label = name) => ({
       action: {
         kind: "application" as const,
         id: `app:/Applications/${name}.app`,
         label,
         appPath: `/Applications/${name}.app`,
         appName: name,
+        ...(always ? { always: true } : {}),
       },
     });
-    render(
-      <InfoPanel
-        loading={false}
-        item={baseItem}
-        onClose={() => undefined}
-        onNavigateToPath={() => undefined}
-        onOpen={() => undefined}
-        onOpenInTerminal={() => undefined}
-        onShowInFinder={() => undefined}
-        onCopyPath={() => true}
-        onOpenWith={() => undefined}
-        openWithItems={[
-          app("Typora", "Typora (default)"),
-          { type: "separator", key: "separator-pinned" },
-          app("Zed"),
-          { type: "separator", key: "separator-other" },
-          {
-            action: { kind: "other", id: "other", label: "Other…", appName: "Other…" },
-          },
-        ]}
-        openWithDefaultAppPath="/Applications/Typora.app"
-        onPickOtherApp={onPickOtherApp}
-        onChangeAll={onChangeAll}
-      />,
-    );
-    const popup = screen.getByRole("combobox", { name: "App this kind of file opens in" });
-    const changeAll = screen.getByRole("button", { name: "Change All…" });
-
-    // It starts on the app the file opens in, which there is nothing to change to.
-    expect(popup).toHaveValue("/Applications/Typora.app");
-    expect(changeAll).toBeDisabled();
-
-    fireEvent.change(popup, { target: { value: "/Applications/Zed.app" } });
-    expect(onChangeAll).not.toHaveBeenCalled();
-    fireEvent.click(changeAll);
-    expect(onChangeAll).toHaveBeenCalledWith({ appPath: "/Applications/Zed.app", appName: "Zed" });
-
-    // Other… adds the app chosen in the window for choosing one.
-    await act(async () => {
-      fireEvent.change(popup, { target: { value: "\u0000other" } });
+    const other = (always = false) => ({
+      action: {
+        kind: "other" as const,
+        id: "other" as const,
+        label: "Other…" as const,
+        appName: "Other…" as const,
+        ...(always ? { always: true } : {}),
+      },
     });
-    expect(onPickOtherApp).toHaveBeenCalledTimes(1);
-    expect(popup).toHaveValue("/Applications/Nova.app");
-    fireEvent.click(changeAll);
-    expect(onChangeAll).toHaveBeenLastCalledWith({
-      appPath: "/Applications/Nova.app",
-      appName: "Nova",
+    const items = (always = false) => [
+      app("Typora", always, "Typora (default)"),
+      { type: "separator" as const, key: "separator-others" },
+      app("Zed", always),
+      { type: "separator" as const, key: "separator-other" },
+      other(always),
+    ];
+    const typora = { path: "/Applications/Typora.app", name: "Typora" };
+    function renderPanel(props: Partial<Parameters<typeof InfoPanel>[0]> = {}) {
+      return render(
+        <InfoPanel
+          loading={false}
+          item={baseItem}
+          onClose={() => undefined}
+          onNavigateToPath={() => undefined}
+          onOpen={() => undefined}
+          onOpenInTerminal={() => undefined}
+          onShowInFinder={() => undefined}
+          onCopyPath={() => true}
+          openWithItems={items()}
+          onOpenWith={() => undefined}
+          openWithDefaultApp={typora}
+          openWithAlwaysItems={items(true)}
+          onChangeDefaultApp={() => undefined}
+          {...props}
+        />,
+      );
+    }
+
+    it("names the app a file opens in, and only says Open for a folder", () => {
+      const onOpen = vi.fn();
+      const { rerender } = renderPanel({ onOpen });
+
+      fireEvent.click(screen.getByRole("button", { name: "Open in Typora" }));
+      expect(onOpen).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <InfoPanel
+          loading={false}
+          item={{ ...baseItem, kind: "directory", extension: "", name: "Folder" }}
+          onClose={() => undefined}
+          onNavigateToPath={() => undefined}
+          onOpen={onOpen}
+          onOpenInTerminal={() => undefined}
+          onShowInFinder={() => undefined}
+          onCopyPath={() => true}
+          openWithItems={items()}
+          onOpenWith={() => undefined}
+          openWithDefaultApp={{ path: "/System/Library/CoreServices/Finder.app", name: "Finder" }}
+        />,
+      );
+      expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
+      expect(screen.queryByText("Opens with")).toBeNull();
     });
-  });
 
-  it("has no Open With section when the kind can't change app", () => {
-    render(
-      <InfoPanel
-        loading={false}
-        item={baseItem}
-        onClose={() => undefined}
-        onNavigateToPath={() => undefined}
-        onOpen={() => undefined}
-        onOpenInTerminal={() => undefined}
-        onShowInFinder={() => undefined}
-        onCopyPath={() => true}
-      />,
-    );
+    it("lists Always Open With in the Open With menu while Option is held", () => {
+      const onOpenWith = vi.fn();
+      renderPanel({ onOpenWith });
 
-    expect(screen.queryByRole("button", { name: "Change All…" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open With" }));
+      fireEvent.keyDown(window, { key: "Alt", altKey: true });
+      expect(screen.getByRole("menu")).toHaveTextContent("Always Open With");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Zed" }));
+      expect(onOpenWith).toHaveBeenCalledWith(expect.objectContaining({ always: true }));
+      fireEvent.keyUp(window, { key: "Alt", altKey: false });
+    });
+
+    it("is worked with the keyboard, as the right-click menu is", () => {
+      const onOpenWith = vi.fn();
+      renderPanel({ onOpenWith });
+
+      fireEvent.click(screen.getByRole("button", { name: "Open With" }));
+      fireEvent.keyDown(window, { key: "ArrowDown" });
+      expect(screen.getByRole("menuitem", { name: "Typora (default)" })).toHaveClass("active");
+      fireEvent.keyDown(window, { key: "z" });
+      expect(screen.getByRole("menuitem", { name: "Zed" })).toHaveClass("active");
+      fireEvent.keyDown(window, { key: "Enter" });
+
+      expect(onOpenWith).toHaveBeenCalledWith(expect.objectContaining({ appName: "Zed" }));
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    it("changes the app every file of the kind opens in from Opens with", () => {
+      const onChangeDefaultApp = vi.fn();
+      renderPanel({ onChangeDefaultApp });
+      const opensWith = screen.getByRole("button", { name: /^Opens with Typora/ });
+
+      // Choosing the app it already opens in changes nothing.
+      fireEvent.click(opensWith);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Typora (default)" }));
+      expect(onChangeDefaultApp).not.toHaveBeenCalled();
+
+      fireEvent.click(opensWith);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Zed" }));
+      expect(onChangeDefaultApp).toHaveBeenCalledWith(
+        expect.objectContaining({ appName: "Zed", always: true }),
+      );
+      fireEvent.click(opensWith);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Other…" }));
+      expect(onChangeDefaultApp).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "other" }),
+      );
+    });
+
+    // The menu stays where it opened, so it closes when the panel under it scrolls.
+    it("closes the Open With menu when the panel scrolls", () => {
+      renderPanel();
+
+      fireEvent.click(screen.getByRole("button", { name: "Open With" }));
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+      fireEvent.scroll(document.querySelector(".get-info-content") as Element);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    it("keeps the Opens with row, empty, until macOS answers", () => {
+      renderPanel({ openWithPending: true, openWithDefaultApp: null, openWithAlwaysItems: null });
+
+      expect(screen.getByText("Opens with")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Opens with/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
+    });
+
+    it("has no Opens with row when the kind can't change app", () => {
+      renderPanel({ openWithAlwaysItems: null, onChangeDefaultApp: undefined });
+
+      expect(screen.queryByText("Opens with")).toBeNull();
+    });
   });
 
   it("closes the Open With menu on an outside click or Escape and runs the chosen app", () => {
@@ -710,7 +778,7 @@ describe("InfoPanel", () => {
       </div>,
     );
 
-    const trigger = screen.getByRole("button", { name: /Open With/ });
+    const trigger = screen.getByRole("button", { name: "Open With" });
     fireEvent.click(trigger);
     expect(screen.getByRole("menu")).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByText("Outside"));
@@ -761,7 +829,7 @@ describe("InfoPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Open With/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Open With" }));
     const zed = screen.getByRole("menuitem", { name: "Zed" });
     const textEdit = screen.getByRole("menuitem", { name: "TextEdit" });
     expect(zed).not.toHaveClass("active");

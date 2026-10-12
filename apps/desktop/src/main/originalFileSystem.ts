@@ -70,6 +70,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeSetAcl: (path: string, acl: string | null) => Promise<void>;
   nativeOpenWithApplications: OpenWithApplicationsLookup;
   nativeSetDefaultApplication: (appPath: string, contentType: string) => Promise<void>;
+  nativeForgetOpenWithCache: () => void;
 };
 const {
   nativeCopyFile,
@@ -230,6 +231,9 @@ export const getFileIcon = nativeGetFileIcon;
 /** The apps that can open some items, their default app and kinds (Launch Services). */
 export const openWithApplications: OpenWithApplicationsLookup = (paths, appPaths) =>
   addon.nativeOpenWithApplications(paths, appPaths);
+
+/** Forgets the apps remembered for each type, and what is known about each app. */
+export const forgetOpenWithCache = (): void => addon.nativeForgetOpenWithCache();
 
 /** Makes an app the one every file of a type opens in, for the whole Mac. */
 export const setDefaultApplication = (appPath: string, contentType: string): Promise<void> =>

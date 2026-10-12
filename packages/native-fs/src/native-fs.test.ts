@@ -1123,6 +1123,47 @@ describe("nativeOpenWithApplications", () => {
   });
 });
 
+describe("nativeOpenWithApplications cache", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-open-with-cache-"));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+    wrapper.nativeForgetOpenWithCache();
+  });
+
+  // What is known about an app is kept until forgotten: an app that appears where there was
+  // none shows only after the cache is cleared, as when the window comes forward.
+  it("remembers an app path until the cache is forgotten", async () => {
+    const appPath = join(root, "Later.app");
+    expect((await wrapper.nativeOpenWithApplications([], [appPath])).appInfo).toEqual([null]);
+
+    mkdirSync(appPath);
+    expect((await wrapper.nativeOpenWithApplications([], [appPath])).appInfo).toEqual([null]);
+
+    wrapper.nativeForgetOpenWithCache();
+    expect((await wrapper.nativeOpenWithApplications([], [appPath])).appInfo).toEqual([
+      expect.objectContaining({ path: appPath, name: "Later" }),
+    ]);
+  });
+
+  it("answers the same for a type asked about again, remembered or not", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+
+    const first = await wrapper.nativeOpenWithApplications([join(root, "a.txt")], []);
+    const remembered = await wrapper.nativeOpenWithApplications([join(root, "b.txt")], []);
+    wrapper.nativeForgetOpenWithCache();
+    const askedAgain = await wrapper.nativeOpenWithApplications([join(root, "b.txt")], []);
+
+    expect(remembered).toEqual(first);
+    expect(askedAgain).toEqual(first);
+  });
+});
+
 describe("nativeSetDefaultApplication", () => {
   // Only refusals are tried, each with an app that isn't there: a change would reach every
   // app on the Mac running the tests, and with no app macOS can't make one even if the

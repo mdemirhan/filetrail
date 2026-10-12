@@ -925,9 +925,8 @@ export function App() {
     openWithMenuAlternates,
     noteContextSubmenuOpen,
     noteContextMenuOptionHeld,
-    askAlwaysOpenWith,
+    changeDefaultApp,
     confirmAlwaysOpenWithDialog,
-    pickApplicationForOpenWith,
     copyGetInfoPath,
     copyGetInfoName,
     dismissActionNotice,
@@ -2220,6 +2219,18 @@ export function App() {
     canAlwaysOpenWith(infoPanelOpenWith.lookup)
       ? (infoPanelOpenWith.lookup?.kinds[0] ?? null)
       : null;
+  // The same apps for Always Open With: listed under Option, and by Get Info's "Opens with".
+  const infoPanelOpenWithAlwaysItems = useMemo(
+    () =>
+      infoPanelOpenWithKind
+        ? buildOpenWithMenuItems({
+            lookup: infoPanelOpenWith.lookup,
+            pinned: openWithApplications,
+            always: true,
+          })
+        : null,
+    [infoPanelOpenWithKind, infoPanelOpenWith.lookup, openWithApplications],
+  );
   // Files can be edited; folders can be favorites, except the Trash, which always is one.
   const infoPanelCanEdit =
     infoPanelItem !== null &&
@@ -2615,17 +2626,17 @@ export function App() {
               openWithItems: infoPanelOpenWithItems,
               onOpenWith: (action) => {
                 if (infoPanelItem) {
-                  void runContextSubmenuAction(action, [infoPanelItem.path]);
+                  void runContextSubmenuAction(action, [infoPanelItem.path], infoPanelOpenWithKind);
                 }
               },
-              ...(infoPanelOpenWithKind
-                ? {
-                    openWithDefaultAppPath: infoPanelOpenWith.lookup?.defaultApp?.path ?? null,
-                    onPickOtherApp: () => pickApplicationForOpenWith("Couldn’t Choose an App"),
-                    onChangeAll: (application: { appPath: string; appName: string }) =>
-                      askAlwaysOpenWith({ ...application, kind: infoPanelOpenWithKind, paths: [] }),
-                  }
-                : {}),
+              openWithDefaultApp: infoPanelOpenWith.lookup?.defaultApp ?? null,
+              openWithAlwaysItems: infoPanelOpenWithAlwaysItems,
+              openWithPending: infoPanelOpenWithPaths !== null && !infoPanelOpenWith.ready,
+              onChangeDefaultApp: (action) => {
+                if (infoPanelOpenWithKind) {
+                  void changeDefaultApp(action, infoPanelOpenWithKind);
+                }
+              },
               ...(selectionSize
                 ? {
                     folderSizeEntry: selectionSizeControls?.entry,

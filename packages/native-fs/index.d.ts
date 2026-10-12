@@ -127,6 +127,10 @@ export type NativeApplicationInfo = {
  *   ("Markdown Document") and whether they are folders.
  * - `appInfo`: one answer per entry of `appPaths`, null when there is no app there.
  *
+ * Remembered between calls, until `nativeForgetOpenWithCache` or a change made with
+ * `nativeSetDefaultApplication`: each type's apps and kind name, and each app's name,
+ * version and bundle id. Each file's type and default app are asked every time.
+ *
  * Runs on a libuv thread pool thread.
  */
 export function nativeOpenWithApplications(
@@ -148,6 +152,12 @@ export function nativeOpenWithApplications(
  * @throws An error with macOS's reason when the change is refused.
  */
 export function nativeSetDefaultApplication(appPath: string, contentType: string): Promise<void>;
+
+/**
+ * Forgets what `nativeOpenWithApplications` remembers, as when apps may have been installed,
+ * removed or updated since.
+ */
+export function nativeForgetOpenWithCache(): void;
 
 /**
  * When each photo was taken, read from its own metadata (the date the camera recorded, in

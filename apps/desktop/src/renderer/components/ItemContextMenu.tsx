@@ -22,13 +22,12 @@ import {
   type ContextMenuSurface,
   getContextMenuItems,
 } from "../lib/contextMenu";
-import { AppIcon } from "../lib/fileIcons";
 import { placeSubmenu } from "../lib/menuPlacement";
 import { useOptionKeyHeld } from "../lib/optionKey";
 import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { EjectIcon } from "./EjectIcon";
-import { MenuCheck } from "./MenuCheck";
+import { SubmenuItemList, getSubmenuActions } from "./SubmenuItemList";
 import { WindowDragRelease } from "./WindowDragRelease";
 
 export type {
@@ -145,10 +144,7 @@ export function ItemContextMenu({
   const submenuOpen = submenuItems !== null;
   // The submenu row the keyboard is on, once → has gone into the submenu.
   const [submenuActiveIndex, setSubmenuActiveIndex] = useState<number | null>(null);
-  const submenuActions = useMemo(
-    () => (submenuItems ?? []).flatMap((item) => (item.type === "separator" ? [] : [item.action])),
-    [submenuItems],
-  );
+  const submenuActions = useMemo(() => getSubmenuActions(submenuItems ?? []), [submenuItems]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the keyboard leaves a submenu when another one opens in its place.
   useEffect(() => {
@@ -273,14 +269,6 @@ export function ItemContextMenu({
   // The menu opens at the pointer and is then moved back inside the window; a menu taller
   // than the window scrolls.
   useKeepInViewport(menuRef, open);
-  // A submenu taller than the window scrolls; the keyboard's item is kept in sight.
-  useEffect(() => {
-    if (submenuActiveIndex === null) {
-      return;
-    }
-    const active = submenuRef.current?.querySelector<HTMLElement>(".context-submenu-item.active");
-    active?.scrollIntoView?.({ block: "nearest" });
-  }, [submenuActiveIndex]);
   // The submenu is a sibling of the menu rather than a child, so a scrolling menu cannot
   // clip it. It is placed beside its parent item once both are measured.
   useLayoutEffect(() => {
@@ -370,32 +358,12 @@ export function ItemContextMenu({
       </div>
       {submenuItems ? (
         <div ref={submenuRef} className="context-submenu">
-          {submenuItems.map((submenuItem) => {
-            if (submenuItem.type === "separator") {
-              return <div key={submenuItem.key} className="context-menu-separator" />;
-            }
-            const action = submenuItem.action;
-            const submenuIndex = submenuActions.indexOf(action);
-            // View As and Sort By tick the current choice, as a macOS menu does.
-            const checked = "checked" in action ? action.checked : null;
-            return (
-              <button
-                key={action.id}
-                type="button"
-                role={checked === null ? undefined : "menuitemradio"}
-                aria-checked={checked ?? undefined}
-                className={`context-submenu-item${
-                  submenuIndex === submenuActiveIndex ? " active" : ""
-                }`}
-                onMouseEnter={() => setSubmenuActiveIndex(submenuIndex)}
-                onClick={() => onSubmenuAction(action)}
-              >
-                {checked === null ? null : <MenuCheck checked={checked} />}
-                {action.kind === "application" ? <AppIcon path={action.appPath} /> : null}
-                <span className="context-submenu-item-label">{action.label}</span>
-              </button>
-            );
-          })}
+          <SubmenuItemList
+            items={submenuItems}
+            activeIndex={submenuActiveIndex}
+            onActiveIndexChange={setSubmenuActiveIndex}
+            onChoose={onSubmenuAction}
+          />
         </div>
       ) : null}
     </div>

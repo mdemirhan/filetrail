@@ -1,13 +1,12 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
-import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import type { ContextMenuSubmenuAction, ContextMenuSubmenuItem } from "../lib/contextMenu";
 import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
-import { FileIcon } from "../lib/fileIcons";
+import { AppIcon, FileIcon } from "../lib/fileIcons";
 import {
   formatDateTime,
   formatFolderSizeDetail,
@@ -19,8 +18,8 @@ import { isVolumeRootPath } from "../lib/volumes";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { ClearButton } from "./ClearButton";
 import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
+import { PullDownMenu } from "./PullDownMenu";
 import { PushButton } from "./PushButton";
-import { WindowDragRelease } from "./WindowDragRelease";
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
 
@@ -69,9 +68,10 @@ export function InfoPanel({
   onCancelFolderSize,
   openWithItems = [],
   onOpenWith,
-  openWithDefaultAppPath = null,
-  onPickOtherApp,
-  onChangeAll,
+  openWithDefaultApp = null,
+  openWithAlwaysItems = null,
+  openWithPending = false,
+  onChangeDefaultApp,
 }: {
   loading: boolean;
   item: ItemProperties | null;
@@ -104,13 +104,14 @@ export function InfoPanel({
   onCancelFolderSize?: (() => void) | undefined;
   openWithItems?: readonly ContextMenuSubmenuItem[];
   onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
-  /** The app the item opens in, which the Open With section starts on. */
-  openWithDefaultAppPath?: string | null;
-  /** Other… in the Open With section: the window for choosing an app. */
-  onPickOtherApp?: (() => Promise<{ appPath: string; appName: string } | null>) | undefined;
-  // Given only for a file whose kind can change app: Change All… makes the app chosen the
-  // one every file of the kind opens in.
-  onChangeAll?: ((application: { appPath: string; appName: string }) => void) | undefined;
+  /** The app the item opens in, which Open names ("Open in Zed"). */
+  openWithDefaultApp?: { path: string; name: string } | null;
+  // Given only for a file whose kind can change app: Open With's apps for Always Open With,
+  // listed under Option and in the "Opens with" row, which changes the kind's app.
+  openWithAlwaysItems?: readonly ContextMenuSubmenuItem[] | null;
+  /** macOS hasn't said yet which app the file opens in: its row waits with a placeholder. */
+  openWithPending?: boolean;
+  onChangeDefaultApp?: ((action: ContextMenuSubmenuAction) => void) | undefined;
 }) {
   const shortcutDisplay = useShortcutDisplay();
   const [copied, setCopied] = useState<"path" | "name" | null>(null);
@@ -191,9 +192,10 @@ export function InfoPanel({
           onCancelFolderSize={onCancelFolderSize}
           openWithItems={openWithItems}
           onOpenWith={onOpenWith}
-          openWithDefaultAppPath={openWithDefaultAppPath}
-          onPickOtherApp={onPickOtherApp}
-          onChangeAll={onChangeAll}
+          openWithDefaultApp={openWithDefaultApp}
+          openWithAlwaysItems={openWithAlwaysItems}
+          openWithPending={openWithPending}
+          onChangeDefaultApp={onChangeDefaultApp}
         />
       ) : loading ? null : (
         <div className="get-info-empty overlay-scroll">
@@ -316,9 +318,10 @@ function GetInfoPanelContent({
   onCancelFolderSize,
   openWithItems,
   onOpenWith,
-  openWithDefaultAppPath,
-  onPickOtherApp,
-  onChangeAll,
+  openWithDefaultApp,
+  openWithAlwaysItems,
+  openWithPending,
+  onChangeDefaultApp,
 }: {
   copied: "path" | "name" | null;
   item: ItemProperties;
@@ -344,47 +347,15 @@ function GetInfoPanelContent({
   onCancelFolderSize?: (() => void) | undefined;
   openWithItems: readonly ContextMenuSubmenuItem[];
   onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
-  openWithDefaultAppPath: string | null;
-  onPickOtherApp?: (() => Promise<{ appPath: string; appName: string } | null>) | undefined;
-  onChangeAll?: ((application: { appPath: string; appName: string }) => void) | undefined;
+  openWithDefaultApp: { path: string; name: string } | null;
+  openWithAlwaysItems: readonly ContextMenuSubmenuItem[] | null;
+  openWithPending: boolean;
+  onChangeDefaultApp?: ((action: ContextMenuSubmenuAction) => void) | undefined;
 }) {
   const shortcutDisplay = useShortcutDisplay();
-  const [openWithMenuOpen, setOpenWithMenuOpen] = useState(false);
-  // The item under the pointer, highlighted through `.active` as in the right-click menu.
-  const [openWithActiveId, setOpenWithActiveId] = useState<string | null>(null);
-  const openWithRef = useRef<HTMLDivElement | null>(null);
-  const openWithMenuRef = useRef<HTMLDivElement | null>(null);
-  useKeepInViewport(openWithMenuRef, openWithMenuOpen);
-
-  // Close the Open With menu on any click outside it (focus does not move when clicking
-  // empty panel space, so blur alone is not enough) and on Escape.
-  useEffect(() => {
-    if (!openWithMenuOpen) {
-      setOpenWithActiveId(null);
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && openWithRef.current?.contains(event.target)) {
-        return;
-      }
-      setOpenWithMenuOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        setOpenWithMenuOpen(false);
-      }
-    };
-    const close = () => setOpenWithMenuOpen(false);
-    window.addEventListener("pointerdown", handlePointerDown, true);
-    window.addEventListener("keydown", handleKeyDown, true);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown, true);
-      window.removeEventListener("keydown", handleKeyDown, true);
-      window.removeEventListener("blur", close);
-    };
-  }, [openWithMenuOpen]);
+  // A file names the app Open opens it in; a folder opens here, and an app opens itself.
+  const isFile = item.kind === "file" || item.kind === "symlink_file";
+  const openApp = isFile ? openWithDefaultApp : null;
   const showFolderSizeForItem = isFolderSizeEligibleKind(item.kind);
 
   let sizeValue: ReactNode;
@@ -440,6 +411,51 @@ function GetInfoPanelContent({
       value: item.kindLabel,
       muted: false,
     },
+    // The app every file of this kind opens in. Choosing another asks first, then changes
+    // it for all of them, as Finder's Change All… does. Until macOS answers, the row waits
+    // with a placeholder, so the rows under it don't move.
+    ...(isFile && openWithPending
+      ? [{ label: "Opens with", value: PENDING_VALUE, muted: true }]
+      : isFile && openWithAlwaysItems && onChangeDefaultApp
+        ? [
+            {
+              label: "Opens with",
+              value: (
+                <PullDownMenu
+                  className="get-info-opens-with"
+                  items={openWithAlwaysItems}
+                  onChoose={(action) => {
+                    if (action.kind === "application" && action.appPath === openApp?.path) {
+                      return;
+                    }
+                    onChangeDefaultApp(action);
+                  }}
+                  renderTrigger={({ open, toggle }) => (
+                    <button
+                      type="button"
+                      className="get-info-opens-with-button"
+                      aria-haspopup="menu"
+                      aria-expanded={open}
+                      aria-label={`Opens with ${openApp?.name ?? "no app"}: change the app for every ${item.kindLabel}`}
+                      onClick={toggle}
+                    >
+                      {openApp ? <AppIcon path={openApp.path} /> : null}
+                      <span className="get-info-opens-with-name">{openApp?.name ?? "None"}</span>
+                      <svg
+                        className="get-info-opens-with-chevron"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" />
+                      </svg>
+                    </button>
+                  )}
+                />
+              ),
+              muted: false,
+            },
+          ]
+        : []),
     ...sizeRows,
     {
       label: "Created",
@@ -526,58 +542,43 @@ function GetInfoPanelContent({
         </div>
       </div>
 
-      <div className="get-info-buttons">
-        <PushButton variant="default" className="get-info-button" onClick={onOpen}>
-          Open
+      {/* Open, and beside it the Open With menu, as one split button: the menu lists the
+          same apps as the right-click menu, and Always Open With while Option is held. */}
+      <div className="get-info-open">
+        <PushButton
+          variant="default"
+          className={`get-info-open-main${onOpenWith && openWithItems.length > 0 ? " split" : ""}`}
+          title={openApp ? `Open in ${openApp.name}` : "Open"}
+          onClick={onOpen}
+        >
+          {openApp ? <AppIcon path={openApp.path} /> : null}
+          <span className="get-info-open-label">
+            {openApp ? `Open in ${openApp.name}` : "Open"}
+          </span>
         </PushButton>
         {onOpenWith && openWithItems.length > 0 ? (
-          <div ref={openWithRef} className="get-info-open-with">
-            <PushButton
-              className="get-info-button pull-down"
-              aria-haspopup="menu"
-              aria-expanded={openWithMenuOpen}
-              onClick={() => setOpenWithMenuOpen((value) => !value)}
-            >
-              Open With
-              <span className="get-info-button-chevron">
+          <PullDownMenu
+            className="get-info-open-with"
+            items={openWithItems}
+            alternate={
+              openWithAlwaysItems ? { label: "Always Open With", items: openWithAlwaysItems } : null
+            }
+            onChoose={onOpenWith}
+            renderTrigger={({ open, toggle }) => (
+              <PushButton
+                variant="default"
+                className="get-info-open-with-button"
+                aria-label="Open With"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                onClick={toggle}
+              >
                 <svg viewBox="0 0 8 8" aria-hidden="true">
                   <path d="M1.5 3 4 5.5 6.5 3" />
                 </svg>
-              </span>
-            </PushButton>
-            {openWithMenuOpen ? (
-              // Same markup and styles as the right-click menu's Open With submenu.
-              <div
-                ref={openWithMenuRef}
-                className="context-submenu get-info-open-with-menu"
-                role="menu"
-                onMouseLeave={() => setOpenWithActiveId(null)}
-              >
-                <WindowDragRelease />
-                {openWithItems.map((entry) =>
-                  entry.type === "separator" ? (
-                    <div key={entry.key} className="context-menu-separator" />
-                  ) : (
-                    <button
-                      key={entry.action.id}
-                      type="button"
-                      role="menuitem"
-                      className={`context-submenu-item${
-                        entry.action.id === openWithActiveId ? " active" : ""
-                      }`}
-                      onMouseEnter={() => setOpenWithActiveId(entry.action.id)}
-                      onClick={() => {
-                        setOpenWithMenuOpen(false);
-                        onOpenWith(entry.action);
-                      }}
-                    >
-                      {entry.action.label}
-                    </button>
-                  ),
-                )}
-              </div>
-            ) : null}
-          </div>
+              </PushButton>
+            )}
+          />
         ) : null}
       </div>
 
@@ -595,17 +596,6 @@ function GetInfoPanelContent({
           ))}
         </dl>
       </section>
-
-      {onChangeAll ? (
-        <GetInfoOpenWithSection
-          // A new item starts again from the app it opens in.
-          key={`${item.path}\n${openWithDefaultAppPath ?? ""}`}
-          items={openWithItems}
-          defaultAppPath={openWithDefaultAppPath}
-          onPickOtherApp={onPickOtherApp}
-          onChangeAll={onChangeAll}
-        />
-      ) : null}
 
       <section className="get-info-section">
         <h3 className="get-info-section-title">Quick Actions</h3>
@@ -930,94 +920,5 @@ function InfoPanelGlyph({
       <path d="M6 6l12 12" />
       <path d="M18 6L6 18" />
     </svg>
-  );
-}
-
-const OTHER_APP_VALUE = "\u0000other";
-
-// Finder's "Open with" section: a pop-up of the apps that can open the file, on the one it
-// opens in. Choosing an app only chooses it; Change All… (asked first) makes it the one every
-// file of the kind opens in.
-function GetInfoOpenWithSection({
-  items,
-  defaultAppPath,
-  onPickOtherApp,
-  onChangeAll,
-}: {
-  items: readonly ContextMenuSubmenuItem[];
-  defaultAppPath: string | null;
-  onPickOtherApp?: (() => Promise<{ appPath: string; appName: string } | null>) | undefined;
-  onChangeAll: (application: { appPath: string; appName: string }) => void;
-}) {
-  const [chosen, setChosen] = useState<{ appPath: string; appName: string } | null>(null);
-  const applications = items.flatMap((entry) =>
-    entry.type !== "separator" && entry.action.kind === "application"
-      ? [
-          {
-            appPath: entry.action.appPath,
-            appName: entry.action.appName,
-            label: entry.action.label,
-          },
-        ]
-      : [],
-  );
-  // An app chosen with Other… that isn't listed is added to the end.
-  const choices =
-    chosen && !applications.some((application) => application.appPath === chosen.appPath)
-      ? [...applications, { ...chosen, label: chosen.appName }]
-      : applications;
-  const selectedPath = chosen?.appPath ?? defaultAppPath ?? "";
-  const selected = choices.find((application) => application.appPath === selectedPath) ?? null;
-
-  return (
-    <section className="get-info-section">
-      <h3 className="get-info-section-title">Open With</h3>
-      <div className="get-info-open-with-default">
-        <span className="settings-popup get-info-open-with-popup">
-          <select
-            aria-label="App this kind of file opens in"
-            value={selectedPath}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              if (value === OTHER_APP_VALUE) {
-                void onPickOtherApp?.().then((application) => {
-                  if (application) {
-                    setChosen(application);
-                  }
-                });
-                return;
-              }
-              const application = choices.find((choice) => choice.appPath === value);
-              if (application) {
-                setChosen({ appPath: application.appPath, appName: application.appName });
-              }
-            }}
-          >
-            {selectedPath === "" ? <option value="">No App</option> : null}
-            {choices.map((application) => (
-              <option key={application.appPath} value={application.appPath}>
-                {application.label}
-              </option>
-            ))}
-            {onPickOtherApp ? <option value={OTHER_APP_VALUE}>Other…</option> : null}
-          </select>
-          <svg className="settings-popup-chevron" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" />
-          </svg>
-        </span>
-        <PushButton
-          className="get-info-change-all"
-          disabled={!selected || selected.appPath === defaultAppPath}
-          onClick={() => {
-            if (selected) {
-              onChangeAll({ appPath: selected.appPath, appName: selected.appName });
-            }
-          }}
-        >
-          Change All…
-        </PushButton>
-      </div>
-      <p className="get-info-open-with-note">Use this app to open all documents like this one.</p>
-    </section>
   );
 }
