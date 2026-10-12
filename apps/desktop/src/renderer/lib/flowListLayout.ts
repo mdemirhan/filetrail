@@ -20,7 +20,7 @@ export const COMPACT_FLOW_LIST_LAYOUT = {
   rowGap: 0,
   itemWidth: 252,
   columnGap: 18,
-  paddingTop: 6,
+  paddingTop: 8,
   paddingBottom: 4,
   paddingInline: 10,
 } as const satisfies FlowListLayout & { paddingInline: number };
