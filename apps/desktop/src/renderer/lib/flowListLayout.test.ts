@@ -57,7 +57,7 @@ describe("flowListLayout", () => {
         compact: false,
         maxScrollLeft: 3000,
       }),
-    ).toBe(282);
+    ).toBe(262);
   });
 
   it("uses the compact column width when revealing compact list items", () => {
@@ -70,7 +70,7 @@ describe("flowListLayout", () => {
         compact: true,
         maxScrollLeft: 3000,
       }),
-    ).toBe(122);
+    ).toBe(102);
   });
 
   it("clamps the reveal scroll offset to the available bounds", () => {

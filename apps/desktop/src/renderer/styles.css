@@ -2580,13 +2580,13 @@ body.resizing-panels * {
 }
 
 .flow-list {
-  padding: 8px 20px 4px;
+  padding: 8px 10px 4px;
   overflow-y: hidden;
   overflow-x: auto;
 }
 
 .flow-list.compact {
-  padding: 6px 20px 4px;
+  padding: 6px 10px 4px;
 }
 
 /* Row pitch is FLOW_LIST_LAYOUT.rowHeight (the details-view row height): rows sit flush. */

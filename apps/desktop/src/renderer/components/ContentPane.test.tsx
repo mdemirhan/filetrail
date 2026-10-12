@@ -1925,7 +1925,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(list.scrollLeft).toBe(282);
+    expect(list.scrollLeft).toBe(262);
     clientHeight.mockRestore();
   });
 
