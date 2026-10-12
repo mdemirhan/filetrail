@@ -237,23 +237,9 @@ export function clampSearchColumnWidth(key: SearchColumnKey, value: number): num
   const limits = SEARCH_COLUMN_WIDTH_LIMITS[key];
   return Math.round(Math.max(limits.min, Math.min(limits.max, value)));
 }
-export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
-  {
-    id: "visual-studio-code",
-    appPath: "/Applications/Visual Studio Code.app",
-    appName: "Visual Studio Code",
-  },
-  {
-    id: "sublime-text",
-    appPath: "/Applications/Sublime Text.app",
-    appName: "Sublime Text",
-  },
-  {
-    id: "zed",
-    appPath: "/Applications/Zed.app",
-    appName: "Zed",
-  },
-];
+// Pinned apps, listed in Open With for every item after the app it opens in. A new install
+// pins none: Open With already lists every app macOS offers for the items.
+export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [];
 export const FAVORITE_ICON_OPTIONS = [
   { value: "home", label: "Home" },
   { value: "applications", label: "Applications" },

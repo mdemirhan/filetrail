@@ -25,9 +25,12 @@ import {
 } from "@filetrail/core";
 import type { ExplorerFileSystem } from "@filetrail/core";
 import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core";
+import type { nativeOpenWithApplications } from "@filetrail/native-fs";
 import type { BatchRenameInspectDeps } from "./bootstrap/batchRenameInspect";
 import type { ItemSize } from "./bootstrap/folderSizeAdjust";
 import type { WriteOperationFs } from "./bootstrap/writeOperations";
+
+export type OpenWithApplicationsLookup = typeof nativeOpenWithApplications;
 
 // Electron patches `node:fs` at startup. The unpatched version is available as
 // `original-fs` but only through `require()`, not ESM `import`.
@@ -65,6 +68,8 @@ const addon = require("@filetrail/native-fs") as {
   nativeTrashItem: (path: string) => Promise<string | null>;
   nativeGetAcl: (path: string) => Promise<string | null>;
   nativeSetAcl: (path: string, acl: string | null) => Promise<void>;
+  nativeOpenWithApplications: OpenWithApplicationsLookup;
+  nativeSetDefaultApplication: (appPath: string, contentType: string) => Promise<void>;
 };
 const {
   nativeCopyFile,
@@ -221,6 +226,14 @@ export function createOriginalBatchRenameInspectDeps(args: {
 
 /** Get macOS file icon as PNG buffer using NSWorkspace. */
 export const getFileIcon = nativeGetFileIcon;
+
+/** The apps that can open some items, their default app and kinds (Launch Services). */
+export const openWithApplications: OpenWithApplicationsLookup = (paths, appPaths) =>
+  addon.nativeOpenWithApplications(paths, appPaths);
+
+/** Makes an app the one every file of a type opens in, for the whole Mac. */
+export const setDefaultApplication = (appPath: string, contentType: string): Promise<void> =>
+  addon.nativeSetDefaultApplication(appPath, contentType);
 
 /** Get a picture of a file's content (JPEG or PNG data) from Quick Look. */
 export const getFileThumbnail = nativeGetFileThumbnail;

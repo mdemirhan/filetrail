@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, readdir, statfs, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
@@ -15,7 +16,14 @@ import {
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import { FINDER_APP_PATH } from "../../shared/finder";
 import { toErrorMessage } from "../ipc";
-import { getFileIcon, getFileThumbnail, originalFileSystem } from "../originalFileSystem";
+import {
+  type OpenWithApplicationsLookup,
+  getFileIcon,
+  getFileThumbnail,
+  openWithApplications,
+  originalFileSystem,
+  setDefaultApplication,
+} from "../originalFileSystem";
 
 const execFileAsync = promisify(execFile);
 
@@ -156,6 +164,54 @@ export async function openPathsWithApplication(
       ok: false,
       error: toErrorMessage(error),
     };
+  }
+}
+
+// The apps Launch Services offers for the items, and the pinned apps that are still there.
+// When it can't be asked, the menu still lists the pinned apps found on disk, and Other….
+export async function getOpenWithApplications(
+  payload: IpcRequest<"system:getOpenWithApplications">,
+  lookUp: OpenWithApplicationsLookup = openWithApplications,
+  exists: (path: string) => boolean = existsSync,
+): Promise<IpcResponse<"system:getOpenWithApplications">> {
+  try {
+    const result = await lookUp([...payload.paths], [...payload.pinnedAppPaths]);
+    return {
+      defaultApp: result.defaultApp,
+      apps: result.apps,
+      kinds: result.kinds,
+      pinnedApps: result.appInfo,
+    };
+  } catch {
+    return {
+      defaultApp: null,
+      apps: [],
+      kinds: [],
+      pinnedApps: payload.pinnedAppPaths.map((path) =>
+        isValidApplicationBundlePath(path) && exists(path)
+          ? { path, name: resolveApplicationDisplayName(path), bundleId: null, version: null }
+          : null,
+      ),
+    };
+  }
+}
+
+// Always Open With: every file of the kind opens in the app from now on, in Finder too.
+export async function setDefaultApplicationHandler(
+  payload: IpcRequest<"system:setDefaultApplication">,
+  setDefault: (appPath: string, contentType: string) => Promise<void> = setDefaultApplication,
+): Promise<IpcResponse<"system:setDefaultApplication">> {
+  if (!isValidApplicationBundlePath(payload.applicationPath)) {
+    return {
+      ok: false,
+      error: buildInvalidApplicationPathMessage(payload.applicationPath),
+    };
+  }
+  try {
+    await setDefault(payload.applicationPath.trim(), payload.contentType);
+    return { ok: true, error: null };
+  } catch (error) {
+    return { ok: false, error: toErrorMessage(error) };
   }
 }
 

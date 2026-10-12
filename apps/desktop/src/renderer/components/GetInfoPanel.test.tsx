@@ -598,6 +598,88 @@ describe("InfoPanel", () => {
     expect(describeOwnerAccess("---------")).toBe("No access");
   });
 
+  it("chooses an app in Open With without changing anything until Change All…", async () => {
+    const onChangeAll = vi.fn();
+    const onPickOtherApp = vi.fn(async () => ({
+      appPath: "/Applications/Nova.app",
+      appName: "Nova",
+    }));
+    const app = (name: string, label = name) => ({
+      action: {
+        kind: "application" as const,
+        id: `app:/Applications/${name}.app`,
+        label,
+        appPath: `/Applications/${name}.app`,
+        appName: name,
+      },
+    });
+    render(
+      <InfoPanel
+        loading={false}
+        item={baseItem}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
+        onCopyPath={() => true}
+        onOpenWith={() => undefined}
+        openWithItems={[
+          app("Typora", "Typora (default)"),
+          { type: "separator", key: "separator-pinned" },
+          app("Zed"),
+          { type: "separator", key: "separator-other" },
+          {
+            action: { kind: "other", id: "other", label: "Other…", appName: "Other…" },
+          },
+        ]}
+        openWithDefaultAppPath="/Applications/Typora.app"
+        onPickOtherApp={onPickOtherApp}
+        onChangeAll={onChangeAll}
+      />,
+    );
+    const popup = screen.getByRole("combobox", { name: "App this kind of file opens in" });
+    const changeAll = screen.getByRole("button", { name: "Change All…" });
+
+    // It starts on the app the file opens in, which there is nothing to change to.
+    expect(popup).toHaveValue("/Applications/Typora.app");
+    expect(changeAll).toBeDisabled();
+
+    fireEvent.change(popup, { target: { value: "/Applications/Zed.app" } });
+    expect(onChangeAll).not.toHaveBeenCalled();
+    fireEvent.click(changeAll);
+    expect(onChangeAll).toHaveBeenCalledWith({ appPath: "/Applications/Zed.app", appName: "Zed" });
+
+    // Other… adds the app chosen in the window for choosing one.
+    await act(async () => {
+      fireEvent.change(popup, { target: { value: "\u0000other" } });
+    });
+    expect(onPickOtherApp).toHaveBeenCalledTimes(1);
+    expect(popup).toHaveValue("/Applications/Nova.app");
+    fireEvent.click(changeAll);
+    expect(onChangeAll).toHaveBeenLastCalledWith({
+      appPath: "/Applications/Nova.app",
+      appName: "Nova",
+    });
+  });
+
+  it("has no Open With section when the kind can't change app", () => {
+    render(
+      <InfoPanel
+        loading={false}
+        item={baseItem}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
+        onCopyPath={() => true}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Change All…" })).toBeNull();
+  });
+
   it("closes the Open With menu on an outside click or Escape and runs the chosen app", () => {
     const onOpenWith = vi.fn();
     render(

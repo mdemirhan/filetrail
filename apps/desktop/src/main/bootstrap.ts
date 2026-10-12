@@ -46,6 +46,7 @@ import {
   emptyTrash,
   getFileIconHandler,
   getFileThumbnailHandler,
+  getOpenWithApplications,
   getTrashState,
   getVolumeInfo,
   openFullDiskAccessSettings,
@@ -58,6 +59,7 @@ import {
   quickLookPath,
   resolveApplicationDisplayName,
   resolveTerminalApplicationName,
+  setDefaultApplicationHandler,
 } from "./bootstrap/systemHandlers";
 import { createTrashItem } from "./bootstrap/trashItem";
 import { createUndoHistory } from "./bootstrap/undoHistory";
@@ -484,6 +486,8 @@ export async function bootstrapMainProcess(
       "system:pickApplication": (_payload, event) => pickApplication(event),
       "system:pickDirectory": (payload, event) => pickDirectory(payload, event),
       "system:openPathsWithApplication": (payload) => openPathsWithApplication(payload),
+      "system:getOpenWithApplications": (payload) => getOpenWithApplications(payload),
+      "system:setDefaultApplication": (payload) => setDefaultApplicationHandler(payload),
       "system:openInTerminal": async (payload) => {
         const response = await openInTerminal(payload, appStateStore.getPreferences().terminalApp);
         return {

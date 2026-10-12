@@ -87,6 +87,16 @@ type CopyPasteDialogState =
       request: DotNameRequest;
     }
   | {
+      // Asked before Always Open With (or Change All… in Get Info) makes the app the one every
+      // file of the kind opens in; `paths` then open in it.
+      type: "confirmAlwaysOpenWith";
+      appPath: string;
+      appName: string;
+      contentType: string;
+      kindName: string | null;
+      paths: string[];
+    }
+  | {
       // Eject on one volume of a disk that holds others: eject them all, or this one only.
       type: "ejectWhichVolumes";
       path: string;

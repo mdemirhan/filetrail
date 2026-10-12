@@ -55,12 +55,15 @@ export type ContextMenuSubmenuAction =
       label: string;
       appPath: string;
       appName: string;
+      // Always Open With: the app becomes the one this kind of file opens in.
+      always?: boolean;
     }
   | {
       kind: "other";
       id: "other";
       label: "Other…";
       appName: "Other…";
+      always?: boolean;
     }
   | {
       kind: "viewMode";
@@ -87,6 +90,12 @@ export type ContextMenuSubmenuItem =
 
 export type ContextMenuSubmenus = Partial<
   Record<ContextMenuSubmenuId, readonly ContextMenuSubmenuItem[]>
+>;
+
+// What an item with a submenu turns into while Option is held, as a macOS menu's alternate
+// items do: Open With becomes Always Open With.
+export type ContextMenuSubmenuAlternates = Partial<
+  Record<ContextMenuSubmenuId, { label: string; items: readonly ContextMenuSubmenuItem[] }>
 >;
 
 export type ContextMenuIconName =

@@ -15,12 +15,14 @@ import {
   type ContextMenuIconName,
   type ContextMenuOptions,
   type ContextMenuSubmenuAction,
+  type ContextMenuSubmenuAlternates,
   type ContextMenuSubmenuId,
   type ContextMenuSubmenuItem,
   type ContextMenuSubmenus,
   type ContextMenuSurface,
   getContextMenuItems,
 } from "../lib/contextMenu";
+import { AppIcon } from "../lib/fileIcons";
 import { placeSubmenu } from "../lib/menuPlacement";
 import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
@@ -31,11 +33,14 @@ import { WindowDragRelease } from "./WindowDragRelease";
 export type {
   ContextMenuActionId,
   ContextMenuSubmenuAction,
+  ContextMenuSubmenuAlternates,
   ContextMenuSubmenuItem,
   ContextMenuSubmenus,
 };
 
 const NO_OPTIONS: ContextMenuOptions = {};
+
+const NO_ALTERNATES: ContextMenuSubmenuAlternates = {};
 
 export function ItemContextMenu({
   anchorX,
@@ -45,10 +50,12 @@ export function ItemContextMenu({
   options = NO_OPTIONS,
   hiddenActionIds = [],
   submenus,
+  submenuAlternates = NO_ALTERNATES,
   shortcutContext,
   open,
   onAction,
   onSubmenuAction,
+  onSubmenuOpen,
 }: {
   anchorX: number;
   anchorY: number;
@@ -56,12 +63,16 @@ export function ItemContextMenu({
   disabledActionIds?: ContextMenuActionId[];
   options?: ContextMenuOptions;
   hiddenActionIds?: ContextMenuActionId[];
-  /** What each item with a submenu lists: Open With's apps, View As, Sort By. */
+  /** What each item with a submenu lists: Open With's apps, View As, Sort By. A submenu
+   *  that isn't known yet (undefined) doesn't open until it is. */
   submenus: ContextMenuSubmenus;
+  submenuAlternates?: ContextMenuSubmenuAlternates | undefined;
   shortcutContext: ShortcutContext;
   open: boolean;
   onAction: (actionId: ContextMenuActionId) => void;
   onSubmenuAction: (action: ContextMenuSubmenuAction) => void;
+  /** Told when the pointer or the keyboard reaches an item with a submenu. */
+  onSubmenuOpen?: ((submenuId: ContextMenuSubmenuId) => void) | undefined;
 }) {
   const shortcutDisplay = useShortcutDisplay();
   const [activeItemId, setActiveItemId] = useState<ContextMenuActionId | null>(null);
@@ -102,6 +113,25 @@ export function ItemContextMenu({
     setActiveItemId(null);
   }, [open]);
 
+  // Option held swaps an item for its alternate while the menu is open.
+  const [optionHeld, setOptionHeld] = useState(false);
+  useEffect(() => {
+    if (!open) {
+      setOptionHeld(false);
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => setOptionHeld(event.altKey);
+    const onBlur = () => setOptionHeld(false);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", onKey, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keyup", onKey, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [open]);
+
   // The submenu of the item under the pointer or the arrow keys, if it has one.
   const openSubmenuId: ContextMenuSubmenuId | null =
     activeItemId !== null &&
@@ -109,7 +139,14 @@ export function ItemContextMenu({
     items.some((item) => item.type !== "separator" && item.id === activeItemId && item.hasSubmenu)
       ? (activeItemId as ContextMenuSubmenuId)
       : null;
-  const submenuItems = (openSubmenuId && submenus[openSubmenuId]) || null;
+  const openAlternate = optionHeld && openSubmenuId ? submenuAlternates[openSubmenuId] : undefined;
+  const submenuItems =
+    (openSubmenuId && (openAlternate ? openAlternate.items : submenus[openSubmenuId])) || null;
+  useEffect(() => {
+    if (open && openSubmenuId !== null) {
+      onSubmenuOpen?.(openSubmenuId);
+    }
+  }, [onSubmenuOpen, open, openSubmenuId]);
   const submenuOpen = submenuItems !== null;
   // The submenu row the keyboard is on, once → has gone into the submenu.
   const [submenuActiveIndex, setSubmenuActiveIndex] = useState<number | null>(null);
@@ -136,10 +173,18 @@ export function ItemContextMenu({
       item.type === "separator" || disabledActionIdSet.has(item.id) ? [] : [item],
     );
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+      const key = event.key;
+      // Option+Return chooses an alternate item (Always Open With); Option otherwise belongs
+      // to the window.
+      const optionChoice = event.altKey && (key === "Enter" || key === " ");
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        (event.altKey && !optionChoice)
+      ) {
         return;
       }
-      const key = event.key;
       const take = () => {
         event.preventDefault();
         event.stopPropagation();
@@ -233,6 +278,14 @@ export function ItemContextMenu({
   // The menu opens at the pointer and is then moved back inside the window; a menu taller
   // than the window scrolls.
   useKeepInViewport(menuRef, open);
+  // A submenu taller than the window scrolls; the keyboard's item is kept in sight.
+  useEffect(() => {
+    if (submenuActiveIndex === null) {
+      return;
+    }
+    const active = submenuRef.current?.querySelector<HTMLElement>(".context-submenu-item.active");
+    active?.scrollIntoView?.({ block: "nearest" });
+  }, [submenuActiveIndex]);
   // The submenu is a sibling of the menu rather than a child, so a scrolling menu cannot
   // clip it. It is placed beside its parent item once both are measured.
   useLayoutEffect(() => {
@@ -303,7 +356,10 @@ export function ItemContextMenu({
               <span className="context-menu-item-icon" aria-hidden="true">
                 <ContextMenuIcon name={item.icon} />
               </span>
-              <span className="context-menu-item-label">{item.label}</span>
+              <span className="context-menu-item-label">
+                {(optionHeld && submenuAlternates[item.id as ContextMenuSubmenuId]?.label) ||
+                  item.label}
+              </span>
               {item.hasSubmenu ? (
                 <span className="context-menu-submenu-arrow" aria-hidden="true">
                   <SubmenuChevron />
@@ -340,7 +396,8 @@ export function ItemContextMenu({
                 onClick={() => onSubmenuAction(action)}
               >
                 {checked === null ? null : <MenuCheck checked={checked} />}
-                {action.label}
+                {action.kind === "application" ? <AppIcon path={action.appPath} /> : null}
+                <span className="context-submenu-item-label">{action.label}</span>
               </button>
             );
           })}

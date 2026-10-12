@@ -33,6 +33,8 @@ vi.mock("./lib/progressCardDelay", async () =>
 );
 
 import {
+  HARNESS_TEXT_EDIT,
+  HARNESS_VISUAL_STUDIO_CODE,
   createAppHarness,
   createDirectoryEntry,
   expectNoRefusedRequests,
@@ -198,6 +200,7 @@ describe("Open With", () => {
   async function chooseOther() {
     await openMenu("/Users/demo/source.txt");
     fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+    await screen.findByRole("button", { name: "Other…" });
     await chooseInMenu("Other…");
   }
 
@@ -227,6 +230,165 @@ describe("Open With", () => {
     const dialog = await screen.findByRole("dialog", { name: "Couldn’t Choose an App" });
     expect(dialog).toHaveTextContent("The window for choosing an app didn’t open.");
     expect(payloads(harness, "system:openPathsWithApplication")).toEqual([]);
+  });
+
+  // The rows of the Open With submenu as they read, "---" for a separator.
+  function openWithRows(): string[] {
+    const submenu = document.querySelector(".context-submenu");
+    return Array.from(submenu?.children ?? []).flatMap((child) =>
+      child.classList.contains("context-menu-separator")
+        ? ["---"]
+        : child.tagName === "BUTTON"
+          ? [child.textContent ?? ""]
+          : [],
+    );
+  }
+
+  async function openOpenWith(path = "/Users/demo/source.txt") {
+    await openMenu(path);
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+    await screen.findByRole("button", { name: "Other…" });
+  }
+
+  it("lists the app the item opens in, the pinned apps, then the others macOS offers", async () => {
+    const harness = createHarness({
+      preferences: {
+        openWithApplications: [
+          { id: "zed", appPath: "/Applications/Zed.app", appName: "Zed" },
+          { id: "gone", appPath: "/Applications/Gone.app", appName: "Gone" },
+        ],
+      },
+      openWithApplications: (request) => ({
+        defaultApp: HARNESS_TEXT_EDIT,
+        apps: [HARNESS_VISUAL_STUDIO_CODE, HARNESS_TEXT_EDIT],
+        kinds: [{ contentType: "public.plain-text", name: "Plain Text Document", isFolder: false }],
+        pinnedApps: request.pinnedAppPaths.map((path) =>
+          path === "/Applications/Zed.app"
+            ? { path, name: "Zed", bundleId: null, version: null }
+            : null,
+        ),
+      }),
+    });
+    renderApp(harness);
+
+    await openOpenWith();
+
+    expect(openWithRows()).toEqual([
+      "TextEdit (default)",
+      "---",
+      "Zed",
+      "---",
+      "Visual Studio Code",
+      "---",
+      "Other…",
+    ]);
+    // macOS is asked only once the submenu is reached, about the item the menu is for.
+    expect(
+      harness.invocations.filter((call) => call.channel === "system:getOpenWithApplications"),
+    ).toEqual([
+      {
+        channel: "system:getOpenWithApplications",
+        payload: {
+          paths: ["/Users/demo/source.txt"],
+          pinnedAppPaths: ["/Applications/Zed.app", "/Applications/Gone.app"],
+        },
+      },
+    ]);
+  });
+
+  it("makes the app the one the kind opens in with Option held, once asked, then opens it", async () => {
+    const harness = createHarness();
+    renderApp(harness);
+
+    await openOpenWith();
+    fireEvent.keyDown(window, { key: "Alt", altKey: true });
+    expect(screen.getByRole("button", { name: "Always Open With" })).toBeInTheDocument();
+    await chooseInMenu("Visual Studio Code");
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Are you sure you want to change all similar documents to open with the application “Visual Studio Code”?",
+    });
+    expect(dialog).toHaveTextContent("every “Plain Text Document” file");
+    expect(
+      harness.invocations.some((call) => call.channel === "system:setDefaultApplication"),
+    ).toBe(false);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Change All" }));
+    });
+
+    await vi.waitFor(() =>
+      expect(payloads(harness, "system:openPathsWithApplication")).toEqual([
+        {
+          applicationPath: "/Applications/Visual Studio Code.app",
+          paths: ["/Users/demo/source.txt"],
+        },
+      ]),
+    );
+    expect(
+      harness.invocations.find((call) => call.channel === "system:setDefaultApplication")?.payload,
+    ).toEqual({
+      applicationPath: "/Applications/Visual Studio Code.app",
+      contentType: "public.plain-text",
+    });
+  });
+
+  it("changes nothing and opens nothing when Always Open With is cancelled", async () => {
+    const harness = createHarness();
+    renderApp(harness);
+
+    await openOpenWith();
+    fireEvent.keyDown(window, { key: "Alt", altKey: true });
+    await chooseInMenu("Visual Studio Code");
+    const dialog = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      harness.invocations.some((call) => call.channel === "system:setDefaultApplication"),
+    ).toBe(false);
+    expect(payloads(harness, "system:openPathsWithApplication")).toEqual([]);
+  });
+
+  it("says so, and opens nothing, when macOS refuses Always Open With", async () => {
+    const harness = createHarness({ setDefaultApplicationError: "Not allowed." });
+    renderApp(harness);
+
+    await openOpenWith();
+    fireEvent.keyDown(window, { key: "Alt", altKey: true });
+    await chooseInMenu("Visual Studio Code");
+    await act(async () => {
+      fireEvent.click(
+        within(await screen.findByRole("dialog")).getByRole("button", { name: "Change All" }),
+      );
+    });
+
+    const notice = await screen.findByRole("dialog", { name: "Couldn’t Change the App" });
+    expect(notice).toHaveTextContent("Plain Text Document files still open in the app");
+    expect(notice).toHaveTextContent("Not allowed.");
+    expect(payloads(harness, "system:openPathsWithApplication")).toEqual([]);
+  });
+
+  it("keeps Open With under Option for items of different kinds", async () => {
+    const harness = createHarness({
+      openWithApplications: () => ({
+        defaultApp: null,
+        apps: [HARNESS_TEXT_EDIT],
+        kinds: [
+          { contentType: "public.plain-text", name: "Plain Text Document", isFolder: false },
+          { contentType: "public.folder", name: "Folder", isFolder: true },
+        ],
+        pinnedApps: [],
+      }),
+    });
+    renderApp(harness);
+
+    await openOpenWith();
+    fireEvent.keyDown(window, { key: "Alt", altKey: true });
+
+    expect(screen.getByRole("button", { name: "Open With" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Always Open With" })).toBeNull();
   });
 });
 

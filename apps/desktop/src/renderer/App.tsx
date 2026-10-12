@@ -50,6 +50,7 @@ import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
 import { useFolderWatch } from "./hooks/useFolderWatch";
 import { useHiddenItemCount } from "./hooks/useHiddenItemCount";
 import { useLatest } from "./hooks/useLatest";
+import { useOpenWithLookup } from "./hooks/useOpenWithLookup";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
 import { useTextEditingFocus } from "./hooks/useTextEditingFocus";
@@ -114,6 +115,7 @@ import { resolveInfoItem } from "./lib/infoPreview";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { filterEntriesByName } from "./lib/listFilter";
 import { createRendererLogger } from "./lib/logging";
+import { buildOpenWithMenuItems, canAlwaysOpenWith } from "./lib/openWith";
 import { expandHomeShortcut } from "./lib/pathUtils";
 import { buildPlaces } from "./lib/places";
 import {
@@ -920,6 +922,11 @@ export function App() {
     contextMenuHiddenActionIds,
     showModalNotice,
     openWithMenuItems,
+    openWithMenuAlternates,
+    noteContextSubmenuOpen,
+    askAlwaysOpenWith,
+    confirmAlwaysOpenWithDialog,
+    pickApplicationForOpenWith,
     copyGetInfoPath,
     copyGetInfoName,
     dismissActionNotice,
@@ -1056,10 +1063,10 @@ export function App() {
     [contextMenuHiddenActionIds, contextMenuEjectPath],
   );
   // The background menu's View As and Sort By tick the current choice; Open With lists the
-  // apps chosen in Settings.
+  // apps macOS offers for the items and the pinned apps, once macOS has answered.
   const contextMenuSubmenus = useMemo<ContextMenuSubmenus>(
     () => ({
-      openWith: openWithMenuItems,
+      ...(openWithMenuItems ? { openWith: openWithMenuItems } : {}),
       viewAs: VIEW_MODE_ORDER.map((mode) => ({
         action: {
           kind: "viewMode",
@@ -2184,6 +2191,34 @@ export function App() {
   // The info panel always shows the getInfoItem (which is the selected or inspected item).
   // The info row shows the selected entry, falling back to the current directory.
   const infoPanelItem = infoPanelView?.item ?? null;
+  // Get Info's Open With lists the same apps as the right-click menu, and names the app the
+  // item opens in. Asked a moment after the item changes, so holding an arrow key does not
+  // ask about every item on the way.
+  const infoPanelItemPath = infoPanelItem?.path ?? null;
+  const infoPanelOpenWithPaths = useMemo(
+    () => (infoPanelOpen && infoPanelItemPath !== null ? [infoPanelItemPath] : null),
+    [infoPanelOpen, infoPanelItemPath],
+  );
+  const infoPanelOpenWith = useOpenWithLookup(
+    client,
+    infoPanelOpenWithPaths,
+    openWithApplications,
+    { delayMs: 80 },
+  );
+  const infoPanelOpenWithItems = useMemo(
+    () =>
+      buildOpenWithMenuItems({
+        lookup: infoPanelOpenWith.lookup,
+        pinned: openWithApplications,
+      }),
+    [infoPanelOpenWith.lookup, openWithApplications],
+  );
+  const infoPanelOpenWithKind =
+    infoPanelItem !== null &&
+    (infoPanelItem.kind === "file" || infoPanelItem.kind === "symlink_file") &&
+    canAlwaysOpenWith(infoPanelOpenWith.lookup)
+      ? (infoPanelOpenWith.lookup?.kinds[0] ?? null)
+      : null;
   // Files can be edited; folders can be favorites, except the Trash, which always is one.
   const infoPanelCanEdit =
     infoPanelItem !== null &&
@@ -2576,12 +2611,20 @@ export function App() {
               onRootTree: infoPanelCanRootTree
                 ? () => rootTreeAtPath(infoPanelItem.path)
                 : undefined,
-              openWithItems: openWithMenuItems,
+              openWithItems: infoPanelOpenWithItems,
               onOpenWith: (action) => {
                 if (infoPanelItem) {
                   void runContextSubmenuAction(action, [infoPanelItem.path]);
                 }
               },
+              ...(infoPanelOpenWithKind
+                ? {
+                    openWithDefaultAppPath: infoPanelOpenWith.lookup?.defaultApp?.path ?? null,
+                    onPickOtherApp: () => pickApplicationForOpenWith("Couldn’t Choose an App"),
+                    onChangeAll: (application: { appPath: string; appName: string }) =>
+                      askAlwaysOpenWith({ ...application, kind: infoPanelOpenWithKind, paths: [] }),
+                  }
+                : {}),
               ...(selectionSize
                 ? {
                     folderSizeEntry: selectionSizeControls?.entry,
@@ -2793,6 +2836,8 @@ export function App() {
           contextMenuOptions={contextMenuOptionsWithEject}
           contextMenuHiddenActionIds={contextMenuHiddenActionIdsWithEject}
           contextMenuSubmenus={contextMenuSubmenus}
+          contextMenuSubmenuAlternates={openWithMenuAlternates}
+          onContextSubmenuOpen={noteContextSubmenuOpen}
           shortcutContext={shortcutContext}
           onRunContextMenuAction={(actionId, paths) => {
             if (actionId === "eject") {
@@ -2827,6 +2872,7 @@ export function App() {
           onUpdateCopyPasteChoices={updateCopyPasteChoices}
           onCloseCopyPasteDialog={dismissCopyPasteDialog}
           onCloseConfirmationDialog={closeConfirmationDialog}
+          onConfirmAlwaysOpenWithDialog={() => void confirmAlwaysOpenWithDialog()}
           onConfirmTrashDialog={(paths) => {
             void startTrashPaths(paths);
           }}

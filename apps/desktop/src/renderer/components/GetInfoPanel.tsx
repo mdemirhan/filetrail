@@ -69,6 +69,9 @@ export function InfoPanel({
   onCancelFolderSize,
   openWithItems = [],
   onOpenWith,
+  openWithDefaultAppPath = null,
+  onPickOtherApp,
+  onChangeAll,
 }: {
   loading: boolean;
   item: ItemProperties | null;
@@ -101,6 +104,13 @@ export function InfoPanel({
   onCancelFolderSize?: (() => void) | undefined;
   openWithItems?: readonly ContextMenuSubmenuItem[];
   onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
+  /** The app the item opens in, which the Open With section starts on. */
+  openWithDefaultAppPath?: string | null;
+  /** Other… in the Open With section: the window for choosing an app. */
+  onPickOtherApp?: (() => Promise<{ appPath: string; appName: string } | null>) | undefined;
+  // Given only for a file whose kind can change app: Change All… makes the app chosen the
+  // one every file of the kind opens in.
+  onChangeAll?: ((application: { appPath: string; appName: string }) => void) | undefined;
 }) {
   const shortcutDisplay = useShortcutDisplay();
   const [copied, setCopied] = useState<"path" | "name" | null>(null);
@@ -181,6 +191,9 @@ export function InfoPanel({
           onCancelFolderSize={onCancelFolderSize}
           openWithItems={openWithItems}
           onOpenWith={onOpenWith}
+          openWithDefaultAppPath={openWithDefaultAppPath}
+          onPickOtherApp={onPickOtherApp}
+          onChangeAll={onChangeAll}
         />
       ) : loading ? null : (
         <div className="get-info-empty overlay-scroll">
@@ -303,6 +316,9 @@ function GetInfoPanelContent({
   onCancelFolderSize,
   openWithItems,
   onOpenWith,
+  openWithDefaultAppPath,
+  onPickOtherApp,
+  onChangeAll,
 }: {
   copied: "path" | "name" | null;
   item: ItemProperties;
@@ -328,6 +344,9 @@ function GetInfoPanelContent({
   onCancelFolderSize?: (() => void) | undefined;
   openWithItems: readonly ContextMenuSubmenuItem[];
   onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
+  openWithDefaultAppPath: string | null;
+  onPickOtherApp?: (() => Promise<{ appPath: string; appName: string } | null>) | undefined;
+  onChangeAll?: ((application: { appPath: string; appName: string }) => void) | undefined;
 }) {
   const shortcutDisplay = useShortcutDisplay();
   const [openWithMenuOpen, setOpenWithMenuOpen] = useState(false);
@@ -576,6 +595,17 @@ function GetInfoPanelContent({
           ))}
         </dl>
       </section>
+
+      {onChangeAll ? (
+        <GetInfoOpenWithSection
+          // A new item starts again from the app it opens in.
+          key={`${item.path}\n${openWithDefaultAppPath ?? ""}`}
+          items={openWithItems}
+          defaultAppPath={openWithDefaultAppPath}
+          onPickOtherApp={onPickOtherApp}
+          onChangeAll={onChangeAll}
+        />
+      ) : null}
 
       <section className="get-info-section">
         <h3 className="get-info-section-title">Quick Actions</h3>
@@ -900,5 +930,94 @@ function InfoPanelGlyph({
       <path d="M6 6l12 12" />
       <path d="M18 6L6 18" />
     </svg>
+  );
+}
+
+const OTHER_APP_VALUE = "\u0000other";
+
+// Finder's "Open with" section: a pop-up of the apps that can open the file, on the one it
+// opens in. Choosing an app only chooses it; Change All… (asked first) makes it the one every
+// file of the kind opens in.
+function GetInfoOpenWithSection({
+  items,
+  defaultAppPath,
+  onPickOtherApp,
+  onChangeAll,
+}: {
+  items: readonly ContextMenuSubmenuItem[];
+  defaultAppPath: string | null;
+  onPickOtherApp?: (() => Promise<{ appPath: string; appName: string } | null>) | undefined;
+  onChangeAll: (application: { appPath: string; appName: string }) => void;
+}) {
+  const [chosen, setChosen] = useState<{ appPath: string; appName: string } | null>(null);
+  const applications = items.flatMap((entry) =>
+    entry.type !== "separator" && entry.action.kind === "application"
+      ? [
+          {
+            appPath: entry.action.appPath,
+            appName: entry.action.appName,
+            label: entry.action.label,
+          },
+        ]
+      : [],
+  );
+  // An app chosen with Other… that isn't listed is added to the end.
+  const choices =
+    chosen && !applications.some((application) => application.appPath === chosen.appPath)
+      ? [...applications, { ...chosen, label: chosen.appName }]
+      : applications;
+  const selectedPath = chosen?.appPath ?? defaultAppPath ?? "";
+  const selected = choices.find((application) => application.appPath === selectedPath) ?? null;
+
+  return (
+    <section className="get-info-section">
+      <h3 className="get-info-section-title">Open With</h3>
+      <div className="get-info-open-with-default">
+        <span className="settings-popup get-info-open-with-popup">
+          <select
+            aria-label="App this kind of file opens in"
+            value={selectedPath}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              if (value === OTHER_APP_VALUE) {
+                void onPickOtherApp?.().then((application) => {
+                  if (application) {
+                    setChosen(application);
+                  }
+                });
+                return;
+              }
+              const application = choices.find((choice) => choice.appPath === value);
+              if (application) {
+                setChosen({ appPath: application.appPath, appName: application.appName });
+              }
+            }}
+          >
+            {selectedPath === "" ? <option value="">No App</option> : null}
+            {choices.map((application) => (
+              <option key={application.appPath} value={application.appPath}>
+                {application.label}
+              </option>
+            ))}
+            {onPickOtherApp ? <option value={OTHER_APP_VALUE}>Other…</option> : null}
+          </select>
+          <svg className="settings-popup-chevron" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" />
+          </svg>
+        </span>
+        <PushButton
+          className="get-info-change-all"
+          disabled={!selected || selected.appPath === defaultAppPath}
+          onClick={() => {
+            if (selected) {
+              onChangeAll({ appPath: selected.appPath, appName: selected.appName });
+            }
+          }}
+        >
+          Change All…
+        </PushButton>
+      </div>
+      <p className="get-info-open-with-note">Use this app to open all documents like this one.</p>
+    </section>
   );
 }

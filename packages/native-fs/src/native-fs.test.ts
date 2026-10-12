@@ -1052,6 +1052,96 @@ describe("nativeIsPackage", () => {
   });
 });
 
+describe("nativeOpenWithApplications", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-open-with-"));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("lists the apps that can open a text file, with its default among them", async () => {
+    const file = join(root, "notes.txt");
+    writeFileSync(file, "hello");
+
+    const result = await wrapper.nativeOpenWithApplications([file], []);
+
+    expect(result.kinds).toEqual([
+      { contentType: "public.plain-text", name: expect.any(String), isFolder: false },
+    ]);
+    // TextEdit ships with every Mac and opens plain text.
+    expect(result.apps.map((app) => app.bundleId)).toContain("com.apple.TextEdit");
+    const defaultApp = expectDefined(result.defaultApp);
+    expect(result.apps.map((app) => app.path)).toContain(defaultApp.path);
+    expect(defaultApp.path.endsWith("/")).toBe(false);
+    expect(defaultApp.name.endsWith(".app")).toBe(false);
+  });
+
+  it("names a folder's kind as a folder", async () => {
+    const result = await wrapper.nativeOpenWithApplications([root], []);
+
+    expect(result.kinds).toEqual([
+      { contentType: "public.folder", name: expect.any(String), isFolder: true },
+    ]);
+  });
+
+  it("gives the kinds of a mixed selection once each", async () => {
+    writeFileSync(join(root, "a.txt"), "a");
+    writeFileSync(join(root, "b.txt"), "b");
+    mkdirSync(join(root, "folder"));
+
+    const result = await wrapper.nativeOpenWithApplications(
+      [join(root, "a.txt"), join(root, "b.txt"), join(root, "folder")],
+      [],
+    );
+
+    expect(result.kinds.map((kind) => kind.contentType)).toEqual([
+      "public.plain-text",
+      "public.folder",
+    ]);
+  });
+
+  it("describes the apps at the paths given, and null where there is none", async () => {
+    const result = await wrapper.nativeOpenWithApplications(
+      [],
+      ["/System/Applications/TextEdit.app", join(root, "Missing.app")],
+    );
+
+    expect(result).toMatchObject({ defaultApp: null, apps: [], kinds: [] });
+    expect(result.appInfo).toEqual([
+      {
+        path: "/System/Applications/TextEdit.app",
+        name: "TextEdit",
+        bundleId: "com.apple.TextEdit",
+        version: expect.any(String),
+      },
+      null,
+    ]);
+  });
+});
+
+describe("nativeSetDefaultApplication", () => {
+  // Only refusals are tried, each with an app that isn't there: a change would reach every
+  // app on the Mac running the tests, and with no app macOS can't make one even if the
+  // refusal went missing.
+  const missingApp = "/Applications/File Trail Test Missing.app";
+
+  it("refuses to change what opens folders", async () => {
+    await expect(wrapper.nativeSetDefaultApplication(missingApp, "public.folder")).rejects.toThrow(
+      "Folders, apps and packages keep the app they open in.",
+    );
+  });
+
+  it("refuses a kind macOS doesn't know", async () => {
+    await expect(wrapper.nativeSetDefaultApplication(missingApp, "")).rejects.toThrow(
+      "That kind of file isn't known to macOS.",
+    );
+  });
+});
+
 describe("nativeDatesTaken", () => {
   const fixtures = join(__dirname, "..", "test-fixtures");
   // The movie was made at this moment; it is shown on this Mac's clock.

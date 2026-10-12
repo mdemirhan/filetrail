@@ -183,6 +183,40 @@ export function SettingsWindowApp() {
     return () => unsubscribe?.();
   }, [client]);
 
+  // Pinned apps that aren't where they were (removed, or moved): flagged in the list. Checked
+  // again whenever the list changes or the window comes forward.
+  const [missingOpenWithAppPaths, setMissingOpenWithAppPaths] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const pinnedAppPaths = preferences.openWithApplications.map((entry) => entry.appPath);
+  const pinnedAppPathsKey = JSON.stringify(pinnedAppPaths);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key stands for the paths.
+  useEffect(() => {
+    let cancelled = false;
+    const check = () => {
+      if (pinnedAppPaths.length === 0) {
+        setMissingOpenWithAppPaths(new Set());
+        return;
+      }
+      void client
+        .invoke("system:getOpenWithApplications", { paths: [], pinnedAppPaths })
+        .then((response) => {
+          if (!cancelled) {
+            setMissingOpenWithAppPaths(
+              new Set(pinnedAppPaths.filter((_path, index) => !response.pinnedApps[index])),
+            );
+          }
+        })
+        .catch(() => undefined);
+    };
+    check();
+    window.addEventListener("focus", check);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", check);
+    };
+  }, [client, pinnedAppPathsKey]);
+
   useEffect(() => {
     document.title = "Settings";
     document.body.classList.add("settings-window-body");
@@ -354,6 +388,7 @@ export function SettingsWindowApp() {
               favorites={preferences.favorites}
               favoritesPlacement={preferences.favoritesPlacement}
               openWithApplications={preferences.openWithApplications}
+              missingOpenWithAppPaths={missingOpenWithAppPaths}
               fileActivationAction={preferences.fileActivationAction}
               diskImageOpensIn={preferences.diskImageOpensIn}
               returnKeyAction={preferences.returnKeyAction}

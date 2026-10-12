@@ -346,7 +346,7 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const store = createAppStateStore(resolveAppStatePath(userDataPath), {
       defaultTheme: "dark",
-      // Open With starts with the suggested applications that are installed.
+      // Open With starts with no pinned apps, whatever is installed.
       fs: fileSystemWithApplications(["/Applications/Zed.app"]),
     });
 
@@ -424,13 +424,7 @@ describe("appStateStore", () => {
         appPath: "/System/Applications/TextEdit.app",
         appName: "TextEdit",
       },
-      openWithApplications: [
-        {
-          id: "zed",
-          appPath: "/Applications/Zed.app",
-          appName: "Zed",
-        },
-      ],
+      openWithApplications: [],
       fileActivationAction: "open",
       diskImageOpensIn: "window",
       openItemLimit: 5,
@@ -926,13 +920,7 @@ describe("appStateStore", () => {
       appPath: "/System/Applications/TextEdit.app",
       appName: "TextEdit",
     });
-    expect(reloaded.getPreferences().openWithApplications).toEqual([
-      {
-        id: "visual-studio-code",
-        appPath: "/Applications/Visual Studio Code.app",
-        appName: "Visual Studio Code",
-      },
-    ]);
+    expect(reloaded.getPreferences().openWithApplications).toEqual([]);
     expect(reloaded.getPreferences().compactDetailsView).toBe(false);
     expect(reloaded.getPreferences().detailColumns).toEqual({
       size: true,

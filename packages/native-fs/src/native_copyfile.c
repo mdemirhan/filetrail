@@ -332,6 +332,10 @@ extern napi_value register_file_drag(napi_env env, napi_value exports);
 /* Defined in native_acl.c — registers nativeGetAcl and nativeSetAcl. */
 extern napi_value register_acl(napi_env env, napi_value exports);
 
+/* Defined in native_openwith.m — registers nativeOpenWithApplications and
+   nativeSetDefaultApplication. */
+extern napi_value register_open_with(napi_env env, napi_value exports);
+
 static napi_value init(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
@@ -353,6 +357,7 @@ static napi_value init(napi_env env, napi_value exports) {
   register_trash(env, exports);
   register_file_drag(env, exports);
   register_acl(env, exports);
+  register_open_with(env, exports);
 
   return exports;
 }

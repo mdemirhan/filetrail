@@ -985,8 +985,9 @@ describe("App copy/paste integration", () => {
     });
 
     fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+    const openWithChoice = await screen.findByRole("button", { name: "Visual Studio Code" });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Visual Studio Code" }));
+      fireEvent.click(openWithChoice);
     });
 
     await vi.waitFor(() => {
@@ -1063,8 +1064,9 @@ describe("App copy/paste integration", () => {
     });
 
     fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+    const openWithChoice = await screen.findByRole("button", { name: "Other…" });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Other…" }));
+      fireEvent.click(openWithChoice);
     });
 
     await vi.waitFor(() => {

@@ -12,6 +12,7 @@
         "src/native_filedrag.m",
         "src/native_fileicon.m",
         "src/native_foldersize.c",
+        "src/native_openwith.m",
         "src/native_package.m",
         "src/native_rename.c",
         "src/native_thumbnail.m",

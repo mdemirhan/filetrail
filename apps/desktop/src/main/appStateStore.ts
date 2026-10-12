@@ -142,8 +142,7 @@ const NAVIGATION_PREFERENCE_KEYS: ReadonlySet<string> = new Set<keyof AppPrefere
 // caches, and other ephemeral runtime state should stay out of this file.
 export class AppStateStore {
   private readonly filePath: string;
-  // What a new install starts with: the platform's first-launch theme, and only the
-  // Open With applications that are installed on this Mac.
+  // What a new install starts with: the platform's first-launch theme.
   private readonly defaults: AppPreferences;
   private readonly fileSystem: AppStateStoreFileSystem;
   private readonly timer: AppStateStoreTimer;
@@ -161,7 +160,6 @@ export class AppStateStore {
     this.fileSystem = dependencies.fs ?? DEFAULT_FILE_SYSTEM;
     this.defaults = createDefaultPreferences(
       dependencies.defaultTheme ?? DEFAULT_APP_PREFERENCES.theme,
-      this.fileSystem,
     );
     this.timer = dependencies.timer ?? DEFAULT_TIMER;
     this.onReadError =
@@ -949,7 +947,8 @@ function sanitizeOpenWithApplications(
       },
     ];
   });
-  return entries.length === value.length ? entries : defaults.map((entry) => ({ ...entry }));
+  // A pinned app that can't be read is dropped; the others are kept.
+  return entries;
 }
 
 function sanitizeDetailColumns(
@@ -1098,15 +1097,10 @@ function sanitizeWindowState(value: unknown): StoredWindowState {
   };
 }
 
-function createDefaultPreferences(
-  defaultTheme: ThemePreference,
-  fileSystem: AppStateStoreFileSystem,
-): AppPreferences {
+function createDefaultPreferences(defaultTheme: ThemePreference): AppPreferences {
   return {
     ...DEFAULT_APP_PREFERENCES,
     theme: defaultTheme,
-    openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.filter((entry) =>
-      fileSystem.existsSync(entry.appPath),
-    ).map((entry) => ({ ...entry })),
+    openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),
   };
 }

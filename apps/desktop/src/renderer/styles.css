@@ -1174,10 +1174,26 @@ select:focus-visible {
   min-width: 180px;
 }
 
-/* Open With lists apps, with no checkmarks or icons: its labels start near the edge. View
-   As and Sort By keep the checkmark column, as the toolbar's menus do. */
+/* Open With lists apps with their own icons, as Finder's menu does, and no checkmarks: its
+   rows start near the edge. View As and Sort By keep the checkmark column, as the toolbar's
+   menus do. A list taller than the window (a text file can have dozens of apps) scrolls. */
+.context-submenu {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+
 .context-submenu-item {
   padding: 0 10px;
+}
+
+.context-submenu-item .file-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.context-submenu-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .context-submenu-item[role="menuitemradio"] {
@@ -4671,6 +4687,34 @@ body.window-inactive {
   font-weight: 600;
 }
 
+/* Open With: the pop-up of apps takes the room Change All… leaves. */
+.get-info-open-with-default {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.get-info-open-with-popup {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.get-info-open-with-popup select {
+  width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.get-info-change-all {
+  flex: none;
+}
+
+.get-info-open-with-note {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+
 .get-info-meta {
   margin-bottom: 0;
 }
@@ -5691,6 +5735,11 @@ body .settings-window .settings-view[data-layout] {
 
 .settings-column-row[aria-disabled="true"] .settings-list-name {
   color: var(--settings-label-secondary);
+}
+
+/* A pinned app that isn't where it was. */
+.settings-list-missing {
+  color: var(--danger-text);
 }
 
 .settings-list-row .file-icon {

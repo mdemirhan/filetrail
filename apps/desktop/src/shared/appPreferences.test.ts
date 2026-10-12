@@ -52,23 +52,7 @@ describe("appPreferences helpers", () => {
       foldersFirst: true,
       singleClickExpandTreeItems: false,
       terminalApp: null,
-      openWithApplications: [
-        {
-          id: "visual-studio-code",
-          appPath: "/Applications/Visual Studio Code.app",
-          appName: "Visual Studio Code",
-        },
-        {
-          id: "sublime-text",
-          appPath: "/Applications/Sublime Text.app",
-          appName: "Sublime Text",
-        },
-        {
-          id: "zed",
-          appPath: "/Applications/Zed.app",
-          appName: "Zed",
-        },
-      ],
+      openWithApplications: [],
       detailColumns: {
         modified: true,
         size: true,

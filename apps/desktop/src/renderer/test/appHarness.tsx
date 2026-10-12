@@ -19,6 +19,20 @@ import { DEFAULT_APP_PREFERENCES } from "../../shared/appPreferences";
 import { recordFolderVisit } from "../../shared/visitedFolders";
 
 import { App } from "../App";
+
+// The apps the harness's Open With offers when a test doesn't say.
+export const HARNESS_TEXT_EDIT = {
+  path: "/System/Applications/TextEdit.app",
+  name: "TextEdit",
+  bundleId: "com.apple.TextEdit",
+  version: "1.21",
+};
+export const HARNESS_VISUAL_STUDIO_CODE = {
+  path: "/Applications/Visual Studio Code.app",
+  name: "Visual Studio Code",
+  bundleId: "com.microsoft.VSCode",
+  version: "1.124.2",
+};
 import { type FiletrailClient, FiletrailClientProvider } from "../lib/filetrailClient";
 
 export type RendererCommand = Parameters<Parameters<FiletrailClient["onCommand"]>[0]>[0];
@@ -270,6 +284,13 @@ export function createAppHarness(
     deferCopyPasteStart?: boolean;
     copyPasteStartError?: Error;
     openPathsWithApplicationError?: Error;
+    // What macOS says can open items, for Open With. Without it, every item opens in TextEdit
+    // and can open in Visual Studio Code, and every pinned app is there.
+    openWithApplications?: (
+      request: IpcRequestInput<"system:getOpenWithApplications">,
+    ) => IpcResponse<"system:getOpenWithApplications">;
+    // Why Always Open With was refused.
+    setDefaultApplicationError?: string;
     // What an alias resolves to, by its path (an Error: resolving it fails); others resolve
     // to themselves.
     resolvedPaths?: Record<string, string | Error>;
@@ -852,6 +873,32 @@ export function createAppHarness(
           canceled: false,
           path: "/Users/demo/Folder",
         }) as IpcResponse<C>;
+      }
+      if (channel === "system:getOpenWithApplications") {
+        const request = payload as IpcRequestInput<"system:getOpenWithApplications">;
+        if (args.openWithApplications) {
+          return args.openWithApplications(request) as IpcResponse<C>;
+        }
+        const hasItems = request.paths.length > 0;
+        return {
+          defaultApp: hasItems ? HARNESS_TEXT_EDIT : null,
+          apps: hasItems ? [HARNESS_TEXT_EDIT, HARNESS_VISUAL_STUDIO_CODE] : [],
+          kinds: hasItems
+            ? [{ contentType: "public.plain-text", name: "Plain Text Document", isFolder: false }]
+            : [],
+          pinnedApps: request.pinnedAppPaths.map((path) => ({
+            path,
+            name: (path.split("/").at(-1) ?? path).replace(/\.app$/, ""),
+            bundleId: null,
+            version: null,
+          })),
+        } satisfies IpcResponse<"system:getOpenWithApplications"> as IpcResponse<C>;
+      }
+      if (channel === "system:setDefaultApplication") {
+        return {
+          ok: args.setDefaultApplicationError === undefined,
+          error: args.setDefaultApplicationError ?? null,
+        } as IpcResponse<C>;
       }
       if (channel === "system:openPathsWithApplication") {
         if (args.openPathsWithApplicationError) {

@@ -430,7 +430,8 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           },
           {
             label: "Open With",
-            description: "Right-click a file to pick another app. Settings → Files sets the list.",
+            description:
+              "Right-click an item for the apps that can open it: the one it opens in, the apps you keep there (Settings → Files), then every other app macOS offers. Hold Option for Always Open With: every file of that kind then opens in the app you choose, in Finder too. Get Info's Change All… does the same.",
           },
           {
             label: "Quick Look",

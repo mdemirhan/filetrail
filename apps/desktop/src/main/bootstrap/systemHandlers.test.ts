@@ -6,7 +6,12 @@ vi.mock("electron", () => ({
   shell: {},
 }));
 
-import { emptyTrash, getTrashState } from "./systemHandlers";
+import {
+  emptyTrash,
+  getOpenWithApplications,
+  getTrashState,
+  setDefaultApplicationHandler,
+} from "./systemHandlers";
 
 describe("emptyTrash", () => {
   // AppleScript stops waiting for Finder after two minutes, which a large Trash takes
@@ -79,5 +84,100 @@ describe("getTrashState", () => {
       "/Volumes": [],
     });
     await expect(getTrashState("/Users/demo", 501, read)).resolves.toEqual({ empty: null });
+  });
+});
+
+describe("getOpenWithApplications", () => {
+  const zed = { path: "/Applications/Zed.app", name: "Zed", bundleId: "dev.zed.Zed", version: "1" };
+
+  it("passes on what Launch Services says, the pinned apps by the paths asked", async () => {
+    const lookUp = vi.fn(async () => ({
+      defaultApp: zed,
+      apps: [zed],
+      kinds: [{ contentType: "net.daringfireball.markdown", name: "Markdown", isFolder: false }],
+      appInfo: [null],
+    }));
+
+    await expect(
+      getOpenWithApplications(
+        { paths: ["/Users/demo/a.md"], pinnedAppPaths: ["/Applications/Gone.app"] },
+        lookUp,
+      ),
+    ).resolves.toEqual({
+      defaultApp: zed,
+      apps: [zed],
+      kinds: [{ contentType: "net.daringfireball.markdown", name: "Markdown", isFolder: false }],
+      pinnedApps: [null],
+    });
+    expect(lookUp).toHaveBeenCalledWith(["/Users/demo/a.md"], ["/Applications/Gone.app"]);
+  });
+
+  // The menu still lists the pinned apps that are on disk, and Other….
+  it("falls back to the pinned apps found on disk when Launch Services can't be asked", async () => {
+    const lookUp = vi.fn(async () => {
+      throw new Error("no answer");
+    });
+
+    await expect(
+      getOpenWithApplications(
+        {
+          paths: ["/Users/demo/a.md"],
+          pinnedAppPaths: ["/Applications/Zed.app", "/Applications/Gone.app", "/etc/passwd"],
+        },
+        lookUp,
+        (path) => path !== "/Applications/Gone.app",
+      ),
+    ).resolves.toEqual({
+      defaultApp: null,
+      apps: [],
+      kinds: [],
+      pinnedApps: [
+        { path: "/Applications/Zed.app", name: "Zed", bundleId: null, version: null },
+        null,
+        null,
+      ],
+    });
+  });
+});
+
+describe("setDefaultApplicationHandler", () => {
+  it("sets the app for the kind", async () => {
+    const setDefault = vi.fn(async () => undefined);
+
+    await expect(
+      setDefaultApplicationHandler(
+        { applicationPath: "/Applications/Zed.app", contentType: "public.plain-text" },
+        setDefault,
+      ),
+    ).resolves.toEqual({ ok: true, error: null });
+    expect(setDefault).toHaveBeenCalledWith("/Applications/Zed.app", "public.plain-text");
+  });
+
+  it("refuses a path that isn't an app, without asking macOS", async () => {
+    const setDefault = vi.fn(async () => undefined);
+
+    const response = await setDefaultApplicationHandler(
+      { applicationPath: "/bin/sh", contentType: "public.plain-text" },
+      setDefault,
+    );
+
+    expect(response.ok).toBe(false);
+    expect(setDefault).not.toHaveBeenCalled();
+  });
+
+  it("says why macOS refused", async () => {
+    const setDefault = vi.fn(async () => {
+      throw new Error("Folders, apps and packages keep the app they open in.");
+    });
+
+    await expect(
+      setDefaultApplicationHandler(
+        { applicationPath: "/Applications/Zed.app", contentType: "public.folder" },
+        setDefault,
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: "Folders, apps and packages keep the app they open in.",
+    });
   });
 });

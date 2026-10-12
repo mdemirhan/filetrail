@@ -107,6 +107,9 @@ module.exports = {
   nativeListMounts: binding.nativeListMounts,
   nativeEjectVolume: binding.nativeEjectVolume,
   nativeTrashItem: binding.nativeTrashItem,
+  nativeOpenWithApplications: (paths, appPaths) =>
+    binding.nativeOpenWithApplications(paths, appPaths).then((json) => JSON.parse(json)),
+  nativeSetDefaultApplication: binding.nativeSetDefaultApplication,
   nativeGetAcl: binding.nativeGetAcl,
   nativeSetAcl: binding.nativeSetAcl,
 };

@@ -8,7 +8,7 @@ import type {
 
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import type { ContextMenuState, WriteOperationCardState } from "../hooks/useWriteOperations";
-import type { ContextMenuOptions } from "../lib/contextMenu";
+import type { ContextMenuOptions, ContextMenuSubmenuId } from "../lib/contextMenu";
 import {
   type CopyPasteReport as CopyPasteAnalysisReport,
   type CopyPasteOverrides,
@@ -35,6 +35,7 @@ import { GoToFolderDialog } from "./GoToFolderDialog";
 import {
   type ContextMenuActionId,
   type ContextMenuSubmenuAction,
+  type ContextMenuSubmenuAlternates,
   type ContextMenuSubmenus,
   ItemContextMenu,
 } from "./ItemContextMenu";
@@ -78,6 +79,8 @@ export function AppDialogs({
   contextMenuOptions,
   contextMenuHiddenActionIds,
   contextMenuSubmenus,
+  contextMenuSubmenuAlternates,
+  onContextSubmenuOpen,
   shortcutContext,
   onRunContextMenuAction,
   onRunContextSubmenuAction,
@@ -92,6 +95,7 @@ export function AppDialogs({
   onConfirmDeleteImmediatelyDialog,
   onConfirmEmptyTrashDialog,
   onConfirmDotNameDialog,
+  onConfirmAlwaysOpenWithDialog,
   onAnswerUndoQuestion,
   volumes,
   onAnswerEjectWhichVolumes,
@@ -115,6 +119,8 @@ export function AppDialogs({
   contextMenuOptions: ContextMenuOptions;
   contextMenuHiddenActionIds: ContextMenuActionId[];
   contextMenuSubmenus: ContextMenuSubmenus;
+  contextMenuSubmenuAlternates?: ContextMenuSubmenuAlternates;
+  onContextSubmenuOpen?: (submenuId: ContextMenuSubmenuId) => void;
   shortcutContext: ShortcutContext;
   onRunContextMenuAction: (actionId: ContextMenuActionId, paths: string[]) => void;
   onRunContextSubmenuAction: (action: ContextMenuSubmenuAction, paths: string[]) => void;
@@ -143,6 +149,7 @@ export function AppDialogs({
   onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
   onConfirmEmptyTrashDialog: () => void;
   onConfirmDotNameDialog: () => void;
+  onConfirmAlwaysOpenWithDialog?: () => void;
   onAnswerUndoQuestion: (goAhead: boolean) => void;
   volumes: readonly Volume[];
   onAnswerEjectWhichVolumes: (path: string, answer: "all" | "one" | "cancel") => void;
@@ -231,6 +238,8 @@ export function AppDialogs({
           options={contextMenuOptions}
           hiddenActionIds={contextMenuHiddenActionIds}
           submenus={contextMenuSubmenus}
+          submenuAlternates={contextMenuSubmenuAlternates}
+          onSubmenuOpen={onContextSubmenuOpen}
           shortcutContext={contextMenuShortcutContext}
           open
           onAction={(actionId) => {
@@ -438,6 +447,26 @@ export function AppDialogs({
             label: "Use “.”",
             onClick: onConfirmDotNameDialog,
             isDefault: false,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onClick: onCloseConfirmationDialog,
+          }}
+        />
+      ) : null}
+      {copyPasteDialogState?.type === "confirmAlwaysOpenWith" ? (
+        // Finder's question, word for word, then what it changes: every file of the kind,
+        // wherever it is opened from.
+        <CopyPasteDialog
+          title={`Are you sure you want to change all similar documents to open with the application “${copyPasteDialogState.appName}”?`}
+          message={
+            copyPasteDialogState.kindName
+              ? `This change will apply to every “${copyPasteDialogState.kindName}” file, opened from File Trail, Finder or any other app.`
+              : "This change will apply to every file of this kind, opened from File Trail, Finder or any other app."
+          }
+          primaryAction={{
+            label: "Change All",
+            onClick: () => onConfirmAlwaysOpenWithDialog?.(),
           }}
           secondaryAction={{
             label: "Cancel",

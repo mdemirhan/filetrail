@@ -637,11 +637,21 @@ function DragHandle() {
 }
 
 // The name and location of an item in a Settings list.
-function SettingsListText({ name, path }: { name: string; path: string }) {
+function SettingsListText({
+  name,
+  path,
+  missing = false,
+}: {
+  name: string;
+  path: string;
+  /** Nothing is at `path` any more: the row says so, for Change or Remove. */
+  missing?: boolean;
+}) {
   return (
     <span className="settings-list-text">
       <span className="settings-list-name">{name}</span>
       <span className="settings-list-path" title={path}>
+        {missing ? <span className="settings-list-missing">Not found · </span> : null}
         {path}
       </span>
     </span>
@@ -1225,6 +1235,8 @@ function resolveDensity(flags: ReadonlyArray<boolean>): Density {
   return flags.some(Boolean) ? "custom" : "comfortable";
 }
 
+const NO_PATHS: ReadonlySet<string> = new Set();
+
 export function SettingsView({
   activeTab,
   headerAccessory = null,
@@ -1253,6 +1265,7 @@ export function SettingsView({
   favorites,
   favoritesPlacement,
   openWithApplications,
+  missingOpenWithAppPaths = NO_PATHS,
   fileActivationAction,
   diskImageOpensIn = "window",
   returnKeyAction = "rename",
@@ -1329,6 +1342,8 @@ export function SettingsView({
   favorites: ReadonlyArray<FavoritePreference>;
   favoritesPlacement: FavoritesPlacement;
   openWithApplications: ReadonlyArray<OpenWithApplication>;
+  /** Pinned apps no longer at their path: flagged "Not found", and left out of Open With. */
+  missingOpenWithAppPaths?: ReadonlySet<string>;
   fileActivationAction: FileActivationAction;
   diskImageOpensIn?: DiskImageOpensIn;
   returnKeyAction?: ReturnKeyAction;
@@ -1798,21 +1813,28 @@ export function SettingsView({
         ) : null}
 
         {showSection("files") ? (
-          <SectionCard title="Open With" note="These apps come first in the Open With menu.">
+          <SectionCard
+            title="Always in Open With"
+            note="Listed for every file and folder, after the app it opens in, above the other apps macOS offers."
+          >
             <div className="settings-row settings-row-list">
               <SettingsList
-                label="Open With applications"
+                label="Always in Open With"
                 items={openWithApplications}
                 getKey={(application) => application.id}
                 getName={(application) => application.appName}
                 renderRow={(application) => (
                   <>
                     <AppIcon path={application.appPath} />
-                    <SettingsListText name={application.appName} path={application.appPath} />
+                    <SettingsListText
+                      name={application.appName}
+                      path={application.appPath}
+                      missing={missingOpenWithAppPaths.has(application.appPath)}
+                    />
                   </>
                 )}
                 onAdd={onAddOpenWithApplication}
-                addLabel="Add Open With application"
+                addLabel="Add app to Open With"
                 onRemove={(index) => {
                   const application = openWithApplications[index];
                   if (application) {

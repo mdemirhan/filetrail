@@ -106,6 +106,49 @@ export function nativeKindForPath(path: string): string | null;
  */
 export function nativeIsPackage(path: string): Promise<boolean | null>;
 
+/** An app as Launch Services describes it. */
+export type NativeApplicationInfo = {
+  /** Where the app is, without a trailing slash. */
+  path: string;
+  /** The name Finder shows for it, without ".app". */
+  name: string;
+  bundleId: string | null;
+  /** CFBundleShortVersionString. */
+  version: string | null;
+};
+
+/**
+ * The apps that can open the items, as Finder's Open With lists them (NSWorkspace
+ * `URLsForApplicationsToOpenURL:`, asked once per type).
+ *
+ * - `apps`: the apps that can open every one of `paths`, the default among them.
+ * - `defaultApp`: the app each of `paths` opens in, or null when they don't all agree.
+ * - `kinds`: the types of `paths`, once each, with what Finder's Kind column calls them
+ *   ("Markdown Document") and whether they are folders.
+ * - `appInfo`: one answer per entry of `appPaths`, null when there is no app there.
+ *
+ * Runs on a libuv thread pool thread.
+ */
+export function nativeOpenWithApplications(
+  paths: string[],
+  appPaths: string[],
+): Promise<{
+  defaultApp: NativeApplicationInfo | null;
+  apps: NativeApplicationInfo[];
+  kinds: Array<{ contentType: string; name: string | null; isFolder: boolean }>;
+  appInfo: Array<NativeApplicationInfo | null>;
+}>;
+
+/**
+ * Makes the app the one every file of the type (a UTI, "net.daringfireball.markdown") opens
+ * in, for Finder and every other app (NSWorkspace `setDefaultApplicationAtURL:toOpenContentType:`).
+ *
+ * Refused for folder types (folders, packages, apps), which keep what opens them.
+ *
+ * @throws An error with macOS's reason when the change is refused.
+ */
+export function nativeSetDefaultApplication(appPath: string, contentType: string): Promise<void>;
+
 /**
  * When each photo was taken, read from its own metadata (the date the camera recorded, in
  * EXIF): one answer per path, in order, as "2026-05-14T18:02:11" on the clock of this Mac,

@@ -493,6 +493,16 @@ describe("SettingsView", () => {
     expect(screen.getByText("Zed")).toBeInTheDocument();
   });
 
+  it("flags a pinned app that isn't where it was", () => {
+    renderSettingsView({ missingOpenWithAppPaths: new Set(["/Applications/Zed.app"]) });
+
+    const list = settingsList("Always in Open With");
+    expect(list.getByRole("option", { name: "Zed" })).toHaveTextContent("Not found");
+    expect(list.getByRole("option", { name: "Visual Studio Code" })).not.toHaveTextContent(
+      "Not found",
+    );
+  });
+
   it("renders configured favorites with their icons as pickers", () => {
     renderSettingsView();
 
@@ -617,8 +627,8 @@ describe("SettingsView", () => {
       onRemoveOpenWithApplication,
     });
 
-    const list = settingsList("Open With applications");
-    fireEvent.click(list.getByRole("button", { name: "Add Open With application" }));
+    const list = settingsList("Always in Open With");
+    fireEvent.click(list.getByRole("button", { name: "Add app to Open With" }));
     fireEvent.mouseDown(list.getByRole("option", { name: "Visual Studio Code" }));
     fireEvent.click(list.getByRole("button", { name: "Change Visual Studio Code" }));
     const zed = list.getByRole("option", { name: "Zed" });

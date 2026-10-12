@@ -578,4 +578,81 @@ describe("ItemContextMenu", () => {
       appName: "Visual Studio Code",
     });
   });
+
+  it("turns Open With into Always Open With while Option is held", () => {
+    const onSubmenuAction = vi.fn();
+    const alwaysItems = submenuItems.map((item) =>
+      item.type === "separator" ? item : { action: { ...item.action, always: true } },
+    );
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="content"
+        submenus={{ openWith: submenuItems }}
+        submenuAlternates={{ openWith: { label: "Always Open With", items: alwaysItems } }}
+        shortcutContext={shortcutContext}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={onSubmenuAction}
+      />,
+    );
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+
+    fireEvent.keyDown(window, { key: "Alt", altKey: true });
+    expect(screen.getByRole("button", { name: "Always Open With" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Zed" }));
+    expect(onSubmenuAction).toHaveBeenLastCalledWith(expect.objectContaining({ always: true }));
+
+    // Letting go of Option puts Open With back.
+    fireEvent.keyUp(window, { key: "Alt", altKey: false });
+    expect(screen.getByRole("button", { name: "Open With" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Zed" }));
+    expect(onSubmenuAction).toHaveBeenLastCalledWith(expect.not.objectContaining({ always: true }));
+  });
+
+  it("leaves Open With as it is under Option when it has no alternate", () => {
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="content"
+        submenus={{ openWith: submenuItems }}
+        shortcutContext={shortcutContext}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "Alt", altKey: true });
+
+    expect(screen.getByRole("button", { name: "Open With" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Always Open With" })).toBeNull();
+  });
+
+  // Open With asks macOS for its apps only when its submenu is reached, and opens once
+  // they are known.
+  it("says when a submenu is reached, and opens it only once its items are known", () => {
+    const onSubmenuOpen = vi.fn();
+    const props = {
+      anchorX: 0,
+      anchorY: 0,
+      surface: "content" as const,
+      shortcutContext,
+      open: true,
+      onAction: () => undefined,
+      onSubmenuAction: () => undefined,
+      onSubmenuOpen,
+    };
+    const { rerender } = render(<ItemContextMenu {...props} submenus={{}} />);
+    expect(onSubmenuOpen).not.toHaveBeenCalled();
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+
+    expect(onSubmenuOpen).toHaveBeenCalledWith("openWith");
+    expect(screen.queryByRole("button", { name: "Other…" })).toBeNull();
+    rerender(<ItemContextMenu {...props} submenus={{ openWith: submenuItems }} />);
+    expect(screen.getByRole("button", { name: "Other…" })).toBeInTheDocument();
+  });
 });

@@ -113,6 +113,13 @@ export const openWithApplicationSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
 });
+// An app as Launch Services describes it: Open With lists these.
+export const applicationInfoSchema = z.object({
+  path: z.string().min(1),
+  name: z.string(),
+  bundleId: z.string().nullable(),
+  version: z.string().nullable(),
+});
 export const favoriteIconIdSchema = z.enum([
   "home",
   "applications",
@@ -1513,6 +1520,39 @@ export const ipcContractSchemas = {
       canceled: z.boolean(),
       appPath: z.string().min(1).nullable(),
       appName: z.string().min(1).nullable(),
+    }),
+  },
+  // What Open With lists for some items: the app they all open in (null when they differ),
+  // the apps that can open every one of them, their kinds, and, for each pinned app, the
+  // app at that path (null when it isn't there any more). With no paths, only the pinned
+  // apps are looked up.
+  "system:getOpenWithApplications": {
+    request: z.object({
+      paths: z.array(z.string().min(1)).max(500),
+      pinnedAppPaths: z.array(z.string().min(1)).max(200),
+    }),
+    response: z.object({
+      defaultApp: applicationInfoSchema.nullable(),
+      apps: z.array(applicationInfoSchema),
+      kinds: z.array(
+        z.object({
+          contentType: z.string().min(1),
+          name: z.string().nullable(),
+          isFolder: z.boolean(),
+        }),
+      ),
+      pinnedApps: z.array(applicationInfoSchema.nullable()),
+    }),
+  },
+  // Makes the app the one every file of the kind opens in, everywhere on the Mac.
+  "system:setDefaultApplication": {
+    request: z.object({
+      applicationPath: z.string().min(1),
+      contentType: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+      error: z.string().nullable(),
     }),
   },
   "system:pickDirectory": {

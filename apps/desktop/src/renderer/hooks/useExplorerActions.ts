@@ -3,10 +3,12 @@ import {
   type MutableRefObject,
   type RefObject,
   type SetStateAction,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 
 import type {
@@ -40,6 +42,8 @@ import {
   type ContextMenuOptions,
   type ContextMenuSourceSubview,
   type ContextMenuSubmenuAction,
+  type ContextMenuSubmenuAlternates,
+  type ContextMenuSubmenuId,
   type ContextMenuSubmenuItem,
   getContextMenuItems,
 } from "../lib/contextMenu";
@@ -103,6 +107,7 @@ import {
 import type { useFiletrailClient } from "../lib/filetrailClient";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import { createRendererLogger } from "../lib/logging";
+import { type OpenWithLookup, buildOpenWithMenuItems, canAlwaysOpenWith } from "../lib/openWith";
 import { expandHomeShortcut } from "../lib/pathUtils";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "../lib/toasts";
 import type {
@@ -114,6 +119,7 @@ import type {
   WriteOperationsStore,
 } from "../state/explorerStores";
 import type { BatchRenameTarget } from "./useBatchRename";
+import { forgetOpenWithLookups, useOpenWithLookup } from "./useOpenWithLookup";
 import type {
   ContextMenuState,
   CopyPasteDialogState,
@@ -206,6 +212,7 @@ function isConfirmationDialog(state: { type: string } | null): boolean {
     state?.type === "confirmEmptyTrash" ||
     state?.type === "confirmDeleteWithoutTrash" ||
     state?.type === "confirmDotName" ||
+    state?.type === "confirmAlwaysOpenWith" ||
     state?.type === "ejectWhichVolumes" ||
     state?.type === "ejectBusy" ||
     state?.type === "undoQuestion"
@@ -721,32 +728,50 @@ export function useExplorerActions(args: {
     [canPasteAtResolvedDestination, contextMenuState, isWriteOperationLocked],
   );
 
-  const openWithMenuItems = useMemo(() => {
-    const items: ContextMenuSubmenuItem[] = openWithApplications.map((application) => ({
-      action: {
-        kind: "application",
-        id: application.id,
-        label: application.appName,
-        appPath: application.appPath,
-        appName: application.appName,
-      },
-    }));
-    if (items.length > 0) {
-      items.push({
-        type: "separator",
-        key: "separator-submenu-main",
-      });
-    }
-    items.push({
-      action: {
-        kind: "other",
-        id: "other",
-        label: "Other…",
-        appName: "Other…",
-      },
-    });
-    return items;
-  }, [openWithApplications]);
+  // Open With asks macOS which apps can open the items once its submenu first opens in a
+  // menu, not when the menu opens; the submenu shows when the answer comes.
+  const [openWithMenuPaths, setOpenWithMenuPaths] = useState<string[] | null>(null);
+  const contextMenuPaths = contextMenuState?.paths ?? null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new menu asks again.
+  useEffect(() => {
+    setOpenWithMenuPaths(null);
+  }, [contextMenuPaths]);
+  const contextMenuOpenWith = useOpenWithLookup(client, openWithMenuPaths, openWithApplications);
+  const noteContextSubmenuOpen = useCallback(
+    (submenuId: ContextMenuSubmenuId) => {
+      if (submenuId === "openWith" && contextMenuPaths && contextMenuPaths.length > 0) {
+        setOpenWithMenuPaths((current) => current ?? contextMenuPaths);
+      }
+    },
+    [contextMenuPaths],
+  );
+  const openWithMenuItems = useMemo<ContextMenuSubmenuItem[] | undefined>(
+    () =>
+      contextMenuOpenWith.ready
+        ? buildOpenWithMenuItems({
+            lookup: contextMenuOpenWith.lookup,
+            pinned: openWithApplications,
+          })
+        : undefined,
+    [contextMenuOpenWith, openWithApplications],
+  );
+  // Option held turns Open With into Always Open With, for items of one kind.
+  const openWithMenuAlternates = useMemo<ContextMenuSubmenuAlternates>(
+    () =>
+      contextMenuOpenWith.ready && canAlwaysOpenWith(contextMenuOpenWith.lookup)
+        ? {
+            openWith: {
+              label: "Always Open With",
+              items: buildOpenWithMenuItems({
+                lookup: contextMenuOpenWith.lookup,
+                pinned: openWithApplications,
+                always: true,
+              }),
+            },
+          }
+        : {},
+    [contextMenuOpenWith, openWithApplications],
+  );
 
   // The list the selection was last checked against, so a selection whose items all leave
   // keeps their place for the arrow keys.
@@ -3101,20 +3126,73 @@ export function useExplorerActions(args: {
   }
 
   async function runContextSubmenuAction(action: ContextMenuSubmenuAction, paths: string[]) {
+    // Always Open With is offered only for items of one kind, which the menu's answer names.
+    const kind = contextMenuOpenWith.lookup?.kinds[0] ?? null;
     closeContextMenu();
     // View As and Sort By set the window's view, which the app does (App.tsx).
     if (paths.length === 0 || action.kind === "viewMode" || action.kind === "sortBy") {
       return;
     }
-    if (action.kind === "other") {
-      const selection = await pickApplicationForOpenWith("Couldn’t Choose an App");
-      if (!selection) {
-        return;
-      }
-      await openPathsWithApplication(paths, selection.appPath, selection.appName);
+    const selection =
+      action.kind === "other"
+        ? await pickApplicationForOpenWith("Couldn’t Choose an App")
+        : { appPath: action.appPath, appName: action.appName };
+    if (!selection) {
       return;
     }
-    await openPathsWithApplication(paths, action.appPath, action.appName);
+    if (action.always && kind && !kind.isFolder) {
+      askAlwaysOpenWith({ ...selection, kind, paths });
+      return;
+    }
+    await openPathsWithApplication(paths, selection.appPath, selection.appName);
+  }
+
+  // Always Open With, and Change All… in Get Info: asked first, as Finder asks, since every
+  // file of the kind then opens in the app, in Finder too. The items it was chosen for open
+  // in it once it is set.
+  function askAlwaysOpenWith(request: {
+    appPath: string;
+    appName: string;
+    kind: OpenWithLookup["kinds"][number];
+    paths: string[];
+  }) {
+    setCopyPasteDialogState({
+      type: "confirmAlwaysOpenWith",
+      appPath: request.appPath,
+      appName: request.appName,
+      contentType: request.kind.contentType,
+      kindName: request.kind.name,
+      paths: request.paths,
+    });
+  }
+
+  async function confirmAlwaysOpenWithDialog() {
+    const dialogState = copyPasteDialogState;
+    if (dialogState?.type !== "confirmAlwaysOpenWith") {
+      return;
+    }
+    setCopyPasteDialogState(null);
+    try {
+      const response = await client.invoke("system:setDefaultApplication", {
+        applicationPath: dialogState.appPath,
+        contentType: dialogState.contentType,
+      });
+      if (!response.ok) {
+        throw new Error(response.error ?? "macOS refused the change.");
+      }
+    } catch (error) {
+      logger.error("set default application failed", error);
+      const detail = error instanceof Error ? error.message : String(error);
+      showModalNotice(
+        "Couldn’t Change the App",
+        `${dialogState.kindName ? `${dialogState.kindName} files` : "These files"} still open in the app they opened in before. ${detail}`,
+      );
+      return;
+    }
+    forgetOpenWithLookups();
+    if (dialogState.paths.length > 0) {
+      await openPathsWithApplication(dialogState.paths, dialogState.appPath, dialogState.appName);
+    }
   }
 
   async function openEntry(entry: DirectoryEntry) {
@@ -4261,6 +4339,11 @@ export function useExplorerActions(args: {
     contextMenuOptions,
     contextMenuHiddenActionIds,
     openWithMenuItems,
+    openWithMenuAlternates,
+    noteContextSubmenuOpen,
+    askAlwaysOpenWith,
+    confirmAlwaysOpenWithDialog,
+    pickApplicationForOpenWith,
     copyGetInfoPath,
     copyGetInfoName,
     dismissActionNotice,
