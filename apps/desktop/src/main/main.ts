@@ -128,7 +128,10 @@ if (hasSingleInstanceLock) {
           appLogger.error("[filetrail] failed persisting app state", error);
         },
       });
-      const iconPath = resolveAppIconPath();
+      // The packaged app's Dock icon comes from its bundle. A development run would show
+      // Electron's, so it sets File Trail's from the PNG; decoding that costs about 40 MB and
+      // 50 ms, which the packaged app does without.
+      const iconPath = app.isPackaged ? null : resolveAppIconPath();
       if (iconPath && process.platform === "darwin") {
         const icon = nativeImage.createFromPath(iconPath);
         if (!icon.isEmpty()) {
