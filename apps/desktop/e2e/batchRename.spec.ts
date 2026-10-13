@@ -36,8 +36,11 @@ async function launch(): Promise<void> {
     cwd: appDir,
   });
   window = await electronApp.firstWindow();
+  // The window can still show the empty page it starts with; loading the app's page
+  // replaces it, and a check made on it then fails rather than answering.
   await waitUntil(
-    () => window.evaluate(() => document.querySelector("main.app-shell") !== null),
+    () =>
+      window.evaluate(() => document.querySelector("main.app-shell") !== null).catch(() => false),
     30_000,
   );
 }
