@@ -16,7 +16,7 @@
     "desktop:build": "bun run --cwd apps/desktop build",
     "desktop:start": "bun run --cwd apps/desktop start",
     "desktop:start:verbose": "bun run --cwd apps/desktop start:verbose",
-    "desktop:dev": "bun run --cwd apps/desktop start",
+    "desktop:dev": "bun run --cwd apps/desktop start:dev",
     "desktop:make:mac": "bun run --cwd apps/desktop make:mac",
     "desktop:make:mac:notarized": "bun run --cwd apps/desktop make:mac:notarized",
     "desktop:make:mac:adhoc": "bun run --cwd apps/desktop make:mac:adhoc",

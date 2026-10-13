@@ -4,24 +4,28 @@ set -Eeuo pipefail
 
 usage() {
   cat <<EOF
-Usage: start.sh [--verbose] [<app arguments>]
+Usage: start.sh [--verbose] [--development] [<app arguments>]
 
 Builds File Trail from source and starts it.
 
 Each build step prints one line, and the tools it runs write to out/start.log; the end of
 the log is shown when a step fails. Once File Trail starts, what it prints shows here.
 
-  --verbose  Also show everything the build tools print.
+  --verbose      Also show everything the build tools print.
+  --development  Build with React's development build (its warnings and StrictMode
+                 checks) and nothing minified, instead of the build the app ships with.
 
 Other arguments go to the app, such as --folder <path> or --user-data-dir=<path>.
 EOF
 }
 
 VERBOSE=0
+BUILD_ARGS=()
 APP_ARGS=()
 while (($# > 0)); do
   case "$1" in
     --verbose) VERBOSE=1 ;;
+    --development) BUILD_ARGS+=(--development) ;;
     -h|--help) usage; exit 0 ;;
     *) APP_ARGS+=("$1") ;;
   esac
@@ -37,7 +41,7 @@ cd "${APP_DIR}"
 if [[ "${VERBOSE}" == 1 ]]; then
   bash ./scripts/build-app-icon.sh
   (cd "${NATIVE_FS_DIR}" && npx node-gyp rebuild)
-  bun run build
+  bun run build ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
 else
   mkdir -p "${APP_DIR}/out"
   LOG_FILE="${APP_DIR}/out/start.log"
@@ -57,7 +61,7 @@ else
   step_done
 
   step "Building the app"
-  run bun run build
+  run bun run build ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
   step_done
 fi
 

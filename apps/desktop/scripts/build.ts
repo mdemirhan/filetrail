@@ -23,8 +23,16 @@ const outDir = join(appDir, "dist");
 // app.log stay readable; the renderer is minified fully. React ships its production build:
 // without NODE_ENV it picks the development one, which is about four times the size and
 // runs every effect twice under StrictMode.
-const KEEP_NAMES_MINIFY = { whitespace: true, syntax: true, identifiers: false };
-const PRODUCTION_DEFINE = { "process.env.NODE_ENV": '"production"' };
+// --development builds as before instead: React's development build, with its warnings and
+// StrictMode checks, and nothing minified.
+const development = process.argv.includes("--development");
+const KEEP_NAMES_MINIFY = development
+  ? false
+  : { whitespace: true, syntax: true, identifiers: false };
+const FULL_MINIFY = !development;
+const PRODUCTION_DEFINE: Record<string, string> = development
+  ? {}
+  : { "process.env.NODE_ENV": '"production"' };
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
@@ -37,7 +45,7 @@ copyAppAssets();
 writeThirdPartyLicenses({ appDir, repoDir, outDir });
 writeBuildInfo();
 
-console.log(`Desktop build completed at ${outDir}`);
+console.log(`Desktop ${development ? "development " : ""}build completed at ${outDir}`);
 
 async function buildMainAndPreload(): Promise<void> {
   const mainBuild = await Bun.build({
@@ -85,7 +93,7 @@ async function buildRenderer(): Promise<void> {
     target: "browser",
     format: "esm",
     sourcemap: "linked",
-    minify: true,
+    minify: FULL_MINIFY,
     define: PRODUCTION_DEFINE,
     splitting: false,
   });

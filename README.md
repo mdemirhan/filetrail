@@ -137,7 +137,7 @@ bun install
 bun run desktop:start
 ```
 
-That builds the app and its native helpers and launches it.
+That builds the app and its native helpers and launches it. `bun run desktop:dev` does the same with React's development build and nothing minified, for React's warnings and checks.
 
 While working on the code:
 

@@ -10,6 +10,7 @@
     "build:native": "cd ../../packages/native-fs && npx node-gyp rebuild",
     "start": "bash ./scripts/start.sh",
     "start:verbose": "bash ./scripts/start.sh --verbose",
+    "start:dev": "bash ./scripts/start.sh --development",
     "test:smoke": "playwright test --config ./e2e/playwright.config.ts",
     "make:mac": "bash ./scripts/make-macos-app.sh",
     "make:mac:notarized": "bash ./scripts/make-macos-app.sh --notarize",
