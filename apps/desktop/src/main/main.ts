@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  net,
   BrowserWindow,
   type BrowserWindowConstructorOptions,
   Menu,
@@ -10,6 +11,7 @@ import {
   dialog,
   nativeImage,
   nativeTheme,
+  protocol,
   screen,
   shell,
 } from "electron";
@@ -39,6 +41,12 @@ import { ExplorerWindowController } from "./explorerWindowController";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
 import { loadPageWindow, pageWebPreferences } from "./pageWindows";
+import {
+  RENDERER_ORIGIN,
+  RENDERER_SCHEME,
+  RENDERER_SCHEME_PRIVILEGES,
+  resolveRendererFile,
+} from "./rendererProtocol";
 import { readSettingsTabFromUrl } from "./settingsWindowTab";
 import { WindowTabsRequests } from "./windowIpcHandlers";
 
@@ -65,6 +73,12 @@ const pendingStartupNotices: string[] = [];
 const pendingOpenFiles: string[] = [];
 let startupWindowsOpened = false;
 const PRELOAD_PATH = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
+const RENDERER_DIR = fileURLToPath(new URL("../renderer/", import.meta.url));
+
+// Before the app is ready, as Chromium requires (see rendererProtocol.ts).
+protocol.registerSchemesAsPrivileged([
+  { scheme: RENDERER_SCHEME, privileges: RENDERER_SCHEME_PRIVILEGES },
+]);
 
 if (!hasSingleInstanceLock) {
   app.quit();
@@ -95,6 +109,12 @@ if (hasSingleInstanceLock) {
       });
       appLoggerRef = appLogger;
       installProcessLoggingHandlers(appLogger);
+      protocol.handle(RENDERER_SCHEME, (request) => {
+        const path = resolveRendererFile(RENDERER_DIR, request.url);
+        return path === null
+          ? new Response(null, { status: 404 })
+          : net.fetch(pathToFileURL(path).toString());
+      });
       const startupFolderPath = resolveStartupFolderPath(
         process.argv,
         resolveLaunchWorkingDirectory(),
@@ -611,8 +631,7 @@ function resolveRendererEntryUrl(): string {
   if (rendererUrl && rendererUrl.length > 0) {
     return rendererUrl;
   }
-  const rendererPath = fileURLToPath(new URL("../renderer/index.html", import.meta.url));
-  return pathToFileURL(rendererPath).toString();
+  return `${RENDERER_ORIGIN}/index.html`;
 }
 
 // Native parts of the window (title bar, scroll bars, pickers, the empty window before the
