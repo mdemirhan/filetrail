@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { brotliDecompress } from "node:zlib";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -10,6 +14,10 @@ type LicenseIndexEntry = Omit<Acknowledgement, "text"> & { file: string | null }
 
 const CHROMIUM_ID = "chromium";
 const CHROMIUM_NOTICES_FILE = "LICENSES.chromium.html";
+// The packaged app ships Chromium's notices compressed: 20 MB of HTML that repeats the same
+// licenses many times is 0.2 MB as Brotli.
+const CHROMIUM_NOTICES_COMPRESSED_FILE = `${CHROMIUM_NOTICES_FILE}.br`;
+const brotliDecompressAsync = promisify(brotliDecompress);
 
 // The build's output folder, where the build leaves `build-info.json` and the licenses.
 export function resolveDistDir(
@@ -76,19 +84,35 @@ export function readAcknowledgements(
   }));
 }
 
-// Chromium's notices: inside the packaged app, or beside Electron's own app in a
-// development run.
+// Chromium's notices: inside the packaged app (compressed), or beside Electron's own app in
+// a development run.
 export function resolveChromiumNoticesPath(
   resourcesPath: string = process.resourcesPath,
 ): string | null {
   const candidates = [
+    join(resourcesPath, CHROMIUM_NOTICES_COMPRESSED_FILE),
     join(resourcesPath, CHROMIUM_NOTICES_FILE),
     join(resourcesPath, "..", "..", "..", CHROMIUM_NOTICES_FILE),
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
-// The file a component's separately shipped notices are in; only Chromium has one.
-export function resolveNoticesPath(id: string, resourcesPath?: string): string | null {
-  return id === CHROMIUM_ID ? resolveChromiumNoticesPath(resourcesPath) : null;
+// The file to open for a component's separately shipped notices; only Chromium has one.
+// Compressed notices are unpacked to one file in the temporary folder, which macOS clears;
+// each opening writes it again. Null when there are none, or they could not be unpacked.
+export async function prepareNoticesForOpening(
+  id: string,
+  options: { resourcesPath?: string; tempDir?: string } = {},
+): Promise<string | null> {
+  const path = id === CHROMIUM_ID ? resolveChromiumNoticesPath(options.resourcesPath) : null;
+  if (path === null || !path.endsWith(".br")) {
+    return path;
+  }
+  const unpackedPath = join(options.tempDir ?? tmpdir(), `filetrail-${CHROMIUM_NOTICES_FILE}`);
+  try {
+    await writeFile(unpackedPath, await brotliDecompressAsync(await readFile(path)));
+    return unpackedPath;
+  } catch {
+    return null;
+  }
 }

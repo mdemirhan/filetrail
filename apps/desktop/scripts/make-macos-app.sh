@@ -220,12 +220,36 @@ if [[ -f "${ICON_ICNS}" ]]; then
 fi
 
 # Chromium's license notices ship beside Electron's app, not inside it. The Acknowledgements
-# window opens them from here; the other licenses are in dist/assets/licenses.
+# window opens them from here; the other licenses are in dist/assets/licenses. They go in
+# compressed: 20 MB of HTML that repeats the same licenses is 0.2 MB as Brotli, and the app
+# unpacks them when they are opened (see src/main/aboutInfo.ts).
 CHROMIUM_NOTICES="${APP_DIR}/node_modules/electron/dist/LICENSES.chromium.html"
 if [[ ! -f "${CHROMIUM_NOTICES}" ]]; then
   fail "Missing Chromium license notices: ${CHROMIUM_NOTICES}"
 fi
-cp "${CHROMIUM_NOTICES}" "${APP_BUNDLE}/Contents/Resources/LICENSES.chromium.html"
+node -e '
+  const fs = require("fs");
+  const zlib = require("zlib");
+  const [from, to] = process.argv.slice(1);
+  const html = fs.readFileSync(from);
+  const params = {
+    [zlib.constants.BROTLI_PARAM_QUALITY]: zlib.constants.BROTLI_MAX_QUALITY,
+    [zlib.constants.BROTLI_PARAM_SIZE_HINT]: html.length,
+  };
+  fs.writeFileSync(to, zlib.brotliCompressSync(html, { params }));
+' "${CHROMIUM_NOTICES}" "${APP_BUNDLE}/Contents/Resources/LICENSES.chromium.html.br"
+
+# What File Trail never uses is left out of Electron's app, about 65 MB:
+# - Chromium's own text in other languages. File Trail is in English, and Chromium uses its
+#   English text for a language it has no file for.
+# - SwiftShader, the software Vulkan that WebGL can fall back to without a GPU. File Trail
+#   draws no WebGL; without a GPU its pages are drawn in software all the same.
+# - Electron's default app, which runs only when there is no app to run.
+FRAMEWORK_DIR="${APP_BUNDLE}/Contents/Frameworks/Electron Framework.framework/Versions/A"
+find "${FRAMEWORK_DIR}/Resources" -maxdepth 1 -name '*.lproj' ! -name 'en.lproj' -exec rm -rf {} +
+rm -f "${FRAMEWORK_DIR}/Libraries/libvk_swiftshader.dylib" \
+  "${FRAMEWORK_DIR}/Libraries/vk_swiftshader_icd.json"
+rm -f "${APP_BUNDLE}/Contents/Resources/default_app.asar"
 
 mkdir -p "${RESOURCES_APP}"
 # Electron's app.getVersion() reads the bundled package.json, whose version in the

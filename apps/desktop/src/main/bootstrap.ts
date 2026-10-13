@@ -9,11 +9,11 @@ import type { AppPreferences } from "../shared/appPreferences";
 import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
 import {
   formatMacosVersion,
+  prepareNoticesForOpening,
   readAcknowledgements,
   readBuildCommit,
   readBuildVersion,
   resolveDistDir,
-  resolveNoticesPath,
 } from "./aboutInfo";
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
 import type { AppStateStore } from "./appStateStore";
@@ -353,7 +353,7 @@ export async function bootstrapMainProcess(
       }),
       // The renderer names the component; the file opened is always one the app ships.
       "app:openAcknowledgementNotices": async (payload) => {
-        const noticesPath = resolveNoticesPath(payload.id);
+        const noticesPath = await prepareNoticesForOpening(payload.id);
         return { ok: noticesPath !== null && (await shell.openPath(noticesPath)).length === 0 };
       },
       "app:setMenuState": (payload, event) => {

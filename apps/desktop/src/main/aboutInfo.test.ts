@@ -1,16 +1,17 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { brotliCompressSync } from "node:zlib";
 
 import {
   formatMacosVersion,
+  prepareNoticesForOpening,
   readAcknowledgements,
   readBuildCommit,
   readBuildVersion,
   resolveChromiumNoticesPath,
   resolveDistDir,
-  resolveNoticesPath,
 } from "./aboutInfo";
 
 describe("aboutInfo", () => {
@@ -137,14 +138,57 @@ describe("aboutInfo", () => {
     );
   });
 
-  it("opens notices for Chromium only, whatever name is asked for", () => {
+  it("prefers the compressed notices the packaged app ships", () => {
+    const resources = join(root, "Resources");
+    mkdirSync(resources, { recursive: true });
+    writeFileSync(join(resources, "LICENSES.chromium.html"), "");
+    writeFileSync(join(resources, "LICENSES.chromium.html.br"), "");
+
+    expect(resolveChromiumNoticesPath(resources)).toBe(
+      join(resources, "LICENSES.chromium.html.br"),
+    );
+  });
+
+  it("opens notices for Chromium only, whatever name is asked for", async () => {
     const resources = join(root, "Resources");
     mkdirSync(resources, { recursive: true });
     writeFileSync(join(resources, "LICENSES.chromium.html"), "");
 
-    expect(resolveNoticesPath("chromium", resources)).toBe(
+    expect(await prepareNoticesForOpening("chromium", { resourcesPath: resources })).toBe(
       join(resources, "LICENSES.chromium.html"),
     );
-    expect(resolveNoticesPath("../../etc/passwd", resources)).toBeNull();
+    expect(
+      await prepareNoticesForOpening("../../etc/passwd", { resourcesPath: resources }),
+    ).toBeNull();
+  });
+
+  it("unpacks compressed notices to the temporary folder to open them", async () => {
+    const resources = join(root, "Resources");
+    const tempDir = join(root, "tmp");
+    mkdirSync(resources, { recursive: true });
+    mkdirSync(tempDir);
+    const html = "<html>Chromium notices</html>";
+    writeFileSync(join(resources, "LICENSES.chromium.html.br"), brotliCompressSync(html));
+
+    const opened = await prepareNoticesForOpening("chromium", {
+      resourcesPath: resources,
+      tempDir,
+    });
+
+    expect(opened).toBe(join(tempDir, "filetrail-LICENSES.chromium.html"));
+    expect(readFileSync(join(tempDir, "filetrail-LICENSES.chromium.html"), "utf8")).toBe(html);
+  });
+
+  it("opens nothing when compressed notices can not be unpacked", async () => {
+    const resources = join(root, "Resources");
+    mkdirSync(resources, { recursive: true });
+    writeFileSync(join(resources, "LICENSES.chromium.html.br"), "not brotli");
+
+    expect(
+      await prepareNoticesForOpening("chromium", {
+        resourcesPath: resources,
+        tempDir: join(root, "tmp"),
+      }),
+    ).toBeNull();
   });
 });
