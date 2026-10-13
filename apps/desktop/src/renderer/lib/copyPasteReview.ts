@@ -1,9 +1,5 @@
-import {
-  type CopyPasteChoice,
-  type IpcRequest,
-  type IpcResponse,
-  choiceForConflict,
-} from "@filetrail/contracts";
+import type { CopyPasteChoice, IpcRequest, IpcResponse } from "@filetrail/contracts";
+import { choiceForConflict } from "@filetrail/contracts/copyPasteChoices";
 
 import { formatSize } from "./formatting";
 

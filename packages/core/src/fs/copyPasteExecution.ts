@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 
-import { isAbortError } from "@filetrail/contracts";
+import { isAbortError } from "@filetrail/contracts/abort";
 
 import { analyzeItemAgain, classifyConflict } from "./copyPasteAnalysis";
 import {

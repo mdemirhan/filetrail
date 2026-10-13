@@ -1,7 +1,8 @@
 import { basename, dirname, extname, relative, resolve } from "node:path";
 
 import type { Readable } from "node:stream";
-import { type IpcRequest, type IpcResponse, isMacOSPackageName } from "@filetrail/contracts";
+import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
+import { isMacOSPackageName } from "@filetrail/contracts/itemName";
 
 const SEARCH_RESULT_LIMIT = 20_000;
 

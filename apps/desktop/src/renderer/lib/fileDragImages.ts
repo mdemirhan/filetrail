@@ -1,4 +1,5 @@
-import { type FileDragImage, MAX_FILE_DRAG_IMAGES } from "@filetrail/contracts";
+import type { FileDragImage } from "@filetrail/contracts";
+import { MAX_FILE_DRAG_IMAGES } from "@filetrail/contracts/limits";
 
 // The name in each view: under the icon in Icon view, after it in the lists.
 const NAME_SELECTOR = ".flow-item-label, .details-name-label, .icon-item-label";

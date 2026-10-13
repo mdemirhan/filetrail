@@ -1,9 +1,6 @@
-import {
-  type WriteOperationAction,
-  type WriteOperationProgressEvent,
-  isFollowedMove,
-  isInsideTrash,
-} from "@filetrail/contracts";
+import type { WriteOperationAction, WriteOperationProgressEvent } from "@filetrail/contracts";
+import { isInsideTrash } from "@filetrail/contracts/trash";
+import { isFollowedMove } from "@filetrail/contracts/writeEffects";
 
 import type { ContextMenuState } from "../hooks/useWriteOperations";
 import { parentDirectoryPath } from "./explorerNavigation";

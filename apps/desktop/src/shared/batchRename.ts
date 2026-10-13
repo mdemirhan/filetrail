@@ -3,7 +3,7 @@
 // preview and the rename itself are built from the same plan, so what is shown is what is
 // done. Pure functions only: the folders' contents and the items' dates are passed in.
 
-import { MAX_ITEM_NAME_BYTES, getItemNameError } from "@filetrail/contracts";
+import { MAX_ITEM_NAME_BYTES, getItemNameError } from "@filetrail/contracts/itemName";
 
 export type BatchRenameMode = "replace" | "add" | "format" | "case";
 export type BatchRenameNameFormat = "index" | "counter" | "date";

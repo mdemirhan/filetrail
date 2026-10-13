@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { parentPort, workerData } from "node:worker_threads";
 
-import { ipcContractSchemas } from "@filetrail/contracts";
+import type { IpcRequest } from "@filetrail/contracts";
 import {
   type ExplorerFileSystem,
   getDirectoryMetadataBatch,
@@ -57,11 +57,12 @@ type ExplorerWorkerData = {
   fdBinaryPath?: string;
 };
 
+// The main process sends requests it has checked against the IPC contract
+// (apps/desktop/src/main/ipc.ts) or made itself to the contract's types. They aren't
+// checked again here, which keeps the contract's schemas, and zod, out of the worker.
 type WorkerRequest = {
-  id: string;
-  channel: WorkerSupportedChannel;
-  payload: unknown;
-};
+  [C in WorkerSupportedChannel]: { id: string; channel: C; payload: IpcRequest<C> };
+}[WorkerSupportedChannel];
 
 // Sent by the client before it ends the worker.
 type WorkerCloseRequest = { close: true };
@@ -132,7 +133,7 @@ async function processQueue(): Promise<void> {
 
 async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerResponse> {
   if (message.channel === "tree:getChildren") {
-    const payload = ipcContractSchemas["tree:getChildren"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
@@ -140,7 +141,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     };
   }
   if (message.channel === "directory:getSnapshot") {
-    const payload = ipcContractSchemas["directory:getSnapshot"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
@@ -155,7 +156,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     };
   }
   if (message.channel === "directory:getMetadataBatch") {
-    const payload = ipcContractSchemas["directory:getMetadataBatch"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
@@ -167,7 +168,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     };
   }
   if (message.channel === "item:getProperties") {
-    const payload = ipcContractSchemas["item:getProperties"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
@@ -175,7 +176,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     };
   }
   if (message.channel === "path:getSuggestions") {
-    const payload = ipcContractSchemas["path:getSuggestions"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
@@ -188,7 +189,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     };
   }
   if (message.channel === "path:resolve") {
-    const payload = ipcContractSchemas["path:resolve"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
@@ -196,7 +197,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     };
   }
   if (message.channel === "search:start") {
-    const payload = ipcContractSchemas["search:start"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
@@ -204,7 +205,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     };
   }
   if (message.channel === "search:getUpdate") {
-    const payload = ipcContractSchemas["search:getUpdate"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
@@ -212,14 +213,15 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     };
   }
   if (message.channel === "search:cancel") {
-    const payload = ipcContractSchemas["search:cancel"].request.parse(message.payload);
+    const { payload } = message;
     return {
       id: message.id,
       ok: true,
       payload: searchRuntime.cancelSearch(payload.jobId),
     };
   }
-  throw new Error(`Unsupported worker channel: ${message.channel}`);
+  // Every channel is handled above; a message from something else gets an answer anyway.
+  throw new Error(`Unsupported worker channel: ${(message as { channel: string }).channel}`);
 }
 
 function getQueue(channel: WorkerRequest["channel"]): WorkerRequest[] {

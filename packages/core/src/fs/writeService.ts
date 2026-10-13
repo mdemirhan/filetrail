@@ -1,8 +1,8 @@
+import { isAbortError } from "@filetrail/contracts/abort";
 import {
   getRuntimeConflictChoices,
   getRuntimeConflictScope,
-  isAbortError,
-} from "@filetrail/contracts";
+} from "@filetrail/contracts/copyPasteChoices";
 
 import {
   buildCopyPasteAnalysisReport,

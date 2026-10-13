@@ -1,4 +1,5 @@
-import { type IpcResponse, isMacOSPackageName } from "@filetrail/contracts";
+import type { IpcResponse } from "@filetrail/contracts";
+import { isMacOSPackageName } from "@filetrail/contracts/itemName";
 
 import { isPathWithinRoot } from "./pathUtils";
 

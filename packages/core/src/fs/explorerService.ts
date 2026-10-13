@@ -1,7 +1,8 @@
 import { lstat, readdir, realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 
-import { type IpcRequest, type IpcResponse, isMacOSPackageName } from "@filetrail/contracts";
+import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
+import { isMacOSPackageName } from "@filetrail/contracts/itemName";
 
 export type FileSystemDirent = {
   name: string;

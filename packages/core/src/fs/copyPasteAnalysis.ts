@@ -1,6 +1,6 @@
 import { basename, dirname, join, resolve } from "node:path";
 
-import { withoutNestedPaths } from "@filetrail/contracts";
+import { withoutNestedPaths } from "@filetrail/contracts/paths";
 
 import { describeCopyPasteError } from "./copyPasteErrors";
 import {

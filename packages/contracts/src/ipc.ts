@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { getItemNameError } from "./itemName";
+import { MAX_FILE_DRAG_IMAGES, MAX_PATHS_PER_REQUEST } from "./limits";
+
+export { MAX_FILE_DRAG_IMAGES, MAX_PATHS_PER_REQUEST };
 
 // These schemas are the single source of truth for renderer <-> main IPC payloads.
 // Keep the runtime validators and the inferred TypeScript types aligned here so the
@@ -24,13 +27,8 @@ const absolutePathSchema = z
   .min(1)
   .refine((path) => path.startsWith("/"), { message: "Expected an absolute path." })
   .refine((path) => !path.includes("\0"), { message: "A path can't contain a null character." });
-// Enough for selecting everything in a large folder; the bound only keeps a runaway
-// payload out.
-export const MAX_PATHS_PER_REQUEST = 100_000;
 const absolutePathListSchema = z.array(absolutePathSchema).min(1).max(MAX_PATHS_PER_REQUEST);
 
-// How many dragged items are drawn; Finder draws no more than fit on screen.
-export const MAX_FILE_DRAG_IMAGES = 200;
 const windowRectSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),

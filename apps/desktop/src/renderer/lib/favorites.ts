@@ -1,4 +1,4 @@
-import { isInsideTrash } from "@filetrail/contracts";
+import { isInsideTrash } from "@filetrail/contracts/trash";
 
 import type { FavoriteIconId, FavoritePreference } from "../../shared/appPreferences";
 import type { TreeNodeState } from "../components/TreePane";

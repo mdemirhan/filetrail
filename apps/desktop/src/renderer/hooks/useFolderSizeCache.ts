@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createChangeMatcher, pathsChangedByWrite } from "@filetrail/contracts";
+import { createChangeMatcher, pathsChangedByWrite } from "@filetrail/contracts/writeEffects";
 
 import { isTerminalWriteStatus } from "../lib/explorerAppUtils";
 import type { FiletrailClient } from "../lib/filetrailClient";

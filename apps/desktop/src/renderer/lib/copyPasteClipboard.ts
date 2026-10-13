@@ -1,4 +1,5 @@
-import { type IpcRequest, isFollowedMove } from "@filetrail/contracts";
+import type { IpcRequest } from "@filetrail/contracts";
+import { isFollowedMove } from "@filetrail/contracts/writeEffects";
 
 import {
   collectFollowedMoves,

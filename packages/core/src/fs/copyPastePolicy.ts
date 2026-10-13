@@ -1,6 +1,9 @@
 import { basename, dirname } from "node:path";
 
-import { choiceForConflict, isChoiceAllowedForConflict } from "@filetrail/contracts";
+import {
+  choiceForConflict,
+  isChoiceAllowedForConflict,
+} from "@filetrail/contracts/copyPasteChoices";
 
 import { destinationPathKey, isPackageFolder, resolveDuplicateName } from "./copyPasteNames";
 import type {

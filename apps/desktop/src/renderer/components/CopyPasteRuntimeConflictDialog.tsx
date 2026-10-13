@@ -1,10 +1,7 @@
 import { useRef, useState } from "react";
 
-import {
-  type CopyPasteChoice,
-  type WriteOperationProgressEvent,
-  getRuntimeConflictChoices,
-} from "@filetrail/contracts";
+import type { CopyPasteChoice, WriteOperationProgressEvent } from "@filetrail/contracts";
+import { getRuntimeConflictChoices } from "@filetrail/contracts/copyPasteChoices";
 
 import { CHOICE_LABELS, dirnameOf, formatReviewDate, leafName } from "../lib/copyPasteReview";
 import { formatSize } from "../lib/formatting";

@@ -1,4 +1,4 @@
-import { isInsideTrash } from "@filetrail/contracts";
+import { isInsideTrash } from "@filetrail/contracts/trash";
 
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { CopyPasteClipboardState } from "./copyPasteClipboard";
