@@ -237,6 +237,8 @@ node -e '
   fs.writeFileSync(to, `${JSON.stringify({ ...pkg, version }, null, 2)}\n`);
 ' "${APP_DIR}/package.json" "${RESOURCES_APP}/package.json" "${APP_VERSION}"
 ditto "${APP_DIR}/dist" "${RESOURCES_APP}/dist"
+# The source maps are for Developer Tools in a development run; the app has no use for them.
+find "${RESOURCES_APP}/dist" -name '*.map' -delete
 
 # Copy native-fs addon into the app bundle. The addon provides copyfile(3)
 # with CoW clones and full metadata preservation. Required on macOS.

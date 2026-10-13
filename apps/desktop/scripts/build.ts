@@ -19,6 +19,13 @@ const repoDir = join(appDir, "..", "..");
 const desktopSrcDir = join(appDir, "src");
 const outDir = join(appDir, "dist");
 
+// The main process and the worker keep their names, so the stack traces they write to
+// app.log stay readable; the renderer is minified fully. React ships its production build:
+// without NODE_ENV it picks the development one, which is about four times the size and
+// runs every effect twice under StrictMode.
+const KEEP_NAMES_MINIFY = { whitespace: true, syntax: true, identifiers: false };
+const PRODUCTION_DEFINE = { "process.env.NODE_ENV": '"production"' };
+
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
@@ -42,7 +49,8 @@ async function buildMainAndPreload(): Promise<void> {
     target: "node",
     format: "esm",
     sourcemap: "linked",
-    minify: false,
+    minify: KEEP_NAMES_MINIFY,
+    define: PRODUCTION_DEFINE,
     external: ["electron"],
     naming: {
       entry: "[name].js",
@@ -58,7 +66,8 @@ async function buildMainAndPreload(): Promise<void> {
     target: "node",
     format: "cjs",
     sourcemap: "linked",
-    minify: false,
+    minify: KEEP_NAMES_MINIFY,
+    define: PRODUCTION_DEFINE,
     external: ["electron"],
     naming: {
       entry: "[name].cjs",
@@ -76,7 +85,8 @@ async function buildRenderer(): Promise<void> {
     target: "browser",
     format: "esm",
     sourcemap: "linked",
-    minify: false,
+    minify: true,
+    define: PRODUCTION_DEFINE,
     splitting: false,
   });
   ensureBuildSuccess("renderer", rendererBuild);
