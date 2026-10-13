@@ -84,7 +84,7 @@ export function AboutWindowApp() {
       <div className="page-window-titlebar" />
       <header className="about-header">
         {/* The app's own icon file, copied beside the page by the build. */}
-        <img className="about-icon" src="../assets/icons/filetrail.svg" alt="" />
+        <img className="about-icon" src="./filetrail.svg" alt="" />
         <div>
           <h1 className="about-name">{APP_NAME}</h1>
           <p className="about-tagline">{APP_TAGLINE}</p>

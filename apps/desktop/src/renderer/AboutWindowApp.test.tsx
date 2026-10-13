@@ -41,10 +41,7 @@ describe("AboutWindowApp", () => {
 
     expect(screen.getByRole("heading", { name: "File Trail" })).toBeInTheDocument();
     expect(screen.getByText("A file browser that stays out of your way.")).toBeInTheDocument();
-    expect(document.querySelector("img.about-icon")).toHaveAttribute(
-      "src",
-      "../assets/icons/filetrail.svg",
-    );
+    expect(document.querySelector("img.about-icon")).toHaveAttribute("src", "./filetrail.svg");
     expect(await screen.findByText("0.1.0 (df11088)")).toBeInTheDocument();
     expect(screen.getByText("27.0, Apple silicon")).toBeInTheDocument();
     expect(screen.getByText("44.4.5")).toBeInTheDocument();

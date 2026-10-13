@@ -112,6 +112,13 @@ function copyRendererHtml(): void {
 }
 
 function copyRendererAssets(): void {
+  // The app's icon, which the About window shows, beside the page: the page is served from
+  // filetrail://app/ (see src/main/rendererProtocol.ts), which serves only the renderer's
+  // own folder.
+  cpSync(
+    join(appDir, "assets", "icons", "filetrail.svg"),
+    join(outDir, "renderer", "filetrail.svg"),
+  );
   const sourceAssetsDir = join(desktopSrcDir, "renderer", "assets");
   if (!existsSync(sourceAssetsDir)) {
     return;
