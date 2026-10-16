@@ -1504,7 +1504,7 @@ export function SettingsView({
             />
             <SettingRow
               title="Calculate folder sizes automatically"
-              desc="In the Info panel, for a folder in your home folder or an app."
+              desc="In the Info panel and Info Row, for a folder in your home folder or an app."
               right={
                 <Toggle
                   checked={autoCalculateFolderSizes}

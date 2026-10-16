@@ -52,6 +52,29 @@ describe("getAutoFolderSizePath", () => {
     expect(getAutoFolderSizePath({ ...base, homePath: "" })).toBeNull();
   });
 
+  it("measures the one folder selected with only the Info Row open", () => {
+    const row = { ...base, infoPanelOpen: false, infoRowOpen: true };
+    expect(getAutoFolderSizePath(row)).toBe(folder.path);
+    expect(
+      getAutoFolderSizePath({ ...row, selectedPaths: [folder.path, `${HOME}/Music`] }),
+    ).toBeNull();
+    // The row shows the selection, whatever Show Info put in the closed panel.
+    const shown = { path: `${HOME}/Music`, kind: "directory" as const };
+    expect(getAutoFolderSizePath({ ...row, showInfoPath: shown.path, infoItem: shown })).toBe(
+      folder.path,
+    );
+    // With both open, the panel's item.
+    expect(
+      getAutoFolderSizePath({
+        ...row,
+        infoPanelOpen: true,
+        showInfoPath: shown.path,
+        infoItem: shown,
+      }),
+    ).toBe(shown.path);
+    expect(getAutoFolderSizePath({ ...row, infoRowOpen: false })).toBeNull();
+  });
+
   it("measures an app outside the home folder", () => {
     const app = { path: "/Applications/Keynote.app", kind: "bundle" as const };
     expect(getAutoFolderSizePath({ ...base, selectedPaths: [app.path], selectedEntry: app })).toBe(
@@ -156,6 +179,33 @@ describe("useAutoFolderSize", () => {
     await waitOutDelay();
     expect(sizes.calculateFolderSize.mock.calls).toEqual([
       ["/Users/demo/b", false, { automatic: true }],
+    ]);
+  });
+
+  it("waits the same moment for the Info Row's folder as for the panel's", async () => {
+    const sizes = createFolderSizes();
+    const pathFor = (selected: string) =>
+      getAutoFolderSizePath({
+        infoPanelOpen: false,
+        infoRowOpen: true,
+        selectedPaths: [selected],
+        selectedEntry: { path: selected, kind: "directory" },
+        homePath: HOME,
+      });
+    const { rerender } = renderHook(({ path }) => useAutoFolderSize(path, sizes), {
+      initialProps: { path: pathFor(`${HOME}/a`) },
+    });
+    // Arrowing through the list: each folder selected for less than the delay.
+    for (const name of ["b", "c", "d"]) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AUTO_FOLDER_SIZE_DELAY_MS - 100);
+      });
+      rerender({ path: pathFor(`${HOME}/${name}`) });
+    }
+    expect(sizes.calculateFolderSize).not.toHaveBeenCalled();
+    await waitOutDelay();
+    expect(sizes.calculateFolderSize.mock.calls).toEqual([
+      [`${HOME}/d`, false, { automatic: true }],
     ]);
   });
 

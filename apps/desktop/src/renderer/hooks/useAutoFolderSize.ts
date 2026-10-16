@@ -4,16 +4,19 @@ import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
 import type { DirectoryEntry } from "../lib/explorerTypes";
 import type { FolderSizeEntry } from "./useFolderSizeCache";
 
-// How long a folder stays selected before it is measured, so moving through the list
-// with the arrow keys does not start a calculation for every folder passed.
+// How long a folder stays selected (or in the Info panel) before it is measured, so moving
+// through the list with the arrow keys does not start a calculation for every folder
+// passed. The Info panel and the Info Row both wait it out: they share one measurement.
 export const AUTO_FOLDER_SIZE_DELAY_MS = 500;
 
-// The folder the Info panel measures by itself: the item Show Info put in it, or else the
-// one item selected, when it is a folder in the home folder or a bundle (an app) anywhere.
-// Not the folder on screen, nor several items, nor a folder outside home (a disk,
-// Macintosh HD), where a walk can take minutes.
+// The folder the Info panel or the Info Row measures by itself: the item Show Info put in
+// the panel, or else the one item selected, when it is a folder in the home folder or a
+// bundle (an app) anywhere. Not the folder on screen, nor several items, nor a folder
+// outside home (a disk, Macintosh HD), where a walk can take minutes.
 export function getAutoFolderSizePath(args: {
   infoPanelOpen: boolean;
+  // The Info Row shows the selection, never Show Info's item.
+  infoRowOpen?: boolean;
   selectedPaths: readonly string[];
   selectedEntry: Pick<DirectoryEntry, "path" | "kind"> | null;
   // The path Show Info put in the panel, null while the panel follows the selection, and
@@ -23,12 +26,13 @@ export function getAutoFolderSizePath(args: {
   homePath: string;
 }): string | null {
   const { infoPanelOpen, selectedPaths, selectedEntry, homePath } = args;
-  const { showInfoPath = null, infoItem = null } = args;
-  if (!infoPanelOpen) {
+  const { infoRowOpen = false, showInfoPath = null, infoItem = null } = args;
+  if (!infoPanelOpen && !infoRowOpen) {
     return null;
   }
+  // With both open, the panel's item: one measurement at a time.
   const item =
-    showInfoPath !== null
+    infoPanelOpen && showInfoPath !== null
       ? infoItem?.path === showInfoPath
         ? infoItem
         : null
