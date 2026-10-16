@@ -2,6 +2,10 @@ import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 
+import type { OpenRequest } from "@filetrail/contracts";
+
+import { isDiskImagePath } from "../shared/diskImages";
+
 type FileSystem = {
   statSync: (path: string) => { isDirectory: () => boolean };
 };
@@ -36,6 +40,24 @@ export function resolveStartupFolderPath(
 
   try {
     return fileSystem.statSync(candidatePath).isDirectory() ? candidatePath : null;
+  } catch {
+    return null;
+  }
+}
+
+// What File Trail does with an item macOS asks it to open (Finder's Open With, a drop on the
+// Dock icon, `open -a "File Trail" <path>`): a disk image is opened, a folder is shown, and
+// any other item is shown selected in its folder. Null for one that isn't there.
+export function describeOpenedPath(
+  path: string,
+  fileSystem: FileSystem = DEFAULT_FILE_SYSTEM,
+): OpenRequest | null {
+  // Before the folder test: a sparse bundle is a folder.
+  if (isDiskImagePath(path)) {
+    return { path, kind: "diskImage" };
+  }
+  try {
+    return { path, kind: fileSystem.statSync(path).isDirectory() ? "folder" : "reveal" };
   } catch {
     return null;
   }

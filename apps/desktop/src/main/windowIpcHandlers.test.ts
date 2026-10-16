@@ -2,6 +2,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { OpenRequest } from "@filetrail/contracts";
+
 import type { OpenTabPreference } from "../shared/appPreferences";
 import { createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import {
@@ -48,7 +50,7 @@ function setUp() {
       startupFolderPath: senderId === 1 ? "/Users/demo" : null,
       restoreTabs: false,
     })),
-    takeOpenRequests: vi.fn((_senderId: number | null): string[] => []),
+    takeOpenRequests: vi.fn((_senderId: number | null): OpenRequest[] => []),
     openExplorerWindow: vi.fn(() => true),
     mergeExplorerWindows: vi.fn(async () => [tab("/Users/demo/merged")]),
     answerMergeRequest: vi.fn(),
@@ -102,9 +104,11 @@ describe("createWindowIpcHandlers", () => {
       startupFolderPath: "/Users/demo",
       restoreTabs: false,
     });
-    windows.takeOpenRequests.mockReturnValueOnce(["/Users/demo/Install.dmg"]);
+    windows.takeOpenRequests.mockReturnValueOnce([
+      { path: "/Users/demo/Install.dmg", kind: "diskImage" },
+    ]);
     expect(await handlers["app:takeOpenRequests"]({}, from(1))).toEqual({
-      paths: ["/Users/demo/Install.dmg"],
+      requests: [{ path: "/Users/demo/Install.dmg", kind: "diskImage" }],
     });
     expect(windows.takeOpenRequests).toHaveBeenCalledWith(1);
     expect(

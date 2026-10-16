@@ -560,21 +560,23 @@ describe("ExplorerWindowController opening windows", () => {
   });
 });
 
-describe("ExplorerWindowController files opened from another app", () => {
+describe("ExplorerWindowController items opened from another app", () => {
+  const IMAGE = { path: "/Users/demo/Install.dmg", kind: "diskImage" } as const;
+
   it("gives them to the window in front, once, and tells it they are waiting", () => {
     const { controller, windows } = setUpWithWindows(2);
     const [back, front] = windows;
     front?.webContents.send.mockClear();
 
-    controller.openFromOtherApp("/Users/demo/Install.dmg");
-    controller.openFromOtherApp("/Users/demo/Other.dmg");
+    controller.openFromOtherApp(IMAGE);
+    controller.openFromOtherApp({ path: "/Users/demo/Projects", kind: "folder" });
 
     expect(front?.webContents.send).toHaveBeenCalledWith("filetrail:openRequestsWaiting");
     expect(back?.webContents.send).not.toHaveBeenCalledWith("filetrail:openRequestsWaiting");
     expect(controller.takeOpenRequests(back?.webContents.id ?? null)).toEqual([]);
     expect(controller.takeOpenRequests(front?.webContents.id ?? null)).toEqual([
-      "/Users/demo/Install.dmg",
-      "/Users/demo/Other.dmg",
+      IMAGE,
+      { path: "/Users/demo/Projects", kind: "folder" },
     ]);
     expect(controller.takeOpenRequests(front?.webContents.id ?? null)).toEqual([]);
   });
@@ -582,7 +584,7 @@ describe("ExplorerWindowController files opened from another app", () => {
   it("says so with no window open to take them, and brings back a minimized one", () => {
     const { controller, windows } = setUp();
 
-    expect(controller.openFromOtherApp("/Users/demo/Install.dmg")).toBe(false);
+    expect(controller.openFromOtherApp(IMAGE)).toBe(false);
     expect(windows).toHaveLength(0);
 
     controller.openStartupWindows(null);
@@ -591,7 +593,7 @@ describe("ExplorerWindowController files opened from another app", () => {
       window.visible = true;
       window.minimized = true;
     }
-    expect(controller.openFromOtherApp("/Users/demo/Install.dmg")).toBe(true);
+    expect(controller.openFromOtherApp(IMAGE)).toBe(true);
     expect(windows).toHaveLength(1);
     expect(window?.minimized).toBe(false);
   });
@@ -609,6 +611,22 @@ describe("ExplorerWindowController files opened from another app", () => {
       restoreTabs: false,
     });
     expect(store.getWindowPreferences(opened?.recordId ?? "").openTabs).toEqual([]);
+    expect(controller.takeOpenRequests(opened?.webContents.id ?? null)).toEqual([]);
+  });
+
+  it("opens a window on an item's folder, which then selects the item", () => {
+    const { controller, windows } = setUp();
+
+    controller.openWindowOnFolder("/Users/demo/Notes", "/Users/demo/Notes/todo.txt");
+
+    const opened = windows[0];
+    expect(controller.launchContextFor(opened?.webContents.id ?? null)).toEqual({
+      startupFolderPath: "/Users/demo/Notes",
+      restoreTabs: false,
+    });
+    expect(controller.takeOpenRequests(opened?.webContents.id ?? null)).toEqual([
+      { path: "/Users/demo/Notes/todo.txt", kind: "select" },
+    ]);
   });
 
   it("opens nothing while quitting", async () => {
@@ -616,7 +634,7 @@ describe("ExplorerWindowController files opened from another app", () => {
     void controller.quit();
     await settle();
 
-    expect(controller.openFromOtherApp("/Users/demo/Install.dmg")).toBe(true);
+    expect(controller.openFromOtherApp(IMAGE)).toBe(true);
     controller.openWindowOnFolder("/Volumes/Install");
 
     expect(windows).toHaveLength(1);

@@ -1,4 +1,4 @@
-import { resolveStartupFolderPath } from "./launchContext";
+import { describeOpenedPath, resolveStartupFolderPath } from "./launchContext";
 
 describe("launchContext", () => {
   it("reads an explicit --folder path", () => {
@@ -117,5 +117,39 @@ describe("launchContext", () => {
         },
       }),
     ).toBeNull();
+  });
+});
+
+describe("describeOpenedPath", () => {
+  const folders = new Set(["/Users/demo/src", "/Users/demo/Backup.sparsebundle"]);
+  const fileSystem = {
+    statSync: (path: string) => {
+      if (path === "/Users/demo/gone.txt") {
+        throw new Error("ENOENT");
+      }
+      return { isDirectory: () => folders.has(path) };
+    },
+  };
+
+  it("shows a folder, and shows any other item in its folder", () => {
+    expect(describeOpenedPath("/Users/demo/src", fileSystem)).toEqual({
+      path: "/Users/demo/src",
+      kind: "folder",
+    });
+    expect(describeOpenedPath("/Users/demo/notes.txt", fileSystem)).toEqual({
+      path: "/Users/demo/notes.txt",
+      kind: "reveal",
+    });
+  });
+
+  it("opens a disk image, a sparse bundle (a folder) too", () => {
+    expect(describeOpenedPath("/Users/demo/Install.dmg", fileSystem)?.kind).toBe("diskImage");
+    expect(describeOpenedPath("/Users/demo/Backup.sparsebundle", fileSystem)?.kind).toBe(
+      "diskImage",
+    );
+  });
+
+  it("leaves out an item that isn't there", () => {
+    expect(describeOpenedPath("/Users/demo/gone.txt", fileSystem)).toBeNull();
   });
 });

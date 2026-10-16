@@ -38,6 +38,7 @@ import {
   createAppHarness,
   createDirectoryEntry,
   expectNoRefusedRequests,
+  focusTreePane,
   renderApp,
   selectItem,
 } from "./test/appHarness";
@@ -682,15 +683,71 @@ describe("opening a disk image", () => {
 
   it("opens one opened with File Trail from Finder, waiting since before the window opened", async () => {
     const harness = createImageHarness({ preferences: { diskImageOpensIn: "tab" } });
-    harness.emitOpenRequests([IMAGE]);
+    harness.emitOpenRequests([{ path: IMAGE, kind: "diskImage" }]);
     renderApp(harness);
 
     await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
     expect(shownFolder()).toBe("/Volumes/Install");
 
-    harness.emitOpenRequests([IMAGE]);
+    harness.emitOpenRequests([{ path: IMAGE, kind: "diskImage" }]);
     await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(3));
     expect(imageRequests(harness)).toHaveLength(2);
+  });
+});
+
+describe("items opened with File Trail from another app", () => {
+  const NOTES = "/Users/demo/Folder/notes.txt";
+
+  function selectedPaths(): string[] {
+    return Array.from(document.querySelectorAll('[data-selected="true"]'), (element) =>
+      element.getAttribute("title"),
+    ).filter((title): title is string => title !== null);
+  }
+
+  function expectContentFocused(focused: boolean) {
+    expect(screen.getByTestId("content-focused")).toHaveTextContent(String(focused));
+  }
+
+  it("opens a folder in a new tab, with the list given the keyboard", async () => {
+    const harness = createHarness();
+    renderApp(harness);
+    await vi.waitFor(() => expect(shownFolder()).toBe("/Users/demo"));
+    await focusTreePane();
+    expectContentFocused(false);
+
+    harness.emitOpenRequests([{ path: "/Users/demo/Folder", kind: "folder" }]);
+
+    await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    await vi.waitFor(() => expect(shownFolder()).toBe("/Users/demo/Folder"));
+    await vi.waitFor(() => expectContentFocused(true));
+  });
+
+  it("selects any other item in its folder, in a new tab, with the list given the keyboard", async () => {
+    const harness = createHarness();
+    harness.setDirectoryEntries("/Users/demo/Folder", [createDirectoryEntry(NOTES, "file")]);
+    renderApp(harness);
+    await vi.waitFor(() => expect(shownFolder()).toBe("/Users/demo"));
+    await focusTreePane();
+    expectContentFocused(false);
+
+    harness.emitOpenRequests([{ path: NOTES, kind: "reveal" }]);
+
+    await vi.waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    await vi.waitFor(() => expect(shownFolder()).toBe("/Users/demo/Folder"));
+    await vi.waitFor(() => expect(selectedPaths()).toEqual([NOTES]));
+    await vi.waitFor(() => expectContentFocused(true));
+  });
+
+  it("selects the item a window was opened on its folder for, in the tab it opened with", async () => {
+    const harness = createHarness();
+    harness.emitOpenRequests([{ path: "/Users/demo/source.txt", kind: "select" }]);
+    renderApp(harness);
+
+    await vi.waitFor(() => expect(selectedPaths()).toEqual(["/Users/demo/source.txt"]));
+    expect(shownFolder()).toBe("/Users/demo");
+    // One tab shows no tab bar.
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    await vi.waitFor(() => expectContentFocused(true));
   });
 });
 

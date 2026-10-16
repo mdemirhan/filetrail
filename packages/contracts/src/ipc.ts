@@ -645,6 +645,18 @@ export const launchContextSchema = z.object({
   initialCommand: z.string().min(1).optional(),
 });
 
+// An item opened with File Trail from another app (Finder's Open With, a drop on the Dock
+// icon, `open -a "File Trail" <path>`), as the window in front is to open it: a disk image
+// is opened, a folder is shown in a new tab, and any other item ("reveal") is selected in
+// its folder in a new tab. "select" selects an item in the folder the window opened on: a
+// window opened for it, when none was open.
+export const openRequestSchema = z.object({
+  path: z.string().min(1),
+  kind: z.enum(["diskImage", "folder", "reveal", "select"]),
+});
+
+export type OpenRequest = z.infer<typeof openRequestSchema>;
+
 // The items Copy or Cut put on the app's clipboard, which every window shares.
 export const copyPasteClipboardSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("empty") }),
@@ -899,12 +911,12 @@ export const ipcContractSchemas = {
     request: emptyRequestSchema,
     response: launchContextSchema,
   },
-  // Files opened with File Trail from another app (a disk image from Finder's Open With),
-  // given to the window in front for it to open; each is handed out once. The window is
-  // told there are some with `filetrail:openRequestsWaiting`, and asks once it has opened.
+  // Items opened with File Trail from another app, given to the window in front for it to
+  // open; each is handed out once. The window is told there are some with
+  // `filetrail:openRequestsWaiting`, and asks once it has opened.
   "app:takeOpenRequests": {
     request: emptyRequestSchema,
-    response: z.object({ paths: z.array(z.string()) }),
+    response: z.object({ requests: z.array(openRequestSchema) }),
   },
   // A new explorer window with these tabs (New Window, Open in New Window, Move Tab to New
   // Window), with the panels of the window asking.

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
+import type {
+  IpcRequest,
+  IpcResponse,
+  OpenRequest,
+  WriteOperationProgressEvent,
+} from "@filetrail/contracts";
 
 import {
   type AppPreferences,
@@ -1645,9 +1650,31 @@ export function App() {
     }
   }, [preferencesReady, runRendererCommand]);
 
-  // Disk images opened with File Trail from Finder (Open With) or another app: this window
-  // opens them once it has opened, and again whenever it is told more are waiting.
-  const openDiskImageRef = useLatest(openDiskImage);
+  // Items opened with File Trail from Finder (Open With), a drop on the Dock icon or
+  // `open -a`: this window opens them once it has opened, and again whenever it is told
+  // more are waiting. A disk image opens as one opened here, a folder in a new tab, and any
+  // other item is selected in its folder in a new tab, with the list given the keyboard.
+  const openRequestRef = useLatest((request: OpenRequest) => {
+    if (request.kind === "diskImage") {
+      void openDiskImage(request.path);
+      return;
+    }
+    if (request.kind === "folder") {
+      openPathInNewTab(request.path, { focusContent: true });
+      return;
+    }
+    const folderPath = parentDirectoryPath(request.path);
+    if (folderPath === null) {
+      return;
+    }
+    if (request.kind === "reveal") {
+      openPathInNewTab(folderPath, { selectPath: request.path });
+    } else if (currentPathRef.current === folderPath) {
+      // A window opened on the item's folder for it.
+      setSingleContentSelection(request.path);
+      focusContentPane();
+    }
+  });
   useEffect(() => {
     if (!preferencesReady) {
       return;
@@ -1655,9 +1682,9 @@ export function App() {
     const takeOpenRequests = () => {
       void client
         .invoke("app:takeOpenRequests", {})
-        .then(({ paths }) => {
-          for (const path of paths) {
-            void openDiskImageRef.current(path);
+        .then(({ requests }) => {
+          for (const request of requests) {
+            openRequestRef.current(request);
           }
         })
         .catch(() => undefined);
@@ -1665,7 +1692,7 @@ export function App() {
     const unsubscribe = client.onOpenRequestsWaiting?.(takeOpenRequests);
     takeOpenRequests();
     return () => unsubscribe?.();
-  }, [client, preferencesReady, openDiskImageRef]);
+  }, [client, preferencesReady, openRequestRef]);
 
   useEffect(
     () => () => {

@@ -1,3 +1,5 @@
+import type { OpenRequest } from "@filetrail/contracts";
+
 import { OPEN_TABS_LIMIT, type OpenTabPreference } from "../shared/appPreferences";
 import type { RendererCommandType } from "../shared/rendererCommands";
 import {
@@ -180,8 +182,8 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
   // Windows whose page has been given its launch folder and command: they are for that
   // page only, not for it loaded again.
   private readonly launchContextGiven = new WeakSet<ExplorerWindowEntry<W>>();
-  // Files opened with File Trail from another app, waiting for the window to open them.
-  private readonly openRequests = new WeakMap<ExplorerWindowEntry<W>, string[]>();
+  // Items opened with File Trail from another app, waiting for the window to open them.
+  private readonly openRequests = new WeakMap<ExplorerWindowEntry<W>, OpenRequest[]>();
 
   constructor(private readonly host: ExplorerWindowHost<W>) {}
 
@@ -393,10 +395,10 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     };
   }
 
-  // A file opened with File Trail from another app (a disk image from Finder's Open With):
-  // the window in front opens it. The window is told so; a window still opening asks for
-  // its files once it has opened. False when no window is open to take it.
-  openFromOtherApp(path: string): boolean {
+  // An item opened with File Trail from another app (Finder's Open With, `open -a`): the
+  // window in front opens it. The window is told so; a window still opening asks for its
+  // items once it has opened. False when no window is open to take it.
+  openFromOtherApp(request: OpenRequest): boolean {
     if (this.shuttingDown) {
       return true;
     }
@@ -404,10 +406,7 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     if (!entry) {
       return false;
     }
-    const waiting = this.openRequests.get(entry) ?? [];
-    waiting.push(path);
-    this.openRequests.set(entry, waiting);
-    entry.window.webContents.send("filetrail:openRequestsWaiting");
+    this.addOpenRequest(entry, request);
     // A window not shown yet (opening, or at startup) is shown when it is ready.
     if (entry.window.isMinimized()) {
       entry.window.restore();
@@ -418,9 +417,10 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
     return true;
   }
 
-  // A window on one folder (a disk image's disk, opened with no window open), where the
-  // window closed last was and with its panels, but none of its tabs.
-  openWindowOnFolder(path: string): void {
+  // A window on one folder (a disk image's disk, or a folder or item opened from another
+  // app, with no window open), where the window closed last was and with its panels, but
+  // none of its tabs. `selectPath`, an item in the folder, is selected once it has opened.
+  openWindowOnFolder(path: string, selectPath?: string): void {
     if (this.shuttingDown) {
       return;
     }
@@ -431,11 +431,26 @@ export class ExplorerWindowController<W extends ExplorerWindowLike> {
       activeTabIndex: 0,
     });
     this.host.store.addExplorerWindow(record);
-    this.open(record, { launchFolderPath: path, restoreTabs: false, place: "front" });
+    const window = this.open(record, {
+      launchFolderPath: path,
+      restoreTabs: false,
+      place: "front",
+    });
+    const entry = this.list.byWindow(window);
+    if (selectPath !== undefined && entry) {
+      this.addOpenRequest(entry, { path: selectPath, kind: "select" });
+    }
   }
 
-  // The files waiting for this window to open them; each is handed out once.
-  takeOpenRequests(senderId: number | null): string[] {
+  private addOpenRequest(entry: ExplorerWindowEntry<W>, request: OpenRequest): void {
+    const waiting = this.openRequests.get(entry) ?? [];
+    waiting.push(request);
+    this.openRequests.set(entry, waiting);
+    entry.window.webContents.send("filetrail:openRequestsWaiting");
+  }
+
+  // The items waiting for this window to open them; each is handed out once.
+  takeOpenRequests(senderId: number | null): OpenRequest[] {
     const entry = this.list.byWebContentsId(senderId);
     if (!entry) {
       return [];

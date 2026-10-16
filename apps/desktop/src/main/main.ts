@@ -16,10 +16,15 @@ import {
   shell,
 } from "electron";
 
-import { type HelpTopic, type SettingsTab, helpTopicSchema } from "@filetrail/contracts";
+import {
+  type HelpTopic,
+  type OpenRequest,
+  type SettingsTab,
+  helpTopicSchema,
+} from "@filetrail/contracts";
 
 import type { AppPreferences } from "../shared/appPreferences";
-import { describeDiskImageFailure, isDiskImagePath } from "../shared/diskImages";
+import { describeDiskImageFailure } from "../shared/diskImages";
 import { resolveShortcuts } from "../shared/shortcuts";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
 import { APP_MENU_NAME, createApplicationMenuTemplate } from "./appMenu";
@@ -39,7 +44,7 @@ import {
 } from "./bootstrap";
 import { ExplorerWindowController } from "./explorerWindowController";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
-import { resolveStartupFolderPath } from "./launchContext";
+import { describeOpenedPath, resolveStartupFolderPath } from "./launchContext";
 import { loadPageWindow, pageWebPreferences } from "./pageWindows";
 import {
   RENDERER_ORIGIN,
@@ -69,8 +74,8 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let processLoggingHandlersInstalled = false;
 // Found while starting, before the window opened; shown once it has.
 const pendingStartupNotices: string[] = [];
-// Disk images macOS asked File Trail to open before its windows were open.
-const pendingOpenFiles: string[] = [];
+// Items macOS asked File Trail to open before its windows were open.
+const pendingOpenRequests: OpenRequest[] = [];
 let startupWindowsOpened = false;
 const PRELOAD_PATH = fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
 const RENDERER_DIR = fileURLToPath(new URL("../renderer/", import.meta.url));
@@ -262,10 +267,10 @@ if (hasSingleInstanceLock) {
         ]),
       );
       explorerWindows.openStartupWindows(startupFolderPath);
-      // Disk images File Trail was launched to open go to the window in front.
+      // Items File Trail was launched to open go to the window in front.
       startupWindowsOpened = true;
-      for (const path of pendingOpenFiles.splice(0)) {
-        openDiskImageFromOtherApp(path);
+      for (const request of pendingOpenRequests.splice(0)) {
+        openFromOtherApp(request);
       }
       const frontWindow = explorerWindows.frontWindow();
       if (frontWindow) {
@@ -305,20 +310,22 @@ if (hasSingleInstanceLock) {
   // Electron would quit.)
   app.on("window-all-closed", () => undefined);
 
-  // A disk image opened with File Trail from Finder (Open With) or another app opens in a
-  // tab, as one opened in File Trail does. macOS sends it before the app is ready when it
-  // launches File Trail to open it: it waits for the windows. Other files aren't File
-  // Trail's to open.
+  // An item opened with File Trail from Finder (Open With), a drop on the Dock icon or
+  // `open -a "File Trail" <path>`: a disk image opens as one opened in File Trail does, a
+  // folder opens in a new tab, and any other item is selected in its folder in a new tab.
+  // macOS sends it before the app is ready when it launches File Trail to open it: it
+  // waits for the windows.
   app.on("open-file", (event, path) => {
-    if (!isDiskImagePath(path)) {
+    const request = describeOpenedPath(path);
+    if (!request) {
       return;
     }
     event.preventDefault();
-    appLoggerRef?.info("[filetrail] open file", { path });
+    appLoggerRef?.info("[filetrail] open file", { path, kind: request.kind });
     if (startupWindowsOpened) {
-      openDiskImageFromOtherApp(path);
+      openFromOtherApp(request);
     } else {
-      pendingOpenFiles.push(path);
+      pendingOpenRequests.push(request);
     }
   });
 
@@ -330,12 +337,22 @@ if (hasSingleInstanceLock) {
   });
 }
 
-// A disk image opened from another app goes to the window in front, which opens it as one
-// opened there. With no window open it is mounted here and its disk opens in a window of
-// its own; an error is shown on its own, with no window to show it in.
-function openDiskImageFromOtherApp(path: string): void {
+// An item opened from another app goes to the window in front, which opens it. With no
+// window open, a folder opens in a window of its own, and so does the folder another item
+// is in, with the item selected. A disk image is mounted here and its disk opens in a
+// window of its own; an error is shown on its own, with no window to show it in.
+function openFromOtherApp(request: OpenRequest): void {
   const explorerWindows = explorerWindowsRef;
-  if (!explorerWindows || explorerWindows.openFromOtherApp(path)) {
+  if (!explorerWindows || explorerWindows.openFromOtherApp(request)) {
+    return;
+  }
+  const { path } = request;
+  if (request.kind === "folder") {
+    explorerWindows.openWindowOnFolder(path);
+    return;
+  }
+  if (request.kind !== "diskImage") {
+    explorerWindows.openWindowOnFolder(dirname(path), path);
     return;
   }
   void openDiskImage(path).then((response) => {

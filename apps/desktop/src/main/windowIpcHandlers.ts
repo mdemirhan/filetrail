@@ -1,4 +1,4 @@
-import type { IpcResponse } from "@filetrail/contracts";
+import type { IpcResponse, OpenRequest } from "@filetrail/contracts";
 
 import {
   type AppPreferences,
@@ -21,8 +21,8 @@ export type WindowHost = {
   // What an explorer window opens with: the launch folder for the window in front at
   // startup, and whether it opens the tabs it was given.
   launchContextFor: (senderId: number | null) => IpcResponse<"app:getLaunchContext">;
-  // Files opened with File Trail from another app, waiting for this window to open them.
-  takeOpenRequests: (senderId: number | null) => string[];
+  // Items opened with File Trail from another app, waiting for this window to open them.
+  takeOpenRequests: (senderId: number | null) => OpenRequest[];
   // Opens a window with the tabs; false when none was opened.
   openExplorerWindow: (
     senderId: number | null,
@@ -139,7 +139,7 @@ export function createWindowIpcHandlers(deps: {
     },
     "app:getLaunchContext": (_payload, event) => windows.launchContextFor(senderIdOf(event)),
     "app:takeOpenRequests": (_payload, event) => ({
-      paths: windows.takeOpenRequests(senderIdOf(event)),
+      requests: windows.takeOpenRequests(senderIdOf(event)),
     }),
     "app:updatePreferences": (payload, event) => {
       const senderId = senderIdOf(event);

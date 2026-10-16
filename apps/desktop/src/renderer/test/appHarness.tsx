@@ -8,6 +8,7 @@ import {
   type IpcChannel,
   type IpcRequestInput,
   type IpcResponse,
+  type OpenRequest,
   type Volume,
   type WriteOperationAdoption,
   type WriteOperationProgressEvent,
@@ -354,8 +355,8 @@ export function createAppHarness(
   holdAdoption: (adoption: WriteOperationAdoption) => void;
   // Merge All Windows in another window asks for this window's tabs.
   emitMergeRequest: (requestId: string) => void;
-  // Files opened with File Trail from another app wait for the window, which is told so.
-  emitOpenRequests: (paths: string[]) => void;
+  // Items opened with File Trail from another app wait for the window, which is told so.
+  emitOpenRequests: (requests: OpenRequest[]) => void;
   // A disk mounted or unmounted: the disks mounted now, as the main process sends them.
   emitVolumesChanged: (volumes: Volume[]) => void;
   // Preferences changed in another window (Settings), as main passes them on.
@@ -446,7 +447,7 @@ export function createAppHarness(
   const fileDragEnds: Array<(response: IpcResponse<"system:startFileDrag">) => void> = [];
   const goneFromDisk = new Set<string>();
   // Files opened with File Trail from another app, waiting for the window to ask for them.
-  const openRequests: string[] = [];
+  const openRequests: OpenRequest[] = [];
   let openRequestsListener: (() => void) | null = null;
   let volumesListener: ((volumes: Volume[]) => void) | null = null;
   let draggedIn: IpcResponse<"system:readDraggedIn"> = {
@@ -541,7 +542,7 @@ export function createAppHarness(
         return { volumes: args.volumes ?? [] } as IpcResponse<C>;
       }
       if (channel === "app:takeOpenRequests") {
-        return { paths: openRequests.splice(0) } as IpcResponse<C>;
+        return { requests: openRequests.splice(0) } as IpcResponse<C>;
       }
       if (channel === "system:openDiskImage") {
         const imagePath = (payload as IpcRequestInput<"system:openDiskImage">).path;
@@ -1124,8 +1125,8 @@ export function createAppHarness(
     emitVolumesChanged(volumes) {
       volumesListener?.(volumes);
     },
-    emitOpenRequests(paths) {
-      openRequests.push(...paths);
+    emitOpenRequests(requests) {
+      openRequests.push(...requests);
       openRequestsListener?.();
     },
     emitPreferencesChanged(patch) {

@@ -64,6 +64,8 @@ type PendingActivation = {
   treeRootPath: string;
   refreshExpandedTree: boolean;
   rerunSearch: boolean;
+  // An item in the folder to select once the folder has been read.
+  selectPath: string | null;
 };
 
 // Where a tab is, to bring it back there (a drag that sprang it into folders and ended
@@ -303,7 +305,7 @@ export function useExplorerTabs(args: {
   function showSnapshot(
     snapshot: TabSnapshot,
     mode: PendingActivation["mode"],
-    options: { refreshExpandedTree?: boolean } = {},
+    options: { refreshExpandedTree?: boolean; selectPath?: string } = {},
   ) {
     forgetRequestsUnderWay();
     selection.clearTypeahead();
@@ -379,6 +381,7 @@ export function useExplorerTabs(args: {
       treeRootPath: snapshot.treeRootPath,
       refreshExpandedTree: options.refreshExpandedTree ?? false,
       rerunSearch,
+      selectPath: options.selectPath ?? null,
     };
     // A tab with nothing on screen yet has no place to go back to: its sidebar scrolls to
     // its folder as it is read.
@@ -452,6 +455,7 @@ export function useExplorerTabs(args: {
     snapshot: TabSnapshot,
     mode: PendingActivation["mode"],
     afterTabId: string = stateRef.current.activeTabId,
+    selectPath?: string,
   ) {
     const current = stateRef.current;
     const id = createTabId();
@@ -463,7 +467,7 @@ export function useExplorerTabs(args: {
       }
     }
     commitState({ activeTabId: id, tabs });
-    showSnapshot(snapshot, mode);
+    showSnapshot(snapshot, mode, selectPath === undefined ? {} : { selectPath });
   }
 
   // ⌘T: a new tab on the folder that is on screen, with a history of its own.
@@ -494,8 +498,12 @@ export function useExplorerTabs(args: {
     );
   }
 
-  // Opens `path` in a new tab and shows it.
-  function openPathInNewTab(path: string) {
+  // Opens `path` in a new tab and shows it. `focusContent` gives the list the keyboard,
+  // and `selectPath`, an item in the folder, is selected there once the folder is read.
+  function openPathInNewTab(
+    path: string,
+    options: { focusContent?: boolean; selectPath?: string } = {},
+  ) {
     if (!canChangeTabs() || path.length === 0 || !hasRoomForTab()) {
       return;
     }
@@ -509,10 +517,16 @@ export function useExplorerTabs(args: {
         historyIndex: -1,
         selectedTreeItemId: createFileSystemItemId(path),
         leftPaneSubview: "tree",
+        focusedPane:
+          options.focusContent || options.selectPath !== undefined
+            ? "content"
+            : leftSnapshot.focusedPane,
         view: null,
         search: null,
       },
       "open",
+      undefined,
+      options.selectPath,
     );
   }
 
@@ -871,13 +885,28 @@ export function useExplorerTabs(args: {
       void navActions.loadTreeChildren(navigation.treeRootPathRef.current);
     }
     // The folder comes back as the tab last left it, where the tab remembers that.
-    void navActions.navigateToNearestExistingFolder(
-      pending.path,
-      pending.mode === "open" ? "push" : "skip",
-      favoritePath
-        ? { syncTree: false, treeSelectionMode: "favorite", favoritePath, restoreView: true }
-        : { restoreView: true },
-    );
+    void navActions
+      .navigateToNearestExistingFolder(
+        pending.path,
+        pending.mode === "open" ? "push" : "skip",
+        favoritePath
+          ? { syncTree: false, treeSelectionMode: "favorite", favoritePath, restoreView: true }
+          : { restoreView: true },
+      )
+      .then((didOpen) => {
+        // Not when another tab has been shown since, or the folder is gone and one above
+        // it opened instead.
+        if (
+          !didOpen ||
+          pending.selectPath === null ||
+          lastActivationIdRef.current !== pending.id ||
+          navigation.currentPathRef.current !== pending.path
+        ) {
+          return;
+        }
+        selection.setSingleContentSelection(pending.selectPath);
+        selection.focusContentPane();
+      });
   }, [activationCount]);
 
   // A search left running in a background tab is asked how it is doing once in a while.

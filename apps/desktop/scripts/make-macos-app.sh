@@ -190,6 +190,9 @@ if [[ -f "${PLIST}" ]]; then
   # File Trail can open disk images (Open With in Finder): it mounts one and opens its disk
   # in a tab. Every kind of disk image is a com.apple.disk-image. "Alternate" leaves macOS's
   # own DiskImageMounter the app that opens them unless the person chooses File Trail.
+  # Folders too (Open With, a drop on the Dock icon), which open in a tab; Finder stays the
+  # app that opens them. Other items need no type: `open -a "File Trail"` sends them anyway,
+  # and File Trail shows them in their folder, but File Trail isn't offered for every file.
   /usr/libexec/PlistBuddy -c "Delete :CFBundleDocumentTypes" "${PLIST}" >/dev/null 2>&1 || true
   /usr/libexec/PlistBuddy \
     -c "Add :CFBundleDocumentTypes array" \
@@ -199,6 +202,12 @@ if [[ -f "${PLIST}" ]]; then
     -c "Add :CFBundleDocumentTypes:0:LSHandlerRank string Alternate" \
     -c "Add :CFBundleDocumentTypes:0:LSItemContentTypes array" \
     -c "Add :CFBundleDocumentTypes:0:LSItemContentTypes:0 string com.apple.disk-image" \
+    -c "Add :CFBundleDocumentTypes:1 dict" \
+    -c "Add :CFBundleDocumentTypes:1:CFBundleTypeName string Folder" \
+    -c "Add :CFBundleDocumentTypes:1:CFBundleTypeRole string Viewer" \
+    -c "Add :CFBundleDocumentTypes:1:LSHandlerRank string Alternate" \
+    -c "Add :CFBundleDocumentTypes:1:LSItemContentTypes array" \
+    -c "Add :CFBundleDocumentTypes:1:LSItemContentTypes:0 string public.folder" \
     "${PLIST}"
 fi
 
