@@ -302,8 +302,8 @@ export type AppPreferences = {
   notificationsEnabled: boolean;
   // Items that were copied or cut flash and keep a mark, in the folder tree and the file list.
   markClipboardItems: boolean;
-  // With the Info panel open, the one folder selected in the home folder is measured by
-  // itself (see useAutoFolderSize).
+  // With the Info panel open, the folder in the home folder or the app it shows is measured
+  // by itself (see useAutoFolderSize).
   autoCalculateFolderSizes: boolean;
   // The folder tree on the left (View > Hide Folder Tree).
   folderTreeOpen: boolean;

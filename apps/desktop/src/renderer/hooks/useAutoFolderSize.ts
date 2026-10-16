@@ -8,24 +8,41 @@ import type { FolderSizeEntry } from "./useFolderSizeCache";
 // with the arrow keys does not start a calculation for every folder passed.
 export const AUTO_FOLDER_SIZE_DELAY_MS = 500;
 
-// The folder the Info panel measures by itself: the one folder selected, when it is in the
-// home folder. Not the folder on screen, nor several items, nor anything outside home (a
-// disk, Macintosh HD), where a walk can take minutes.
+// The folder the Info panel measures by itself: the item Show Info put in it, or else the
+// one item selected, when it is a folder in the home folder or a bundle (an app) anywhere.
+// Not the folder on screen, nor several items, nor a folder outside home (a disk,
+// Macintosh HD), where a walk can take minutes.
 export function getAutoFolderSizePath(args: {
   infoPanelOpen: boolean;
   selectedPaths: readonly string[];
   selectedEntry: Pick<DirectoryEntry, "path" | "kind"> | null;
+  // The path Show Info put in the panel, null while the panel follows the selection, and
+  // the item the panel shows.
+  showInfoPath?: string | null;
+  infoItem?: Pick<DirectoryEntry, "path" | "kind"> | null;
   homePath: string;
 }): string | null {
   const { infoPanelOpen, selectedPaths, selectedEntry, homePath } = args;
-  if (!infoPanelOpen || selectedPaths.length !== 1 || !selectedEntry) {
+  const { showInfoPath = null, infoItem = null } = args;
+  if (!infoPanelOpen) {
     return null;
   }
-  if (selectedEntry.path !== selectedPaths[0] || !isFolderSizeEligibleKind(selectedEntry.kind)) {
+  const item =
+    showInfoPath !== null
+      ? infoItem?.path === showInfoPath
+        ? infoItem
+        : null
+      : selectedPaths.length === 1 && selectedEntry?.path === selectedPaths[0]
+        ? selectedEntry
+        : null;
+  if (!item || !isFolderSizeEligibleKind(item.kind)) {
     return null;
+  }
+  if (item.kind === "bundle") {
+    return item.path;
   }
   const home = homePath.replace(/\/+$/u, "");
-  return home.length > 0 && selectedEntry.path.startsWith(`${home}/`) ? selectedEntry.path : null;
+  return home.length > 0 && item.path.startsWith(`${home}/`) ? item.path : null;
 }
 
 type FolderSizes = {

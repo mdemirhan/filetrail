@@ -51,6 +51,41 @@ describe("getAutoFolderSizePath", () => {
     }
     expect(getAutoFolderSizePath({ ...base, homePath: "" })).toBeNull();
   });
+
+  it("measures an app outside the home folder", () => {
+    const app = { path: "/Applications/Keynote.app", kind: "bundle" as const };
+    expect(getAutoFolderSizePath({ ...base, selectedPaths: [app.path], selectedEntry: app })).toBe(
+      app.path,
+    );
+  });
+
+  it("measures the folder Show Info put in the panel, once the panel shows it", () => {
+    const shown = { path: `${HOME}/Music`, kind: "directory" as const };
+    const showInfo = { ...base, showInfoPath: shown.path };
+    expect(getAutoFolderSizePath({ ...showInfo, infoItem: shown })).toBe(shown.path);
+    // The same folder as the one selected, as after right-clicking it.
+    expect(getAutoFolderSizePath({ ...base, showInfoPath: folder.path, infoItem: folder })).toBe(
+      folder.path,
+    );
+    // Not while the panel still shows something else, nor with nothing selected.
+    expect(getAutoFolderSizePath({ ...showInfo, infoItem: folder })).toBeNull();
+    expect(
+      getAutoFolderSizePath({
+        ...showInfo,
+        selectedPaths: [],
+        selectedEntry: null,
+        infoItem: null,
+      }),
+    ).toBeNull();
+    // The same rules as for the selection otherwise.
+    const outside = { path: "/Volumes/Disk/x", kind: "directory" as const };
+    expect(
+      getAutoFolderSizePath({ ...base, showInfoPath: outside.path, infoItem: outside }),
+    ).toBeNull();
+    expect(
+      getAutoFolderSizePath({ ...showInfo, infoItem: shown, infoPanelOpen: false }),
+    ).toBeNull();
+  });
 });
 
 describe("useAutoFolderSize", () => {
