@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -111,6 +111,8 @@ export function useExplorerSearchController(args: {
     searchResultsSortDirectionRef,
     browseSelectionRef,
     cachedSearchSelectionRef,
+    searchReturnPlaceRef,
+    searchReturnRequest,
   } = search;
 
   // Sorting is live: results stream in from fd in arbitrary order and are kept sorted by
@@ -245,8 +247,18 @@ export function useExplorerSearchController(args: {
     }
   }
 
+  // Back or Forward reached the place the results were left from. Before the window draws,
+  // so the folder underneath does not flash by.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per request, with the folder that request opened.
+  useLayoutEffect(() => {
+    if (searchReturnRequest > 0) {
+      showCachedSearchResults();
+    }
+  }, [searchReturnRequest]);
+
   function hideSearchResults() {
     cancelLiveSearch();
+    searchReturnPlaceRef.current = null;
     // Leaving search mode clears the field so it never shows a query for results that are
     // no longer visible; the cached results stay available (focus the field or ⇧⌘F).
     setSearchDraftQuery("");
@@ -309,6 +321,7 @@ export function useExplorerSearchController(args: {
       return;
     }
     searchSessionRef.current += 1;
+    searchReturnPlaceRef.current = null;
     setSearchCommittedQuery("");
     setSearchBaseQuery("");
     searchBaseQueryRef.current = "";
@@ -517,6 +530,8 @@ export function useExplorerSearchController(args: {
     searchCommittedQueryRef.current = trimmedQuery;
     searchBaseQueryRef.current = trimmedQuery;
     searchInterruptedRef.current = false;
+    // The results left somewhere in the history are not these.
+    searchReturnPlaceRef.current = null;
     setSearchRootPath(rootPath);
     setSearchResultsVisible(true);
     // Read right after the search has been started, which can be before the next render.
@@ -599,6 +614,7 @@ export function useExplorerSearchController(args: {
     }
     setSearchCommittedQuery(query);
     searchCommittedQueryRef.current = query;
+    searchReturnPlaceRef.current = null;
     cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
     applyContentSelection(EMPTY_CONTENT_SELECTION, []);
   }
@@ -797,6 +813,7 @@ export function useExplorerSearchController(args: {
       searchedHidden: searchedHiddenRef.current,
       browseSelection: browseSelectionRef.current,
       cachedSearchSelection: cachedSearchSelectionRef.current,
+      returnPlace: searchReturnPlaceRef.current,
     };
     // Answers still on their way belong to the search that was just taken out.
     searchSessionRef.current += 1;
@@ -851,6 +868,7 @@ export function useExplorerSearchController(args: {
     searchedHiddenRef.current = session.searchedHidden;
     browseSelectionRef.current = session.browseSelection;
     cachedSearchSelectionRef.current = session.cachedSearchSelection;
+    searchReturnPlaceRef.current = session.returnPlace;
     searchJobIdRef.current = session.jobId;
     searchCursorRef.current = session.cursor;
     awaitingFirstUpdateAfterAttachRef.current = session.jobId !== null;
@@ -907,6 +925,7 @@ export function useExplorerSearchController(args: {
       searchedHidden: includeHidden,
       browseSelection: EMPTY_CONTENT_SELECTION,
       cachedSearchSelection: EMPTY_CONTENT_SELECTION,
+      returnPlace: null,
     };
   }
 

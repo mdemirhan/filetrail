@@ -26,6 +26,13 @@ type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
 
 // A tab's search, as it was when the tab was left. The search itself keeps running in the
 // worker; `jobId` and `cursor` are where to pick its results up again.
+// A place in a tab's history: its position, and the folder there, since a later step can
+// put another folder at that position.
+export type SearchReturnPlace = {
+  historyIndex: number;
+  path: string;
+};
+
 export type TabSearchSession = {
   draftQuery: string;
   committedQuery: string;
@@ -59,6 +66,7 @@ export type TabSearchSession = {
   searchedHidden: boolean;
   browseSelection: ContentSelectionState;
   cachedSearchSelection: ContentSelectionState;
+  returnPlace: SearchReturnPlace | null;
 };
 
 // What a tab had on screen: enough to show it again at once, before its folder is re-read.

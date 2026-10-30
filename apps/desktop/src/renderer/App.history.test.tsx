@@ -37,6 +37,7 @@ import {
   expectNoRefusedRequests,
   focusContentPane,
   focusTreePane,
+  openSearchResults,
   pressKey,
   renderApp,
   selectItem,
@@ -265,6 +266,131 @@ describe("the enclosing folder", () => {
     await expectShownFolder("/");
     await pressKey({ key: "ArrowUp", metaKey: true });
     await expectShownFolder("/");
+  });
+});
+
+describe("Back and Forward with search results", () => {
+  const FOLDER_RESULT = {
+    path: "/Users/demo/Folder/Inner",
+    name: "Inner",
+    extension: "",
+    kind: "directory" as const,
+    isHidden: false,
+    isSymlink: false,
+    parentPath: "/Users/demo/Folder",
+    relativeParentPath: ".",
+  };
+
+  function createSearchHarness() {
+    return createHarness({
+      searchResultItems: [FOLDER_RESULT],
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/Folder", "directory"),
+            createDirectoryEntry("/Users/demo/Other", "directory"),
+          ],
+        },
+        "/Users/demo/Other": { path: "/Users/demo/Other", parentPath: "/Users/demo", entries: [] },
+      },
+    });
+  }
+
+  // Searches in the folder on screen, and opens the folder it finds.
+  async function openFolderFromResults() {
+    await openSearchResults();
+    const result = await screen.findByTitle(`search:${FOLDER_RESULT.path}`);
+    await act(async () => {
+      fireEvent.click(result);
+      fireEvent.doubleClick(result);
+    });
+    await vi.waitFor(() => expect(screen.queryByTestId("search-results-pane")).toBeNull());
+    await expectShownFolder(FOLDER_RESULT.path);
+  }
+
+  async function expectResultsShown() {
+    await screen.findByTitle(`search:${FOLDER_RESULT.path}`);
+    expect(screen.getByPlaceholderText("Search")).toHaveValue("source");
+  }
+
+  it("brings back the results a folder was opened from, as it was left", async () => {
+    const harness = createSearchHarness();
+    renderApp(harness);
+    await open("/Users/demo/Folder");
+    await openFolderFromResults();
+
+    await command(harness, "goBack");
+    await expectResultsShown();
+    expect(selectedPaths()).toEqual([`search:${FOLDER_RESULT.path}`]);
+
+    // Forward leaves them, and Back finds them again.
+    await command(harness, "goForward");
+    await expectShownFolder(FOLDER_RESULT.path);
+    expect(screen.queryByTestId("search-results-pane")).toBeNull();
+    await command(harness, "goBack");
+    await expectResultsShown();
+
+    // Back from the results goes on to the folder before them, and Forward returns to them.
+    await command(harness, "goBack");
+    await expectShownFolder("/Users/demo");
+    expect(screen.queryByTestId("search-results-pane")).toBeNull();
+    await command(harness, "goForward");
+    await expectResultsShown();
+  });
+
+  it("shows the folder after the results were closed", async () => {
+    const harness = createSearchHarness();
+    renderApp(harness);
+    await open("/Users/demo/Folder");
+    await openFolderFromResults();
+    await command(harness, "goBack");
+    await expectResultsShown();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle(`search:${FOLDER_RESULT.path}`));
+    });
+    await pressKey({ key: "Escape" });
+    await vi.waitFor(() => expect(screen.queryByTestId("search-results-pane")).toBeNull());
+    await expectShownFolder("/Users/demo/Folder");
+
+    await command(harness, "goForward");
+    await expectShownFolder(FOLDER_RESULT.path);
+    await command(harness, "goBack");
+    await expectShownFolder("/Users/demo/Folder");
+    expect(screen.queryByTestId("search-results-pane")).toBeNull();
+  });
+
+  it("shows the folder where older results were left, after a newer search", async () => {
+    const harness = createSearchHarness();
+    renderApp(harness);
+    await open("/Users/demo/Folder");
+    await openFolderFromResults();
+    await openSearchResults();
+
+    await command(harness, "goBack");
+    await expectShownFolder("/Users/demo/Folder");
+    await vi.waitFor(() => expect(screen.queryByTestId("search-results-pane")).toBeNull());
+    expect(screen.getByPlaceholderText("Search")).toHaveValue("");
+  });
+
+  it("shows the folder when another one has taken the results' place in the history", async () => {
+    const harness = createSearchHarness();
+    renderApp(harness);
+    await open("/Users/demo/Folder");
+    await openFolderFromResults();
+    await command(harness, "goBack");
+    await expectResultsShown();
+    await command(harness, "goBack");
+    await expectShownFolder("/Users/demo");
+    await open("/Users/demo/Other");
+
+    await command(harness, "goBack");
+    await expectShownFolder("/Users/demo");
+    await command(harness, "goForward");
+    await expectShownFolder("/Users/demo/Other");
+    expect(screen.queryByTestId("search-results-pane")).toBeNull();
   });
 });
 

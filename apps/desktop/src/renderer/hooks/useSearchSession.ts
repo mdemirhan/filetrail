@@ -8,6 +8,7 @@ import {
   type SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
 import { type ContentSelectionState, EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
+import type { SearchReturnPlace } from "../lib/explorerTabs";
 
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
@@ -73,6 +74,11 @@ export function useSearchSession() {
   );
   const browseSelectionRef = useRef<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
   const cachedSearchSelectionRef = useRef<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
+  // The place in the tab's history the results were left from by opening a folder: Back and
+  // Forward bring them back there.
+  const searchReturnPlaceRef = useRef<SearchReturnPlace | null>(null);
+  // Counts the times the history asked for the results back.
+  const [searchReturnRequest, setSearchReturnRequest] = useState(0);
 
   useEffect(() => {
     searchResultsVisibleRef.current = searchResultsVisible;
@@ -156,5 +162,8 @@ export function useSearchSession() {
     searchResultsSortDirectionRef,
     browseSelectionRef,
     cachedSearchSelectionRef,
+    searchReturnPlaceRef,
+    searchReturnRequest,
+    setSearchReturnRequest,
   };
 }

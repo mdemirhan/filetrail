@@ -220,6 +220,8 @@ export function useExplorerNavigationController(args: {
     setSearchDraftQuery,
     searchResultsVisibleRef,
     searchPointerIntentRef,
+    searchReturnPlaceRef,
+    setSearchReturnRequest,
   } = search;
   const { actionNotice, contextMenuState, pendingPasteSelectionRef } = writeOperations;
   const { applyContentSelection, setSingleContentSelection } = selection;
@@ -732,39 +734,36 @@ export function useExplorerNavigationController(args: {
     }
   }
 
-  function goBack() {
-    const nextPath = historyPaths[historyIndex - 1];
+  // Moves within the history instead of adding to it. The folder comes back as it was left,
+  // or under its search results if they were what was left there.
+  function goToHistoryPlace(index: number) {
+    const nextPath = historyPaths[index];
     if (!nextPath) {
       return;
     }
-    setHistoryIndex(historyIndex - 1);
+    const returnPlace = searchReturnPlaceRef.current;
+    const showSearchResults =
+      hasCachedSearch && returnPlace?.historyIndex === index && returnPlace.path === nextPath;
+    setHistoryIndex(index);
     void navigateTo(nextPath, "skip", undefined, undefined, undefined, undefined, {
-      restoreView: true,
+      restoreView: !showSearchResults,
+      showSearchResults,
     });
+  }
+
+  function goBack() {
+    goToHistoryPlace(historyIndex - 1);
   }
 
   function goForward() {
-    const nextPath = historyPaths[historyIndex + 1];
-    if (!nextPath) {
-      return;
-    }
-    setHistoryIndex(historyIndex + 1);
-    void navigateTo(nextPath, "skip", undefined, undefined, undefined, undefined, {
-      restoreView: true,
-    });
+    goToHistoryPlace(historyIndex + 1);
   }
 
-  // Jumps straight to a folder in the history (from the Back or Forward hold menu). Like
-  // Back and Forward themselves, it moves within the history instead of adding to it.
+  // Jumps straight to a folder in the history (from the Back or Forward hold menu).
   function goToHistoryIndex(index: number) {
-    const nextPath = historyPaths[index];
-    if (!nextPath || index === historyIndex) {
-      return;
+    if (index !== historyIndex) {
+      goToHistoryPlace(index);
     }
-    setHistoryIndex(index);
-    void navigateTo(nextPath, "skip", undefined, undefined, undefined, undefined, {
-      restoreView: true,
-    });
   }
 
   // Opens `path` and makes it the top of the folder tree. The tree keeps that root until a
@@ -885,7 +884,8 @@ export function useExplorerNavigationController(args: {
       changedPaths?: readonly string[] | null;
     } = {},
   ) {
-    const sameFolder = path === currentPathRef.current;
+    const leftPath = currentPathRef.current;
+    const sameFolder = path === leftPath;
     if (!sameFolder) {
       staleMetadataPathsRef.current.clear();
     }
@@ -918,7 +918,9 @@ export function useExplorerNavigationController(args: {
       !options.keepSearchResults
     ) {
       // Opening a folder leaves the search; the field is cleared with it so it never shows
-      // a query for results that are no longer on screen.
+      // a query for results that are no longer on screen. Back and Forward can bring them
+      // back; choosing the folder they cover closes them.
+      searchReturnPlaceRef.current = sameFolder ? null : { historyIndex, path: leftPath };
       setSearchResultsVisible(false);
       setSearchDraftQuery("");
     }
@@ -1081,6 +1083,8 @@ export function useExplorerNavigationController(args: {
       keepInfoTarget?: boolean;
       /** Back or Forward: the folder comes back as it was left (see FolderViewMemory). */
       restoreView?: boolean;
+      /** Back or Forward: the search results left here come back over the folder. */
+      showSearchResults?: boolean;
       /** Read again after a change made outside the app to these items in it (null: to
        *  anything in it): the info views ask again only if what they show is among them. */
       changedPaths?: readonly string[] | null;
@@ -1138,6 +1142,9 @@ export function useExplorerNavigationController(args: {
         );
         pendingContentScrollRef.current = memory.contentScroll;
         setScrollRestoreCount((count) => count + 1);
+      }
+      if (options.showSearchResults) {
+        setSearchReturnRequest((count) => count + 1);
       }
       // The folder is on screen from here on, so it is in the history from here on: what
       // follows waits for the tree, and the tab may be left before the tree has answered.
