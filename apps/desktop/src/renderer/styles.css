@@ -3418,11 +3418,6 @@ body.resizing-panels * {
   display: inline;
 }
 
-.folder-size-items {
-  color: var(--text-dim);
-  font-size: var(--font-size-mini);
-}
-
 .folder-size-refresh-btn .get-info-icon,
 .folder-size-refresh-icon {
   width: 11px;
@@ -6257,19 +6252,6 @@ button.shortcut-slot-key.recording:hover {
 .flow-item.active:not(.inactive) .flow-item-label span,
 .details-row.active:not(.inactive) .details-name span {
   color: var(--ft-accent-on-selection);
-}
-
-/* Info panel folder size: size on one line, item count below, both right-aligned. */
-.get-info-meta-value .folder-size-detail {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
-}
-
-.get-info-meta-value .folder-size-items {
-  color: var(--text-secondary);
-  font-size: var(--font-size-small);
 }
 
 /* ── macOS Light / macOS Dark: base tokens outside the variant set ─────── */

@@ -253,6 +253,16 @@ function InfoPanelSelectionContent({
       <section className="get-info-section">
         <h3 className="get-info-section-title">Information</h3>
         <dl className="get-info-meta">
+          {folderSizeEntry ? (
+            <div className="get-info-meta-row">
+              <dt className="get-info-meta-label">Contains</dt>
+              <dd
+                className={`get-info-meta-value${folderSizeEntry.status === "ready" ? "" : " muted"}`}
+              >
+                {describeMeasuredContents(folderSizeEntry) ?? PENDING_VALUE}
+              </dd>
+            </div>
+          ) : null}
           <div className="get-info-meta-row">
             <dt className="get-info-meta-label">Size</dt>
             {folderSizeEntry && onCalculateFolderSize && onCancelFolderSize ? (
@@ -384,6 +394,7 @@ function GetInfoPanelContent({
   // A volume's root shows the disk's capacity, free and used space, as Finder's Get Info
   // does, instead of the size of everything on it.
   const isVolumeRoot = isVolumeRootPath(item.path);
+  const contents = describeMeasuredContents(folderSizeEntry);
   const volumeBytes = (value: number | null | undefined): string =>
     value === null || value === undefined ? PENDING_VALUE : formatSize(value, "ready");
   const usedBytes =
@@ -456,6 +467,17 @@ function GetInfoPanelContent({
             },
           ]
         : []),
+    // In the place a file's "Opens with" takes, so the rows under it stay where they are
+    // from item to item, and when the folder has been measured.
+    ...(showFolderSizeForItem && !isVolumeRoot
+      ? [
+          {
+            label: "Contains",
+            value: contents ?? PENDING_VALUE,
+            muted: contents === null,
+          },
+        ]
+      : []),
     ...sizeRows,
     {
       label: "Created",
@@ -737,6 +759,14 @@ function getFolderLabel(path: string): string {
   return path === "/" ? "Macintosh HD" : (path.split("/").filter(Boolean).at(-1) ?? path);
 }
 
+// "2 files, 1 folder", once the folder has been measured.
+function describeMeasuredContents(entry: FolderSizeEntry | undefined): string | null {
+  return entry?.status === "ready"
+    ? formatFolderSizeDetail(entry.sizeBytes, entry.diskBytes, entry.fileCount, entry.folderCount)
+        .items
+    : null;
+}
+
 const CALCULATING_DELAY_MS = 300;
 function FolderSizeCell({
   entry,
@@ -760,12 +790,9 @@ function FolderSizeCell({
     );
     return (
       <span className="folder-size-value">
-        <span className="folder-size-detail">
-          <span>
-            {detail.size}
-            {detail.disk ? ` (${detail.disk})` : ""}
-          </span>
-          <span className="folder-size-items">{detail.items}</span>
+        <span>
+          {detail.size}
+          {detail.disk ? ` (${detail.disk})` : ""}
         </span>
         <button
           type="button"

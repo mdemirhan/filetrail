@@ -487,10 +487,66 @@ describe("InfoPanel", () => {
     // Size text should include the logical size and disk size
     expect(screen.getAllByText(/1\.0 MB/).length).toBeGreaterThan(0);
     expect(screen.getByText(/on disk/)).toBeInTheDocument();
-    // What it holds, files then folders
-    expect(screen.getByText(/^43,016 files, 3 folders$/)).toBeInTheDocument();
+    // What it holds, files then folders, in a row of its own
+    expect(screen.getByText("Contains").nextElementSibling).toHaveTextContent(
+      /^43,016 files, 3 folders$/,
+    );
     // Recalculate button present
     expect(screen.getByRole("button", { name: "Recalculate folder size" })).toBeInTheDocument();
+  });
+
+  it("keeps the rows in place while a folder is measured, and from a file to a folder", () => {
+    const folderItem = {
+      ...baseItem,
+      path: "/Users/demo/projects",
+      name: "projects",
+      extension: "",
+      kind: "directory" as const,
+      kindLabel: "Folder",
+      sizeBytes: null,
+      sizeStatus: "deferred" as const,
+    };
+    const props = {
+      loading: false,
+      onClose: () => undefined,
+      onNavigateToPath: () => undefined,
+      onOpen: () => undefined,
+      onOpenInTerminal: () => undefined,
+      onShowInFinder: () => undefined,
+      onCopyPath: () => true,
+      onCalculateFolderSize: () => undefined,
+      onCancelFolderSize: () => undefined,
+    };
+    const rowLabels = () =>
+      Array.from(document.querySelectorAll(".get-info-meta-label"), (label) => label.textContent);
+
+    const { rerender } = render(
+      <InfoPanel {...props} item={baseItem} openWithPending folderSizeEntry={undefined} />,
+    );
+    const fileRows = rowLabels();
+    expect(fileRows.slice(0, 3)).toEqual(["Kind", "Opens with", "Size"]);
+
+    rerender(<InfoPanel {...props} item={folderItem} folderSizeEntry={{ status: "idle" }} />);
+    expect(rowLabels().slice(0, 3)).toEqual(["Kind", "Contains", "Size"]);
+    expect(rowLabels().length).toBe(fileRows.length);
+    expect(screen.getByText("Contains").nextElementSibling).toHaveTextContent("—");
+
+    rerender(
+      <InfoPanel
+        {...props}
+        item={folderItem}
+        folderSizeEntry={{
+          status: "ready",
+          sizeBytes: 1000,
+          diskBytes: 1000,
+          fileCount: 2,
+          folderCount: 1,
+        }}
+      />,
+    );
+    expect(rowLabels().length).toBe(fileRows.length);
+    expect(screen.getByText("Contains").nextElementSibling).toHaveTextContent("2 files, 1 folder");
+    expect(screen.getByText("Size").nextElementSibling).not.toHaveTextContent("2 files");
   });
 
   it("shows cached bundle size when ready", () => {
