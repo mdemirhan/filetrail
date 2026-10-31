@@ -2,6 +2,8 @@
 
 A Mac file browser with fast search, a real folder tree and true cut and paste. Everything else works the way it does in Finder.
 
+> There is also a native version of File Trail, written in Swift and AppKit: [filetrailnative](https://github.com/mdemirhan/filetrailnative).
+
 <p align="center">
   <img src="docs/screenshots/search.png" alt="Search results for the word trip under a project folder, with the folder tree beside them" width="900">
 </p>
